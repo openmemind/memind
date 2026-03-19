@@ -53,12 +53,13 @@
         <flatten-maven-plugin.version>1.7.3</flatten-maven-plugin.version>
         <google-java-format.version>1.28.0</google-java-format.version>
         <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <argLine>-Xms512m -Xmx1024m</argLine>
 
         <maven.deploy.skip>false</maven.deploy.skip>
 
         <license.plugin.version>4.1</license.plugin.version>
+        <jacoco-maven-plugin.version>0.8.14</jacoco-maven-plugin.version>
+        <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
+        <spring-boot-maven-plugin.version>4.0.2</spring-boot-maven-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -221,7 +222,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven-surefire-plugin.version}</version>
                 <configuration>
-                    <argLine>@{argLine} ${argLine}</argLine>
+                    <argLine>@{argLine}</argLine>
 
                     <useFile>false</useFile>
                     <trimStackTrace>false</trimStackTrace>
@@ -239,7 +240,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.14</version>
+                <version>${jacoco-maven-plugin.version}</version>
                 <executions>
                     <execution>
                         <id>prepare-agent</id>
@@ -311,7 +312,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-checkstyle-plugin</artifactId>
-                <version>3.6.0</version>
+                <version>${maven-checkstyle-plugin.version}</version>
                 <configuration>
                     <configLocation>etc/checkstyle.xml</configLocation>
                     <suppressionsLocation>etc/suppressions.xml</suppressionsLocation>
