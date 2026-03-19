@@ -1,0 +1,144 @@
+package com.openmemind.ai.memory.core.extraction.item.strategy;
+
+import com.openmemind.ai.memory.core.data.MemoryInsightType;
+import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
+import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
+import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
+import com.openmemind.ai.memory.core.extraction.item.ItemExtractionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
+import com.openmemind.ai.memory.core.extraction.item.support.ToolItemResponse;
+import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
+import com.openmemind.ai.memory.core.prompt.extraction.item.ToolItemPrompts;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import org.springframework.ai.chat.client.ChatClient;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
+
+/**
+ * Item extraction strategy for tool-call content.
+ *
+ * <p>Each segment is already grouped by toolName (via ToolCallChunker),
+ * so one LLM call per segment produces one tool usage insight.
+ */
+public class ToolCallItemExtractionStrategy implements ItemExtractionStrategy {
+
+    private final ChatClient chatClient;
+
+    public ToolCallItemExtractionStrategy(ChatClient chatClient) {
+        this.chatClient = chatClient;
+    }
+
+    @Override
+    public Mono<List<ExtractedMemoryEntry>> extract(
+            List<ParsedSegment> segments,
+            List<MemoryInsightType> insightTypes,
+            ItemExtractionConfig config) {
+
+        var language = config.language();
+        return Flux.fromIterable(segments)
+                .flatMap(segment -> extractToolItem(segment, language))
+                .collectList();
+    }
+
+    private Mono<ExtractedMemoryEntry> extractToolItem(ParsedSegment segment, String language) {
+        var meta = segment.metadata() != null ? segment.metadata() : Map.<String, Object>of();
+        var toolName = String.valueOf(meta.getOrDefault("toolName", "unknown"));
+        var callCount = meta.get("callCount") instanceof Number n ? n.intValue() : 1;
+        var successCount = meta.get("successCount") instanceof Number n ? n.intValue() : 0;
+        var failCount = meta.get("failCount") instanceof Number n ? n.intValue() : 0;
+        var avgDurationMs = String.valueOf(meta.getOrDefault("avgDurationMs", "0"));
+
+        String statistics =
+                "Total calls: %d, Success: %d, Failed: %d, Avg duration: %sms"
+                        .formatted(callCount, successCount, failCount, avgDurationMs);
+
+        // Format individual records from metadata for LLM
+        String records = formatToolCallRecords(meta);
+
+        // TODO: fetch historical item content for incremental update
+        String historicalContent = null;
+
+        var prompt =
+                ToolItemPrompts.build(toolName, records, statistics, historicalContent)
+                        .render(language);
+
+        return Mono.fromCallable(
+                        () -> {
+                            ToolItemResponse response;
+                            try {
+                                response =
+                                        chatClient
+                                                .prompt()
+                                                .system(prompt.systemPrompt())
+                                                .user(prompt.userPrompt())
+                                                .call()
+                                                .entity(ToolItemResponse.class);
+                            } catch (Exception e) {
+                                return null;
+                            }
+
+                            if (response == null
+                                    || response.content() == null
+                                    || response.content().isBlank()) {
+                                return null;
+                            }
+
+                            var itemMetadata = new LinkedHashMap<String, Object>();
+                            itemMetadata.put("toolName", toolName);
+                            itemMetadata.put("callCount", String.valueOf(callCount));
+                            itemMetadata.put("successCount", String.valueOf(successCount));
+                            itemMetadata.put("failCount", String.valueOf(failCount));
+                            itemMetadata.put("avgDurationMs", avgDurationMs);
+                            itemMetadata.put("score", String.valueOf(response.score()));
+
+                            return new ExtractedMemoryEntry(
+                                    response.content(),
+                                    1.0f,
+                                    Instant.now(),
+                                    segment.rawDataId(),
+                                    null,
+                                    List.of(),
+                                    Map.copyOf(itemMetadata),
+                                    MemoryItemType.FACT,
+                                    MemoryCategory.TOOL.categoryName());
+                        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .filter(obj -> true);
+    }
+
+    @SuppressWarnings("unchecked")
+    static String formatToolCallRecords(Map<String, Object> meta) {
+        var records = meta.get("records");
+        if (!(records instanceof List<?> recordList) || recordList.isEmpty()) {
+            return "(no records)";
+        }
+
+        var sb = new StringBuilder();
+        int maxIo = ToolItemPrompts.maxIoLength();
+        for (int i = 0; i < recordList.size(); i++) {
+            if (!(recordList.get(i) instanceof Map<?, ?> record)) continue;
+            sb.append("### Call #").append(i + 1).append("\n");
+            var status = record.get("status");
+            sb.append("- Status: ").append(status != null ? status : "unknown").append("\n");
+            var duration = record.get("durationMs");
+            sb.append("- Duration: ").append(duration != null ? duration : 0).append("ms\n");
+            var input = record.get("input");
+            sb.append("- Input: ")
+                    .append(
+                            ToolItemPrompts.truncate(
+                                    input != null ? input.toString() : null, maxIo))
+                    .append("\n");
+            var output = record.get("output");
+            sb.append("- Output: ")
+                    .append(
+                            ToolItemPrompts.truncate(
+                                    output != null ? output.toString() : null, maxIo))
+                    .append("\n\n");
+        }
+        return sb.toString();
+    }
+}

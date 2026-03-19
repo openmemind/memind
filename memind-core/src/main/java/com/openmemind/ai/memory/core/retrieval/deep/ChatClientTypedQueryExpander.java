@@ -1,0 +1,95 @@
+package com.openmemind.ai.memory.core.retrieval.deep;
+
+import com.openmemind.ai.memory.core.prompt.retrieval.TypedQueryExpandPrompts;
+import com.openmemind.ai.memory.core.retrieval.deep.ExpandedQuery.QueryType;
+import java.time.Duration;
+import java.util.List;
+import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.client.ChatClient;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
+import reactor.util.retry.Retry;
+
+/**
+ * Type-annotated query expander based on ChatClient
+ *
+ * <p>Calls LLM to generate type-annotated (LEX / VEC / HYDE) expanded queries based on information gaps,
+ * which can be routed to BM25 or vector search channels downstream according to {@link QueryType}.
+ *
+ */
+public class ChatClientTypedQueryExpander implements TypedQueryExpander {
+
+    private static final Logger log = LoggerFactory.getLogger(ChatClientTypedQueryExpander.class);
+
+    private final ChatClient chatClient;
+
+    public ChatClientTypedQueryExpander(ChatClient chatClient) {
+        this.chatClient = Objects.requireNonNull(chatClient, "chatClient must not be null");
+    }
+
+    @Override
+    public Mono<List<ExpandedQuery>> expand(
+            String query,
+            List<String> gaps,
+            List<String> keyInformation,
+            List<String> conversationHistory,
+            int maxExpansions) {
+        return Mono.fromCallable(
+                        () -> {
+                            var promptResult =
+                                    TypedQueryExpandPrompts.build(
+                                                    query,
+                                                    gaps,
+                                                    keyInformation,
+                                                    conversationHistory,
+                                                    maxExpansions)
+                                            .render("English");
+                            var response =
+                                    chatClient
+                                            .prompt()
+                                            .user(promptResult.userPrompt())
+                                            .call()
+                                            .entity(TypedExpandResponse.class);
+                            return toExpandedQueries(response, maxExpansions);
+                        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .retryWhen(
+                        Retry.backoff(3, Duration.ofSeconds(2)).maxBackoff(Duration.ofSeconds(10)))
+                .onErrorResume(
+                        e -> {
+                            log.warn(
+                                    "Type-annotated query expansion failed, returning empty list",
+                                    e);
+                            return Mono.just(List.of());
+                        });
+    }
+
+    private List<ExpandedQuery> toExpandedQueries(TypedExpandResponse response, int maxExpansions) {
+        if (response == null || response.queries() == null || response.queries().isEmpty()) {
+            return List.of();
+        }
+        return response.queries().stream()
+                .filter(tq -> tq.text() != null && !tq.text().isBlank())
+                .map(tq -> new ExpandedQuery(mapQueryType(tq.type()), tq.text()))
+                .limit(maxExpansions)
+                .toList();
+    }
+
+    private QueryType mapQueryType(String type) {
+        if (type == null) {
+            return QueryType.VEC;
+        }
+        return switch (type.toLowerCase()) {
+            case "lex" -> QueryType.LEX;
+            case "vec" -> QueryType.VEC;
+            case "hyde" -> QueryType.HYDE;
+            default -> QueryType.VEC;
+        };
+    }
+
+    private record TypedExpandResponse(List<TypedQuery> queries) {}
+
+    private record TypedQuery(String type, String text) {}
+}

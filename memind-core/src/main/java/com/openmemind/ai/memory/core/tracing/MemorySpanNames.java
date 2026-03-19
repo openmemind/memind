@@ -1,0 +1,59 @@
+package com.openmemind.ai.memory.core.tracing;
+
+/**
+ * memind span name constants
+ */
+public final class MemorySpanNames {
+
+    private MemorySpanNames() {}
+
+    // ===== Extraction =====
+    public static final String EXTRACTION = "memind.extraction";
+    public static final String EXTRACTION_RAWDATA = "memind.extraction.rawdata";
+    public static final String EXTRACTION_RAWDATA_NORMALIZE = "memind.extraction.rawdata.normalize";
+    public static final String EXTRACTION_RAWDATA_CHUNK = "memind.extraction.rawdata.chunk";
+    public static final String EXTRACTION_RAWDATA_CAPTION = "memind.extraction.rawdata.caption";
+    public static final String EXTRACTION_RAWDATA_VECTORIZE = "memind.extraction.rawdata.vectorize";
+    public static final String EXTRACTION_ITEM = "memind.extraction.item";
+    public static final String EXTRACTION_ITEM_EXTRACT = "memind.extraction.item.extract";
+    public static final String EXTRACTION_ITEM_DEDUP = "memind.extraction.item.dedup";
+    public static final String EXTRACTION_ITEM_SEMANTIC_DEDUP =
+            "memind.extraction.item.semantic_dedup";
+    public static final String EXTRACTION_ITEM_VECTORIZE = "memind.extraction.item.vectorize";
+    public static final String EXTRACTION_INSIGHT = "memind.extraction.insight";
+    public static final String EXTRACTION_INSIGHT_GENERATE = "memind.extraction.insight.generate";
+
+    // ===== Insight Tree =====
+    public static final String EXTRACTION_INSIGHT_PIPELINE = "memind.extraction.insight.pipeline";
+    public static final String EXTRACTION_INSIGHT_GROUP_CLASSIFY =
+            "memind.extraction.insight.group.classify";
+    public static final String EXTRACTION_INSIGHT_GENERATE_LEAF =
+            "memind.extraction.insight.generate.leaf";
+    public static final String EXTRACTION_INSIGHT_GENERATE_BRANCH =
+            "memind.extraction.insight.generate.branch";
+    public static final String EXTRACTION_INSIGHT_GENERATE_ROOT =
+            "memind.extraction.insight.generate.root";
+    public static final String EXTRACTION_INSIGHT_TREE_REORGANIZE =
+            "memind.extraction.insight.tree.reorganize";
+
+    // ===== Retrieval =====
+    public static final String RETRIEVAL = "memind.retrieval";
+    public static final String RETRIEVAL_INTENT = "memind.retrieval.intent";
+    public static final String RETRIEVAL_REWRITE = "memind.retrieval.rewrite";
+    public static final String RETRIEVAL_STRATEGY = "memind.retrieval.strategy";
+    public static final String RETRIEVAL_TIER_INSIGHT = "memind.retrieval.sufficiency.insight";
+    public static final String RETRIEVAL_TIER_ITEM = "memind.retrieval.sufficiency.item";
+    public static final String RETRIEVAL_TIER_RAWDATA = "memind.retrieval.sufficiency.rawdata";
+    public static final String RETRIEVAL_SUFFICIENCY = "memind.retrieval.sufficiency";
+    public static final String RETRIEVAL_VECTOR_SEARCH = "memind.retrieval.vector_search";
+    public static final String RETRIEVAL_RERANK = "memind.retrieval.rerank";
+    public static final String RETRIEVAL_KEYWORD_SEARCH = "memind.retrieval.keyword_search";
+    public static final String RETRIEVAL_INSIGHT_TYPE_ROUTING =
+            "memind.retrieval.insight_type_routing";
+    public static final String RETRIEVAL_MULTI_QUERY_EXPAND = "memind.retrieval.multi_query_expand";
+    // ===== Graph =====
+    public static final String GRAPH_EXTRACT_ENTITIES = "memind.graph.extract_entities";
+    public static final String GRAPH_EXTRACT_EDGES = "memind.graph.extract_edges";
+    public static final String GRAPH_RESOLVE_ENTITIES = "memind.graph.resolve_entities";
+    public static final String GRAPH_RESOLVE_EDGES = "memind.graph.resolve_edges";
+}

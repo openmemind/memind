@@ -1,0 +1,63 @@
+package com.openmemind.ai.memory.core.extraction.streaming;
+
+import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import java.util.List;
+
+/**
+ * Stream buffer persistent storage
+ *
+ * <p>Persist the message buffer of the ConversationSession to prevent loss of unarchived messages due to application crashes.
+ *
+ */
+public interface ConversationBufferStore {
+
+    /**
+     * Save buffer (overwrite)
+     *
+     * @param sessionId Session identifier
+     * @param buffer Current message list
+     */
+    void save(String sessionId, List<Message> buffer);
+
+    /**
+     * Load buffer
+     *
+     * @param sessionId Session identifier
+     * @return Message list, returns an empty list if not found
+     */
+    List<Message> load(String sessionId);
+
+    /**
+     * Clear buffer
+     *
+     * @param sessionId Session identifier
+     */
+    void clear(String sessionId);
+
+    /**
+     * List all active sessions under the specified memory
+     *
+     * @param memoryId Memory identifier
+     * @return List of active session IDs
+     */
+    List<String> listActiveSessions(MemoryId memoryId);
+
+    /**
+     * Save the total number of processed messages (used to calculate the absolute message position across segments)
+     *
+     * @param sessionId Session identifier
+     * @param count Total number of processed messages
+     */
+    default void saveMessageCount(String sessionId, int count) {}
+
+    /**
+     * Load the total number of processed messages
+     *
+     * @param sessionId Session identifier
+     * @return Total number of processed messages, returns 0 if not found
+     */
+    default int loadMessageCount(String sessionId) {
+        return 0;
+    }
+}

@@ -1,0 +1,91 @@
+spring:
+  application:
+    name: memind-evaluation
+  main:
+    allow-bean-definition-overriding: true
+  ai:
+    openai:
+      base-url: ${OPENAI_BASE_URL:}
+      api-key: ${OPENAI_API_KEY:}
+      chat:
+        options:
+          model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+      embedding:
+        base-url: ${EMBEDDING_BASE_URL:}
+        api-key: ${EMBEDDING_API_KEY:}
+        options:
+          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+
+memind:
+  store:
+    sqlite:
+      path: ./eval-data/memind-eval.db
+    init-schema: true
+  vector:
+    store-path: ./eval-data/memind-eval-vectors.json
+  extraction:
+    boundary:
+      max-messages: 30
+  retrieval:
+    timeout: 5m
+    rerank:
+      base-url: ${RERANK_BASE_URL:}
+      api-key: ${RERANK_API_KEY:}
+      model: ${RERANK_MODEL:jina-reranker-v3}
+      blend-with-retrieval: true
+      top-k: 20
+
+# MyBatis Plus 的配置项
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+    banner: false
+  type-aliases-package: com.openmemind.ai.memory.plugin.store.mybatis.dataobject
+
+logging:
+  file:
+    name: ./eval-data/logs/memind-eval.log
+  level:
+    root: WARN
+    com.openmemind.ai.memory: INFO
+    com.openmemind.ai.memory.evaluation.pipeline: INFO
+    com.openmemind.ai.memory.evaluation.progress: INFO
+    # 关闭噪音日志
+    reactor.netty.http.client: ERROR
+    org.springframework.ai.retry: WARN
+    io.micrometer: WARN
+
+evaluation:
+  auto-run: true
+  output-dir: ./eval-data/results
+  run-name: default
+  stages: add,search,answer,evaluate
+  from-conv: 0
+  to-conv: -1
+  smoke: false
+  clean-groups: false
+  concurrency:
+    add: 10       # conversations processed in parallel during ADD stage
+    search: 20   # QA questions processed in parallel during SEARCH stage
+    conv: 10      # conversations processed in parallel during SEARCH stage
+  dataset:
+    name: locomo
+    path: ./memind-evaluation/data/locomo/locomo10.json
+    filter-categories: [5]
+  system:
+    adapter: memind
+    search:
+      top-k: 20
+      dual-perspective: true
+    memind:
+      add-mode: chunk
+      enable-insight: false
+    answer:
+      max-retries: 3
+    llm:
+      model: gpt-4.1-mini
+      num-runs: 3

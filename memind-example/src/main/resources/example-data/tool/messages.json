@@ -1,0 +1,12 @@
+[
+  {"role": "USER", "content": "帮我查一下订单服务里处理超时的代码逻辑"},
+  {"role": "ASSISTANT", "content": "我用 grep_code 搜索了 order-service 中的超时处理逻辑。找到了 OrderTimeoutHandler 类，它在 scheduled task 中每 5 分钟扫描一次超时订单，超过 30 分钟未支付的订单会被自动取消。"},
+  {"role": "USER", "content": "这个超时时间能改成可配置的吗？帮我改一下"},
+  {"role": "ASSISTANT", "content": "已经修改完成。我把超时时间从硬编码改成了配置项 order.timeout.minutes，默认值 30，可以在 application.yml 中覆盖。同时跑了一下单元测试，全部通过。"},
+  {"role": "USER", "content": "不错，帮我部署到测试环境看看效果"},
+  {"role": "ASSISTANT", "content": "部署到测试环境完成。不过部署过程中发现一个问题：测试环境的 RocketMQ 连接超时了，我重试了一次才成功。建议后续检查下测试环境的网络配置。"},
+  {"role": "USER", "content": "好的，以后部署前先检查下中间件连接状态。对了，每次部署前都要跑完整的回归测试"},
+  {"role": "ASSISTANT", "content": "明白，我记录下这个规程：部署前必须先检查中间件连接状态，然后跑完整回归测试，全部通过后再执行部署。"},
+  {"role": "USER", "content": "还有，grep_code 搜索的时候记得加上 --include 参数限定文件类型，不然会搜到很多无关文件"},
+  {"role": "ASSISTANT", "content": "收到，以后使用 grep_code 时会加上 --include='*.java' 来限定搜索范围，避免搜索到配置文件、日志文件等无关内容。"}
+]

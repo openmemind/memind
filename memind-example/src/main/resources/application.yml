@@ -1,0 +1,32 @@
+spring:
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      base-url: ${OPENAI_BASE_URL:}
+      embedding:
+        options:
+          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+      chat:
+        options:
+          model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+  main:
+    web-application-type: none
+
+memind:
+  store:
+    type: sqlite
+    sqlite:
+      path: ./example-data/memind.db
+  vector:
+    store-path: ./example-data/vector-store.json
+  extraction:
+    timeout: 5m
+    chunking:
+      strategy: FIXED_SIZE
+      messages-per-chunk: 10
+    insight-build:
+      grouping-threshold: 3
+      build-threshold: 2
+  retrieval:
+    rerank:
+      enabled: false

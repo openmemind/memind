@@ -1,0 +1,320 @@
+package com.openmemind.ai.memory.evaluation.config;
+
+import java.util.ArrayList;
+import java.util.List;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+/**
+ * Evaluation framework configuration properties, bound to the evaluation.* prefix in application.yml
+ *
+ */
+@ConfigurationProperties(prefix = "evaluation")
+public class EvaluationProperties {
+
+    private String outputDir = "results";
+    private int fromConv = 0;
+    private int toConv = -1;
+    private String runName = "default";
+    private String stages = "add,search,answer,evaluate";
+    private boolean smoke = false;
+    private int smokeMessages = 10;
+    private int smokeQuestions = 3;
+    private boolean cleanGroups = false;
+    private DatasetProperties dataset = new DatasetProperties();
+    private SystemProperties system = new SystemProperties();
+    private ConcurrencyProperties concurrency = new ConcurrencyProperties();
+
+    public String getOutputDir() {
+        return outputDir;
+    }
+
+    public void setOutputDir(String outputDir) {
+        this.outputDir = outputDir;
+    }
+
+    public int getFromConv() {
+        return fromConv;
+    }
+
+    public void setFromConv(int fromConv) {
+        this.fromConv = fromConv;
+    }
+
+    public int getToConv() {
+        return toConv;
+    }
+
+    public void setToConv(int toConv) {
+        this.toConv = toConv;
+    }
+
+    public String getRunName() {
+        return runName;
+    }
+
+    public void setRunName(String runName) {
+        this.runName = runName;
+    }
+
+    public String getStages() {
+        return stages;
+    }
+
+    public void setStages(String stages) {
+        this.stages = stages;
+    }
+
+    public boolean isSmoke() {
+        return smoke;
+    }
+
+    public void setSmoke(boolean smoke) {
+        this.smoke = smoke;
+    }
+
+    public int getSmokeMessages() {
+        return smokeMessages;
+    }
+
+    public void setSmokeMessages(int smokeMessages) {
+        this.smokeMessages = smokeMessages;
+    }
+
+    public int getSmokeQuestions() {
+        return smokeQuestions;
+    }
+
+    public void setSmokeQuestions(int smokeQuestions) {
+        this.smokeQuestions = smokeQuestions;
+    }
+
+    public boolean isCleanGroups() {
+        return cleanGroups;
+    }
+
+    public void setCleanGroups(boolean cleanGroups) {
+        this.cleanGroups = cleanGroups;
+    }
+
+    public DatasetProperties getDataset() {
+        return dataset;
+    }
+
+    public void setDataset(DatasetProperties dataset) {
+        this.dataset = dataset;
+    }
+
+    public SystemProperties getSystem() {
+        return system;
+    }
+
+    public void setSystem(SystemProperties system) {
+        this.system = system;
+    }
+
+    public ConcurrencyProperties getConcurrency() {
+        return concurrency;
+    }
+
+    public void setConcurrency(ConcurrencyProperties concurrency) {
+        this.concurrency = concurrency;
+    }
+
+    public static class ConcurrencyProperties {
+        private int add = 1;
+        private int search = 10;
+        private int conv = 5;
+
+        public int getAdd() {
+            return add;
+        }
+
+        public void setAdd(int add) {
+            this.add = add;
+        }
+
+        public int getSearch() {
+            return search;
+        }
+
+        public void setSearch(int search) {
+            this.search = search;
+        }
+
+        public int getConv() {
+            return conv;
+        }
+
+        public void setConv(int conv) {
+            this.conv = conv;
+        }
+    }
+
+    public static class DatasetProperties {
+
+        private String name = "locomo";
+        private String path;
+        private Integer maxContentLength;
+        private List<String> filterCategories = new ArrayList<>();
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getPath() {
+            return path;
+        }
+
+        public void setPath(String path) {
+            this.path = path;
+        }
+
+        public Integer getMaxContentLength() {
+            return maxContentLength;
+        }
+
+        public void setMaxContentLength(Integer maxContentLength) {
+            this.maxContentLength = maxContentLength;
+        }
+
+        public List<String> getFilterCategories() {
+            return filterCategories;
+        }
+
+        public void setFilterCategories(List<String> filterCategories) {
+            this.filterCategories = filterCategories;
+        }
+    }
+
+    public static class SystemProperties {
+
+        private String adapter = "memind";
+        private SearchProperties search = new SearchProperties();
+        private AnswerProperties answer = new AnswerProperties();
+        private LlmProperties llm = new LlmProperties();
+        private MemindProperties memind = new MemindProperties();
+
+        public String getAdapter() {
+            return adapter;
+        }
+
+        public void setAdapter(String adapter) {
+            this.adapter = adapter;
+        }
+
+        public SearchProperties getSearch() {
+            return search;
+        }
+
+        public void setSearch(SearchProperties search) {
+            this.search = search;
+        }
+
+        public AnswerProperties getAnswer() {
+            return answer;
+        }
+
+        public void setAnswer(AnswerProperties answer) {
+            this.answer = answer;
+        }
+
+        public LlmProperties getLlm() {
+            return llm;
+        }
+
+        public void setLlm(LlmProperties llm) {
+            this.llm = llm;
+        }
+
+        public MemindProperties getMemind() {
+            return memind;
+        }
+
+        public void setMemind(MemindProperties memind) {
+            this.memind = memind;
+        }
+
+        public static class SearchProperties {
+
+            private int topK = 20;
+            private boolean dualPerspective = false;
+
+            public int getTopK() {
+                return topK;
+            }
+
+            public void setTopK(int topK) {
+                this.topK = topK;
+            }
+
+            public boolean isDualPerspective() {
+                return dualPerspective;
+            }
+
+            public void setDualPerspective(boolean dualPerspective) {
+                this.dualPerspective = dualPerspective;
+            }
+        }
+
+        public static class MemindProperties {
+
+            private String addMode = "streaming";
+            private boolean enableInsight = false;
+
+            public String getAddMode() {
+                return addMode;
+            }
+
+            public void setAddMode(String addMode) {
+                this.addMode = addMode;
+            }
+
+            public boolean isEnableInsight() {
+                return enableInsight;
+            }
+
+            public void setEnableInsight(boolean enableInsight) {
+                this.enableInsight = enableInsight;
+            }
+        }
+
+        public static class AnswerProperties {
+
+            private int maxRetries = 3;
+
+            public int getMaxRetries() {
+                return maxRetries;
+            }
+
+            public void setMaxRetries(int maxRetries) {
+                this.maxRetries = maxRetries;
+            }
+        }
+
+        public static class LlmProperties {
+
+            private String model = "gpt-4o-mini";
+            private int numRuns = 3;
+
+            public String getModel() {
+                return model;
+            }
+
+            public void setModel(String model) {
+                this.model = model;
+            }
+
+            public int getNumRuns() {
+                return numRuns;
+            }
+
+            public void setNumRuns(int numRuns) {
+                this.numRuns = numRuns;
+            }
+        }
+    }
+}

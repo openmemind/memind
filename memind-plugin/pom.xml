@@ -1,0 +1,19 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.openmemind.ai</groupId>
+        <artifactId>memind</artifactId>
+        <version>${revision}</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>memind-plugin</artifactId>
+    <packaging>pom</packaging>
+    <name>Memind - Plugins</name>
+
+    <modules>
+        <module>memind-plugin-tracing-opentelemetry</module>
+        <module>memind-plugin-store-mybatis-plus</module>
+    </modules>
+</project>

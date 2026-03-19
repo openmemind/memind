@@ -1,0 +1,133 @@
+package com.openmemind.ai.memory.core.prompt.extraction.item;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.openmemind.ai.memory.core.data.MemoryInsightType;
+import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
+import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
+import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
+import java.time.Instant;
+import java.util.List;
+import java.util.Set;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+class SelfVerificationPromptsTest {
+
+    @Test
+    @DisplayName(
+            "Rendered prompt should contain category context, identity, temporal resolution, and"
+                    + " examples")
+    void shouldContainAllSections() {
+        var insightTypes =
+                List.of(
+                        createInsightType("identity", List.of("profile")),
+                        createInsightType("experiences", List.of("event")),
+                        createInsightType("procedural", List.of("procedural")));
+        var existingEntries = List.of(createEntry("User is a backend engineer", "profile"));
+        var template =
+                SelfVerificationPrompts.build(
+                        "user: I am a backend engineer working on Spring Boot",
+                        existingEntries,
+                        Instant.parse("2026-03-18T00:00:00Z"),
+                        insightTypes,
+                        "Alice",
+                        Set.of(
+                                MemoryCategory.PROFILE,
+                                MemoryCategory.EVENT,
+                                MemoryCategory.PROCEDURAL));
+        var result = template.render("English");
+
+        // System prompt structure
+        assertThat(result.systemPrompt()).contains("memory extraction reviewer");
+        assertThat(result.systemPrompt()).contains("# Core Principles");
+        assertThat(result.systemPrompt()).contains("Non-overlap");
+        assertThat(result.systemPrompt()).contains("# Common Miss Patterns");
+        assertThat(result.systemPrompt()).contains("# Extraction Bias");
+        assertThat(result.systemPrompt()).contains("## Decision Logic");
+        assertThat(result.systemPrompt()).contains("## Category Definitions");
+        assertThat(result.systemPrompt()).contains("Alice");
+        assertThat(result.systemPrompt()).contains("# Temporal Resolution");
+        assertThat(result.systemPrompt()).contains("category_reason");
+
+        // Examples
+        assertThat(result.systemPrompt()).contains("# Examples");
+        assertThat(result.systemPrompt()).contains("Good Example");
+        assertThat(result.systemPrompt()).contains("Bad Example");
+
+        // User prompt structure
+        assertThat(result.userPrompt()).contains("# AlreadyExtracted");
+        assertThat(result.userPrompt()).contains("[profile] User is a backend engineer");
+        assertThat(result.userPrompt()).contains("# Conversation");
+    }
+
+    @Test
+    @DisplayName("Should use default identity when userName is null")
+    void shouldUseDefaultIdentity() {
+        var template =
+                SelfVerificationPrompts.build(
+                        "user: hello", List.of(), null, List.of(), null, null);
+        var result = template.render(null);
+        assertThat(result.systemPrompt()).contains("Use \"User\" to refer to the user");
+        assertThat(result.systemPrompt()).doesNotContain("CRITICAL: The user's real name");
+    }
+
+    @Test
+    @DisplayName("AlreadyExtracted should show category prefix when available")
+    void shouldShowCategoryInExistingEntries() {
+        var entries =
+                List.of(
+                        createEntry("User is a Java developer", "profile"),
+                        createEntry("User is migrating to Java 21", "event"),
+                        createEntry("Some fact", null));
+        var template =
+                SelfVerificationPrompts.build(
+                        "conversation text", entries, null, List.of(), null, null);
+        var result = template.render(null);
+        assertThat(result.userPrompt()).contains("[profile] User is a Java developer");
+        assertThat(result.userPrompt()).contains("[event] User is migrating to Java 21");
+        assertThat(result.userPrompt()).contains("[unknown] Some fact");
+    }
+
+    @Test
+    @DisplayName("Should show first-pass message when no existing entries")
+    void shouldShowFirstPassMessage() {
+        var template =
+                SelfVerificationPrompts.build(
+                        "conversation text", List.of(), null, List.of(), null, null);
+        var result = template.render(null);
+        assertThat(result.userPrompt()).contains("(none -- this is the first extraction pass)");
+    }
+
+    private static MemoryInsightType createInsightType(String name, List<String> categories) {
+        return new MemoryInsightType(
+                null,
+                null,
+                name,
+                null,
+                null,
+                categories,
+                100,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+    }
+
+    private static ExtractedMemoryEntry createEntry(String content, String category) {
+        return new ExtractedMemoryEntry(
+                content,
+                0.9f,
+                null,
+                "raw-001",
+                null,
+                List.of(),
+                null,
+                MemoryItemType.FACT,
+                category);
+    }
+}

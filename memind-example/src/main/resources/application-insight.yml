@@ -1,0 +1,6 @@
+# InsightTreeExample 专用配置：降低阈值以便少量数据触发完整树构建
+memind:
+  extraction:
+    insight-build:
+      grouping-threshold: 2
+      build-threshold: 2

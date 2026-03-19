@@ -1,0 +1,18 @@
+[
+  {"role": "USER", "content": "最近在准备下周的性能压测，订单系统要扛住双十一 10 倍流量。"},
+  {"role": "ASSISTANT", "content": "10 倍流量的压测目标不低。你们打算用什么压测工具？JMeter 还是 Gatling？"},
+  {"role": "USER", "content": "打算用 Gatling，之前用过觉得报告比 JMeter 好看。压测脚本我周三之前要写完。"},
+  {"role": "ASSISTANT", "content": "Gatling 的 Scala DSL 写起来确实更优雅，HTML 报告也更直观。周三的 deadline 还是比较紧的。"},
+  {"role": "USER", "content": "嗯，而且周五之前要把压测报告提交给 CTO 审批。如果性能不达标，可能要推迟上线计划。"},
+  {"role": "ASSISTANT", "content": "时间线很紧。建议先跑一轮基准测试，确认当前系统的瓶颈在哪，再针对性优化。"},
+  {"role": "USER", "content": "好主意。另外我最近在研究 GraalVM Native Image，想看看能不能用在我们的网关服务上，启动时间太长了。"},
+  {"role": "ASSISTANT", "content": "GraalVM Native Image 确实能大幅缩短启动时间，但对反射和动态代理的支持需要额外配置。Spring Boot 3 的 AOT 支持已经比较成熟了。"},
+  {"role": "USER", "content": "对，我觉得明年我们的网关服务迟早要迁移到 GraalVM。现在先做技术调研，等 Spring Boot 的 AOT 更稳定了再动手。"},
+  {"role": "ASSISTANT", "content": "分阶段推进是稳妥的做法。先调研、再 POC、最后生产落地。"},
+  {"role": "USER", "content": "每次发版前我都会跑一遍全量回归测试，这个习惯救了我好几次。上次就是回归测试发现了一个并发 bug。"},
+  {"role": "ASSISTANT", "content": "全量回归测试虽然耗时，但在关键发版前确实不能省。并发 bug 特别隐蔽，能在测试阶段发现是很幸运的。"},
+  {"role": "USER", "content": "今年的目标是把整个支付系统的可观测性做起来，引入 OpenTelemetry，实现全链路追踪。预计 Q2 开始动手。"},
+  {"role": "ASSISTANT", "content": "OpenTelemetry 是可观测性的标准选择。Q2 开始的话，建议先从核心支付链路开始接入，逐步扩展到其他服务。"},
+  {"role": "USER", "content": "对，我打算先在订单服务上做 POC，验证 trace 的采集和展示效果，然后再推广到其他服务。"},
+  {"role": "ASSISTANT", "content": "从订单服务开始 POC 很合理，它是核心链路，trace 数据最有价值。Jaeger 或 Grafana Tempo 都是不错的后端选择。"}
+]

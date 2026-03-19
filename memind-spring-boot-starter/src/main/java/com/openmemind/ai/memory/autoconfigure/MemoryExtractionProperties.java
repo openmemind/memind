@@ -1,0 +1,149 @@
+package com.openmemind.ai.memory.autoconfigure;
+
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig.ConversationSegmentStrategy;
+import java.time.Duration;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+/**
+ * memind extraction configuration properties
+ *
+ */
+@ConfigurationProperties(prefix = "memind.extraction")
+public class MemoryExtractionProperties {
+
+    private Duration timeout = Duration.ofMinutes(10);
+    private Chunking chunking = new Chunking();
+    private Boundary boundary = new Boundary();
+    private InsightBuild insightBuild = new InsightBuild();
+
+    public Duration getTimeout() {
+        return timeout;
+    }
+
+    public void setTimeout(Duration timeout) {
+        this.timeout = timeout;
+    }
+
+    public Chunking getChunking() {
+        return chunking;
+    }
+
+    public void setChunking(Chunking chunking) {
+        this.chunking = chunking;
+    }
+
+    public Boundary getBoundary() {
+        return boundary;
+    }
+
+    public void setBoundary(Boundary boundary) {
+        this.boundary = boundary;
+    }
+
+    public InsightBuild getInsightBuild() {
+        return insightBuild;
+    }
+
+    public void setInsightBuild(InsightBuild insightBuild) {
+        this.insightBuild = insightBuild;
+    }
+
+    public static class Chunking {
+        private ConversationSegmentStrategy strategy = ConversationSegmentStrategy.LLM;
+        private int messagesPerChunk = 20;
+        private int minMessagesPerSegment = 20;
+
+        public ConversationSegmentStrategy getStrategy() {
+            return strategy;
+        }
+
+        public void setStrategy(ConversationSegmentStrategy strategy) {
+            this.strategy = strategy;
+        }
+
+        public int getMessagesPerChunk() {
+            return messagesPerChunk;
+        }
+
+        public void setMessagesPerChunk(int messagesPerChunk) {
+            this.messagesPerChunk = messagesPerChunk;
+        }
+
+        public int getMinMessagesPerSegment() {
+            return minMessagesPerSegment;
+        }
+
+        public void setMinMessagesPerSegment(int v) {
+            this.minMessagesPerSegment = v;
+        }
+    }
+
+    public static class Boundary {
+        private int maxMessages = 50;
+        private int maxTokens = 8192;
+        private int minMessagesForLlm = 10;
+
+        public int getMaxMessages() {
+            return maxMessages;
+        }
+
+        public void setMaxMessages(int maxMessages) {
+            this.maxMessages = maxMessages;
+        }
+
+        public int getMaxTokens() {
+            return maxTokens;
+        }
+
+        public void setMaxTokens(int maxTokens) {
+            this.maxTokens = maxTokens;
+        }
+
+        public int getMinMessagesForLlm() {
+            return minMessagesForLlm;
+        }
+
+        public void setMinMessagesForLlm(int v) {
+            this.minMessagesForLlm = v;
+        }
+    }
+
+    public static class InsightBuild {
+        private int groupingThreshold = 5;
+        private int buildThreshold = 3;
+        private int concurrency = 8;
+        private int maxRetries = 2;
+
+        public int getGroupingThreshold() {
+            return groupingThreshold;
+        }
+
+        public void setGroupingThreshold(int v) {
+            this.groupingThreshold = v;
+        }
+
+        public int getBuildThreshold() {
+            return buildThreshold;
+        }
+
+        public void setBuildThreshold(int v) {
+            this.buildThreshold = v;
+        }
+
+        public int getConcurrency() {
+            return concurrency;
+        }
+
+        public void setConcurrency(int concurrency) {
+            this.concurrency = concurrency;
+        }
+
+        public int getMaxRetries() {
+            return maxRetries;
+        }
+
+        public void setMaxRetries(int maxRetries) {
+            this.maxRetries = maxRetries;
+        }
+    }
+}

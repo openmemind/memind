@@ -1,0 +1,16 @@
+[
+  {"role": "USER", "content": "我叫李伟，今年 32 岁，在杭州一家金融科技公司做技术负责人，带一个 8 人的后端团队。"},
+  {"role": "ASSISTANT", "content": "你好李伟！金融科技领域的技术负责人，团队管理和技术决策都要兼顾，挺有挑战的。"},
+  {"role": "USER", "content": "是的，我本科是浙大计算机专业，毕业后先在阿里做了 3 年 Java 开发，然后跳到现在这家公司，已经 6 年了。"},
+  {"role": "ASSISTANT", "content": "浙大计算机加阿里的背景，技术功底很扎实。在阿里的经历对现在做技术决策应该帮助很大。"},
+  {"role": "USER", "content": "对，阿里那段经历让我对高并发和分布式系统有了很深的理解。现在我们公司的核心交易系统就是我主导设计的。"},
+  {"role": "ASSISTANT", "content": "核心交易系统的架构设计，这是很重的责任。用的什么技术栈？"},
+  {"role": "USER", "content": "主要是 Java 17 + Spring Cloud + Kafka + TiDB。我个人特别喜欢函数式编程的风格，代码里大量用 Stream API 和 Optional。"},
+  {"role": "ASSISTANT", "content": "TiDB 在金融场景下确实是个好选择，分布式事务支持比较完善。函数式风格写出来的代码确实更简洁。"},
+  {"role": "USER", "content": "我对代码质量要求很高，团队必须写单元测试，覆盖率不能低于 80%。而且我不喜欢用 Lombok，觉得它隐藏了太多细节。"},
+  {"role": "ASSISTANT", "content": "80% 覆盖率是个很好的标准。不用 Lombok 的观点也有道理，显式代码更容易调试和理解。"},
+  {"role": "USER", "content": "工具方面，我习惯用 IntelliJ IDEA Ultimate，版本控制用 Git，CI/CD 用 Jenkins。最近在考虑迁移到 GitHub Actions。"},
+  {"role": "ASSISTANT", "content": "GitHub Actions 的 YAML 配置确实比 Jenkins 的 Groovy pipeline 更直观，迁移成本也不高。"},
+  {"role": "USER", "content": "技术选型上我比较保守，不会追新技术。一个框架至少要有 2 年以上的生产验证我才会考虑引入。"},
+  {"role": "ASSISTANT", "content": "金融场景下保守选型是对的，稳定性比新特性重要得多。2 年生产验证是个合理的门槛。"}
+]

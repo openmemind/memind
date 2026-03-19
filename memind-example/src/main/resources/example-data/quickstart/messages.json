@@ -1,0 +1,14 @@
+[
+  {"role": "USER", "content": "你好，我是张明，在一家互联网公司做后端开发，主要用 Java。"},
+  {"role": "ASSISTANT", "content": "你好张明！Java 后端开发，很棒的方向。你目前在做什么项目呢？"},
+  {"role": "USER", "content": "我们团队在做一个电商平台的订单系统重构，之前是单体架构，现在要拆成微服务。我负责订单核心模块。"},
+  {"role": "ASSISTANT", "content": "单体到微服务的拆分是个大工程。订单核心模块涉及哪些关键功能？"},
+  {"role": "USER", "content": "主要是订单创建、支付回调、库存扣减这些。技术栈用的 Spring Boot 3 + MyBatis-Plus + RocketMQ。数据库是 MySQL，缓存用 Redis。"},
+  {"role": "ASSISTANT", "content": "经典的电商技术栈。RocketMQ 做异步解耦很合适，特别是支付回调和库存扣减这种场景。"},
+  {"role": "USER", "content": "对，我们之前支付回调是同步的，经常超时。换成 MQ 之后好多了。不过最近遇到个问题，分布式事务一致性不太好处理。"},
+  {"role": "ASSISTANT", "content": "分布式事务确实是微服务拆分的经典难题。你们考虑过 Seata 或者基于 MQ 的最终一致性方案吗？"},
+  {"role": "USER", "content": "在看 Seata 的 AT 模式，但担心性能开销。我个人更倾向于用 MQ + 本地消息表的方案，可靠性更好。"},
+  {"role": "ASSISTANT", "content": "MQ + 本地消息表确实是更轻量的选择，适合对性能敏感的订单场景。实现起来也更可控。"},
+  {"role": "USER", "content": "嗯，我有 5 年 Java 开发经验了，之前也做过类似的方案。对了，我们团队用的是 IntelliJ IDEA，代码规范走的是阿里巴巴 Java 开发手册。"},
+  {"role": "ASSISTANT", "content": "5 年经验加上阿里规范，代码质量应该很有保障。微服务拆分过程中如果遇到具体问题，随时可以讨论。"}
+]
