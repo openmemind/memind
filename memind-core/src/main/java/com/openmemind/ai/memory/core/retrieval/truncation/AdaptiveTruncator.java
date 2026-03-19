@@ -1,3 +1,16 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.openmemind.ai.memory.core.retrieval.truncation;
 
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
@@ -11,19 +24,25 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Algorithm process:
  * <ol>
- *   <li>L1 Elbow detection: Find the maximum gap between adjacent scores, if gap >= minElbowGap then truncate at that position</li>
+ *   <li>L1 Elbow detection: Find the maximum gap between adjacent scores, if gap >= minElbowGap then truncate
+ *   at that position</li>
  *   <li>L2 Relative threshold: Use topScore * dropRatio as the score line, results below this line are removed</li>
- *   <li>Take the more aggressive (smaller index) truncation point of the two, ensuring at least 1 result is retained</li>
+ *   <li>Take the more aggressive (smaller index) truncation point of the two, ensuring at least
+ *   1 result is retained</li>
  * </ol>
  */
 public final class AdaptiveTruncator {
 
     private static final Logger log = LoggerFactory.getLogger(AdaptiveTruncator.class);
 
-    /** Skip truncation when the input list is less than this number */
+    /**
+     * Skip truncation when the input list is less than this number
+     */
     private static final int MIN_INPUT_SIZE = 3;
 
-    /** Minimum number of results to retain after truncation */
+    /**
+     * Minimum number of results to retain after truncation
+     */
     private static final int MIN_RESULT_COUNT = 1;
 
     private AdaptiveTruncator() {}
@@ -86,7 +105,8 @@ public final class AdaptiveTruncator {
     /**
      * Elbow detection: Find the maximum gap between adjacent scores
      *
-     * @return Truncation position index (retain elements in [0, index)), if no significant elbow then return sorted.size()
+     * @return Truncation position index (retain elements in [0, index)), if no significant
+     * elbow then return sorted.size()
      */
     static int findElbow(List<ScoredResult> sorted, double minElbowGap) {
         double maxGap = 0.0;

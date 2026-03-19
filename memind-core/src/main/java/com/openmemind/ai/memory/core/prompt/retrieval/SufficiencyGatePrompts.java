@@ -1,3 +1,16 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.openmemind.ai.memory.core.prompt.retrieval;
 
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
@@ -80,7 +93,8 @@ public final class SufficiencyGatePrompts {
             ```json
             {
               "sufficient": true/false,
-              "reasoning": "Step-by-step: Query requires X, Y, Z. Result #1 provides X. Result #3 provides Y. Z is not found in any result. → insufficient.",
+              "reasoning": "Step-by-step: Query requires X, Y, Z.
+              Result #1 provides X. Result #3 provides Y. Z is not found in any result. → insufficient.",
               "gaps": ["specific missing piece 1", "specific missing piece 2"],
               "keyInformation": ["key fact extracted from results"],
               "evidences": ["[#1] exact sentence from result"]
@@ -95,15 +109,18 @@ public final class SufficiencyGatePrompts {
             Results:
             - #1 [ITEM] User is a backend engineer with 5 years of Java experience
             - #2 [ITEM] User has been learning Python for data analysis
-            - #3 [INSIGHT] User's technical identity centers on Java/Spring ecosystem with emerging Python skills
+            - #3 [INSIGHT] User's technical identity centers on Java/Spring ecosystem with
+              emerging Python skills
 
             Output:
             {
               "sufficient": true,
-              "reasoning": "Query asks for programming languages. #1 provides Java (5 years). #2 provides Python (learning). #3 confirms both. All aspects covered with specifics.",
+              "reasoning": "Query asks for programming languages. #1 provides Java (5 years).
+              #2 provides Python (learning). #3 confirms both. All aspects covered with specifics.",
               "gaps": [],
               "keyInformation": ["User knows Java (5 years) and Python (learning)"],
-              "evidences": ["[#1] User is a backend engineer with 5 years of Java experience", "[#2] User has been learning Python for data analysis"]
+              "evidences": ["[#1] User is a backend engineer with 5 years of Java experience",
+              "[#2] User has been learning Python for data analysis"]
             }
 
             ## Example 2 — Insufficient (topic mentioned but detail missing)
@@ -116,7 +133,9 @@ public final class SufficiencyGatePrompts {
             Output:
             {
               "sufficient": false,
-              "reasoning": "Query asks for specific database name in current project. #1 mentions the project but no database. #2 mentions connection pool but no specific database name. The topic is related but the actual answer is missing.",
+              "reasoning": "Query asks for specific database name in current project.
+              #1 mentions the project but no database. #2 mentions connection pool but no specific database name.
+              The topic is related but the actual answer is missing.",
               "gaps": ["the specific database (e.g., PostgreSQL, MySQL) used in the microservices project"],
               "keyInformation": ["User is working on a microservices migration project"],
               "evidences": []
@@ -132,7 +151,9 @@ public final class SufficiencyGatePrompts {
             Output:
             {
               "sufficient": false,
-              "reasoning": "Query asks for a specific start date/time. #1 confirms the company but no date. #2 says 'for a while' which is vague, not a specific date. Time queries require actual dates, not vague temporal references.",
+              "reasoning": "Query asks for a specific start date/time. #1 confirms the company but no date.
+               #2 says 'for a while' which is vague, not a specific date. Time queries require actual dates,
+               not vague temporal references.",
               "gaps": ["the specific date or year when user started working at TechCorp"],
               "keyInformation": ["User works at TechCorp as a senior engineer"],
               "evidences": ["[#1] User works at TechCorp as a senior engineer"]

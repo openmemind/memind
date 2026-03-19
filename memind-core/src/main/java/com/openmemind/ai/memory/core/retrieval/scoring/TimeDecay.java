@@ -1,3 +1,16 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.openmemind.ai.memory.core.retrieval.scoring;
 
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
@@ -9,7 +22,8 @@ import java.util.List;
 /**
  * Time decay utility class
  *
- * <p>Extracts the time decay logic of ItemTierRetriever as an independent tool, supporting batch application of decay to ScoredResult list.
+ * <p>Extracts the time decay logic of ItemTierRetriever as an independent tool, supporting batch application
+ * of decay to ScoredResult list.
  *
  */
 public final class TimeDecay {
@@ -19,7 +33,8 @@ public final class TimeDecay {
     /**
      * Calculate time decay factor based on occurredAt
      *
-     * <p>Returns 1.0 within the query time range, outside the range decays exponentially (half-life of 30 days, lower limit of 0.3).
+     * <p>Returns 1.0 within the query time range, outside the range decays exponentially (half-life of 30 days,
+     * lower limit of 0.3).
      * If occurredAt is null, returns 1.0 (no decay).
      * If context has no time range, applies global freshness decay (half-life of 365 days, lower limit of 0.7).
      *
@@ -35,7 +50,9 @@ public final class TimeDecay {
 
         if (!context.hasTimeRange()) {
             long daysAge = Duration.between(occurredAt, Instant.now()).toDays();
-            if (daysAge <= 0) return 1.0;
+            if (daysAge <= 0) {
+                return 1.0;
+            }
             return Math.max(
                     scoring.recency().floor(), Math.exp(-scoring.recency().rate() * daysAge));
         }

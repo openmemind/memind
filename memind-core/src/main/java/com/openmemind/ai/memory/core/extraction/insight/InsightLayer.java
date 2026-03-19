@@ -1,3 +1,16 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.openmemind.ai.memory.core.extraction.insight;
 
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
@@ -44,10 +57,10 @@ public class InsightLayer implements InsightExtractStep {
     }
 
     /**
-     * @param store memory store
-     * @param scheduler insight build scheduler
+     * @param store                   memory store
+     * @param scheduler               insight build scheduler
      * @param unsupportedContentTypes content types that should be excluded from insight building
-     *     (derived from processors where supportsInsight() returns false)
+     *                                (derived from processors where supportsInsight() returns false)
      */
     public InsightLayer(
             MemoryStore store,
@@ -200,7 +213,9 @@ public class InsightLayer implements InsightExtractStep {
         for (var item : newItems) {
             for (String insightTypeName : resolveExplicitInsightTypes(item, insightTypes)) {
                 var insightType = typeByName.get(insightTypeName);
-                if (insightType == null) continue;
+                if (insightType == null) {
+                    continue;
+                }
                 if (insightType.acceptContentTypes() != null
                         && !insightType.acceptContentTypes().contains(item.contentType())) {
                     continue;
@@ -235,8 +250,9 @@ public class InsightLayer implements InsightExtractStep {
 
     private List<String> validateInsightTypes(
             MemoryItem item, List<String> llmOutput, List<MemoryInsightType> insightTypes) {
-        if (item.category() == null) return llmOutput;
-
+        if (item.category() == null) {
+            return llmOutput;
+        }
         if (llmOutput != null && !llmOutput.isEmpty()) {
             return llmOutput;
         }

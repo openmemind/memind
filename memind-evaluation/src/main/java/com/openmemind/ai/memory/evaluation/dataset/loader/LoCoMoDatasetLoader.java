@@ -1,3 +1,16 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.openmemind.ai.memory.evaluation.dataset.loader;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -110,7 +123,9 @@ public class LoCoMoDatasetLoader implements DatasetLoader {
             int globalMsgIdx = 0;
             while (true) {
                 String sessionKey = "session_" + sessionIdx;
-                if (!convObj.has(sessionKey)) break;
+                if (!convObj.has(sessionKey)) {
+                    break;
+                }
 
                 // session-level timestamp from session_N_date_time
                 String dateTimeKey = sessionKey + "_date_time";
@@ -235,7 +250,9 @@ public class LoCoMoDatasetLoader implements DatasetLoader {
         // Level 1: message-level timestamp
         if (msg.has("timestamp") && !msg.get("timestamp").asText().isBlank()) {
             Instant parsed = parseTimestamp(msg.get("timestamp").asText());
-            if (parsed != null) return parsed;
+            if (parsed != null) {
+                return parsed;
+            }
         }
         // Level 2: session-level base
         if (sessionBase != null) {
@@ -249,7 +266,9 @@ public class LoCoMoDatasetLoader implements DatasetLoader {
      * Parse the "date" or "start_time" field of the session node as the base time
      */
     private Instant parseSessionBase(JsonNode session) {
-        if (session == null || !session.isObject()) return null;
+        if (session == null || !session.isObject()) {
+            return null;
+        }
         if (session.has("date")) {
             return parseTimestamp(session.get("date").asText());
         }
@@ -261,7 +280,9 @@ public class LoCoMoDatasetLoader implements DatasetLoader {
 
     private List<QAPair> parseQaPairs(String convId, JsonNode qasNode) {
         List<QAPair> pairs = new ArrayList<>();
-        if (qasNode == null || !qasNode.isArray()) return pairs;
+        if (qasNode == null || !qasNode.isArray()) {
+            return pairs;
+        }
 
         List<String> filtered = props.getDataset().getFilterCategories();
 
@@ -269,7 +290,9 @@ public class LoCoMoDatasetLoader implements DatasetLoader {
             JsonNode qa = qasNode.get(i);
 
             String category = qa.has("category") ? qa.get("category").asText() : "unknown";
-            if (!filtered.isEmpty() && filtered.contains(category)) continue;
+            if (!filtered.isEmpty() && filtered.contains(category)) {
+                continue;
+            }
 
             Map<String, Object> meta = new LinkedHashMap<>();
             if (qa.has("all_options")) {
@@ -295,7 +318,9 @@ public class LoCoMoDatasetLoader implements DatasetLoader {
 
     // package-private for testing
     Instant parseTimestamp(String raw) {
-        if (raw == null || raw.isBlank()) return null;
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
         try {
             LocalDateTime ldt = LocalDateTime.parse(raw.trim(), LOCOMO_TS);
             return ldt.atOffset(ZoneOffset.UTC).toInstant();
@@ -306,7 +331,9 @@ public class LoCoMoDatasetLoader implements DatasetLoader {
 
     // package-private for testing
     String truncateContent(String content, Integer maxLength) {
-        if (maxLength == null || content == null || content.length() <= maxLength) return content;
+        if (maxLength == null || content == null || content.length() <= maxLength) {
+            return content;
+        }
         return content.substring(0, maxLength);
     }
 

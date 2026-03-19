@@ -1,3 +1,16 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.openmemind.ai.memory.evaluation.evaluator;
 
 import com.openmemind.ai.memory.evaluation.dataset.model.QAPair;
@@ -38,11 +51,15 @@ public class ExactMatchEvaluator implements AnswerEvaluator {
      * @return extracted letter (lowercase), or the result of trim+toLowerCase
      */
     String extractOption(String s) {
-        if (s == null) return "";
+        if (s == null) {
+            return "";
+        }
         String trimmed = s.trim();
         for (Pattern p : OPTION_PATTERNS) {
             Matcher m = p.matcher(trimmed);
-            if (m.find()) return m.group(1).toLowerCase();
+            if (m.find()) {
+                return m.group(1).toLowerCase();
+            }
         }
         return trimmed.toLowerCase();
     }

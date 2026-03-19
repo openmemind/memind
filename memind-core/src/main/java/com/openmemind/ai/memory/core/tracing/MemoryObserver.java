@@ -1,3 +1,16 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.openmemind.ai.memory.core.tracing;
 
 import java.util.function.Supplier;
@@ -7,10 +20,12 @@ import reactor.core.publisher.Mono;
 /**
  * Observability provider abstraction
  *
- * <p>Defines the observation wrapping capability for Mono/Flux operations. The default implementation is {@link NoopMemoryObserver} (zero overhead),
+ * <p>Defines the observation wrapping capability for Mono/Flux operations.
+ * The default implementation is {@link NoopMemoryObserver} (zero overhead),
  * specific implementations are provided by plugin modules (such as OpenTelemetry).
  *
- * <p><b>Constraints:</b> operation supplier must return cold Mono/Flux (lazy), cannot return already subscribed hot streams.
+ * <p><b>Constraints:</b> operation supplier must return cold Mono/Flux (lazy), cannot return already
+ * subscribed hot streams.
  */
 public interface MemoryObserver {
 

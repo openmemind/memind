@@ -1,3 +1,16 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.openmemind.ai.memory.core.retrieval.scoring;
 
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
@@ -81,10 +94,12 @@ public final class ResultMerger {
                         result,
                         (existing, incoming) -> {
                             // Prefer to keep those with vector scores (from vector search)
-                            if (existing.vectorScore() > 0 && incoming.vectorScore() == 0)
+                            if (existing.vectorScore() > 0 && incoming.vectorScore() == 0) {
                                 return existing;
-                            if (incoming.vectorScore() > 0 && existing.vectorScore() == 0)
+                            }
+                            if (incoming.vectorScore() > 0 && existing.vectorScore() == 0) {
                                 return incoming;
+                            }
                             return incoming.vectorScore() > existing.vectorScore()
                                     ? incoming
                                     : existing;
@@ -160,8 +175,11 @@ public final class ResultMerger {
         for (int i = 0; i < results.size(); i++) {
             ScoredResult r = results.get(i);
             double bonus = 0;
-            if (i == 0) bonus = scoring.positionBonus().top1();
-            else if (i <= 2) bonus = scoring.positionBonus().top3();
+            if (i == 0) {
+                bonus = scoring.positionBonus().top1();
+            } else if (i <= 2) {
+                bonus = scoring.positionBonus().top3();
+            }
             boosted.add(
                     new ScoredResult(
                             r.sourceType(),
@@ -180,7 +198,8 @@ public final class ResultMerger {
      * <p>Each list's finalScore is first max-ratio normalized to [0, 1],
      * then the normalized scores of the same document are summed as the final score, and finally globally normalized.
      *
-     * <p>Difference from RRF: RSF retains original score information, high-scoring documents can still receive high weight even if ranked lower.
+     * <p>Difference from RRF: RSF retains original score information, high-scoring documents can
+     * still receive high weight even if ranked lower.
      *
      * @param rankedLists multiple ranking lists
      * @return merged results (sorted by finalScore in descending order, normalized to [0, 1])
@@ -217,10 +236,12 @@ public final class ResultMerger {
                         key,
                         result,
                         (existing, incoming) -> {
-                            if (existing.vectorScore() > 0 && incoming.vectorScore() == 0)
+                            if (existing.vectorScore() > 0 && incoming.vectorScore() == 0) {
                                 return existing;
-                            if (incoming.vectorScore() > 0 && existing.vectorScore() == 0)
+                            }
+                            if (incoming.vectorScore() > 0 && existing.vectorScore() == 0) {
                                 return incoming;
+                            }
                             return incoming.vectorScore() > existing.vectorScore()
                                     ? incoming
                                     : existing;
@@ -301,7 +322,8 @@ public final class ResultMerger {
      * Detects if BM25 has a strong signal
      *
      * <p>A strong signal is when the top-1 sigmoid score ≥ 0.85 and the gap with the second place ≥ 0.15.
-     * A strong signal means the keyword has been accurately hit, allowing skipping multiple query expansions to save LLM calls.
+     * A strong signal means the keyword has been accurately hit, allowing skipping multiple query
+     * expansions to save LLM calls.
      */
     public static boolean isStrongSignal(
             ScoringConfig scoring, List<TextSearchResult> bm25Results) {

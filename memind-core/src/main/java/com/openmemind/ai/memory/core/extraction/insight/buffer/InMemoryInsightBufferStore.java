@@ -1,3 +1,16 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.openmemind.ai.memory.core.extraction.insight.buffer;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
@@ -6,6 +19,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -124,8 +138,12 @@ public class InMemoryInsightBufferStore implements InsightBufferStore {
             var ungrouped = new ArrayList<BufferEntry>();
             var groupNames = new HashSet<String>();
             for (var e : list) {
-                if (e.groupName() != null) groupNames.add(e.groupName());
-                if (e.isUngrouped() && !e.built()) ungrouped.add(e);
+                if (e.groupName() != null) {
+                    groupNames.add(e.groupName());
+                }
+                if (e.isUngrouped() && !e.built()) {
+                    ungrouped.add(e);
+                }
             }
             return new UngroupedContext(List.copyOf(ungrouped), Set.copyOf(groupNames));
         }
@@ -160,7 +178,7 @@ public class InMemoryInsightBufferStore implements InsightBufferStore {
         synchronized (list) {
             return list.stream()
                     .map(BufferEntry::groupName)
-                    .filter(g -> g != null)
+                    .filter(Objects::nonNull)
                     .collect(Collectors.toUnmodifiableSet());
         }
     }
@@ -168,7 +186,9 @@ public class InMemoryInsightBufferStore implements InsightBufferStore {
     @Override
     public boolean hasWork(MemoryId memoryId, String insightTypeName) {
         var list = buffers.get(bufferKey(memoryId, insightTypeName));
-        if (list == null) return false;
+        if (list == null) {
+            return false;
+        }
         synchronized (list) {
             return list.stream().anyMatch(e -> !e.built());
         }

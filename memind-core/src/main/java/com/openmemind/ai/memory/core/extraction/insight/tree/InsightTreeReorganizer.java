@@ -1,3 +1,16 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.openmemind.ai.memory.core.extraction.insight.tree;
 
 import com.openmemind.ai.memory.core.data.InsightPoint;
@@ -47,12 +60,16 @@ public class InsightTreeReorganizer {
     private final BubbleTrackerStore bubbleTracker;
     private final IdUtils.SnowflakeIdGenerator idGenerator;
 
-    /** Fixed-size strip lock, bucketed by memoryId hash, to avoid ConcurrentHashMap infinite growth */
+    /**
+     * Fixed-size strip lock, bucketed by memoryId hash, to avoid ConcurrentHashMap infinite growth
+     */
     private static final int LOCK_STRIPES = 16;
 
     private final ReentrantLock[] rootLocks;
 
-    /** Tracks in-flight ROOT re-summarize virtual threads per memoryId, used by drainRootTasks */
+    /**
+     * Tracks in-flight ROOT re-summarize virtual threads per memoryId, used by drainRootTasks
+     */
     private final ConcurrentHashMap<String, ConcurrentLinkedQueue<Thread>> pendingRootThreads =
             new ConcurrentHashMap<>();
 
@@ -83,7 +100,9 @@ public class InsightTreeReorganizer {
      */
     public void drainRootTasks(MemoryId memoryId, long timeout, TimeUnit unit) {
         var queue = pendingRootThreads.remove(memoryId.toIdentifier());
-        if (queue == null || queue.isEmpty()) return;
+        if (queue == null || queue.isEmpty()) {
+            return;
+        }
         long deadlineNanos = System.nanoTime() + unit.toNanos(timeout);
         for (var t : queue) {
             long remainingNanos = deadlineNanos - System.nanoTime();
@@ -113,14 +132,20 @@ public class InsightTreeReorganizer {
     public void forceResummarizeBranchIfEmpty(
             MemoryId memoryId, MemoryInsightType insightType, String language) {
         var branch = store.getBranchByType(memoryId, insightType.name()).orElse(null);
-        if (branch == null) return;
-        if (branch.points() != null && !branch.points().isEmpty()) return;
+        if (branch == null) {
+            return;
+        }
+        if (branch.points() != null && !branch.points().isEmpty()) {
+            return;
+        }
 
         var allLeafs =
                 store.getInsightsByTypeId(memoryId, insightType.name()).stream()
                         .filter(i -> InsightTier.LEAF.equals(i.tier()))
                         .toList();
-        if (allLeafs.isEmpty()) return;
+        if (allLeafs.isEmpty()) {
+            return;
+        }
 
         log.debug(
                 "forceResummarizeBranchIfEmpty: BRANCH [type={}] has {} leafs but no summary,"
@@ -177,7 +202,9 @@ public class InsightTreeReorganizer {
             InsightTreeConfig config,
             String language) {
 
-        if (builtLeafs.isEmpty()) return;
+        if (builtLeafs.isEmpty()) {
+            return;
+        }
 
         var dirtyKey = branchBubbleKey(memoryId, insightTypeName);
 
@@ -257,7 +284,9 @@ public class InsightTreeReorganizer {
 
     // ===== Internal Process =====
 
-    /** Constructs a new BRANCH memory object, does not write to DB; first persistence is completed by the caller batchLinkLeafsToBranch */
+    /**
+     * Constructs a new BRANCH memory object, does not write to DB; first persistence is completed by the caller batchLinkLeafsToBranch
+     */
     private MemoryInsight newBranch(
             MemoryId memoryId, String insightTypeName, MemoryInsightType insightType) {
         var now = Instant.now();
@@ -284,7 +313,9 @@ public class InsightTreeReorganizer {
                 1);
     }
 
-    /** Batch links all LEAFs to BRANCH, single saveInsights replaces N+1 */
+    /**
+     * Batch links all LEAFs to BRANCH, single saveInsights replaces N+1
+     */
     private MemoryInsight batchLinkLeafsToBranch(
             MemoryId memoryId, List<MemoryInsight> allLeafs, MemoryInsight branch) {
         var existingChildIds = new LinkedHashSet<>(branch.childInsightIds());
@@ -306,11 +337,15 @@ public class InsightTreeReorganizer {
         return updatedBranch;
     }
 
-    /** Shared query result for ROOT-related operations */
+    /**
+     * Shared query result for ROOT-related operations
+     */
     private record RootContext(
             List<MemoryInsight> allBranches, List<MemoryInsightType> rootTypes) {}
 
-    /** Query once within strip lock, result shared by link and bubble logic */
+    /**
+     * Query once within strip lock, result shared by link and bubble logic
+     */
     private RootContext queryRootContext(MemoryId memoryId) {
         var allBranches = store.getAllInsightsByTier(memoryId, InsightTier.BRANCH);
         var rootTypes =
@@ -320,21 +355,29 @@ public class InsightTreeReorganizer {
         return new RootContext(allBranches, rootTypes);
     }
 
-    /** Ensure BRANCH is linked to all ROOTs (pure link, no bubble tracking) */
+    /**
+     * Ensure BRANCH is linked to all ROOTs (pure link, no bubble tracking)
+     */
     private void linkBranchToAllRoots(MemoryId memoryId, MemoryInsight branch, RootContext ctx) {
         for (var rootType : ctx.rootTypes()) {
             var config = rootType.resolveTreeConfig();
-            if (ctx.allBranches().size() < config.minBranchesForRoot()) continue;
+            if (ctx.allBranches().size() < config.minBranchesForRoot()) {
+                continue;
+            }
             var root = ensureRoot(memoryId, rootType, ctx.allBranches());
             linkBranchToRoot(memoryId, branch, root);
         }
     }
 
-    /** Context for ROOT that needs re-summarize (lightweight — no stale snapshots) */
+    /**
+     * Context for ROOT that needs re-summarize (lightweight — no stale snapshots)
+     */
     private record PendingRootResummarize(
             MemoryInsightType rootType, InsightTreeConfig config, String rootKey) {}
 
-    /** After BRANCH re-summarize, bubble-track all ROOTs and maybe trigger re-summarize */
+    /**
+     * After BRANCH re-summarize, bubble-track all ROOTs and maybe trigger re-summarize
+     */
     private void bubbleAndMaybeResummarizeRoots(
             MemoryId memoryId, MemoryInsight branch, RootContext ctx, String language) {
         List<PendingRootResummarize> pendingList = new ArrayList<>();
@@ -371,12 +414,16 @@ public class InsightTreeReorganizer {
         }
     }
 
-    /** Re-summarize a single ROOT with fresh data, unconditionally reset dirty count */
+    /**
+     * Re-summarize a single ROOT with fresh data, unconditionally reset dirty count
+     */
     private void resummarizeRootAndReset(
             MemoryId memoryId, PendingRootResummarize p, String language) {
         try {
             var freshRoot = store.getRootByType(memoryId, p.rootType().name()).orElse(null);
-            if (freshRoot == null) return;
+            if (freshRoot == null) {
+                return;
+            }
             var freshBranches = store.getAllInsightsByTier(memoryId, InsightTier.BRANCH);
             resummarizeRoot(memoryId, p.rootType(), freshRoot, freshBranches, p.config(), language);
         } catch (Exception e) {
@@ -390,7 +437,9 @@ public class InsightTreeReorganizer {
         }
     }
 
-    /** Find or create the ROOT node of the specified ROOT InsightType */
+    /**
+     * Find or create the ROOT node of the specified ROOT InsightType
+     */
     private MemoryInsight ensureRoot(
             MemoryId memoryId, MemoryInsightType rootType, List<MemoryInsight> allBranches) {
         return store.getRootByType(memoryId, rootType.name())
@@ -429,7 +478,9 @@ public class InsightTreeReorganizer {
                         });
     }
 
-    /** Set ROOT→BRANCH link (idempotent, does not update BRANCH's parentInsightId) */
+    /**
+     * Set ROOT→BRANCH link (idempotent, does not update BRANCH's parentInsightId)
+     */
     private void linkBranchToRoot(MemoryId memoryId, MemoryInsight branch, MemoryInsight root) {
         var latestRoot = store.getInsight(memoryId, root.id()).orElse(root);
         var childIds = new ArrayList<>(latestRoot.childInsightIds());

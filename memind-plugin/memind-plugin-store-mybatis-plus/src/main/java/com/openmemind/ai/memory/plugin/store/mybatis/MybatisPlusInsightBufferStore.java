@@ -1,3 +1,16 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.openmemind.ai.memory.plugin.store.mybatis;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -28,7 +41,9 @@ public class MybatisPlusInsightBufferStore implements InsightBufferStore {
     public void append(MemoryId memoryId, String insightTypeName, List<Long> itemIds) {
         for (var itemId : itemIds) {
             var existing = selectEntry(memoryId, insightTypeName, itemId);
-            if (existing != null) continue;
+            if (existing != null) {
+                continue;
+            }
 
             var record = new InsightBufferDO();
             record.setUserId(memoryId.getAttribute("userId"));
@@ -87,7 +102,9 @@ public class MybatisPlusInsightBufferStore implements InsightBufferStore {
     @Override
     public void assignGroup(
             MemoryId memoryId, String insightTypeName, List<Long> itemIds, String groupName) {
-        if (itemIds.isEmpty()) return;
+        if (itemIds.isEmpty()) {
+            return;
+        }
         mapper.update(
                 new UpdateWrapper<InsightBufferDO>()
                         .eq("user_id", memoryId.getAttribute("userId"))
@@ -99,7 +116,9 @@ public class MybatisPlusInsightBufferStore implements InsightBufferStore {
 
     @Override
     public void markBuilt(MemoryId memoryId, String insightTypeName, List<Long> itemIds) {
-        if (itemIds.isEmpty()) return;
+        if (itemIds.isEmpty()) {
+            return;
+        }
         mapper.update(
                 new UpdateWrapper<InsightBufferDO>()
                         .eq("user_id", memoryId.getAttribute("userId"))

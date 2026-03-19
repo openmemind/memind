@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suppressions PUBLIC
+        "-//Puppy Crawl//DTD Suppressions 1.2//EN"
+        "https://checkstyle.org/dtds/suppressions_1_2.dtd">
+
+<suppressions>
+    <!-- Suppress package-info requirements for all source directories -->
+    <suppress files=".*[/\\]src[/\\].*" checks="JavadocPackage"/>
+
+    <!-- Suppress JavadocStyle requirements (first sentence period) -->
+    <suppress files=".*[/\\]src[/\\].*" checks="JavadocStyle"/>
+
+    <!-- Suppress FallThrough (intentional in some cases) -->
+    <suppress files=".*[/\\]src[/\\].*" checks="FallThrough"/>
+
+    <!-- Suppress TodoComment (TODOs are allowed) -->
+    <suppress files=".*[/\\]src[/\\].*" checks="TodoComment"/>
+
+    <!-- Suppress illegal import (JUnit) in test files -->
+    <suppress files=".*[/\\]src[/\\]test[/\\].*" checks="IllegalImport"/>
+
+    <!-- Suppress Javadoc requirements in test files -->
+    <suppress files=".*[/\\]src[/\\]test[/\\].*" checks="JavadocMethod"/>
+    <suppress files=".*[/\\]src[/\\]test[/\\].*" checks="JavadocType"/>
+</suppressions>
