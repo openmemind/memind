@@ -1,3 +1,16 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.openmemind.ai.memory.core.retrieval.scoring;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
@@ -241,7 +254,8 @@ public final class RawDataAggregator {
     /**
      * Batch fill timestamps for ITEM type results with occurredAt as null.
      *
-     * <p>ScoredResult created by BM25 channel does not carry occurredAt, this method fills it by batch querying MemoryStore.
+     * <p>ScoredResult created by BM25 channel does not carry occurredAt, this method fills it by
+     * batch querying MemoryStore.
      *
      * @param results  List of results to be filled
      * @param memoryId Memory identifier

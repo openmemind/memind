@@ -1,3 +1,16 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.openmemind.ai.memory.evaluation.pipeline.model;
 
 import java.util.LinkedHashMap;
@@ -24,7 +37,9 @@ public record EvaluationResult(
         Map<String, CategoryStats> categoryStats,
         List<QuestionJudgment> details) {
 
-    /** Statistical information by category */
+    /**
+     * Statistical information by category
+     */
     public record CategoryStats(
             double mean, double std, List<Double> individualRuns, int total, int correct) {}
 
@@ -49,8 +64,10 @@ public record EvaluationResult(
                                                 .mapToDouble(
                                                         j -> {
                                                             if (j.runScores() == null
-                                                                    || j.runScores().size() <= run)
+                                                                    || j.runScores().size()
+                                                                            <= run) {
                                                                 return j.correct() ? 1.0 : 0.0;
+                                                            }
                                                             return j.runScores().get(run);
                                                         })
                                                 .average()
@@ -83,11 +100,12 @@ public record EvaluationResult(
                                                                                                 == null
                                                                                         || j.runScores()
                                                                                                         .size()
-                                                                                                <= run)
+                                                                                                <= run) {
                                                                                     return j
                                                                                                     .correct()
                                                                                             ? 1.0
                                                                                             : 0.0;
+                                                                                }
                                                                                 return j.runScores()
                                                                                         .get(run);
                                                                             })
@@ -124,7 +142,9 @@ public record EvaluationResult(
 
     // Use population standard deviation, consistent with Python numpy.std() default behavior
     private static double calcStd(List<Double> values, double mean) {
-        if (values.size() <= 1) return 0.0;
+        if (values.size() <= 1) {
+            return 0.0;
+        }
         double variance =
                 values.stream().mapToDouble(v -> (v - mean) * (v - mean)).average().orElse(0.0);
         return Math.sqrt(variance);

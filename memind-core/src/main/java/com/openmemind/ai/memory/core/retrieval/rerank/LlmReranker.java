@@ -1,3 +1,16 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.openmemind.ai.memory.core.retrieval.rerank;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -22,7 +35,8 @@ import reactor.util.retry.Retry;
 /**
  * Reranker based on Rerank API
  *
- * <p>Call the /v1/rerank endpoint (Cohere compatible format) to refine the recall results using a dedicated reranking model
+ * <p>Call the /v1/rerank endpoint (Cohere compatible format) to refine the recall results using
+ * a dedicated reranking model
  *
  */
 public class LlmReranker implements Reranker {
@@ -129,7 +143,9 @@ public class LlmReranker implements Reranker {
     /**
      * Position-aware blended scoring
      *
-     * <p>Mix the original retrieval ranking (RRF inverse weight) with the Reranker semantic score. Higher ranked results are given more weight from the original ranking to avoid high-quality results being drowned out by single-point misjudgments of the Reranker.
+     * <p>Mix the original retrieval ranking (RRF inverse weight) with the Reranker semantic score. Higher ranked
+     * results are given more weight from the original ranking to avoid high-quality results being drowned out by
+     * single-point misjudgments of the Reranker.
      *
      * @param retrievalRank Original retrieval ranking (1-indexed)
      * @param rerankerScore Relevance score returned by Rerank API
@@ -150,7 +166,8 @@ public class LlmReranker implements Reranker {
     /**
      * Position-aware blended scoring (based on RerankConfig)
      *
-     * <p>Mix the RRF retrieval score with the Reranker semantic score. Higher ranked results are given more weight from the original retrieval to avoid single-point misjudgments of the Reranker.
+     * <p>Mix the RRF retrieval score with the Reranker semantic score. Higher ranked results are given more weight
+     * from the original retrieval to avoid single-point misjudgments of the Reranker.
      *
      * @param rrfScore RRF blended retrieval score
      * @param rerankerScore Relevance score returned by Rerank API
@@ -161,9 +178,13 @@ public class LlmReranker implements Reranker {
     static double blendScore(
             double rrfScore, double rerankerScore, int rrfRank, RerankConfig config) {
         double rrfWeight;
-        if (rrfRank <= 3) rrfWeight = config.top3Weight();
-        else if (rrfRank <= 10) rrfWeight = config.top10Weight();
-        else rrfWeight = config.otherWeight();
+        if (rrfRank <= 3) {
+            rrfWeight = config.top3Weight();
+        } else if (rrfRank <= 10) {
+            rrfWeight = config.top10Weight();
+        } else {
+            rrfWeight = config.otherWeight();
+        }
         return rrfWeight * rrfScore + (1 - rrfWeight) * rerankerScore;
     }
 

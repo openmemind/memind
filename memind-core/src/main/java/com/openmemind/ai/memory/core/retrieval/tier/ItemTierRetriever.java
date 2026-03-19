@@ -1,3 +1,16 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.openmemind.ai.memory.core.retrieval.tier;
 
 import com.openmemind.ai.memory.core.data.MemoryItem;
@@ -53,7 +66,9 @@ public class ItemTierRetriever implements TierSearchable {
         this.textSearch = textSearch;
     }
 
-    /** Expose textSearch for DeepRetrievalStrategy to directly call BM25 channel */
+    /**
+     * Expose textSearch for DeepRetrievalStrategy to directly call BM25 channel
+     */
     public MemoryTextSearch textSearch() {
         return textSearch;
     }
@@ -108,16 +123,15 @@ public class ItemTierRetriever implements TierSearchable {
                                                             var item = e.getValue();
                                                             if (context.scope() != null
                                                                     && !context.scope()
-                                                                            .equals(item.scope()))
+                                                                            .equals(item.scope())) {
                                                                 return false;
-                                                            if (context.categories() != null
-                                                                    && item.category() != null
-                                                                    && !context.categories()
+                                                            }
+                                                            return context.categories() == null
+                                                                    || item.category() == null
+                                                                    || context.categories()
                                                                             .contains(
                                                                                     item
-                                                                                            .category()))
-                                                                return false;
-                                                            return true;
+                                                                                            .category());
                                                         })
                                                 .collect(
                                                         Collectors.toMap(
@@ -232,16 +246,15 @@ public class ItemTierRetriever implements TierSearchable {
                                                             var item = e.getValue();
                                                             if (context.scope() != null
                                                                     && !context.scope()
-                                                                            .equals(item.scope()))
+                                                                            .equals(item.scope())) {
                                                                 return false;
-                                                            if (context.categories() != null
-                                                                    && item.category() != null
-                                                                    && !context.categories()
+                                                            }
+                                                            return context.categories() == null
+                                                                    || item.category() == null
+                                                                    || context.categories()
                                                                             .contains(
                                                                                     item
-                                                                                            .category()))
-                                                                return false;
-                                                            return true;
+                                                                                            .category());
                                                         })
                                                 .collect(
                                                         Collectors.toMap(
@@ -279,7 +292,6 @@ public class ItemTierRetriever implements TierSearchable {
                                                         vr.score(),
                                                         finalScore)
                                                 .withOccurredAt(item.occurredAt()));
-
                                 if (item.rawDataId() != null) {
                                     rawDataIds.add(item.rawDataId());
                                 }
@@ -377,7 +389,8 @@ public class ItemTierRetriever implements TierSearchable {
     /**
      * Calculate time decay factor
      *
-     * <p>Returns 1.0 within the query time range, outside the range decays exponentially (half-life of 30 days, lower limit of 0.3).
+     * <p>Returns 1.0 within the query time range, outside the range decays exponentially
+     * (half-life of 30 days, lower limit of 0.3).
      * If the item has no occurredAt, returns 1.0 (no decay).
      * If the context has no time range, applies global freshness decay (half-life of 365 days, lower limit of 0.7).
      */
@@ -494,7 +507,9 @@ public class ItemTierRetriever implements TierSearchable {
                         });
     }
 
-    /** Build temporary RetrievalConfig for TierSearchable method delegation */
+    /**
+     * Build temporary RetrievalConfig for TierSearchable method delegation
+     */
     private RetrievalConfig buildTempConfig(
             RetrievalConfig.TierConfig tier, ScoringConfig scoring) {
         return new RetrievalConfig(

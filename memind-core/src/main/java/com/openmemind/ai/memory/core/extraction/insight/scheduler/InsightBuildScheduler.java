@@ -1,3 +1,16 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.openmemind.ai.memory.core.extraction.insight.scheduler;
 
 import com.openmemind.ai.memory.core.data.InsightPoint;
@@ -68,7 +81,9 @@ public class InsightBuildScheduler implements Closeable {
     private final ExecutorService executor;
     private final Semaphore semaphore;
 
-    /** Fixed-size strip lock, bucketed by lockKey hash to avoid ConcurrentHashMap infinite growth */
+    /**
+     * Fixed-size strip lock, bucketed by lockKey hash to avoid ConcurrentHashMap infinite growth
+     */
     private static final int LOCK_STRIPES = 32;
 
     private final ReentrantLock[] lockStripes;
@@ -84,10 +99,14 @@ public class InsightBuildScheduler implements Closeable {
 
     private record ActiveKey(MemoryId memoryId, String insightTypeName, String language) {}
 
-    /** Records all submitted (memoryId, insightTypeName, language) combinations, used for flush on close */
+    /**
+     * Records all submitted (memoryId, insightTypeName, language) combinations, used for flush on close
+     */
     private final Set<ActiveKey> activeKeys = ConcurrentHashMap.newKeySet();
 
-    /** Tracks in-flight pipeline futures for each memoryId, awaitPending is used to wait */
+    /**
+     * Tracks in-flight pipeline futures for each memoryId, awaitPending is used to wait
+     */
     private final ConcurrentHashMap<String, ConcurrentLinkedQueue<CompletableFuture<Void>>>
             pendingFutures = new ConcurrentHashMap<>();
 
@@ -198,7 +217,9 @@ public class InsightBuildScheduler implements Closeable {
      * Synchronously flush with language hint
      */
     public void flushSync(MemoryId memoryId, String insightTypeName, String language) {
-        if (closed) return;
+        if (closed) {
+            return;
+        }
         if (!bufferStore.hasWork(memoryId, insightTypeName)) {
             log.debug("flushSync skipped: no pending work [type={}]", insightTypeName);
             return;
@@ -212,12 +233,14 @@ public class InsightBuildScheduler implements Closeable {
      * <p>Call before {@link #flushSync} to ensure all submitted buffers are written to disk.
      *
      * @param memoryId target memoryId
-     * @param timeout maximum wait time
-     * @param unit time unit
+     * @param timeout  maximum wait time
+     * @param unit     time unit
      */
     public void awaitPending(MemoryId memoryId, long timeout, TimeUnit unit) {
         var queue = pendingFutures.get(memoryId.toIdentifier());
-        if (queue == null || queue.isEmpty()) return;
+        if (queue == null || queue.isEmpty()) {
+            return;
+        }
 
         var futures = queue.toArray(new CompletableFuture[0]);
         try {
@@ -241,7 +264,9 @@ public class InsightBuildScheduler implements Closeable {
      * <p>Should call {@link #awaitPending} first to ensure all submits are completed.
      */
     public void flushSync(MemoryId memoryId, String insightTypeName) {
-        if (closed) return;
+        if (closed) {
+            return;
+        }
         if (!bufferStore.hasWork(memoryId, insightTypeName)) {
             log.debug("flushSync skipped: no pending work [type={}]", insightTypeName);
             return;
@@ -256,7 +281,9 @@ public class InsightBuildScheduler implements Closeable {
      */
     @Deprecated
     public void flush(MemoryId memoryId, String insightTypeName) {
-        if (closed) return;
+        if (closed) {
+            return;
+        }
         executor.submit(() -> runPipeline(memoryId, insightTypeName, List.of(), true));
     }
 
@@ -273,7 +300,7 @@ public class InsightBuildScheduler implements Closeable {
             List<Long> itemIds,
             boolean force,
             String language) {
-        observer.<Void>observeMono(
+        observer.observeMono(
                         ObservationContext.<Void>of(
                                 MemorySpanNames.EXTRACTION_INSIGHT_PIPELINE,
                                 Map.of(
@@ -378,7 +405,9 @@ public class InsightBuildScheduler implements Closeable {
             String language) {
         var ctx = bufferStore.getUngroupedContext(memoryId, insightTypeName);
         var ungroupedEntries = ctx.ungroupedEntries();
-        if (ungroupedEntries.isEmpty()) return;
+        if (ungroupedEntries.isEmpty()) {
+            return;
+        }
         if (!force && ungroupedEntries.size() < config.groupingThreshold()) {
             log.debug(
                     "Phase 2 Group skipped: ungrouped={} < threshold={}",
@@ -405,7 +434,9 @@ public class InsightBuildScheduler implements Closeable {
                     groupClassifier
                             .classify(insightType, nullCategoryItems, existingGroupNames, language)
                             .block();
-            if (groupResult != null) mergedGroups.putAll(groupResult);
+            if (groupResult != null) {
+                mergedGroups.putAll(groupResult);
+            }
         }
 
         for (var bucket : categorizedItems.entrySet()) {
@@ -415,7 +446,9 @@ public class InsightBuildScheduler implements Closeable {
                     groupRouter
                             .group(insightType, category, bucketItems, existingGroupNames, language)
                             .block();
-            if (groupResult != null) mergedGroups.putAll(groupResult);
+            if (groupResult != null) {
+                mergedGroups.putAll(groupResult);
+            }
         }
 
         if (mergedGroups.isEmpty()) {
@@ -579,11 +612,12 @@ public class InsightBuildScheduler implements Closeable {
                             ObservationContext.<Void>of(
                                     MemorySpanNames.EXTRACTION_INSIGHT_TREE_REORGANIZE,
                                     Map.of(
-                                            MemoryAttributes.MEMORY_ID, memoryId.toIdentifier(),
+                                            MemoryAttributes.MEMORY_ID,
+                                            memoryId.toIdentifier(),
                                             MemoryAttributes.EXTRACTION_INSIGHT_TYPE,
-                                                    insightTypeName,
+                                            insightTypeName,
                                             MemoryAttributes.EXTRACTION_INSIGHT_LEAF_COUNT,
-                                                    builtLeafs.size())),
+                                            builtLeafs.size())),
                             () ->
                                     Mono.fromRunnable(
                                             () -> {
@@ -636,7 +670,9 @@ public class InsightBuildScheduler implements Closeable {
         return (float) points.stream().mapToDouble(InsightPoint::confidence).average().orElse(0.0);
     }
 
-    /** Delegates to {@link InsightTreeReorganizer#forceResummarizeBranchIfEmpty} for use in flush. */
+    /**
+     * Delegates to {@link InsightTreeReorganizer#forceResummarizeBranchIfEmpty} for use in flush.
+     */
     public void forceResummarizeBranchIfEmpty(
             MemoryId memoryId, MemoryInsightType insightType, String language) {
         if (treeReorganizer != null) {
@@ -644,7 +680,9 @@ public class InsightBuildScheduler implements Closeable {
         }
     }
 
-    /** Delegates to {@link InsightTreeReorganizer#drainRootTasks} for use in flush. */
+    /**
+     * Delegates to {@link InsightTreeReorganizer#drainRootTasks} for use in flush.
+     */
     public void drainRootTasks(MemoryId memoryId, long timeout, TimeUnit unit) {
         if (treeReorganizer != null) {
             treeReorganizer.drainRootTasks(memoryId, timeout, unit);

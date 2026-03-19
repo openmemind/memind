@@ -1,3 +1,16 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.openmemind.ai.memory.evaluation.adapter.memind;
 
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
@@ -466,7 +479,9 @@ public class MemindAdapter extends BaseMemoryAdapter {
      * 2. Fallback to the last non-empty text
      */
     private String extractAnswer(String response) {
-        if (response == null) return "";
+        if (response == null) {
+            return "";
+        }
 
         // Priority 1: FINAL ANSWER: format
         if (response.contains("FINAL ANSWER:")) {
@@ -474,7 +489,9 @@ public class MemindAdapter extends BaseMemoryAdapter {
             if (parts.length > 1) {
                 for (String line : parts[1].split("\n")) {
                     line = line.trim();
-                    if (!line.isBlank() && !line.startsWith("#")) return line;
+                    if (!line.isBlank() && !line.startsWith("#")) {
+                        return line;
+                    }
                 }
             }
         }
@@ -482,7 +499,9 @@ public class MemindAdapter extends BaseMemoryAdapter {
         // Priority 2: Last non-empty text
         String[] lines = response.strip().split("\n");
         for (int i = lines.length - 1; i >= 0; i--) {
-            if (!lines[i].isBlank()) return lines[i].trim();
+            if (!lines[i].isBlank()) {
+                return lines[i].trim();
+            }
         }
         return response.trim();
     }
@@ -509,12 +528,16 @@ public class MemindAdapter extends BaseMemoryAdapter {
     }
 
     private int countNew(ExtractionResult r) {
-        if (r == null || r.memoryItemResult() == null) return 0;
+        if (r == null || r.memoryItemResult() == null) {
+            return 0;
+        }
         return r.memoryItemResult().newCount();
     }
 
     private int countInsights(ExtractionResult r) {
-        if (r == null || r.insightResult() == null) return 0;
+        if (r == null || r.insightResult() == null) {
+            return 0;
+        }
         return r.insightResult().totalCount();
     }
 }
