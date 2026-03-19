@@ -9,7 +9,7 @@
 <p align="center">
   <a href="./README.md"><img src="https://img.shields.io/badge/English-Click-yellow" alt="English"></a>
   <a href="./README_zh.md"><img src="https://img.shields.io/badge/简体中文-点击查看-orange" alt="简体中文"></a>
-  <a href="https://github.com/openmemind-ai/memind"><img src="https://img.shields.io/github/stars/openmemind-ai/memind?style=social" alt="GitHub Stars"></a>
+  <a href="https://github.com/openmemind/memind"><img src="https://img.shields.io/github/stars/openmemind-ai/memind?style=social" alt="GitHub Stars"></a>
 </p>
 
 <p align="center">
