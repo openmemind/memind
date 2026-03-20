@@ -468,6 +468,52 @@ class InsightTierRetrieverTest {
                             })
                     .verifyComplete();
         }
+
+        @Test
+        @DisplayName("Should reuse stored leaf summary embeddings before calling embedAll")
+        void shouldReuseStoredLeafSummaryEmbeddings() {
+            var branch =
+                    buildInsight(
+                            10L,
+                            "identity",
+                            "Personal information",
+                            InsightTier.BRANCH,
+                            null,
+                            List.of(1L, 2L));
+            var leaf1 =
+                    buildInsight(1L, "identity", "Likes coffee", InsightTier.LEAF, 10L, List.of())
+                            .withSummaryEmbedding(List.of(0.9f, 0.1f, 0.0f));
+            var leaf2 =
+                    buildInsight(2L, "identity", "Likes tea", InsightTier.LEAF, 10L, List.of())
+                            .withSummaryEmbedding(List.of(0.0f, 0.0f, 1.0f));
+
+            when(memoryStore.getAllInsights(memoryId)).thenReturn(List.of(branch, leaf1, leaf2));
+            when(memoryStore.getAllInsightTypes(memoryId))
+                    .thenReturn(
+                            List.of(
+                                    buildType(
+                                            "identity",
+                                            "Personal information",
+                                            InsightAnalysisMode.BRANCH)));
+            when(router.route(anyString(), anyList(), anyMap()))
+                    .thenReturn(Mono.just(List.of("identity")));
+            when(memoryVector.embed(any())).thenReturn(Mono.just(List.of(1.0f, 0.0f, 0.0f)));
+
+            var treeRetriever = new InsightTierRetriever(memoryStore, memoryVector, router, 2);
+            var context =
+                    new QueryContext(memoryId, "Coffee", "Coffee", List.of(), Map.of(), null, null);
+
+            StepVerifier.create(treeRetriever.retrieve(context, config))
+                    .assertNext(
+                            result -> {
+                                assertThat(result.expandedInsights()).hasSize(2);
+                                assertThat(result.expandedInsights().getFirst().id())
+                                        .isEqualTo("1");
+                            })
+                    .verifyComplete();
+
+            verify(memoryVector, never()).embedAll(any());
+        }
     }
 
     @Nested

@@ -21,9 +21,9 @@ import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategy;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.utils.HashUtils;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -63,7 +63,7 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
         this.store = Objects.requireNonNull(store, "store must not be null");
         this.textSearch = textSearch; // nullable
         this.queryRewriter = queryRewriter; // nullable
-        this.strategies = new HashMap<>();
+        this.strategies = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -144,9 +144,17 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
                     // 4. Strategy dispatch
                     RetrievalStrategy strategy = strategies.get(config.strategyName());
                     if (strategy == null) {
-                        log.warn("Strategy not found: {}", config.strategyName());
-                        return Mono.just(
-                                RetrievalResult.empty(config.strategyName(), request.query()));
+                        var availableStrategies = strategies.keySet().stream().sorted().toList();
+                        log.warn(
+                                "Strategy not found: requested={}, available={}",
+                                config.strategyName(),
+                                availableStrategies);
+                        return Mono.error(
+                                new IllegalStateException(
+                                        "No retrieval strategy registered for '"
+                                                + config.strategyName()
+                                                + "'. Registered strategies: "
+                                                + availableStrategies));
                     }
 
                     return strategy.retrieve(context, config)

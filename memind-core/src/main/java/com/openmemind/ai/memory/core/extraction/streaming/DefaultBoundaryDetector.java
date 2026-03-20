@@ -90,8 +90,22 @@ public class DefaultBoundaryDetector implements BoundaryDetector {
             return Mono.just(BoundaryDecision.seal(1.0, "token_limit"));
         }
 
+        boolean hasEnoughMessagesForLlm = buffer.size() >= config.minMessagesForLlm();
+
+        // Small buffers still need the time-gap fallback, even when an LLM is configured.
+        if (!hasEnoughMessagesForLlm) {
+            if (hasTimeGap(buffer, FALLBACK_TIME_GAP)) {
+                log.debug(
+                        "Time-gap fallback triggered before LLM threshold: gap between last two"
+                                + " messages exceeds {}",
+                        FALLBACK_TIME_GAP);
+                return Mono.just(BoundaryDecision.seal(0.9, "time_gap"));
+            }
+            return Mono.just(BoundaryDecision.hold());
+        }
+
         // L3: LLM topic-shift detection
-        if (chatClient != null && buffer.size() >= config.minMessagesForLlm()) {
+        if (chatClient != null) {
             log.debug("L3 LLM detection: buffer.size()={}", buffer.size());
             var enrichedContext = new BoundaryDetectionContext(computeTimeGap(buffer));
             return callLlm(buffer, enrichedContext)
@@ -106,7 +120,7 @@ public class DefaultBoundaryDetector implements BoundaryDetector {
         }
 
         // Fallback (no LLM): seal on long time gap
-        if (chatClient == null && hasTimeGap(buffer, FALLBACK_TIME_GAP)) {
+        if (hasTimeGap(buffer, FALLBACK_TIME_GAP)) {
             log.debug(
                     "Time-gap fallback triggered: gap between last two messages exceeds {}",
                     FALLBACK_TIME_GAP);

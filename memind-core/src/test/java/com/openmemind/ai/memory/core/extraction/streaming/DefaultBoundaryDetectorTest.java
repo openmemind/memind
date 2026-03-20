@@ -337,10 +337,9 @@ class DefaultBoundaryDetectorTest {
         }
 
         @Test
-        @DisplayName("With LLM configured, time-gap fallback should not trigger independently")
-        void shouldNotTriggerTimeGapIndependentlyWithLlm() {
-            // buffer size (2) < minMessagesForLlm (6): L3 is skipped,
-            // but since chatClient is non-null, time-gap fallback must NOT fire
+        @DisplayName(
+                "With LLM configured, time-gap fallback should still trigger below LLM threshold")
+        void shouldTriggerTimeGapFallbackBelowLlmThreshold() {
             var config = new BoundaryDetectorConfig(20, 8192, 6);
             var detector = new LlmStubDetector(config, Mono.just(BoundaryDecision.hold()));
 
@@ -351,8 +350,41 @@ class DefaultBoundaryDetectorTest {
                             Message.user("Good evening", now));
 
             StepVerifier.create(detector.shouldSeal(buffer, EMPTY_CONTEXT))
+                    .assertNext(
+                            decision -> {
+                                assertThat(decision.shouldSeal()).isTrue();
+                                assertThat(decision.reason()).isEqualTo("time_gap");
+                            })
+                    .verifyComplete();
+        }
+
+        @Test
+        @DisplayName(
+                "When LLM threshold is reached, LLM detection should take precedence over time gap")
+        void shouldPreferLlmDetectionWhenThresholdReached() {
+            var config = new BoundaryDetectorConfig(20, 8192, 2);
+            var llmCalled = new boolean[1];
+            var detector =
+                    new LlmStubDetector(config, Mono.just(BoundaryDecision.hold())) {
+                        @Override
+                        protected Mono<BoundaryDecision> callLlm(
+                                List<Message> buffer, BoundaryDetectionContext context) {
+                            llmCalled[0] = true;
+                            return Mono.just(BoundaryDecision.hold());
+                        }
+                    };
+
+            Instant now = Instant.now();
+            List<Message> buffer =
+                    List.of(
+                            Message.user("Good morning", now.minus(Duration.ofHours(2))),
+                            Message.user("Good evening", now));
+
+            StepVerifier.create(detector.shouldSeal(buffer, EMPTY_CONTEXT))
                     .assertNext(decision -> assertThat(decision.shouldSeal()).isFalse())
                     .verifyComplete();
+
+            assertThat(llmCalled[0]).isTrue();
         }
     }
 

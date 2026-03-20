@@ -277,14 +277,10 @@ public class InsightTierRetriever {
                             }
 
                             // ⑦ Real-time embed: query + leaf texts
-                            List<String> leafTexts =
-                                    leafInsights.stream()
-                                            .map(MemoryInsight::pointsContent)
-                                            .toList();
-
                             Mono<List<Float>> queryEmbMono =
                                     memoryVector.embed(context.searchQuery());
-                            Mono<List<List<Float>>> leafEmbMono = memoryVector.embedAll(leafTexts);
+                            Mono<List<List<Float>>> leafEmbMono =
+                                    resolveLeafEmbeddings(leafInsights);
 
                             return Mono.zip(queryEmbMono, leafEmbMono)
                                     .map(
@@ -322,6 +318,39 @@ public class InsightTierRetriever {
                             log.warn(
                                     "Tier 1 (Insight) retrieval failed, returning empty result", e);
                             return Mono.just(TierResult.empty());
+                        });
+    }
+
+    private Mono<List<List<Float>>> resolveLeafEmbeddings(List<MemoryInsight> leafInsights) {
+        var resolvedEmbeddings = new ArrayList<List<Float>>(leafInsights.size());
+        for (int i = 0; i < leafInsights.size(); i++) {
+            resolvedEmbeddings.add(null);
+        }
+
+        List<PendingLeafEmbedding> missingEmbeddings = new ArrayList<>();
+        for (int i = 0; i < leafInsights.size(); i++) {
+            var leaf = leafInsights.get(i);
+            if (leaf.summaryEmbedding() != null && !leaf.summaryEmbedding().isEmpty()) {
+                resolvedEmbeddings.set(i, leaf.summaryEmbedding());
+            } else {
+                missingEmbeddings.add(new PendingLeafEmbedding(i, leaf.pointsContent()));
+            }
+        }
+
+        if (missingEmbeddings.isEmpty()) {
+            return Mono.just(List.copyOf(resolvedEmbeddings));
+        }
+
+        var textsToEmbed = missingEmbeddings.stream().map(PendingLeafEmbedding::text).toList();
+        return memoryVector
+                .embedAll(textsToEmbed)
+                .map(
+                        embeddedLeaves -> {
+                            for (int i = 0; i < missingEmbeddings.size(); i++) {
+                                resolvedEmbeddings.set(
+                                        missingEmbeddings.get(i).index(), embeddedLeaves.get(i));
+                            }
+                            return List.copyOf(resolvedEmbeddings);
                         });
     }
 
@@ -397,6 +426,8 @@ public class InsightTierRetriever {
         double denominator = Math.sqrt(normA) * Math.sqrt(normB);
         return denominator > 0 ? dotProduct / denominator : 0.0;
     }
+
+    private record PendingLeafEmbedding(int index, String text) {}
 
     private record ScoredLeaf(MemoryInsight insight, double score) {}
 }
