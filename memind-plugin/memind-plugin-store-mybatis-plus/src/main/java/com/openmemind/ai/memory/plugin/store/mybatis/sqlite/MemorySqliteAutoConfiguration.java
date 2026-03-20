@@ -40,13 +40,15 @@ import org.sqlite.SQLiteDataSource;
  * MyBatis-Plus framework Beans are provided by {@link MemoryMybatisPlusAutoConfiguration}.
  *
  */
-@AutoConfiguration(after = MemoryMybatisPlusAutoConfiguration.class)
+@AutoConfiguration(
+        after = MemoryMybatisPlusAutoConfiguration.class,
+        beforeName = "org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration")
 @ConditionalOnClass(name = "org.sqlite.SQLiteDataSource")
+@ConditionalOnProperty(name = "memind.store.type", havingValue = "sqlite")
 @EnableConfigurationProperties(MemorySqliteProperties.class)
 public class MemorySqliteAutoConfiguration {
 
     @Bean
-    @ConditionalOnMissingBean
     public DataSource sqliteDataSource(MemorySqliteProperties properties) {
         String path = properties.path();
         if (!":memory:".equals(path)) {
