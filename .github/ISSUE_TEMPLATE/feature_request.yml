@@ -1,0 +1,21 @@
+name: Feature Request
+description: Suggest a new feature or improvement for memind
+title: "[Feature] "
+labels: ["enhancement"]
+
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What problem does this feature solve? Why do you need it?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How do you think this should work?
+    validations:
+      required: true

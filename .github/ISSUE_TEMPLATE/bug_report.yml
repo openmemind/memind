@@ -1,0 +1,43 @@
+name: Bug Report
+description: Report a bug to help us improve memind
+title: "[Bug] "
+labels: ["bug"]
+
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear description of the bug. What happened and what did you expect?
+      placeholder: |
+        What happened:
+        ...
+
+        What I expected:
+        ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this issue?
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Any relevant environment info (Java version, memind version, OS, etc.)
+      placeholder: |
+        - Java version:
+        - memind version:
+        - OS:
+    validations:
+      required: false

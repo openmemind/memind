@@ -236,7 +236,7 @@ mvn -pl memind-example -am spring-boot:run \
 
 ## Contributing
 
-Contributions are welcome! Feel free to open an [issue](https://github.com/openmemind-ai/memind/issues) or submit a pull request.
+Contributions are welcome! Feel free to open an [issue](https://github.com/openmemind/memind/issues) or submit a pull request.
 
 ## License
 
