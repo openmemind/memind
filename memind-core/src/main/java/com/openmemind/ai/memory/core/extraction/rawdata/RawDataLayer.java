@@ -17,7 +17,9 @@ import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
@@ -27,6 +29,7 @@ import com.openmemind.ai.memory.core.extraction.step.SegmentProcessor;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -222,6 +225,7 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
             MemoryId memoryId, RawDataInput input, String contentId, List<Segment> segments) {
 
         Instant now = Instant.now();
+        List<Message> messages = extractMessages(input);
 
         List<MemoryRawData> rawDataList =
                 segments.stream()
@@ -236,7 +240,9 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
                                                 segment.caption(),
                                                 (String) segment.metadata().get("vectorId"),
                                                 segment.metadata(),
-                                                now))
+                                                now,
+                                                resolveStartTime(segment, messages, now),
+                                                resolveEndTime(segment, messages, now)))
                         .toList();
 
         List<ParsedSegment> parsedSegments =
@@ -273,5 +279,34 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
             case MessageBoundary mb -> mb.endMessage();
             case CharBoundary cb -> cb.endChar();
         };
+    }
+
+    private List<Message> extractMessages(RawDataInput input) {
+        if (input.content() instanceof ConversationContent cc) {
+            return cc.getMessages();
+        }
+        return Collections.emptyList();
+    }
+
+    private Instant resolveStartTime(Segment segment, List<Message> messages, Instant fallback) {
+        if (segment.boundary() instanceof MessageBoundary mb && !messages.isEmpty()) {
+            int idx = mb.startMessage();
+            if (idx >= 0 && idx < messages.size()) {
+                Instant ts = messages.get(idx).timestamp();
+                return ts != null ? ts : fallback;
+            }
+        }
+        return fallback;
+    }
+
+    private Instant resolveEndTime(Segment segment, List<Message> messages, Instant fallback) {
+        if (segment.boundary() instanceof MessageBoundary mb && !messages.isEmpty()) {
+            int idx = mb.endMessage() - 1;
+            if (idx >= 0 && idx < messages.size()) {
+                Instant ts = messages.get(idx).timestamp();
+                return ts != null ? ts : fallback;
+            }
+        }
+        return fallback;
     }
 }

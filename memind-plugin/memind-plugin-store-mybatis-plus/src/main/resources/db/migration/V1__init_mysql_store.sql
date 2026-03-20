@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS memory_raw_data (
     caption     TEXT                  COMMENT '一句话摘要',
     caption_vector_id VARCHAR(200)    COMMENT 'Caption 向量库 ID',
     metadata    JSON                  COMMENT '附加元数据',
+    start_time  DATETIME(3) DEFAULT NULL COMMENT '该分段第一条消息的时间戳',
+    end_time    DATETIME(3) DEFAULT NULL COMMENT '该分段最后一条消息的时间戳',
     created_at  DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
     updated_at  DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
     deleted     TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除（0=正常，1=已删除）',

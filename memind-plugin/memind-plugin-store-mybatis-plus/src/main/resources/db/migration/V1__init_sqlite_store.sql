@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS memory_raw_data (
     caption         TEXT,
     caption_vector_id TEXT,
     metadata        TEXT,                           -- JSON 存为 TEXT
+    start_time      TEXT DEFAULT NULL,
+    end_time        TEXT DEFAULT NULL,
     created_at      TEXT         NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT         NOT NULL DEFAULT (datetime('now')),
     deleted         INTEGER      NOT NULL DEFAULT 0

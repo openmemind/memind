@@ -46,6 +46,8 @@ public final class RawDataConverter {
         if (record.segment() != null) {
             dataObject.setSegment(segmentToMap(record.segment()));
         }
+        dataObject.setStartTime(record.startTime());
+        dataObject.setEndTime(record.endTime());
         return dataObject;
     }
 
@@ -63,7 +65,9 @@ public final class RawDataConverter {
                 dataObject.getCaption(),
                 dataObject.getCaptionVectorId(),
                 dataObject.getMetadata(),
-                dataObject.getCreatedAt());
+                dataObject.getCreatedAt(),
+                dataObject.getStartTime(),
+                dataObject.getEndTime());
     }
 
     private static String parseContentType(String value) {

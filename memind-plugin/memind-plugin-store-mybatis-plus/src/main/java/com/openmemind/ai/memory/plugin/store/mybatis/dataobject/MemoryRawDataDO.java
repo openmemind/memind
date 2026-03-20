@@ -18,6 +18,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import java.time.Instant;
 import java.util.Map;
 
 @TableName(value = "memory_raw_data", autoResultMap = true)
@@ -40,6 +41,9 @@ public class MemoryRawDataDO extends BaseDO {
 
     @TableField(typeHandler = JacksonTypeHandler.class)
     private Map<String, Object> metadata;
+
+    private Instant startTime;
+    private Instant endTime;
 
     public Integer getId() {
         return id;
@@ -127,5 +131,21 @@ public class MemoryRawDataDO extends BaseDO {
 
     public void setMetadata(Map<String, Object> metadata) {
         this.metadata = metadata;
+    }
+
+    public Instant getStartTime() {
+        return startTime;
+    }
+
+    public void setStartTime(Instant startTime) {
+        this.startTime = startTime;
+    }
+
+    public Instant getEndTime() {
+        return endTime;
+    }
+
+    public void setEndTime(Instant endTime) {
+        this.endTime = endTime;
     }
 }

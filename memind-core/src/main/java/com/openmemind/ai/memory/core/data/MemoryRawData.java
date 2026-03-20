@@ -41,7 +41,13 @@ public record MemoryRawData(
         Map<String, Object> metadata,
 
         /* Creation time */
-        Instant createdAt) {
+        Instant createdAt,
+
+        /* Timestamp of the first message in this segment */
+        Instant startTime,
+
+        /* Timestamp of the last message in this segment */
+        Instant endTime) {
 
     /**
      * Returns a new {@link MemoryRawData} instance, using the given vector ID, and merging patches in the metadata.
@@ -64,7 +70,9 @@ public record MemoryRawData(
                 caption,
                 vectorId,
                 merged,
-                createdAt);
+                createdAt,
+                startTime,
+                endTime);
     }
 
     /**
@@ -80,6 +88,8 @@ public record MemoryRawData(
                 caption,
                 captionVectorId,
                 metadata,
-                createdAt);
+                createdAt,
+                startTime,
+                endTime);
     }
 }

@@ -32,7 +32,7 @@ public class MemoryDdl implements IDdl {
 
     @Override
     public List<String> getSqlFiles() {
-        return List.of("db/migration/V1__init_memory_store.sql");
+        return List.of("db/migration/V1__init_mysql_store.sql");
     }
 
     @Override
