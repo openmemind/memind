@@ -27,6 +27,7 @@ import com.openmemind.ai.memory.core.extraction.step.InsightExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.SegmentProcessor;
+import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDecision;
 import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDetectionContext;
 import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDetector;
 import com.openmemind.ai.memory.core.extraction.streaming.ConversationBufferStore;
@@ -38,10 +39,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * Memory Extractor
@@ -59,6 +63,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
     private final SegmentProcessor segmentProcessor;
     private final BoundaryDetector boundaryDetector;
     private final ConversationBufferStore conversationBufferStore;
+    private final ConcurrentHashMap<String, Object> bufferLocks = new ConcurrentHashMap<>();
 
     public MemoryExtractor(
             RawDataExtractStep rawDataStep,
@@ -213,61 +218,78 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
 
         var bufferKey = memoryId.toIdentifier();
 
-        // ASSISTANT message: skip boundary detection, accumulate directly
-        if (message.role() == Message.Role.ASSISTANT) {
-            var buffer = new ArrayList<>(conversationBufferStore.load(bufferKey));
-            buffer.add(message);
-            var count = conversationBufferStore.loadMessageCount(bufferKey) + 1;
-            conversationBufferStore.save(bufferKey, buffer);
-            conversationBufferStore.saveMessageCount(bufferKey, count);
-            return Mono.empty();
-        }
+        return Mono.fromCallable(
+                        () -> {
+                            synchronized (lockFor(bufferKey)) {
+                                if (message.role() == Message.Role.ASSISTANT) {
+                                    appendToBuffer(bufferKey, message);
+                                    return Optional.<PendingExtraction>empty();
+                                }
 
-        // USER message: perform boundary detection on the current buffer snapshot
-        var snapshot = conversationBufferStore.load(bufferKey);
-        return boundaryDetector
-                .shouldSeal(snapshot, BoundaryDetectionContext.empty())
-                .flatMap(
-                        decision -> {
-                            if (!decision.shouldSeal()) {
-                                var buffer =
-                                        new ArrayList<>(conversationBufferStore.load(bufferKey));
-                                buffer.add(message);
-                                var count = conversationBufferStore.loadMessageCount(bufferKey) + 1;
-                                conversationBufferStore.save(bufferKey, buffer);
-                                conversationBufferStore.saveMessageCount(bufferKey, count);
-                                return Mono.<ExtractionResult>empty();
+                                var snapshot = conversationBufferStore.load(bufferKey);
+                                var decision =
+                                        boundaryDetector
+                                                .shouldSeal(
+                                                        snapshot, BoundaryDetectionContext.empty())
+                                                .defaultIfEmpty(BoundaryDecision.hold())
+                                                .block();
+
+                                if (decision == null || !decision.shouldSeal()) {
+                                    appendToBuffer(bufferKey, message);
+                                    return Optional.<PendingExtraction>empty();
+                                }
+
+                                log.debug(
+                                        "Boundary detection triggered sealing: memoryId={},"
+                                                + " reason={}, confidence={}",
+                                        bufferKey,
+                                        decision.reason(),
+                                        decision.confidence());
+
+                                var sealedMessages = List.copyOf(snapshot);
+                                var endMessage =
+                                        conversationBufferStore.loadMessageCount(bufferKey);
+                                var startMessage = endMessage - sealedMessages.size();
+
+                                var sealMetadata = new HashMap<String, Object>();
+                                sealMetadata.put("start_message", startMessage);
+                                sealMetadata.put("end_message", endMessage);
+
+                                conversationBufferStore.clear(bufferKey);
+                                conversationBufferStore.save(bufferKey, List.of(message));
+                                conversationBufferStore.saveMessageCount(bufferKey, endMessage + 1);
+
+                                return Optional.of(
+                                        new PendingExtraction(
+                                                sealedMessages, new HashMap<>(sealMetadata)));
                             }
-
-                            log.debug(
-                                    "Boundary detection triggered sealing: memoryId={}, reason={},"
-                                            + " confidence={}",
-                                    bufferKey,
-                                    decision.reason(),
-                                    decision.confidence());
-
-                            var sealedMessages = List.copyOf(snapshot);
-                            var endMessage = conversationBufferStore.loadMessageCount(bufferKey);
-                            var startMessage = endMessage - sealedMessages.size();
-
-                            var sealMetadata = new HashMap<String, Object>();
-                            sealMetadata.put("start_message", startMessage);
-                            sealMetadata.put("end_message", endMessage);
-
-                            conversationBufferStore.clear(bufferKey);
-
-                            return extractConversationSegment(
-                                            memoryId, sealedMessages, config, sealMetadata)
-                                    .doOnSuccess(
-                                            ignored -> {
-                                                var newBuffer = new ArrayList<Message>();
-                                                newBuffer.add(message);
-                                                conversationBufferStore.save(bufferKey, newBuffer);
-                                                conversationBufferStore.saveMessageCount(
-                                                        bufferKey, endMessage + 1);
-                                            });
-                        });
+                        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(
+                        pending ->
+                                pending.map(
+                                                extraction ->
+                                                        extractConversationSegment(
+                                                                memoryId,
+                                                                extraction.messages(),
+                                                                config,
+                                                                extraction.sealMetadata()))
+                                        .orElseGet(Mono::empty));
     }
+
+    private void appendToBuffer(String bufferKey, Message message) {
+        var buffer = new ArrayList<>(conversationBufferStore.load(bufferKey));
+        buffer.add(message);
+        var count = conversationBufferStore.loadMessageCount(bufferKey) + 1;
+        conversationBufferStore.save(bufferKey, buffer);
+        conversationBufferStore.saveMessageCount(bufferKey, count);
+    }
+
+    private Object lockFor(String bufferKey) {
+        return bufferLocks.computeIfAbsent(bufferKey, ignored -> new Object());
+    }
+
+    private record PendingExtraction(List<Message> messages, Map<String, Object> sealMetadata) {}
 
     private Mono<RawDataResult> extractRawData(ExtractionRequest request) {
         return rawDataStep.extract(

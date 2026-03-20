@@ -31,8 +31,13 @@ import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDecision;
 import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDetectionContext;
 import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDetector;
 import com.openmemind.ai.memory.core.extraction.streaming.ConversationBufferStore;
+import com.openmemind.ai.memory.core.extraction.streaming.InMemoryConversationBufferStore;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -134,6 +139,182 @@ class MemoryExtractorAddMessageTest {
 
             verify(bufferStore).clear("user1:agent1");
             verify(bufferStore).save("user1:agent1", List.of(trigger));
+        }
+
+        @Test
+        @DisplayName("Preserve follow-up message appended while sealing is still extracting")
+        void preserves_follow_up_message_during_inflight_extraction() throws Exception {
+            var realStore = new InMemoryConversationBufferStore();
+            realStore.save("user1:agent1", List.of(Message.assistant("I am fine")));
+            realStore.saveMessageCount("user1:agent1", 1);
+
+            var extractionStarted = new CountDownLatch(1);
+            var releaseExtraction = new CountDownLatch(1);
+
+            MemoryExtractor localExtractor =
+                    new MemoryExtractor(
+                            unusedRawDataStep(),
+                            unusedMemoryItemStep(),
+                            unusedInsightStep(),
+                            (mid, segment, type, contentId, metadata) ->
+                                    Mono.fromCallable(
+                                            () -> {
+                                                extractionStarted.countDown();
+                                                if (!releaseExtraction.await(5, TimeUnit.SECONDS)) {
+                                                    throw new AssertionError(
+                                                            "Timed out waiting to release"
+                                                                    + " extraction");
+                                                }
+                                                return RawDataResult.empty();
+                                            }),
+                            (messages, context) -> Mono.just(BoundaryDecision.seal(0.9, "test")),
+                            realStore);
+
+            var trigger = Message.user("Tell me more");
+            var followUp = Message.assistant("Additional detail");
+
+            try (var executor = Executors.newSingleThreadExecutor()) {
+                var triggerFuture =
+                        executor.submit(
+                                () ->
+                                        localExtractor
+                                                .addMessage(
+                                                        memoryId,
+                                                        trigger,
+                                                        ExtractionConfig.withoutInsight())
+                                                .block());
+
+                assertThat(extractionStarted.await(5, TimeUnit.SECONDS)).isTrue();
+
+                StepVerifier.create(
+                                localExtractor.addMessage(
+                                        memoryId, followUp, ExtractionConfig.defaults()))
+                        .verifyComplete();
+
+                releaseExtraction.countDown();
+                assertThat(triggerFuture.get(5, TimeUnit.SECONDS)).isNotNull();
+            }
+
+            assertThat(realStore.load("user1:agent1")).containsExactly(trigger, followUp);
+        }
+    }
+
+    @Nested
+    @DisplayName("Concurrent append")
+    class ConcurrentAppend {
+
+        @Test
+        @DisplayName("Assistant messages from concurrent callers do not lose buffered messages")
+        void assistant_messages_do_not_get_lost_under_concurrency() throws Exception {
+            var realStore = new SlowSnapshotConversationBufferStore();
+            MemoryExtractor localExtractor =
+                    new MemoryExtractor(
+                            unusedRawDataStep(),
+                            unusedMemoryItemStep(),
+                            unusedInsightStep(),
+                            segmentProcessor,
+                            boundaryDetector,
+                            realStore);
+            var first = Message.assistant("first");
+            var second = Message.assistant("second");
+            var ready = new CountDownLatch(2);
+            var start = new CountDownLatch(1);
+
+            try (var executor = Executors.newFixedThreadPool(2)) {
+                var firstFuture =
+                        executor.submit(
+                                () -> {
+                                    ready.countDown();
+                                    assertThat(start.await(5, TimeUnit.SECONDS)).isTrue();
+                                    localExtractor
+                                            .addMessage(
+                                                    memoryId, first, ExtractionConfig.defaults())
+                                            .blockOptional();
+                                    return null;
+                                });
+                var secondFuture =
+                        executor.submit(
+                                () -> {
+                                    ready.countDown();
+                                    assertThat(start.await(5, TimeUnit.SECONDS)).isTrue();
+                                    localExtractor
+                                            .addMessage(
+                                                    memoryId, second, ExtractionConfig.defaults())
+                                            .blockOptional();
+                                    return null;
+                                });
+
+                assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+                start.countDown();
+                firstFuture.get(5, TimeUnit.SECONDS);
+                secondFuture.get(5, TimeUnit.SECONDS);
+            }
+
+            assertThat(realStore.load("user1:agent1")).containsExactlyInAnyOrder(first, second);
+            assertThat(realStore.loadMessageCount("user1:agent1")).isEqualTo(2);
+        }
+    }
+
+    private static RawDataExtractStep unusedRawDataStep() {
+        return (mid, content, contentType, metadata) -> Mono.just(RawDataResult.empty());
+    }
+
+    private static MemoryItemExtractStep unusedMemoryItemStep() {
+        return (mid, rawResult, config) ->
+                Mono.just(com.openmemind.ai.memory.core.extraction.result.MemoryItemResult.empty());
+    }
+
+    private static InsightExtractStep unusedInsightStep() {
+        return (mid, memoryItemResult) ->
+                Mono.just(com.openmemind.ai.memory.core.extraction.result.InsightResult.empty());
+    }
+
+    private static final class SlowSnapshotConversationBufferStore
+            implements ConversationBufferStore {
+
+        private final ConcurrentHashMap<String, List<Message>> buffers = new ConcurrentHashMap<>();
+        private final ConcurrentHashMap<String, Integer> messageCounts = new ConcurrentHashMap<>();
+
+        @Override
+        public void save(String sessionId, List<Message> buffer) {
+            buffers.put(sessionId, new ArrayList<>(buffer));
+        }
+
+        @Override
+        public List<Message> load(String sessionId) {
+            var snapshot = new ArrayList<>(buffers.getOrDefault(sessionId, List.of()));
+            sleepQuietly();
+            return snapshot;
+        }
+
+        @Override
+        public void clear(String sessionId) {
+            buffers.remove(sessionId);
+            messageCounts.remove(sessionId);
+        }
+
+        @Override
+        public List<String> listActiveSessions(MemoryId memoryId) {
+            return List.copyOf(buffers.keySet());
+        }
+
+        @Override
+        public void saveMessageCount(String sessionId, int count) {
+            messageCounts.put(sessionId, count);
+        }
+
+        @Override
+        public int loadMessageCount(String sessionId) {
+            return messageCounts.getOrDefault(sessionId, 0);
+        }
+
+        private void sleepQuietly() {
+            try {
+                TimeUnit.MILLISECONDS.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("Interrupted while coordinating concurrent load", e);
+            }
         }
     }
 }
