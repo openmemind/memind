@@ -45,9 +45,7 @@ public class DefaultDBFieldHandler implements MetaObjectHandler {
 
     @Override
     public void updateFill(MetaObject metaObject) {
-        // If update time is null, use the current time as the update time
-        Object modifyTime = getFieldValByName("updatedAt", metaObject);
-        if (Objects.isNull(modifyTime)) {
+        if (Objects.nonNull(metaObject)) {
             setFieldValByName("updatedAt", Instant.now(), metaObject);
         }
     }

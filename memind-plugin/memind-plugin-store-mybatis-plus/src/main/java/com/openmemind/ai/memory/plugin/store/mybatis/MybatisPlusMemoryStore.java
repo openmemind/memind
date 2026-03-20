@@ -42,6 +42,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.transaction.annotation.Transactional;
 
 public class MybatisPlusMemoryStore implements MemoryStore {
@@ -79,8 +81,35 @@ public class MybatisPlusMemoryStore implements MemoryStore {
     }
 
     @Override
+    @Transactional
     public void saveRawDataList(MemoryId id, List<MemoryRawData> rawDataList) {
-        rawDataList.forEach(rawData -> saveRawData(id, rawData));
+        if (rawDataList == null || rawDataList.isEmpty()) {
+            return;
+        }
+
+        Map<String, MemoryRawDataDO> existingByBizId =
+                rawDataMapper
+                        .selectList(
+                                memoryQuery(id, MemoryRawDataDO.class)
+                                        .in(
+                                                "biz_id",
+                                                rawDataList.stream()
+                                                        .map(MemoryRawData::id)
+                                                        .toList()))
+                        .stream()
+                        .collect(Collectors.toMap(MemoryRawDataDO::getBizId, Function.identity()));
+
+        rawDataList.forEach(
+                rawData -> {
+                    MemoryRawDataDO dataObject = RawDataConverter.toDO(id, rawData);
+                    MemoryRawDataDO existing = existingByBizId.get(rawData.id());
+                    if (existing != null) {
+                        dataObject.setId(existing.getId());
+                        rawDataMapper.updateById(dataObject);
+                    } else {
+                        rawDataMapper.insert(dataObject);
+                    }
+                });
     }
 
     @Override
@@ -134,16 +163,24 @@ public class MybatisPlusMemoryStore implements MemoryStore {
     }
 
     @Override
+    @Transactional
     public void updateRawDataVectorIds(
             MemoryId id, Map<String, String> vectorIds, Map<String, Object> metadataPatch) {
         if (vectorIds == null || vectorIds.isEmpty()) {
             return;
         }
+
+        Map<String, MemoryRawDataDO> existingByBizId =
+                rawDataMapper
+                        .selectList(
+                                memoryQuery(id, MemoryRawDataDO.class)
+                                        .in("biz_id", vectorIds.keySet()))
+                        .stream()
+                        .collect(Collectors.toMap(MemoryRawDataDO::getBizId, Function.identity()));
+
         vectorIds.forEach(
                 (bizId, vectorId) -> {
-                    MemoryRawDataDO existing =
-                            rawDataMapper.selectOne(
-                                    memoryQuery(id, MemoryRawDataDO.class).eq("biz_id", bizId));
+                    MemoryRawDataDO existing = existingByBizId.get(bizId);
                     if (existing == null) {
                         return;
                     }
@@ -181,7 +218,11 @@ public class MybatisPlusMemoryStore implements MemoryStore {
     }
 
     @Override
+    @Transactional
     public void addItems(MemoryId id, List<MemoryItem> items) {
+        if (items == null || items.isEmpty()) {
+            return;
+        }
         items.forEach(item -> addItem(id, item));
     }
 
@@ -279,12 +320,23 @@ public class MybatisPlusMemoryStore implements MemoryStore {
     }
 
     @Override
+    @Transactional
     public void updateItems(MemoryId id, List<MemoryItem> items) {
+        if (items == null || items.isEmpty()) {
+            return;
+        }
+
+        Map<Long, MemoryItemDO> existingByBizId =
+                itemMapper
+                        .selectList(
+                                memoryQuery(id, MemoryItemDO.class)
+                                        .in("biz_id", items.stream().map(MemoryItem::id).toList()))
+                        .stream()
+                        .collect(Collectors.toMap(MemoryItemDO::getBizId, Function.identity()));
+
         items.forEach(
                 item -> {
-                    MemoryItemDO existing =
-                            itemMapper.selectOne(
-                                    memoryQuery(id, MemoryItemDO.class).eq("biz_id", item.id()));
+                    MemoryItemDO existing = existingByBizId.get(item.id());
                     if (existing != null) {
                         MemoryItemDO dataObject = ItemConverter.toDO(id, item);
                         dataObject.setId(existing.getId());
