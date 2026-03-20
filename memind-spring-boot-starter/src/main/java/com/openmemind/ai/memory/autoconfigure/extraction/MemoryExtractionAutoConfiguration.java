@@ -46,7 +46,6 @@ import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.ConversationCaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig.ConversationSegmentStrategy;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
@@ -67,6 +66,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 
@@ -122,11 +122,12 @@ public class MemoryExtractionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnProperty(
+            name = "memind.extraction.chunking.strategy",
+            havingValue = "LLM",
+            matchIfMissing = true)
     public LlmConversationChunker llmConversationChunker(
             ConversationChunkingConfig config, ChatClient.Builder chatClientBuilder) {
-        if (config.strategy() != ConversationSegmentStrategy.LLM) {
-            return null;
-        }
         return new LlmConversationChunker(chatClientBuilder.build(), new ConversationChunker());
     }
 

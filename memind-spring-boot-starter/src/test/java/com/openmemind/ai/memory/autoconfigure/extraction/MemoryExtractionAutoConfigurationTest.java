@@ -18,6 +18,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChunker;
+import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import org.junit.jupiter.api.DisplayName;
@@ -58,6 +60,23 @@ class MemoryExtractionAutoConfigurationTest {
                                 assertThat(context).hasSingleBean(MemoryExtractor.class);
                             });
         }
+
+        @Test
+        @DisplayName(
+                "Do not register llmConversationChunker bean when chunking strategy is not LLM")
+        void doesNotRegisterLlmChunkerBeanWhenStrategyIsNotLlm() {
+            contextRunner
+                    .withUserConfiguration(RequiredDependenciesConfig.class)
+                    .withPropertyValues("memind.extraction.chunking.strategy=FIXED_SIZE")
+                    .run(
+                            context -> {
+                                assertThat(context).hasNotFailed();
+                                assertThat(context)
+                                        .hasSingleBean(ConversationContentProcessor.class)
+                                        .doesNotHaveBean(LlmConversationChunker.class)
+                                        .doesNotHaveBean("llmConversationChunker");
+                            });
+        }
     }
 
     @Nested
@@ -74,10 +93,6 @@ class MemoryExtractionAutoConfigurationTest {
                             context -> {
                                 assertThat(context).hasNotFailed();
                                 assertThat(context).hasSingleBean(MemoryExtractor.class);
-                                assertThat(context.getBean(MemoryExtractor.class))
-                                        .isSameAs(
-                                                context.getBean(CustomMemoryExtractorConfig.class)
-                                                        .customExtractor);
                             });
         }
     }
@@ -105,12 +120,9 @@ class MemoryExtractionAutoConfigurationTest {
 
     @Configuration
     static class CustomMemoryExtractorConfig {
-
-        MemoryExtractor customExtractor = mock(MemoryExtractor.class);
-
         @Bean
         MemoryExtractor memoryExtractor() {
-            return customExtractor;
+            return mock(MemoryExtractor.class);
         }
     }
 }

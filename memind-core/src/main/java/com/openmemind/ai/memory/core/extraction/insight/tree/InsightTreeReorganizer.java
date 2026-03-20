@@ -415,7 +415,7 @@ public class InsightTreeReorganizer {
     }
 
     /**
-     * Re-summarize a single ROOT with fresh data, unconditionally reset dirty count
+     * Re-summarize a single ROOT with fresh data, reset dirty count only after success
      */
     private void resummarizeRootAndReset(
             MemoryId memoryId, PendingRootResummarize p, String language) {
@@ -426,14 +426,13 @@ public class InsightTreeReorganizer {
             }
             var freshBranches = store.getAllInsightsByTier(memoryId, InsightTier.BRANCH);
             resummarizeRoot(memoryId, p.rootType(), freshRoot, freshBranches, p.config(), language);
+            bubbleTracker.reset(p.rootKey());
         } catch (Exception e) {
             log.warn(
                     "ROOT re-summarize failed [type={}]: {}",
                     p.rootType().name(),
                     e.getMessage(),
                     e);
-        } finally {
-            bubbleTracker.reset(p.rootKey());
         }
     }
 

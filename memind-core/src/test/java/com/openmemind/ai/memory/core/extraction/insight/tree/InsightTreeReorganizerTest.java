@@ -457,6 +457,56 @@ class InsightTreeReorganizerTest {
         }
 
         @Test
+        @DisplayName("should keep ROOT dirty count when re-summarize fails")
+        void shouldKeepRootDirtyCountWhenResummarizeFails() {
+            var branch1 = createBranchWithType(10L, TYPE_NAME);
+            var branch2 = createBranchWithType(20L, "other-type");
+            var root = createRoot(100L, ROOT_TYPE_NAME, List.of(10L, 20L));
+            var leaf = createLeaf(3L, "New information");
+            var rootInsightType = createRootInsightType(ROOT_TYPE_NAME);
+            var rootKey = "test-memory::root::" + ROOT_TYPE_NAME;
+
+            when(store.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch1));
+            when(store.getInsight(memoryId, 100L)).thenReturn(Optional.of(root));
+            when(store.getInsightsByTypeId(memoryId, TYPE_NAME))
+                    .thenReturn(List.of(createLeaf(1L, "Old information"), leaf));
+            when(store.getAllInsightsByTier(memoryId, InsightTier.BRANCH))
+                    .thenReturn(List.of(branch1, branch2));
+            when(store.getAllInsightTypes(memoryId)).thenReturn(List.of(rootInsightType));
+            when(store.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.of(root));
+
+            var branchPoint =
+                    new InsightPoint(
+                            InsightPoint.PointType.SUMMARY, "BRANCH summary", 0.9f, List.of());
+            when(generator.generateBranchSummary(
+                            any(), any(), anyList(), anyInt(), nullable(String.class)))
+                    .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(branchPoint))));
+            when(generator.generateRootSynthesis(
+                            any(MemoryInsightType.class),
+                            any(),
+                            anyList(),
+                            anyInt(),
+                            nullable(String.class)))
+                    .thenReturn(Mono.error(new IllegalStateException("root synthesis failed")));
+            when(vector.embed(anyString())).thenReturn(Mono.just(List.of(0.1f, 0.2f)));
+
+            bubbleTracker.markDirty(DIRTY_KEY);
+            bubbleTracker.markDirty(DIRTY_KEY);
+            bubbleTracker.markDirty(rootKey);
+
+            reorganizer.onLeafUpdated(memoryId, TYPE_NAME, createInsightType(), leaf, config);
+
+            verify(generator, timeout(2000))
+                    .generateRootSynthesis(
+                            any(MemoryInsightType.class),
+                            any(),
+                            anyList(),
+                            anyInt(),
+                            nullable(String.class));
+            assertThat(bubbleTracker.getDirtyCount(rootKey)).isEqualTo(2);
+        }
+
+        @Test
         @DisplayName("multiple ROOT-mode InsightType should independently build ROOT nodes")
         void shouldBuildMultipleRootsIndependently() {
             var branch1 = createBranchWithType(10L, TYPE_NAME);
