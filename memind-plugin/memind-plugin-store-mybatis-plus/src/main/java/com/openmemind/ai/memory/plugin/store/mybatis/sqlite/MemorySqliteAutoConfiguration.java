@@ -44,7 +44,7 @@ import org.sqlite.SQLiteDataSource;
         after = MemoryMybatisPlusAutoConfiguration.class,
         beforeName = "org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration")
 @ConditionalOnClass(name = "org.sqlite.SQLiteDataSource")
-@ConditionalOnProperty(name = "memind.store.type", havingValue = "sqlite")
+@ConditionalOnProperty(name = "memind.store.type", havingValue = "sqlite", matchIfMissing = true)
 @EnableConfigurationProperties(MemorySqliteProperties.class)
 public class MemorySqliteAutoConfiguration {
 

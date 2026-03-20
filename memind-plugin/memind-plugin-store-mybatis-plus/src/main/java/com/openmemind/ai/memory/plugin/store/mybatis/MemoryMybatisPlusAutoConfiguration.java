@@ -73,6 +73,7 @@ public class MemoryMybatisPlusAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(MybatisPlusInterceptor.class)
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
         MybatisPlusInterceptor mybatisPlusInterceptor = new MybatisPlusInterceptor();
         mybatisPlusInterceptor.addInnerInterceptor(
@@ -85,11 +86,13 @@ public class MemoryMybatisPlusAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(MetaObjectHandler.class)
     public MetaObjectHandler defaultMetaObjectHandler() {
         return new DefaultDBFieldHandler(); // Automatic fill parameter class
     }
 
     @Bean
+    @ConditionalOnMissingBean(MemoryStore.class)
     public MybatisPlusMemoryStore mybatisPlusMemoryStore(
             MemoryRawDataMapper rawDataMapper,
             MemoryItemMapper itemMapper,

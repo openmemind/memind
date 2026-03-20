@@ -20,7 +20,6 @@ import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -28,14 +27,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 /**
  * MySQL storage auto-configuration.
  *
- * <p>Automatically activated when the MySQL JDBC driver is on the classpath and the SQLite driver does not exist: create database, create table, full-text search Bean.
+ * <p>Automatically activated when the MySQL JDBC driver is on the classpath and
+ * {@code memind.store.type=mysql}: create database, create table, full-text search Bean.
  * MyBatis-Plus framework Beans (Interceptor, MetaHandler, Store) are provided by
  * {@link MemoryMybatisPlusAutoConfiguration}.
  *
  */
 @AutoConfiguration(after = MemoryMybatisPlusAutoConfiguration.class)
 @ConditionalOnClass(name = "com.mysql.cj.jdbc.Driver")
-@ConditionalOnMissingClass("org.sqlite.SQLiteDataSource")
+@ConditionalOnProperty(name = "memind.store.type", havingValue = "mysql")
 public class MemoryMysqlAutoConfiguration {
 
     @Bean
