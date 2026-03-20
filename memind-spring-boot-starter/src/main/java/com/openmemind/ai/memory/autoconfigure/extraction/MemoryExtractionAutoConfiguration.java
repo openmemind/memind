@@ -46,6 +46,8 @@ import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.ConversationCaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig.ConversationSegmentStrategy;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
 import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDetector;
@@ -119,11 +121,27 @@ public class MemoryExtractionAutoConfiguration {
     // ─── Content Processors (individually overridable) ───
 
     @Bean
+    @ConditionalOnMissingBean
+    public LlmConversationChunker llmConversationChunker(
+            ConversationChunkingConfig config, ChatClient.Builder chatClientBuilder) {
+        if (config.strategy() != ConversationSegmentStrategy.LLM) {
+            return null;
+        }
+        return new LlmConversationChunker(chatClientBuilder.build(), new ConversationChunker());
+    }
+
+    @Bean
     @ConditionalOnMissingBean(name = "conversationContentProcessor")
     public ConversationContentProcessor conversationContentProcessor(
-            CaptionGenerator captionGenerator, ConversationChunkingConfig conversationConfig) {
+            CaptionGenerator captionGenerator,
+            ConversationChunkingConfig conversationConfig,
+            ObjectProvider<LlmConversationChunker> llmChunkerProvider) {
         return new ConversationContentProcessor(
-                new ConversationChunker(), null, conversationConfig, captionGenerator, null);
+                new ConversationChunker(),
+                llmChunkerProvider.getIfAvailable(),
+                conversationConfig,
+                captionGenerator,
+                null);
     }
 
     @Bean
