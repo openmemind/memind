@@ -22,6 +22,8 @@ import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -30,6 +32,8 @@ import reactor.core.publisher.Mono;
  *
  */
 public class SemanticDeduplicator implements MemoryItemDeduplicator {
+
+    private static final int SEARCH_CONCURRENCY = 4;
 
     private final MemoryStore store;
     private final MemoryVector vector;
@@ -53,33 +57,48 @@ public class SemanticDeduplicator implements MemoryItemDeduplicator {
                         entry ->
                                 vector.search(memoryId, entry.content(), 3, threshold, Map.of())
                                         .next()
-                                        .flatMap(
-                                                vr ->
-                                                        Mono.justOrEmpty(
-                                                                        findItemByVectorId(
-                                                                                memoryId,
-                                                                                vr.vectorId()))
-                                                                .map(
-                                                                        item ->
-                                                                                new DeduplicationResult
-                                                                                        .MatchedItem(
-                                                                                        item,
-                                                                                        vr
-                                                                                                .score())))
-                                        .map(matched -> (Object) matched)
-                                        .defaultIfEmpty(entry))
+                                        .map(vr -> new EntryMatch(entry, vr.vectorId(), vr.score()))
+                                        .defaultIfEmpty(new EntryMatch(entry, null, 0.0f)),
+                        SEARCH_CONCURRENCY)
                 .collectList()
                 .map(
-                        results -> {
+                        matches -> {
+                            var matchedVectorIds =
+                                    matches.stream()
+                                            .map(EntryMatch::vectorId)
+                                            .filter(Objects::nonNull)
+                                            .distinct()
+                                            .toList();
+
+                            Map<String, MemoryItem> vectorIdToItem =
+                                    matchedVectorIds.isEmpty()
+                                            ? Map.of()
+                                            : store
+                                                    .getItemsByVectorIds(memoryId, matchedVectorIds)
+                                                    .stream()
+                                                    .filter(item -> item.vectorId() != null)
+                                                    .collect(
+                                                            Collectors.toMap(
+                                                                    MemoryItem::vectorId,
+                                                                    item -> item,
+                                                                    (first, ignored) -> first));
+
                             var keepNew = new ArrayList<ExtractedMemoryEntry>();
                             var reinforced = new ArrayList<DeduplicationResult.MatchedItem>();
-                            for (Object result : results) {
-                                if (result instanceof ExtractedMemoryEntry e) {
-                                    keepNew.add(e);
-                                } else if (result
-                                        instanceof DeduplicationResult.MatchedItem matched) {
-                                    reinforced.add(matched);
+                            for (EntryMatch match : matches) {
+                                if (match.vectorId() == null) {
+                                    keepNew.add(match.entry());
+                                    continue;
                                 }
+
+                                var item = vectorIdToItem.get(match.vectorId());
+                                if (item == null) {
+                                    keepNew.add(match.entry());
+                                    continue;
+                                }
+
+                                reinforced.add(
+                                        new DeduplicationResult.MatchedItem(item, match.score()));
                             }
                             return new DeduplicationResult(
                                     List.copyOf(keepNew), List.copyOf(reinforced));
@@ -91,9 +110,5 @@ public class SemanticDeduplicator implements MemoryItemDeduplicator {
         return MemorySpanNames.EXTRACTION_ITEM_SEMANTIC_DEDUP;
     }
 
-    private java.util.Optional<MemoryItem> findItemByVectorId(MemoryId memoryId, String vectorId) {
-        return store.getAllItems(memoryId).stream()
-                .filter(item -> vectorId.equals(item.vectorId()))
-                .findFirst();
-    }
+    private record EntryMatch(ExtractedMemoryEntry entry, String vectorId, float score) {}
 }
