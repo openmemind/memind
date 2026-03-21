@@ -109,7 +109,6 @@ class InsightTierRetrieverTest {
             String name, String description, InsightAnalysisMode mode, MemoryScope scope) {
         return new MemoryInsightType(
                 1L,
-                null,
                 name,
                 description,
                 null,
@@ -149,9 +148,9 @@ class InsightTierRetrieverTest {
                             null,
                             List.of());
 
-            when(memoryStore.getAllInsights(memoryId))
+            when(memoryStore.listInsights(memoryId))
                     .thenReturn(List.of(rootInsight, branchInsight));
-            when(memoryStore.getAllInsightTypes(memoryId))
+            when(memoryStore.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType("profile", "User portrait", InsightAnalysisMode.ROOT),
@@ -200,9 +199,9 @@ class InsightTierRetrieverTest {
                             null,
                             List.of());
 
-            when(memoryStore.getAllInsights(memoryId))
+            when(memoryStore.listInsights(memoryId))
                     .thenReturn(List.of(rootInsight, branchInsight));
-            when(memoryStore.getAllInsightTypes(memoryId))
+            when(memoryStore.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType("profile", "User portrait", InsightAnalysisMode.ROOT),
@@ -256,9 +255,9 @@ class InsightTierRetrieverTest {
                             null,
                             List.of());
 
-            when(memoryStore.getAllInsights(memoryId))
+            when(memoryStore.listInsights(memoryId))
                     .thenReturn(List.of(branchProfile, branchPrefs));
-            when(memoryStore.getAllInsightTypes(memoryId))
+            when(memoryStore.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(
@@ -297,8 +296,8 @@ class InsightTierRetrieverTest {
                             null,
                             List.of());
 
-            when(memoryStore.getAllInsights(memoryId)).thenReturn(List.of(branchInsight));
-            when(memoryStore.getAllInsightTypes(memoryId))
+            when(memoryStore.listInsights(memoryId)).thenReturn(List.of(branchInsight));
+            when(memoryStore.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(
@@ -337,8 +336,8 @@ class InsightTierRetrieverTest {
                     buildInsight(1L, "identity", "Likes coffee", InsightTier.LEAF, 10L, List.of());
             var leaf2 = buildInsight(2L, "identity", "Likes tea", InsightTier.LEAF, 10L, List.of());
 
-            when(memoryStore.getAllInsights(memoryId)).thenReturn(List.of(branch, leaf1, leaf2));
-            when(memoryStore.getAllInsightTypes(memoryId))
+            when(memoryStore.listInsights(memoryId)).thenReturn(List.of(branch, leaf1, leaf2));
+            when(memoryStore.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(
@@ -391,8 +390,8 @@ class InsightTierRetrieverTest {
             var leaf =
                     buildInsight(1L, "identity", "Likes coffee", InsightTier.LEAF, 10L, List.of());
 
-            when(memoryStore.getAllInsights(memoryId)).thenReturn(List.of(branch, leaf));
-            when(memoryStore.getAllInsightTypes(memoryId))
+            when(memoryStore.listInsights(memoryId)).thenReturn(List.of(branch, leaf));
+            when(memoryStore.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(
@@ -432,9 +431,9 @@ class InsightTierRetrieverTest {
             var leaf2 = buildInsight(2L, "identity", "Tea", InsightTier.LEAF, 10L, List.of());
             var leaf3 = buildInsight(3L, "identity", "Cola", InsightTier.LEAF, 10L, List.of());
 
-            when(memoryStore.getAllInsights(memoryId))
+            when(memoryStore.listInsights(memoryId))
                     .thenReturn(List.of(branch, leaf1, leaf2, leaf3));
-            when(memoryStore.getAllInsightTypes(memoryId))
+            when(memoryStore.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(
@@ -487,8 +486,8 @@ class InsightTierRetrieverTest {
                     buildInsight(2L, "identity", "Likes tea", InsightTier.LEAF, 10L, List.of())
                             .withSummaryEmbedding(List.of(0.0f, 0.0f, 1.0f));
 
-            when(memoryStore.getAllInsights(memoryId)).thenReturn(List.of(branch, leaf1, leaf2));
-            when(memoryStore.getAllInsightTypes(memoryId))
+            when(memoryStore.listInsights(memoryId)).thenReturn(List.of(branch, leaf1, leaf2));
+            when(memoryStore.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(
@@ -527,8 +526,8 @@ class InsightTierRetrieverTest {
                     buildInsight(
                             100L, "profile", "User portrait", InsightTier.ROOT, null, List.of());
 
-            when(memoryStore.getAllInsights(memoryId)).thenReturn(List.of(rootInsight));
-            when(memoryStore.getAllInsightTypes(memoryId))
+            when(memoryStore.listInsights(memoryId)).thenReturn(List.of(rootInsight));
+            when(memoryStore.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(
@@ -545,7 +544,7 @@ class InsightTierRetrieverTest {
                     .assertNext(result -> assertThat(result.results()).isNotEmpty())
                     .verifyComplete();
 
-            verify(memoryStore, times(1)).getAllInsights(memoryId);
+            verify(memoryStore, times(1)).listInsights(memoryId);
         }
 
         @Test
@@ -555,8 +554,8 @@ class InsightTierRetrieverTest {
                     buildInsight(
                             100L, "profile", "User portrait", InsightTier.ROOT, null, List.of());
 
-            when(memoryStore.getAllInsights(memoryId)).thenReturn(List.of(rootInsight));
-            when(memoryStore.getAllInsightTypes(memoryId))
+            when(memoryStore.listInsights(memoryId)).thenReturn(List.of(rootInsight));
+            when(memoryStore.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(
@@ -575,7 +574,7 @@ class InsightTierRetrieverTest {
                     .assertNext(result -> assertThat(result.results()).isNotEmpty())
                     .verifyComplete();
 
-            verify(memoryStore, times(2)).getAllInsights(memoryId);
+            verify(memoryStore, times(2)).listInsights(memoryId);
         }
 
         @Test
@@ -606,7 +605,7 @@ class InsightTierRetrieverTest {
         @Test
         @DisplayName("When there are no insights, should return empty result")
         void shouldReturnEmptyWhenNoInsights() {
-            when(memoryStore.getAllInsights(memoryId)).thenReturn(List.of());
+            when(memoryStore.listInsights(memoryId)).thenReturn(List.of());
 
             var context =
                     new QueryContext(memoryId, "Query", "Query", List.of(), Map.of(), null, null);
@@ -641,9 +640,8 @@ class InsightTierRetrieverTest {
                             null,
                             List.of());
 
-            when(memoryStore.getAllInsights(memoryId))
-                    .thenReturn(List.of(agentInsight, userInsight));
-            when(memoryStore.getAllInsightTypes(memoryId))
+            when(memoryStore.listInsights(memoryId)).thenReturn(List.of(agentInsight, userInsight));
+            when(memoryStore.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(

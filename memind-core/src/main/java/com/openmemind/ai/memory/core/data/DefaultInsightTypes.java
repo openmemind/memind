@@ -36,7 +36,6 @@ public final class DefaultInsightTypes {
     public static MemoryInsightType identity() {
         return new MemoryInsightType(
                 1L,
-                null,
                 "identity",
                 "Who the user IS as a person: stable traits, professional background,"
                         + " education, skills, and self-description that remain true regardless"
@@ -59,7 +58,6 @@ public final class DefaultInsightTypes {
     public static MemoryInsightType preferences() {
         return new MemoryInsightType(
                 2L,
-                null,
                 "preferences",
                 "What the user LIKES, DISLIKES, or VALUES: subjective opinions on tools,"
                         + " technologies, food, lifestyle, aesthetics, and communication style."
@@ -82,7 +80,6 @@ public final class DefaultInsightTypes {
     public static MemoryInsightType relationships() {
         return new MemoryInsightType(
                 3L,
-                null,
                 "relationships",
                 "The user's social network: family members, friends, colleagues, mentors,"
                         + " and their roles or dynamics. Groups might be: family, work_team,"
@@ -104,7 +101,6 @@ public final class DefaultInsightTypes {
     public static MemoryInsightType experiences() {
         return new MemoryInsightType(
                 4L,
-                null,
                 "experiences",
                 "What is HAPPENING or HAS HAPPENED: time-bound activities, projects, goals,"
                         + " milestones, team context, and situational facts that may become"
@@ -126,7 +122,6 @@ public final class DefaultInsightTypes {
     public static MemoryInsightType behavior() {
         return new MemoryInsightType(
                 9L,
-                null,
                 "behavior",
                 "What the user DOES REPEATEDLY: habits, routines, rituals, and recurring"
                         + " patterns with observable frequency (daily, weekly, always, usually)."
@@ -151,7 +146,6 @@ public final class DefaultInsightTypes {
     public static MemoryInsightType procedural() {
         return new MemoryInsightType(
                 24L,
-                null,
                 "procedural",
                 "Reusable HOW-TO knowledge: operational procedures, configuration recipes,"
                         + " problem-solution pairs, and directives the user gave to the agent."
@@ -176,7 +170,6 @@ public final class DefaultInsightTypes {
     public static MemoryInsightType profile() {
         return new MemoryInsightType(
                 20L,
-                null,
                 "profile",
                 "Comprehensive user portrait synthesized from all BRANCH dimensions"
                         + " (identity, preferences, relationships, experiences, behavior)"
@@ -198,7 +191,6 @@ public final class DefaultInsightTypes {
     public static MemoryInsightType interaction() {
         return new MemoryInsightType(
                 21L,
-                null,
                 "interaction",
                 "Prescriptive directives for the AI agent: communication style calibration"
                         + " (tone, verbosity, formality), domain-specific response strategies,"

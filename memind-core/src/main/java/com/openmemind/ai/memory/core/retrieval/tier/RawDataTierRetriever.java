@@ -399,7 +399,7 @@ public class RawDataTierRetriever implements TierSearchable {
                             .map(java.util.Optional::get)
                             .toList();
         } else {
-            candidates = memoryStore.getAllRawData(context.memoryId());
+            candidates = memoryStore.listRawData(context.memoryId());
         }
         return candidates.stream()
                 .filter(rd -> rd.captionVectorId() != null)

@@ -114,7 +114,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
     public Mono<MemoryItemResult> extract(
             MemoryId memoryId, RawDataResult rawDataResult, ItemExtractionConfig config) {
 
-        List<MemoryInsightType> resolvedInsightTypes = resolveInsightTypes(memoryId);
+        List<MemoryInsightType> resolvedInsightTypes = resolveInsightTypes();
 
         // Phase 1: LLM extraction + filtering
         return extractor
@@ -287,7 +287,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                                                                     contentType))
                                             .toList();
 
-                            store.addItems(memoryId, newItems);
+                            store.insertItems(memoryId, newItems);
 
                             return new MemoryItemResult(newItems, resolvedInsightTypes);
                         });
@@ -345,8 +345,8 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
         return result.isEmpty() ? Map.of() : Map.copyOf(result);
     }
 
-    private List<MemoryInsightType> resolveInsightTypes(MemoryId memoryId) {
-        List<MemoryInsightType> fromStore = store.getAllInsightTypes(memoryId);
+    private List<MemoryInsightType> resolveInsightTypes() {
+        List<MemoryInsightType> fromStore = store.listInsightTypes();
         return fromStore.isEmpty() ? DefaultInsightTypes.all() : fromStore;
     }
 

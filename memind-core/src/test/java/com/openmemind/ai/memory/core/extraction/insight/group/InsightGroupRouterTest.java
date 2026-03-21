@@ -103,20 +103,7 @@ class InsightGroupRouterTest {
 
     private MemoryInsightType createInsightType() {
         return new MemoryInsightType(
-                1L,
-                "test-memory",
-                "test",
-                "desc",
-                null,
-                List.of(),
-                400,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
+                1L, "test", "desc", null, List.of(), 400, null, null, null, null, null, null, null,
                 null);
     }
 

@@ -42,7 +42,7 @@ class SemanticDeduplicatorTest {
     void batchLoadsMatchedItemsByVectorIdsWithoutScanningAllItems() {
         var store = new TrackingMemoryStore();
         var matchedItem = memoryItem(1L, "v-1", "existing item");
-        store.addItem(memoryId, matchedItem);
+        store.insertItems(memoryId, List.of(matchedItem));
 
         var vector = new StubMemoryVector();
         vector.register("first", new VectorSearchResult("v-1", "existing item", 0.95f, Map.of()));
@@ -70,7 +70,7 @@ class SemanticDeduplicatorTest {
     @org.junit.jupiter.api.Test
     void keepsEntryWhenMatchedVectorIdHasNoBackingItem() {
         var store = new TrackingMemoryStore();
-        store.addItem(memoryId, memoryItem(1L, "other-vector", "existing item"));
+        store.insertItems(memoryId, List.of(memoryItem(1L, "other-vector", "existing item")));
 
         var vector = new StubMemoryVector();
         vector.register(
@@ -94,7 +94,7 @@ class SemanticDeduplicatorTest {
     @org.junit.jupiter.api.Test
     void skipsBatchLookupWhenSearchFindsNoSimilarItem() {
         var store = new TrackingMemoryStore();
-        store.addItem(memoryId, memoryItem(1L, "v-1", "existing item"));
+        store.insertItems(memoryId, List.of(memoryItem(1L, "v-1", "existing item")));
 
         var vector = new StubMemoryVector();
         var deduplicator = new SemanticDeduplicator(store, vector, 0.8);
@@ -148,9 +148,9 @@ class SemanticDeduplicatorTest {
         private List<String> lastRequestedVectorIds = List.of();
 
         @Override
-        public List<MemoryItem> getAllItems(MemoryId id) {
+        public List<MemoryItem> listItems(MemoryId id) {
             getAllItemsCalls++;
-            return super.getAllItems(id);
+            return super.listItems(id);
         }
 
         @Override

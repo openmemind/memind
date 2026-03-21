@@ -141,7 +141,7 @@ public final class ExamplePrinter {
     // ── Insight tree ────────────────────────────────────────────────────
 
     public static void printInsightTree(MemoryStore store, MemoryId memoryId) {
-        var allInsights = store.getAllInsights(memoryId);
+        var allInsights = store.listInsights(memoryId);
         if (allInsights.isEmpty()) {
             log.info("  (no insights built yet)");
             return;

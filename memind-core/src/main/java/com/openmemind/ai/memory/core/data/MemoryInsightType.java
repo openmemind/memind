@@ -22,7 +22,6 @@ import java.util.Map;
 
 public record MemoryInsightType(
         Long id,
-        String memoryId,
 
         /* Name */
         String name,
@@ -72,7 +71,6 @@ public record MemoryInsightType(
     public MemoryInsightType withTargetTokens(int targetTokens) {
         return new MemoryInsightType(
                 id,
-                memoryId,
                 name,
                 description,
                 descriptionVectorId,
@@ -92,7 +90,6 @@ public record MemoryInsightType(
     public MemoryInsightType withTreeConfig(InsightTreeConfig treeConfig) {
         return new MemoryInsightType(
                 id,
-                memoryId,
                 name,
                 description,
                 descriptionVectorId,

@@ -352,7 +352,7 @@ public class InsightBuildScheduler implements Closeable {
                             itemIds.size());
                 }
 
-                insightType = store.getInsightType(memoryId, insightTypeName).orElse(null);
+                insightType = store.getInsightType(insightTypeName).orElse(null);
                 if (insightType == null) {
                     log.warn(
                             "InsightType does not exist [type={}]，skipping subsequent phases",
@@ -587,7 +587,7 @@ public class InsightBuildScheduler implements Closeable {
                             1);
         }
 
-        store.saveInsight(memoryId, leafInsight);
+        store.upsertInsights(memoryId, List.of(leafInsight));
         bufferStore.markBuilt(memoryId, insightTypeName, unbuiltItemIds);
         log.debug(
                 "Phase 3 Build completed [type={}, group={}, points={}, version={}]",
