@@ -262,7 +262,7 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
                         .toList();
 
         // Persistence
-        store.saveRawDataList(memoryId, rawDataList);
+        store.upsertRawData(memoryId, rawDataList);
 
         return new RawDataProcessResult(rawDataList, parsedSegments, false);
     }

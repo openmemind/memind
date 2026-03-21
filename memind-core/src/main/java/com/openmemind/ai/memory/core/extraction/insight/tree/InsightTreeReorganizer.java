@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.core.extraction.insight.tree;
 
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
@@ -140,7 +141,7 @@ public class InsightTreeReorganizer {
         }
 
         var allLeafs =
-                store.getInsightsByTypeId(memoryId, insightType.name()).stream()
+                store.getInsightsByType(memoryId, insightType.name()).stream()
                         .filter(i -> InsightTier.LEAF.equals(i.tier()))
                         .toList();
         if (allLeafs.isEmpty()) {
@@ -215,7 +216,7 @@ public class InsightTreeReorganizer {
 
         // 1. Query all LEAFs at once (eliminate duplicate queries)
         var allLeafs =
-                store.getInsightsByTypeId(memoryId, insightTypeName).stream()
+                store.getInsightsByType(memoryId, insightTypeName).stream()
                         .filter(i -> InsightTier.LEAF.equals(i.tier()))
                         .toList();
 
@@ -332,7 +333,7 @@ public class InsightTreeReorganizer {
         var toSave = new ArrayList<MemoryInsight>();
         toSave.add(updatedBranch);
         toSave.addAll(updatedLeafs);
-        store.saveInsights(memoryId, toSave);
+        store.upsertInsights(memoryId, toSave);
 
         return updatedBranch;
     }
@@ -347,11 +348,13 @@ public class InsightTreeReorganizer {
      * Query once within strip lock, result shared by link and bubble logic
      */
     private RootContext queryRootContext(MemoryId memoryId) {
-        var allBranches = store.getAllInsightsByTier(memoryId, InsightTier.BRANCH);
+        var allBranches = store.getInsightsByTier(memoryId, InsightTier.BRANCH);
+        var configuredTypes = store.listInsightTypes();
         var rootTypes =
-                store.getAllInsightTypes(memoryId).stream()
-                        .filter(t -> t.insightAnalysisMode() == InsightAnalysisMode.ROOT)
-                        .toList();
+                (configuredTypes.isEmpty() ? DefaultInsightTypes.all() : configuredTypes)
+                        .stream()
+                                .filter(t -> t.insightAnalysisMode() == InsightAnalysisMode.ROOT)
+                                .toList();
         return new RootContext(allBranches, rootTypes);
     }
 
@@ -424,7 +427,7 @@ public class InsightTreeReorganizer {
             if (freshRoot == null) {
                 return;
             }
-            var freshBranches = store.getAllInsightsByTier(memoryId, InsightTier.BRANCH);
+            var freshBranches = store.getInsightsByTier(memoryId, InsightTier.BRANCH);
             resummarizeRoot(memoryId, p.rootType(), freshRoot, freshBranches, p.config(), language);
             bubbleTracker.reset(p.rootKey());
         } catch (Exception e) {
@@ -467,7 +470,7 @@ public class InsightTreeReorganizer {
                                             null,
                                             childIds,
                                             1);
-                            store.saveInsight(memoryId, root);
+                            store.upsertInsights(memoryId, List.of(root));
                             log.info(
                                     "Creating ROOT [type={}, id={}], containing {} BRANCHES",
                                     rootType.name(),
@@ -489,7 +492,7 @@ public class InsightTreeReorganizer {
         }
 
         childIds.add(branch.id());
-        store.saveInsight(memoryId, latestRoot.withChildInsightIds(childIds));
+        store.upsertInsights(memoryId, List.of(latestRoot.withChildInsightIds(childIds)));
         log.debug(
                 "Linking BRANCH [id={}] → ROOT [type={}, id={}]",
                 branch.id(),
@@ -630,7 +633,7 @@ public class InsightTreeReorganizer {
                         .withLastReasonedAt(now)
                         .withUpdatedAt(now)
                         .withVersion(insight.version() + 1);
-        store.saveInsight(memoryId, updated);
+        store.upsertInsights(memoryId, List.of(updated));
         return updated;
     }
 

@@ -51,7 +51,6 @@ class MemoryItemUnifiedPromptsTest {
     private static MemoryInsightType createInsightType(String name, List<String> categories) {
         return new MemoryInsightType(
                 null,
-                null,
                 name,
                 null,
                 null,

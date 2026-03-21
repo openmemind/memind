@@ -60,8 +60,8 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
     @TempDir Path tempDir;
 
     @Test
-    @DisplayName("saveRawDataList prefetches existing rows once before upsert")
-    void saveRawDataListPrefetchesExistingRowsOnce() {
+    @DisplayName("upsertRawData prefetches existing rows once before upsert")
+    void upsertRawDataPrefetchesExistingRowsOnce() {
         newContextRunner(tempDir.resolve("save-raw-data.db"))
                 .run(
                         context -> {
@@ -69,12 +69,16 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
                             MapperMethodCounter counter =
                                     context.getBean(MapperMethodCounter.class);
 
-                            store.saveRawData(
+                            store.upsertRawData(
                                     MEMORY_ID,
-                                    rawData("raw-1", "old caption", Map.of("source", "seed")));
+                                    List.of(
+                                            rawData(
+                                                    "raw-1",
+                                                    "old caption",
+                                                    Map.of("source", "seed"))));
                             counter.reset();
 
-                            store.saveRawDataList(
+                            store.upsertRawData(
                                     MEMORY_ID,
                                     List.of(
                                             rawData(
@@ -90,7 +94,7 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
                                     .isZero();
                             assertThat(counter.count(MemoryRawDataMapper.class, "selectList"))
                                     .isEqualTo(1);
-                            assertThat(store.getAllRawData(MEMORY_ID)).hasSize(2);
+                            assertThat(store.listRawData(MEMORY_ID)).hasSize(2);
                             assertThat(store.getRawData(MEMORY_ID, "raw-1"))
                                     .get()
                                     .extracting(MemoryRawData::caption)
@@ -99,32 +103,25 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
     }
 
     @Test
-    @DisplayName("updateItems prefetches existing rows once and updates only existing items")
-    void updateItemsPrefetchesExistingRowsOnce() {
-        newContextRunner(tempDir.resolve("update-items.db"))
+    @DisplayName("deleteItems removes only the requested rows in batch")
+    void deleteItemsRemovesOnlyRequestedRowsInBatch() {
+        newContextRunner(tempDir.resolve("delete-items.db"))
                 .run(
                         context -> {
                             MemoryStore store = context.getBean(MemoryStore.class);
-                            MapperMethodCounter counter =
-                                    context.getBean(MapperMethodCounter.class);
 
-                            store.addItem(MEMORY_ID, memoryItem(1L, "original content"));
-                            counter.reset();
-
-                            store.updateItems(
+                            store.insertItems(
                                     MEMORY_ID,
                                     List.of(
-                                            memoryItem(1L, "updated content"),
-                                            memoryItem(2L, "missing content")));
+                                            memoryItem(1L, "first content"),
+                                            memoryItem(2L, "second content"),
+                                            memoryItem(3L, "third content")));
 
-                            assertThat(counter.count(MemoryItemMapper.class, "selectOne")).isZero();
-                            assertThat(counter.count(MemoryItemMapper.class, "selectList"))
-                                    .isEqualTo(1);
-                            assertThat(store.getAllItems(MEMORY_ID)).hasSize(1);
-                            assertThat(store.getItem(MEMORY_ID, 1L))
-                                    .get()
-                                    .extracting(MemoryItem::content)
-                                    .isEqualTo("updated content");
+                            store.deleteItems(MEMORY_ID, List.of(2L, 3L));
+
+                            assertThat(store.listItems(MEMORY_ID))
+                                    .extracting(MemoryItem::id)
+                                    .containsExactly(1L);
                         });
     }
 
@@ -138,9 +135,13 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
                             MapperMethodCounter counter =
                                     context.getBean(MapperMethodCounter.class);
 
-                            store.saveRawData(
+                            store.upsertRawData(
                                     MEMORY_ID,
-                                    rawData("raw-1", "caption", Map.of("existing", "value")));
+                                    List.of(
+                                            rawData(
+                                                    "raw-1",
+                                                    "caption",
+                                                    Map.of("existing", "value"))));
                             counter.reset();
 
                             store.updateRawDataVectorIds(
@@ -166,8 +167,8 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
     }
 
     @Test
-    @DisplayName("addItems rolls back the whole batch when one insert fails")
-    void addItemsRollsBackWholeBatchWhenInsertFails() {
+    @DisplayName("insertItems rolls back the whole batch when one insert fails")
+    void insertItemsRollsBackWholeBatchWhenInsertFails() {
         newContextRunner(tempDir.resolve("add-items-tx.db"))
                 .run(
                         context -> {
@@ -177,7 +178,7 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
 
                             assertThatThrownBy(
                                             () ->
-                                                    store.addItems(
+                                                    store.insertItems(
                                                             MEMORY_ID,
                                                             List.of(
                                                                     memoryItem(1L, "first content"),
@@ -186,7 +187,7 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
                                                                             "duplicate content"))))
                                     .isInstanceOf(Exception.class);
 
-                            assertThat(store.getAllItems(MEMORY_ID)).isEmpty();
+                            assertThat(store.listItems(MEMORY_ID)).isEmpty();
                         });
     }
 

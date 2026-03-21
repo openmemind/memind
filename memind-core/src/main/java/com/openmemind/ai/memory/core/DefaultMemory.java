@@ -14,6 +14,7 @@
 package com.openmemind.ai.memory.core;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.ToolCallStats;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
@@ -30,6 +31,8 @@ import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.vector.MemoryVector;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -51,16 +54,19 @@ public class DefaultMemory implements Memory {
     private final MemoryExtractionPipeline extractor;
     private final MemoryRetriever retriever;
     private final MemoryStore store;
+    private final MemoryVector vector;
     private final ToolStatsService toolStatsService;
 
     public DefaultMemory(
             MemoryExtractionPipeline extractor,
             MemoryRetriever retriever,
             MemoryStore store,
+            MemoryVector vector,
             ToolStatsService toolStatsService) {
         this.extractor = Objects.requireNonNull(extractor, "extractor must not be null");
         this.retriever = Objects.requireNonNull(retriever, "retriever must not be null");
         this.store = Objects.requireNonNull(store, "store must not be null");
+        this.vector = Objects.requireNonNull(vector, "vector must not be null");
         this.toolStatsService =
                 Objects.requireNonNull(toolStatsService, "toolStatsService must not be null");
     }
@@ -114,6 +120,41 @@ public class DefaultMemory implements Memory {
     @Override
     public Mono<RetrievalResult> retrieve(RetrievalRequest request) {
         return retriever.retrieve(request);
+    }
+
+    @Override
+    public Mono<Void> deleteItems(MemoryId memoryId, Collection<Long> itemIds) {
+        var requestedIds = List.copyOf(itemIds);
+        if (requestedIds.isEmpty()) {
+            return Mono.<Void>empty();
+        }
+
+        return Mono.fromCallable(() -> store.getItemsByIds(memoryId, requestedIds))
+                .map(
+                        items ->
+                                items.stream()
+                                        .map(MemoryItem::vectorId)
+                                        .filter(Objects::nonNull)
+                                        .distinct()
+                                        .toList())
+                .flatMap(
+                        vectorIds ->
+                                vectorIds.isEmpty()
+                                        ? Mono.<Void>empty()
+                                        : vector.deleteBatch(memoryId, vectorIds))
+                .then(Mono.<Void>fromRunnable(() -> store.deleteItems(memoryId, requestedIds)))
+                .doOnSuccess(ignored -> retriever.onDataChanged(memoryId));
+    }
+
+    @Override
+    public Mono<Void> deleteInsights(MemoryId memoryId, Collection<Long> insightIds) {
+        var requestedIds = List.copyOf(insightIds);
+        if (requestedIds.isEmpty()) {
+            return Mono.<Void>empty();
+        }
+
+        return Mono.<Void>fromRunnable(() -> store.deleteInsights(memoryId, requestedIds))
+                .doOnSuccess(ignored -> retriever.onDataChanged(memoryId));
     }
 
     // ===== Agent memory reporting =====

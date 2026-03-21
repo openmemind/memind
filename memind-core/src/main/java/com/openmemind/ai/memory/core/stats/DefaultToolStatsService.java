@@ -40,7 +40,7 @@ public class DefaultToolStatsService implements ToolStatsService {
         return Mono.fromCallable(
                 () -> {
                     var items =
-                            store.getAllItems(memoryId).stream()
+                            store.listItems(memoryId).stream()
                                     .filter(
                                             item ->
                                                     toolName.equals(
@@ -56,7 +56,7 @@ public class DefaultToolStatsService implements ToolStatsService {
         return Mono.fromCallable(
                 () -> {
                     var grouped =
-                            store.getAllItems(memoryId).stream()
+                            store.listItems(memoryId).stream()
                                     .filter(
                                             item ->
                                                     !extractMetadataString(item, "toolName")

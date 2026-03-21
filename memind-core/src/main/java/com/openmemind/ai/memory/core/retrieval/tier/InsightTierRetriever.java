@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.retrieval.tier;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
@@ -117,7 +118,7 @@ public class InsightTierRetriever {
         List<MemoryInsight> allInsights =
                 insightCache.get(
                         context.memoryId().toIdentifier(),
-                        key -> memoryStore.getAllInsights(context.memoryId()));
+                        key -> memoryStore.listInsights(context.memoryId()));
 
         var candidateInsights =
                 allInsights.stream()
@@ -132,7 +133,10 @@ public class InsightTierRetriever {
         }
 
         // Load insight types to distinguish ROOT / BRANCH
-        List<MemoryInsightType> insightTypes = memoryStore.getAllInsightTypes(context.memoryId());
+        List<MemoryInsightType> insightTypes = memoryStore.listInsightTypes();
+        if (insightTypes.isEmpty()) {
+            insightTypes = DefaultInsightTypes.all();
+        }
         Map<String, InsightAnalysisMode> typeNameToMode =
                 insightTypes.stream()
                         .collect(

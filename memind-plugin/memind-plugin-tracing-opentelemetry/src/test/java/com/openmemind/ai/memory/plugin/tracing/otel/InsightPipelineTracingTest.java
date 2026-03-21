@@ -100,7 +100,6 @@ class InsightPipelineTracingTest {
     private static MemoryInsightType testInsightType(String name) {
         return new MemoryInsightType(
                 1L,
-                "test-memory-1",
                 name,
                 "Test insight type",
                 null,
@@ -191,8 +190,7 @@ class InsightPipelineTracingTest {
 
             // Mock store
             var store = mock(MemoryStore.class);
-            when(store.getInsightType(memoryId, insightTypeName))
-                    .thenReturn(Optional.of(insightType));
+            when(store.getInsightType(insightTypeName)).thenReturn(Optional.of(insightType));
             when(store.getItemsByIds(any(), anyList())).thenReturn(List.of(item));
             when(store.getLeafByGroup(any(), anyString(), anyString()))
                     .thenReturn(Optional.empty());
@@ -262,8 +260,7 @@ class InsightPipelineTracingTest {
 
             // Mock store
             var store = mock(MemoryStore.class);
-            when(store.getInsightType(memoryId, insightTypeName))
-                    .thenReturn(Optional.of(insightType));
+            when(store.getInsightType(insightTypeName)).thenReturn(Optional.of(insightType));
             when(store.getItemsByIds(any(), anyList())).thenReturn(List.of(item));
             when(store.getLeafByGroup(any(), anyString(), anyString()))
                     .thenReturn(Optional.empty());

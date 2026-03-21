@@ -14,8 +14,6 @@
 package com.openmemind.ai.memory.plugin.store.mybatis.initializer;
 
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
-import com.openmemind.ai.memory.core.data.DefaultMemoryId;
-import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import org.springframework.boot.context.event.ApplicationStartedEvent;
 import org.springframework.context.ApplicationListener;
@@ -36,9 +34,6 @@ public class DefaultTaxonomySeeder implements ApplicationListener<ApplicationSta
 
     @Override
     public void onApplicationEvent(ApplicationStartedEvent event) {
-        MemoryId systemMemoryId = DefaultMemoryId.of("system", "system");
-
-        DefaultInsightTypes.all()
-                .forEach(insightType -> memoryStore.saveInsightType(systemMemoryId, insightType));
+        memoryStore.upsertInsightTypes(DefaultInsightTypes.all());
     }
 }

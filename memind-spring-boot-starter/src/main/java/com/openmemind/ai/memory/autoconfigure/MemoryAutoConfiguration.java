@@ -22,6 +22,7 @@ import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.stats.DefaultToolStatsService;
 import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.vector.MemoryVector;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -59,7 +60,8 @@ public class MemoryAutoConfiguration {
             MemoryExtractionPipeline extractor,
             MemoryRetriever retriever,
             MemoryStore store,
+            MemoryVector vector,
             ToolStatsService toolStatsService) {
-        return new DefaultMemory(extractor, retriever, store, toolStatsService);
+        return new DefaultMemory(extractor, retriever, store, vector, toolStatsService);
     }
 }

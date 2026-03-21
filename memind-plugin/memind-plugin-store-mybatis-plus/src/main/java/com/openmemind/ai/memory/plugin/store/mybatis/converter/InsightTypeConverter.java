@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.plugin.store.mybatis.converter;
 
-import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
@@ -26,7 +25,7 @@ public final class InsightTypeConverter {
 
     private InsightTypeConverter() {}
 
-    public static MemoryInsightTypeDO toDO(MemoryId memoryId, MemoryInsightType record) {
+    public static MemoryInsightTypeDO toDO(MemoryInsightType record) {
         MemoryInsightTypeDO dataObject = new MemoryInsightTypeDO();
         dataObject.setBizId(record.id());
         dataObject.setName(record.name());
@@ -54,7 +53,6 @@ public final class InsightTypeConverter {
         }
         return new MemoryInsightType(
                 dataObject.getBizId(),
-                null,
                 dataObject.getName(),
                 dataObject.getDescription(),
                 dataObject.getDescriptionVectorId(),

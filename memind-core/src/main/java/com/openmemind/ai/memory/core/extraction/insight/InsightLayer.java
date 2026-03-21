@@ -139,7 +139,7 @@ public class InsightLayer implements InsightExtractStep {
     public void flush(MemoryId memoryId, String language) {
         scheduler.awaitPending(memoryId, 5, TimeUnit.MINUTES);
 
-        var insightTypes = store.getAllInsightTypes(memoryId);
+        var insightTypes = store.listInsightTypes();
         if (insightTypes.isEmpty()) {
             insightTypes = DefaultInsightTypes.all();
         }
@@ -186,7 +186,7 @@ public class InsightLayer implements InsightExtractStep {
         if (!result.resolvedInsightTypes().isEmpty()) {
             return result.resolvedInsightTypes();
         }
-        var stored = store.getAllInsightTypes(memoryId);
+        var stored = store.listInsightTypes();
         return stored.isEmpty() ? DefaultInsightTypes.all() : stored;
     }
 

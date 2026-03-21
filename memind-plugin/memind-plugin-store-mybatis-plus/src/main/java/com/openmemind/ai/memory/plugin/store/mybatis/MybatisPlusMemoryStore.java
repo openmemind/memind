@@ -21,7 +21,6 @@ import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
-import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.InsightConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.InsightTypeConverter;
@@ -67,22 +66,7 @@ public class MybatisPlusMemoryStore implements MemoryStore {
     // ===== MemoryRawData =====
 
     @Override
-    public void saveRawData(MemoryId id, MemoryRawData rawData) {
-        MemoryRawDataDO existing =
-                rawDataMapper.selectOne(
-                        memoryQuery(id, MemoryRawDataDO.class).eq("biz_id", rawData.id()));
-        MemoryRawDataDO dataObject = RawDataConverter.toDO(id, rawData);
-        if (existing != null) {
-            dataObject.setId(existing.getId());
-            rawDataMapper.updateById(dataObject);
-        } else {
-            rawDataMapper.insert(dataObject);
-        }
-    }
-
-    @Override
-    @Transactional
-    public void saveRawDataList(MemoryId id, List<MemoryRawData> rawDataList) {
+    public void upsertRawData(MemoryId id, List<MemoryRawData> rawDataList) {
         if (rawDataList == null || rawDataList.isEmpty()) {
             return;
         }
@@ -121,7 +105,7 @@ public class MybatisPlusMemoryStore implements MemoryStore {
     }
 
     @Override
-    public List<MemoryRawData> getAllRawData(MemoryId id) {
+    public List<MemoryRawData> listRawData(MemoryId id) {
         return rawDataMapper.selectList(memoryQuery(id, MemoryRawDataDO.class)).stream()
                 .map(RawDataConverter::toRecord)
                 .toList();
@@ -137,12 +121,6 @@ public class MybatisPlusMemoryStore implements MemoryStore {
         return Optional.ofNullable(dataObject).map(RawDataConverter::toRecord);
     }
 
-    @Override
-    public void deleteRawData(MemoryId id, String rawDataId) {
-        rawDataMapper.delete(memoryQuery(id, MemoryRawDataDO.class).eq("biz_id", rawDataId));
-    }
-
-    @Override
     public List<MemoryRawData> pollRawDataWithoutVector(MemoryId id, int limit, Duration minAge) {
         if (limit <= 0) {
             return List.of();
@@ -212,38 +190,17 @@ public class MybatisPlusMemoryStore implements MemoryStore {
     // ===== MemoryItem =====
 
     @Override
-    public void addItem(MemoryId id, MemoryItem item) {
-        MemoryItemDO dataObject = ItemConverter.toDO(id, item);
-        itemMapper.insert(dataObject);
-    }
-
-    @Override
     @Transactional
-    public void addItems(MemoryId id, List<MemoryItem> items) {
+    public void insertItems(MemoryId id, List<MemoryItem> items) {
         if (items == null || items.isEmpty()) {
             return;
         }
-        items.forEach(item -> addItem(id, item));
-    }
-
-    @Override
-    public Optional<MemoryItem> getItem(MemoryId id, Long itemId) {
-        MemoryItemDO dataObject =
-                itemMapper.selectOne(memoryQuery(id, MemoryItemDO.class).eq("biz_id", itemId));
-        return Optional.ofNullable(dataObject).map(ItemConverter::toRecord);
-    }
-
-    @Override
-    public Optional<MemoryItem> getItemByContentHash(MemoryId id, String contentHash) {
-        MemoryItemDO dataObject =
-                itemMapper.selectOne(
-                        memoryQuery(id, MemoryItemDO.class).eq("content_hash", contentHash));
-        return Optional.ofNullable(dataObject).map(ItemConverter::toRecord);
+        items.forEach(item -> itemMapper.insert(ItemConverter.toDO(id, item)));
     }
 
     @Override
     public List<MemoryItem> getItemsByContentHashes(MemoryId id, Collection<String> contentHashes) {
-        if (contentHashes.isEmpty()) {
+        if (contentHashes == null || contentHashes.isEmpty()) {
             return List.of();
         }
         return itemMapper
@@ -255,7 +212,7 @@ public class MybatisPlusMemoryStore implements MemoryStore {
 
     @Override
     public List<MemoryItem> getItemsByVectorIds(MemoryId id, Collection<String> vectorIds) {
-        if (vectorIds.isEmpty()) {
+        if (vectorIds == null || vectorIds.isEmpty()) {
             return List.of();
         }
         return itemMapper
@@ -266,7 +223,7 @@ public class MybatisPlusMemoryStore implements MemoryStore {
     }
 
     @Override
-    public List<MemoryItem> getItemsByIds(MemoryId id, List<Long> itemIds) {
+    public List<MemoryItem> getItemsByIds(MemoryId id, Collection<Long> itemIds) {
         if (itemIds == null || itemIds.isEmpty()) {
             return List.of();
         }
@@ -278,20 +235,8 @@ public class MybatisPlusMemoryStore implements MemoryStore {
     }
 
     @Override
-    public List<MemoryItem> getAllItems(MemoryId id) {
+    public List<MemoryItem> listItems(MemoryId id) {
         return itemMapper.selectList(memoryQuery(id, MemoryItemDO.class)).stream()
-                .map(ItemConverter::toRecord)
-                .toList();
-    }
-
-    @Override
-    public List<MemoryItem> getRecentItems(MemoryId id, int limit) {
-        return itemMapper
-                .selectList(
-                        memoryQuery(id, MemoryItemDO.class)
-                                .orderByDesc("created_at")
-                                .last("LIMIT " + limit))
-                .stream()
                 .map(ItemConverter::toRecord)
                 .toList();
     }
@@ -302,75 +247,54 @@ public class MybatisPlusMemoryStore implements MemoryStore {
     }
 
     @Override
-    public List<MemoryItem> getItemsByRawDataId(MemoryId id, String rawDataId) {
-        return itemMapper
-                .selectList(memoryQuery(id, MemoryItemDO.class).eq("raw_data_id", rawDataId))
-                .stream()
-                .map(ItemConverter::toRecord)
-                .toList();
-    }
-
-    @Override
-    public List<MemoryItem> getItemsByScope(MemoryId id, MemoryScope scope) {
-        return itemMapper
-                .selectList(memoryQuery(id, MemoryItemDO.class).eq("scope", scope.name()))
-                .stream()
-                .map(ItemConverter::toRecord)
-                .toList();
-    }
-
-    @Override
-    @Transactional
-    public void updateItems(MemoryId id, List<MemoryItem> items) {
-        if (items == null || items.isEmpty()) {
+    public void deleteItems(MemoryId id, Collection<Long> itemIds) {
+        if (itemIds == null || itemIds.isEmpty()) {
             return;
         }
-
-        Map<Long, MemoryItemDO> existingByBizId =
-                itemMapper
-                        .selectList(
-                                memoryQuery(id, MemoryItemDO.class)
-                                        .in("biz_id", items.stream().map(MemoryItem::id).toList()))
-                        .stream()
-                        .collect(Collectors.toMap(MemoryItemDO::getBizId, Function.identity()));
-
-        items.forEach(
-                item -> {
-                    MemoryItemDO existing = existingByBizId.get(item.id());
-                    if (existing != null) {
-                        MemoryItemDO dataObject = ItemConverter.toDO(id, item);
-                        dataObject.setId(existing.getId());
-                        itemMapper.updateById(dataObject);
-                    }
-                });
-    }
-
-    @Override
-    public void deleteItem(MemoryId id, Long itemId) {
-        itemMapper.delete(memoryQuery(id, MemoryItemDO.class).eq("biz_id", itemId));
+        itemMapper.delete(memoryQuery(id, MemoryItemDO.class).in("biz_id", itemIds));
     }
 
     // ===== MemoryInsightType =====
 
     @Override
-    public void saveInsightType(MemoryId id, MemoryInsightType insightType) {
-        MemoryInsightTypeDO existing =
-                insightTypeMapper.selectOne(
-                        appQuery(id, MemoryInsightTypeDO.class).eq("name", insightType.name()));
-        MemoryInsightTypeDO dataObject = InsightTypeConverter.toDO(id, insightType);
-        if (existing != null) {
-            dataObject.setId(existing.getId());
-            insightTypeMapper.updateById(dataObject);
-        } else {
-            insightTypeMapper.insert(dataObject);
+    @Transactional
+    public void upsertInsightTypes(List<MemoryInsightType> insightTypes) {
+        if (insightTypes == null || insightTypes.isEmpty()) {
+            return;
         }
+
+        Map<String, MemoryInsightTypeDO> existingByName =
+                insightTypeMapper
+                        .selectList(
+                                appQuery(MemoryInsightTypeDO.class)
+                                        .in(
+                                                "name",
+                                                insightTypes.stream()
+                                                        .map(MemoryInsightType::name)
+                                                        .toList()))
+                        .stream()
+                        .collect(
+                                Collectors.toMap(
+                                        MemoryInsightTypeDO::getName, Function.identity()));
+
+        insightTypes.forEach(
+                insightType -> {
+                    MemoryInsightTypeDO dataObject = InsightTypeConverter.toDO(insightType);
+                    MemoryInsightTypeDO existing = existingByName.get(insightType.name());
+                    if (existing != null) {
+                        dataObject.setId(existing.getId());
+                        insightTypeMapper.updateById(dataObject);
+                    } else {
+                        insightTypeMapper.insert(dataObject);
+                    }
+                });
     }
 
     @Override
-    public Optional<MemoryInsightType> getInsightType(MemoryId id, String insightType) {
+    public Optional<MemoryInsightType> getInsightType(String insightType) {
         MemoryInsightTypeDO dataObject =
                 insightTypeMapper.selectOne(
-                        appQuery(id, MemoryInsightTypeDO.class).eq("name", insightType));
+                        appQuery(MemoryInsightTypeDO.class).eq("name", insightType));
         if (dataObject == null) {
             return Optional.empty();
         }
@@ -378,42 +302,42 @@ public class MybatisPlusMemoryStore implements MemoryStore {
     }
 
     @Override
-    public List<MemoryInsightType> getAllInsightTypes(MemoryId id) {
-        return insightTypeMapper.selectList(appQuery(id, MemoryInsightTypeDO.class)).stream()
+    public List<MemoryInsightType> listInsightTypes() {
+        return insightTypeMapper.selectList(appQuery(MemoryInsightTypeDO.class)).stream()
                 .map(InsightTypeConverter::toRecord)
                 .toList();
-    }
-
-    @Override
-    public void deleteInsightType(MemoryId id, String insightType) {
-        MemoryInsightTypeDO existing =
-                insightTypeMapper.selectOne(
-                        appQuery(id, MemoryInsightTypeDO.class).eq("name", insightType));
-        if (existing != null) {
-            insightTypeMapper.deleteById(existing.getId());
-        }
     }
 
     // ===== MemoryInsight =====
 
     @Override
-    public void saveInsight(MemoryId id, MemoryInsight insight) {
-        MemoryInsightDO existing =
-                insightMapper.selectOne(
-                        memoryQuery(id, MemoryInsightDO.class).eq("biz_id", insight.id()));
-        MemoryInsightDO dataObject = InsightConverter.toDO(id, insight);
-        if (existing != null) {
-            dataObject.setId(existing.getId());
-            insightMapper.updateById(dataObject);
-        } else {
-            insightMapper.insert(dataObject);
-        }
-    }
-
     @Transactional
-    @Override
-    public void saveInsights(MemoryId id, List<MemoryInsight> insights) {
-        insights.forEach(insight -> saveInsight(id, insight));
+    public void upsertInsights(MemoryId id, List<MemoryInsight> insights) {
+        if (insights == null || insights.isEmpty()) {
+            return;
+        }
+
+        Map<Long, MemoryInsightDO> existingByBizId =
+                insightMapper
+                        .selectList(
+                                memoryQuery(id, MemoryInsightDO.class)
+                                        .in(
+                                                "biz_id",
+                                                insights.stream().map(MemoryInsight::id).toList()))
+                        .stream()
+                        .collect(Collectors.toMap(MemoryInsightDO::getBizId, Function.identity()));
+
+        insights.forEach(
+                insight -> {
+                    MemoryInsightDO dataObject = InsightConverter.toDO(id, insight);
+                    MemoryInsightDO existing = existingByBizId.get(insight.id());
+                    if (existing != null) {
+                        dataObject.setId(existing.getId());
+                        insightMapper.updateById(dataObject);
+                    } else {
+                        insightMapper.insert(dataObject);
+                    }
+                });
     }
 
     @Override
@@ -428,38 +352,19 @@ public class MybatisPlusMemoryStore implements MemoryStore {
     }
 
     @Override
-    public List<MemoryInsight> getAllInsights(MemoryId id) {
+    public List<MemoryInsight> listInsights(MemoryId id) {
         return insightMapper.selectList(memoryQuery(id, MemoryInsightDO.class)).stream()
                 .map(InsightConverter::toRecord)
                 .toList();
     }
 
     @Override
-    public List<MemoryInsight> getInsightsByTypeId(MemoryId id, String insightType) {
+    public List<MemoryInsight> getInsightsByType(MemoryId id, String insightType) {
         return insightMapper
                 .selectList(memoryQuery(id, MemoryInsightDO.class).eq("type", insightType))
                 .stream()
                 .map(InsightConverter::toRecord)
                 .toList();
-    }
-
-    @Override
-    public List<MemoryInsight> getInsightsByScope(MemoryId id, MemoryScope scope) {
-        return insightMapper
-                .selectList(memoryQuery(id, MemoryInsightDO.class).eq("scope", scope.name()))
-                .stream()
-                .map(InsightConverter::toRecord)
-                .toList();
-    }
-
-    @Override
-    public void deleteInsight(MemoryId id, Long insightId) {
-        MemoryInsightDO existing =
-                insightMapper.selectOne(
-                        memoryQuery(id, MemoryInsightDO.class).eq("biz_id", insightId));
-        if (existing != null) {
-            insightMapper.deleteById(existing.getId());
-        }
     }
 
     // ===== Shared tree query optimization =====
@@ -499,12 +404,20 @@ public class MybatisPlusMemoryStore implements MemoryStore {
     }
 
     @Override
-    public List<MemoryInsight> getAllInsightsByTier(MemoryId id, InsightTier tier) {
+    public List<MemoryInsight> getInsightsByTier(MemoryId id, InsightTier tier) {
         return insightMapper
                 .selectList(memoryQuery(id, MemoryInsightDO.class).eq("tier", tier.name()))
                 .stream()
                 .map(InsightConverter::toRecord)
                 .toList();
+    }
+
+    @Override
+    public void deleteInsights(MemoryId id, Collection<Long> insightIds) {
+        if (insightIds == null || insightIds.isEmpty()) {
+            return;
+        }
+        insightMapper.delete(memoryQuery(id, MemoryInsightDO.class).in("biz_id", insightIds));
     }
 
     // ===== Helper methods =====
@@ -518,7 +431,7 @@ public class MybatisPlusMemoryStore implements MemoryStore {
     /**
      * InsightType is global (not scoped by userId/agentId), so no extra conditions needed.
      */
-    private <T> QueryWrapper<T> appQuery(MemoryId id, Class<T> clazz) {
+    private <T> QueryWrapper<T> appQuery(Class<T> clazz) {
         return new QueryWrapper<>();
     }
 }
