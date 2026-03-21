@@ -23,6 +23,7 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRec
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import reactor.core.publisher.Mono;
@@ -156,6 +157,26 @@ public interface Memory {
      * @return a {@link RetrievalResult} containing ranked, relevant memory items
      */
     Mono<RetrievalResult> retrieve(RetrievalRequest request);
+
+    // ===== Deletion =====
+
+    /**
+     * Deletes only the requested memory items for the given memory id.
+     *
+     * @param memoryId the memory identity
+     * @param itemIds the item ids to delete
+     * @return completion signal
+     */
+    Mono<Void> deleteItems(MemoryId memoryId, Collection<Long> itemIds);
+
+    /**
+     * Deletes only the requested insights for the given memory id.
+     *
+     * @param memoryId the memory identity
+     * @param insightIds the insight ids to delete
+     * @return completion signal
+     */
+    Mono<Void> deleteInsights(MemoryId memoryId, Collection<Long> insightIds);
 
     // ===== Agent tool stats =====
 

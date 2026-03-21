@@ -16,12 +16,18 @@ package com.openmemind.ai.memory.core;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.ToolCallStats;
+import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
+import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
+import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
@@ -36,6 +42,7 @@ import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -45,6 +52,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
@@ -57,6 +65,7 @@ class DefaultMemoryTest {
     @Mock private MemoryExtractor extractor;
     @Mock private MemoryRetriever retriever;
     @Mock private MemoryStore store;
+    @Mock private MemoryVector vector;
     @Mock private ToolStatsService toolStatsService;
 
     private Memory memind;
@@ -64,7 +73,7 @@ class DefaultMemoryTest {
 
     @BeforeEach
     void setUp() {
-        memind = new DefaultMemory(extractor, retriever, store, toolStatsService);
+        memind = new DefaultMemory(extractor, retriever, store, vector, toolStatsService);
         memoryId = DefaultMemoryId.of("user1", "agent1");
     }
 
@@ -120,6 +129,56 @@ class DefaultMemoryTest {
                                     memoryId, "User Preferences", RetrievalConfig.Strategy.SIMPLE))
                     .expectNext(result)
                     .verifyComplete();
+        }
+    }
+
+    @Nested
+    @DisplayName("Deletion APIs")
+    class DeleteApis {
+
+        @Test
+        @DisplayName("deleteItems deletes vectors before store rows and invalidates retriever")
+        void deleteItemsDeletesVectorsThenStoreRowsAndInvalidatesRetriever() {
+            var itemIds = List.of(1L, 2L);
+            var items = List.of(memoryItem(1L, "vec-1"), memoryItem(2L, "vec-2"));
+            when(store.getItemsByIds(memoryId, itemIds)).thenReturn(items);
+            when(vector.deleteBatch(memoryId, List.of("vec-1", "vec-2"))).thenReturn(Mono.empty());
+
+            StepVerifier.create(memind.deleteItems(memoryId, itemIds)).verifyComplete();
+
+            InOrder inOrder = inOrder(store, vector, retriever);
+            inOrder.verify(store).getItemsByIds(memoryId, itemIds);
+            inOrder.verify(vector).deleteBatch(memoryId, List.of("vec-1", "vec-2"));
+            inOrder.verify(store).deleteItems(memoryId, itemIds);
+            inOrder.verify(retriever).onDataChanged(memoryId);
+        }
+
+        @Test
+        @DisplayName("deleteItems skips vector delete when no vector ids exist")
+        void deleteItemsSkipsVectorDeleteWhenNoVectorIdsExist() {
+            var itemIds = List.of(3L);
+            when(store.getItemsByIds(memoryId, itemIds)).thenReturn(List.of(memoryItem(3L, null)));
+
+            StepVerifier.create(memind.deleteItems(memoryId, itemIds)).verifyComplete();
+
+            InOrder inOrder = inOrder(store, retriever);
+            inOrder.verify(store).getItemsByIds(memoryId, itemIds);
+            inOrder.verify(store).deleteItems(memoryId, itemIds);
+            inOrder.verify(retriever).onDataChanged(memoryId);
+            verifyNoInteractions(vector);
+        }
+
+        @Test
+        @DisplayName("deleteInsights deletes only requested insights and invalidates retriever")
+        void deleteInsightsDeletesOnlyRequestedInsightsAndInvalidatesRetriever() {
+            var insightIds = List.of(11L, 12L);
+
+            StepVerifier.create(memind.deleteInsights(memoryId, insightIds)).verifyComplete();
+
+            InOrder inOrder = inOrder(store, retriever);
+            inOrder.verify(store).deleteInsights(memoryId, insightIds);
+            inOrder.verify(retriever).onDataChanged(memoryId);
+            verifyNoInteractions(vector);
         }
     }
 
@@ -270,5 +329,22 @@ class DefaultMemoryTest {
 
             verify(toolStatsService).getAllToolStats(memoryId);
         }
+    }
+
+    private MemoryItem memoryItem(Long itemId, String vectorId) {
+        return new MemoryItem(
+                itemId,
+                memoryId.toIdentifier(),
+                "content-" + itemId,
+                MemoryScope.USER,
+                MemoryCategory.PROFILE,
+                "conversation",
+                vectorId,
+                "raw-" + itemId,
+                "hash-" + itemId,
+                Instant.now(),
+                Map.of(),
+                Instant.now(),
+                MemoryItemType.FACT);
     }
 }

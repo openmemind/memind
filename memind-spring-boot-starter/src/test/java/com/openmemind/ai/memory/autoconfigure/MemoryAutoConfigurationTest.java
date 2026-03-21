@@ -20,6 +20,7 @@ import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.vector.MemoryVector;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -45,12 +46,25 @@ class MemoryAutoConfigurationTest {
         @DisplayName("Register DefaultMemory when all dependencies exist")
         void registersMemory4jBean() {
             contextRunner
-                    .withUserConfiguration(DependenciesConfig.class)
+                    .withUserConfiguration(DependenciesWithVectorConfig.class)
                     .run(
                             context -> {
                                 assertThat(context).hasSingleBean(Memory.class);
                                 assertThat(context.getBean(Memory.class))
                                         .isInstanceOf(DefaultMemory.class);
+                            });
+        }
+
+        @Test
+        @DisplayName("Require MemoryVector bean for default Memory wiring")
+        void requiresMemoryVectorBean() {
+            contextRunner
+                    .withUserConfiguration(DependenciesWithoutVectorConfig.class)
+                    .run(
+                            context -> {
+                                assertThat(context).hasFailed();
+                                assertThat(context.getStartupFailure())
+                                        .hasMessageContaining("MemoryVector");
                             });
         }
     }
@@ -63,7 +77,8 @@ class MemoryAutoConfigurationTest {
         @DisplayName("Do not register default when user customizes Memory")
         void userMemory4jTakesPrecedence() {
             contextRunner
-                    .withUserConfiguration(DependenciesConfig.class, CustomMemory4jConfig.class)
+                    .withUserConfiguration(
+                            DependenciesWithVectorConfig.class, CustomMemory4jConfig.class)
                     .run(
                             context -> {
                                 assertThat(context).hasSingleBean(Memory.class);
@@ -74,7 +89,7 @@ class MemoryAutoConfigurationTest {
     }
 
     @Configuration
-    static class DependenciesConfig {
+    static class DependenciesWithoutVectorConfig {
         @Bean
         ChatClient.Builder chatClientBuilder() {
             return Mockito.mock(ChatClient.Builder.class);
@@ -93,6 +108,14 @@ class MemoryAutoConfigurationTest {
         @Bean
         MemoryStore memoryStore() {
             return Mockito.mock(MemoryStore.class);
+        }
+    }
+
+    @Configuration
+    static class DependenciesWithVectorConfig extends DependenciesWithoutVectorConfig {
+        @Bean
+        MemoryVector memoryVector() {
+            return Mockito.mock(MemoryVector.class);
         }
     }
 
