@@ -30,6 +30,7 @@ target/
 ### VS Code ###
 .vscode/
 .claude/
+.worktrees/
 
 ### Mac OS ###
 .DS_Store
