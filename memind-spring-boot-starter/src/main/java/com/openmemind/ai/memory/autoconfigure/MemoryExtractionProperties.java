@@ -13,6 +13,10 @@
  */
 package com.openmemind.ai.memory.autoconfigure;
 
+import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
+import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig.ConversationSegmentStrategy;
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -62,9 +66,12 @@ public class MemoryExtractionProperties {
     }
 
     public static class Chunking {
-        private ConversationSegmentStrategy strategy = ConversationSegmentStrategy.LLM;
-        private int messagesPerChunk = 20;
-        private int minMessagesPerSegment = 20;
+        private static final ConversationChunkingConfig DEFAULTS =
+                MemoryBuildOptions.defaults().conversationChunking();
+
+        private ConversationSegmentStrategy strategy = DEFAULTS.strategy();
+        private int messagesPerChunk = DEFAULTS.messagesPerChunk();
+        private int minMessagesPerSegment = DEFAULTS.minMessagesPerSegment();
 
         public ConversationSegmentStrategy getStrategy() {
             return strategy;
@@ -92,9 +99,11 @@ public class MemoryExtractionProperties {
     }
 
     public static class Boundary {
-        private int maxMessages = 50;
-        private int maxTokens = 8192;
-        private int minMessagesForLlm = 10;
+        private static final CommitDetectorConfig DEFAULTS = CommitDetectorConfig.defaults();
+
+        private int maxMessages = DEFAULTS.maxMessages();
+        private int maxTokens = DEFAULTS.maxTokens();
+        private int minMessagesForLlm = DEFAULTS.minMessagesForLlm();
 
         public int getMaxMessages() {
             return maxMessages;
@@ -122,10 +131,13 @@ public class MemoryExtractionProperties {
     }
 
     public static class InsightBuild {
-        private int groupingThreshold = 5;
-        private int buildThreshold = 3;
-        private int concurrency = 8;
-        private int maxRetries = 2;
+        private static final InsightBuildConfig DEFAULTS =
+                MemoryBuildOptions.defaults().insightBuild();
+
+        private int groupingThreshold = DEFAULTS.groupingThreshold();
+        private int buildThreshold = DEFAULTS.buildThreshold();
+        private int concurrency = DEFAULTS.concurrency();
+        private int maxRetries = DEFAULTS.maxRetries();
 
         public int getGroupingThreshold() {
             return groupingThreshold;

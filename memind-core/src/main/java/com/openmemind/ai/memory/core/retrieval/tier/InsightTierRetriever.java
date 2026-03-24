@@ -118,7 +118,7 @@ public class InsightTierRetriever {
         List<MemoryInsight> allInsights =
                 insightCache.get(
                         context.memoryId().toIdentifier(),
-                        key -> memoryStore.listInsights(context.memoryId()));
+                        key -> memoryStore.insightOperations().listInsights(context.memoryId()));
 
         var candidateInsights =
                 allInsights.stream()
@@ -133,7 +133,7 @@ public class InsightTierRetriever {
         }
 
         // Load insight types to distinguish ROOT / BRANCH
-        List<MemoryInsightType> insightTypes = memoryStore.listInsightTypes();
+        List<MemoryInsightType> insightTypes = memoryStore.insightOperations().listInsightTypes();
         if (insightTypes.isEmpty()) {
             insightTypes = DefaultInsightTypes.all();
         }

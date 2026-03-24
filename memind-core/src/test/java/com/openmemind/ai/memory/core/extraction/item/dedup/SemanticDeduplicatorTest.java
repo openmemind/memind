@@ -23,6 +23,7 @@ import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
+import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import com.openmemind.ai.memory.core.vector.VectorSearchResult;
 import java.time.Instant;
@@ -42,7 +43,7 @@ class SemanticDeduplicatorTest {
     void batchLoadsMatchedItemsByVectorIdsWithoutScanningAllItems() {
         var store = new TrackingMemoryStore();
         var matchedItem = memoryItem(1L, "v-1", "existing item");
-        store.insertItems(memoryId, List.of(matchedItem));
+        store.itemOperations().insertItems(memoryId, List.of(matchedItem));
 
         var vector = new StubMemoryVector();
         vector.register("first", new VectorSearchResult("v-1", "existing item", 0.95f, Map.of()));
@@ -70,7 +71,8 @@ class SemanticDeduplicatorTest {
     @org.junit.jupiter.api.Test
     void keepsEntryWhenMatchedVectorIdHasNoBackingItem() {
         var store = new TrackingMemoryStore();
-        store.insertItems(memoryId, List.of(memoryItem(1L, "other-vector", "existing item")));
+        store.itemOperations()
+                .insertItems(memoryId, List.of(memoryItem(1L, "other-vector", "existing item")));
 
         var vector = new StubMemoryVector();
         vector.register(
@@ -94,7 +96,8 @@ class SemanticDeduplicatorTest {
     @org.junit.jupiter.api.Test
     void skipsBatchLookupWhenSearchFindsNoSimilarItem() {
         var store = new TrackingMemoryStore();
-        store.insertItems(memoryId, List.of(memoryItem(1L, "v-1", "existing item")));
+        store.itemOperations()
+                .insertItems(memoryId, List.of(memoryItem(1L, "v-1", "existing item")));
 
         var vector = new StubMemoryVector();
         var deduplicator = new SemanticDeduplicator(store, vector, 0.8);
@@ -146,18 +149,58 @@ class SemanticDeduplicatorTest {
         private int getAllItemsCalls;
         private int getItemsByVectorIdsCalls;
         private List<String> lastRequestedVectorIds = List.of();
+        private final ItemOperations trackingItemOps;
 
-        @Override
-        public List<MemoryItem> listItems(MemoryId id) {
-            getAllItemsCalls++;
-            return super.listItems(id);
+        TrackingMemoryStore() {
+            var delegate = super.itemOperations();
+            trackingItemOps =
+                    new ItemOperations() {
+                        @Override
+                        public void insertItems(MemoryId id, List<MemoryItem> items) {
+                            delegate.insertItems(id, items);
+                        }
+
+                        @Override
+                        public List<MemoryItem> getItemsByIds(
+                                MemoryId id, Collection<Long> itemIds) {
+                            return delegate.getItemsByIds(id, itemIds);
+                        }
+
+                        @Override
+                        public List<MemoryItem> getItemsByVectorIds(
+                                MemoryId id, Collection<String> vectorIds) {
+                            getItemsByVectorIdsCalls++;
+                            lastRequestedVectorIds = List.copyOf(vectorIds);
+                            return delegate.getItemsByVectorIds(id, vectorIds);
+                        }
+
+                        @Override
+                        public List<MemoryItem> getItemsByContentHashes(
+                                MemoryId id, Collection<String> contentHashes) {
+                            return delegate.getItemsByContentHashes(id, contentHashes);
+                        }
+
+                        @Override
+                        public List<MemoryItem> listItems(MemoryId id) {
+                            getAllItemsCalls++;
+                            return delegate.listItems(id);
+                        }
+
+                        @Override
+                        public boolean hasItems(MemoryId id) {
+                            return delegate.hasItems(id);
+                        }
+
+                        @Override
+                        public void deleteItems(MemoryId id, Collection<Long> itemIds) {
+                            delegate.deleteItems(id, itemIds);
+                        }
+                    };
         }
 
         @Override
-        public List<MemoryItem> getItemsByVectorIds(MemoryId id, Collection<String> vectorIds) {
-            getItemsByVectorIdsCalls++;
-            lastRequestedVectorIds = List.copyOf(vectorIds);
-            return super.getItemsByVectorIds(id, vectorIds);
+        public ItemOperations itemOperations() {
+            return trackingItemOps;
         }
 
         int getAllItemsCalls() {

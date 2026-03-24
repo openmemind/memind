@@ -18,6 +18,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -34,6 +35,7 @@ import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Duration;
 import java.time.Instant;
@@ -54,6 +56,7 @@ import reactor.test.StepVerifier;
 class InsightTierRetrieverTest {
 
     @Mock private MemoryStore memoryStore;
+    @Mock private InsightOperations insightOperations;
     @Mock private MemoryVector memoryVector;
     @Mock private InsightTypeRouter router;
 
@@ -64,6 +67,7 @@ class InsightTierRetrieverTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(memoryStore.insightOperations()).thenReturn(insightOperations);
         retriever = new InsightTierRetriever(memoryStore, memoryVector, router);
         config =
                 RetrievalConfig.deep()
@@ -148,9 +152,9 @@ class InsightTierRetrieverTest {
                             null,
                             List.of());
 
-            when(memoryStore.listInsights(memoryId))
+            when(insightOperations.listInsights(memoryId))
                     .thenReturn(List.of(rootInsight, branchInsight));
-            when(memoryStore.listInsightTypes())
+            when(insightOperations.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType("profile", "User portrait", InsightAnalysisMode.ROOT),
@@ -199,9 +203,9 @@ class InsightTierRetrieverTest {
                             null,
                             List.of());
 
-            when(memoryStore.listInsights(memoryId))
+            when(insightOperations.listInsights(memoryId))
                     .thenReturn(List.of(rootInsight, branchInsight));
-            when(memoryStore.listInsightTypes())
+            when(insightOperations.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType("profile", "User portrait", InsightAnalysisMode.ROOT),
@@ -255,9 +259,9 @@ class InsightTierRetrieverTest {
                             null,
                             List.of());
 
-            when(memoryStore.listInsights(memoryId))
+            when(insightOperations.listInsights(memoryId))
                     .thenReturn(List.of(branchProfile, branchPrefs));
-            when(memoryStore.listInsightTypes())
+            when(insightOperations.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(
@@ -296,8 +300,8 @@ class InsightTierRetrieverTest {
                             null,
                             List.of());
 
-            when(memoryStore.listInsights(memoryId)).thenReturn(List.of(branchInsight));
-            when(memoryStore.listInsightTypes())
+            when(insightOperations.listInsights(memoryId)).thenReturn(List.of(branchInsight));
+            when(insightOperations.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(
@@ -336,8 +340,9 @@ class InsightTierRetrieverTest {
                     buildInsight(1L, "identity", "Likes coffee", InsightTier.LEAF, 10L, List.of());
             var leaf2 = buildInsight(2L, "identity", "Likes tea", InsightTier.LEAF, 10L, List.of());
 
-            when(memoryStore.listInsights(memoryId)).thenReturn(List.of(branch, leaf1, leaf2));
-            when(memoryStore.listInsightTypes())
+            when(insightOperations.listInsights(memoryId))
+                    .thenReturn(List.of(branch, leaf1, leaf2));
+            when(insightOperations.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(
@@ -390,8 +395,8 @@ class InsightTierRetrieverTest {
             var leaf =
                     buildInsight(1L, "identity", "Likes coffee", InsightTier.LEAF, 10L, List.of());
 
-            when(memoryStore.listInsights(memoryId)).thenReturn(List.of(branch, leaf));
-            when(memoryStore.listInsightTypes())
+            when(insightOperations.listInsights(memoryId)).thenReturn(List.of(branch, leaf));
+            when(insightOperations.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(
@@ -431,9 +436,9 @@ class InsightTierRetrieverTest {
             var leaf2 = buildInsight(2L, "identity", "Tea", InsightTier.LEAF, 10L, List.of());
             var leaf3 = buildInsight(3L, "identity", "Cola", InsightTier.LEAF, 10L, List.of());
 
-            when(memoryStore.listInsights(memoryId))
+            when(insightOperations.listInsights(memoryId))
                     .thenReturn(List.of(branch, leaf1, leaf2, leaf3));
-            when(memoryStore.listInsightTypes())
+            when(insightOperations.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(
@@ -486,8 +491,9 @@ class InsightTierRetrieverTest {
                     buildInsight(2L, "identity", "Likes tea", InsightTier.LEAF, 10L, List.of())
                             .withSummaryEmbedding(List.of(0.0f, 0.0f, 1.0f));
 
-            when(memoryStore.listInsights(memoryId)).thenReturn(List.of(branch, leaf1, leaf2));
-            when(memoryStore.listInsightTypes())
+            when(insightOperations.listInsights(memoryId))
+                    .thenReturn(List.of(branch, leaf1, leaf2));
+            when(insightOperations.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(
@@ -526,8 +532,8 @@ class InsightTierRetrieverTest {
                     buildInsight(
                             100L, "profile", "User portrait", InsightTier.ROOT, null, List.of());
 
-            when(memoryStore.listInsights(memoryId)).thenReturn(List.of(rootInsight));
-            when(memoryStore.listInsightTypes())
+            when(insightOperations.listInsights(memoryId)).thenReturn(List.of(rootInsight));
+            when(insightOperations.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(
@@ -544,7 +550,7 @@ class InsightTierRetrieverTest {
                     .assertNext(result -> assertThat(result.results()).isNotEmpty())
                     .verifyComplete();
 
-            verify(memoryStore, times(1)).listInsights(memoryId);
+            verify(insightOperations, times(1)).listInsights(memoryId);
         }
 
         @Test
@@ -554,8 +560,8 @@ class InsightTierRetrieverTest {
                     buildInsight(
                             100L, "profile", "User portrait", InsightTier.ROOT, null, List.of());
 
-            when(memoryStore.listInsights(memoryId)).thenReturn(List.of(rootInsight));
-            when(memoryStore.listInsightTypes())
+            when(insightOperations.listInsights(memoryId)).thenReturn(List.of(rootInsight));
+            when(insightOperations.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(
@@ -574,7 +580,7 @@ class InsightTierRetrieverTest {
                     .assertNext(result -> assertThat(result.results()).isNotEmpty())
                     .verifyComplete();
 
-            verify(memoryStore, times(2)).listInsights(memoryId);
+            verify(insightOperations, times(2)).listInsights(memoryId);
         }
 
         @Test
@@ -605,7 +611,7 @@ class InsightTierRetrieverTest {
         @Test
         @DisplayName("When there are no insights, should return empty result")
         void shouldReturnEmptyWhenNoInsights() {
-            when(memoryStore.listInsights(memoryId)).thenReturn(List.of());
+            when(insightOperations.listInsights(memoryId)).thenReturn(List.of());
 
             var context =
                     new QueryContext(memoryId, "Query", "Query", List.of(), Map.of(), null, null);
@@ -640,8 +646,9 @@ class InsightTierRetrieverTest {
                             null,
                             List.of());
 
-            when(memoryStore.listInsights(memoryId)).thenReturn(List.of(agentInsight, userInsight));
-            when(memoryStore.listInsightTypes())
+            when(insightOperations.listInsights(memoryId))
+                    .thenReturn(List.of(agentInsight, userInsight));
+            when(insightOperations.listInsightTypes())
                     .thenReturn(
                             List.of(
                                     buildType(

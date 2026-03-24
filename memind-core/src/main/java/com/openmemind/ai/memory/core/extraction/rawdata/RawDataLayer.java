@@ -48,7 +48,7 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
 
     private final Map<Class<?>, RawContentProcessor<?>> processors;
     private final CaptionGenerator defaultCaptionGenerator;
-    private final MemoryStore store;
+    private final MemoryStore memoryStore;
     private final MemoryVector vector;
 
     /**
@@ -56,20 +56,20 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
      *
      * @param processorList list of processors (each keyed by its contentClass())
      * @param defaultCaptionGenerator fallback caption generator when processor provides none
-     * @param store memory store for persistence
+     * @param memoryStore memory store for persistence
      * @param vector memory vector for vectorization
      */
     public RawDataLayer(
             List<RawContentProcessor<?>> processorList,
             CaptionGenerator defaultCaptionGenerator,
-            MemoryStore store,
+            MemoryStore memoryStore,
             MemoryVector vector) {
         this.processors = new HashMap<>();
         for (var processor : processorList) {
             this.processors.put(processor.contentClass(), processor);
         }
         this.defaultCaptionGenerator = defaultCaptionGenerator;
-        this.store = store;
+        this.memoryStore = memoryStore;
         this.vector = vector;
     }
 
@@ -108,7 +108,8 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
         MemoryId memoryId = input.memoryId();
 
         // Idempotency check
-        Optional<MemoryRawData> existing = store.getRawDataByContentId(memoryId, contentId);
+        Optional<MemoryRawData> existing =
+                memoryStore.rawDataOperations().getRawDataByContentId(memoryId, contentId);
         return existing.map(
                         memoryRawData -> Mono.just(RawDataProcessResult.existing(memoryRawData)))
                 .orElseGet(() -> doProcess(input, memoryId, contentId, null));
@@ -123,7 +124,8 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
             Map<String, Object> metadata) {
 
         // Idempotency check
-        Optional<MemoryRawData> existing = store.getRawDataByContentId(memoryId, contentId);
+        Optional<MemoryRawData> existing =
+                memoryStore.rawDataOperations().getRawDataByContentId(memoryId, contentId);
         if (existing.isPresent()) {
             return Mono.just(RawDataResult.existing(existing.get()));
         }
@@ -262,7 +264,7 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
                         .toList();
 
         // Persistence
-        store.upsertRawData(memoryId, rawDataList);
+        memoryStore.rawDataOperations().upsertRawData(memoryId, rawDataList);
 
         return new RawDataProcessResult(rawDataList, parsedSegments, false);
     }

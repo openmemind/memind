@@ -63,7 +63,10 @@ public class HashBasedDeduplicator implements MemoryItemDeduplicator {
 
                     // 3. Batch query existing items
                     Map<String, MemoryItem> existingMap =
-                            store.getItemsByContentHashes(memoryId, hashes).stream()
+                            store
+                                    .itemOperations()
+                                    .getItemsByContentHashes(memoryId, hashes)
+                                    .stream()
                                     .collect(
                                             Collectors.toMap(
                                                     MemoryItem::contentHash,

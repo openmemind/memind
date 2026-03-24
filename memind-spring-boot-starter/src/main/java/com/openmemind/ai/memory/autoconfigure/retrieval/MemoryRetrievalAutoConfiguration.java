@@ -14,17 +14,17 @@
 package com.openmemind.ai.memory.autoconfigure.retrieval;
 
 import com.openmemind.ai.memory.autoconfigure.MemoryRetrievalProperties;
-import com.openmemind.ai.memory.autoconfigure.vector.MemoryVectorAutoConfiguration;
+import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.llm.rerank.LlmReranker;
+import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig.RerankConfig;
 import com.openmemind.ai.memory.core.retrieval.cache.CaffeineRetrievalCache;
 import com.openmemind.ai.memory.core.retrieval.cache.RetrievalCache;
-import com.openmemind.ai.memory.core.retrieval.deep.ChatClientTypedQueryExpander;
+import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.deep.TypedQueryExpander;
-import com.openmemind.ai.memory.core.retrieval.rerank.LlmReranker;
-import com.openmemind.ai.memory.core.retrieval.rerank.Reranker;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoringConfig;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoringConfig.FusionConfig;
@@ -39,22 +39,22 @@ import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig.Query
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig.SufficiencyConfig;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategy;
 import com.openmemind.ai.memory.core.retrieval.strategy.SimpleRetrievalStrategy;
-import com.openmemind.ai.memory.core.retrieval.sufficiency.ChatClientSufficiencyGate;
+import com.openmemind.ai.memory.core.retrieval.sufficiency.LlmSufficiencyGate;
 import com.openmemind.ai.memory.core.retrieval.sufficiency.SufficiencyGate;
-import com.openmemind.ai.memory.core.retrieval.tier.ChatClientInsightTypeRouter;
 import com.openmemind.ai.memory.core.retrieval.tier.InsightTierRetriever;
 import com.openmemind.ai.memory.core.retrieval.tier.InsightTypeRouter;
 import com.openmemind.ai.memory.core.retrieval.tier.ItemTierRetriever;
+import com.openmemind.ai.memory.core.retrieval.tier.LlmInsightTypeRouter;
 import com.openmemind.ai.memory.core.retrieval.tier.RawDataTierRetriever;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.util.Comparator;
 import java.util.List;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -69,10 +69,13 @@ import reactor.core.publisher.Mono;
  *
  */
 @AutoConfiguration
-@AutoConfigureAfter({
-    MemoryVectorAutoConfiguration.class,
-    com.openmemind.ai.memory.plugin.store.mybatis.MemoryMybatisPlusAutoConfiguration.class
-})
+@AutoConfigureAfter(
+        name = {
+            "com.openmemind.ai.memory.plugin.store.mybatis.MemoryMybatisPlusAutoConfiguration",
+            "com.openmemind.ai.memory.plugin.jdbc.autoconfigure.JdbcPluginAutoConfiguration",
+            "com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.SpringAiLlmAutoConfiguration",
+            "com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.SpringAiVectorAutoConfiguration"
+        })
 @EnableConfigurationProperties(MemoryRetrievalProperties.class)
 public class MemoryRetrievalAutoConfiguration {
 
@@ -172,12 +175,14 @@ public class MemoryRetrievalAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public InsightTypeRouter insightTypeRouter(ChatClient.Builder chatClientBuilder) {
-        return new ChatClientInsightTypeRouter(chatClientBuilder.build());
+    @ConditionalOnBean(StructuredChatClient.class)
+    public InsightTypeRouter insightTypeRouter(StructuredChatClient structuredChatClient) {
+        return new LlmInsightTypeRouter(structuredChatClient);
     }
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnBean({MemoryVector.class, InsightTypeRouter.class})
     public InsightTierRetriever insightTierRetriever(
             MemoryStore store, MemoryVector vector, InsightTypeRouter router) {
         return new InsightTierRetriever(store, vector, router);
@@ -185,6 +190,7 @@ public class MemoryRetrievalAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnBean(MemoryVector.class)
     public ItemTierRetriever itemTierRetriever(
             MemoryStore store,
             MemoryVector vector,
@@ -194,6 +200,7 @@ public class MemoryRetrievalAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnBean(MemoryVector.class)
     public RawDataTierRetriever rawDataTierRetriever(
             MemoryStore store,
             MemoryVector vector,
@@ -203,18 +210,26 @@ public class MemoryRetrievalAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public SufficiencyGate sufficiencyGate(ChatClient.Builder chatClientBuilder) {
-        return new ChatClientSufficiencyGate(chatClientBuilder.build());
+    @ConditionalOnBean(StructuredChatClient.class)
+    public SufficiencyGate sufficiencyGate(StructuredChatClient structuredChatClient) {
+        return new LlmSufficiencyGate(structuredChatClient);
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public TypedQueryExpander typedQueryExpander(ChatClient.Builder chatClientBuilder) {
-        return new ChatClientTypedQueryExpander(chatClientBuilder.build());
+    @ConditionalOnBean(StructuredChatClient.class)
+    public TypedQueryExpander typedQueryExpander(StructuredChatClient structuredChatClient) {
+        return new LlmTypedQueryExpander(structuredChatClient);
     }
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnBean({
+        InsightTierRetriever.class,
+        ItemTierRetriever.class,
+        SufficiencyGate.class,
+        TypedQueryExpander.class
+    })
     public DeepRetrievalStrategy deepRetrievalStrategy(
             InsightTierRetriever insightTierRetriever,
             ItemTierRetriever itemTierRetriever,
@@ -233,6 +248,7 @@ public class MemoryRetrievalAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnBean({InsightTierRetriever.class, ItemTierRetriever.class})
     public SimpleRetrievalStrategy simpleRetrievalStrategy(
             InsightTierRetriever insightTierRetriever,
             ItemTierRetriever itemTierRetriever,
@@ -244,6 +260,7 @@ public class MemoryRetrievalAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(MemoryRetriever.class)
+    @ConditionalOnBean(RetrievalStrategy.class)
     public DefaultMemoryRetriever defaultMemoryRetriever(
             RetrievalCache retrievalCache,
             MemoryStore store,

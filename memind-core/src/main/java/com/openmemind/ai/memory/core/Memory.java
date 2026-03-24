@@ -13,10 +13,14 @@
  */
 package com.openmemind.ai.memory.core;
 
+import com.openmemind.ai.memory.core.builder.DefaultMemoryBuilder;
+import com.openmemind.ai.memory.core.builder.MemoryBuilder;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.ToolCallStats;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
+import com.openmemind.ai.memory.core.extraction.context.ContextRequest;
+import com.openmemind.ai.memory.core.extraction.context.ContextWindow;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
@@ -31,9 +35,10 @@ import reactor.core.publisher.Mono;
 /**
  * The primary entry point for all memind memory operations.
  *
- * <p>Combines extraction and retrieval into a single unified API:
+ * <p>Combines context management, extraction, and retrieval into a single unified API:
  *
  * <ul>
+ *   <li><b>Context</b> — manage conversation context with automatic buffer and commit
  *   <li><b>Extraction</b> — feed conversation messages or tool call records into memory
  *   <li><b>Retrieval</b> — query memory with natural language
  *   <li><b>Tool stats</b> — read aggregated statistics about Agent tool usage
@@ -41,7 +46,11 @@ import reactor.core.publisher.Mono;
  *
  * <p>All methods return {@link Mono} and are non-blocking.
  */
-public interface Memory {
+public interface Memory extends AutoCloseable {
+
+    static MemoryBuilder builder() {
+        return new DefaultMemoryBuilder();
+    }
 
     // ===== Extraction =====
 
@@ -94,7 +103,7 @@ public interface Memory {
             MemoryId memoryId, List<Message> messages, ExtractionConfig config);
 
     /**
-     * Feeds a single message into the streaming extraction pipeline (boundary-detection mode).
+     * Feeds a single message into the context extraction pipeline (boundary-detection mode).
      *
      * <p>Messages are buffered internally under {@code memoryId}. Extraction is triggered
      * automatically when the boundary detector decides the accumulated buffer is ready.
@@ -123,6 +132,45 @@ public interface Memory {
      * @return an {@link ExtractionResult} if extraction was triggered, otherwise empty
      */
     Mono<ExtractionResult> addMessage(MemoryId memoryId, Message message, ExtractionConfig config);
+
+    // ===== Context =====
+
+    /**
+     * Assembles a context window from the current conversation buffer and optionally
+     * retrieved memories.
+     *
+     * <p>This is the primary method for building LLM context in real-time Agent applications.
+     * It reads the messages currently buffered under {@code memoryId}, retrieves relevant
+     * memories extracted from previous conversations, and returns a ready-to-use
+     * {@link ContextWindow}.
+     *
+     * @param request context request specifying memory id, token budget, and retrieval options
+     * @return a {@link ContextWindow} containing recent messages and retrieved memories
+     */
+    Mono<ContextWindow> getContext(ContextRequest request);
+
+    /**
+     * Manually commits the current conversation buffer, triggering memory extraction immediately.
+     *
+     * <p>Normally the buffer is committed automatically when the context commit detector
+     * decides the accumulated messages are ready. Use this method to force an immediate commit,
+     * for example at end-of-session or before the application shuts down.
+     *
+     * <p>If the buffer is empty, returns an empty extraction result.
+     *
+     * @param memoryId identifies whose buffer to commit
+     * @return an {@link ExtractionResult} describing what was extracted
+     */
+    Mono<ExtractionResult> commit(MemoryId memoryId);
+
+    /**
+     * Manually commits the current conversation buffer with a custom extraction config.
+     *
+     * @param memoryId identifies whose buffer to commit
+     * @param config   custom extraction configuration
+     * @return an {@link ExtractionResult} describing what was extracted
+     */
+    Mono<ExtractionResult> commit(MemoryId memoryId, ExtractionConfig config);
 
     // ===== Retrieval =====
 
@@ -223,4 +271,36 @@ public interface Memory {
      * @return a map of tool name → {@link ToolCallStats}
      */
     Mono<Map<String, ToolCallStats>> getAllToolStats(MemoryId memoryId);
+
+    /**
+     * Forces a flush of any buffered insight data for the given memory.
+     *
+     * <p>Normally insights are built asynchronously when buffers reach a threshold.
+     * Call this to force-process all remaining buffered items immediately — useful
+     * at end-of-session, application shutdown, or when the caller needs insights
+     * to be available right away.
+     *
+     * <p>The default implementation is a no-op, suitable for configurations
+     * where the insight layer is not enabled.
+     *
+     * @param memoryId identifies whose memory to flush
+     */
+    default void flushInsights(MemoryId memoryId) {
+        flushInsights(memoryId, null);
+    }
+
+    /**
+     * Forces a flush of any buffered insight data, specifying the language for
+     * LLM-generated insight summaries.
+     *
+     * @param memoryId identifies whose memory to flush
+     * @param language the language for insight generation, or {@code null} for the default
+     */
+    default void flushInsights(MemoryId memoryId, String language) {}
+
+    /**
+     * Releases runtime-owned resources created for this memory instance.
+     */
+    @Override
+    void close();
 }

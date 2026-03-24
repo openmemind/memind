@@ -48,7 +48,7 @@ public class SemanticDeduplicator implements MemoryItemDeduplicator {
     @Override
     public Mono<DeduplicationResult> deduplicate(
             MemoryId memoryId, List<ExtractedMemoryEntry> entries) {
-        if (threshold <= 0 || entries.isEmpty() || !store.hasItems(memoryId)) {
+        if (threshold <= 0 || entries.isEmpty() || !store.itemOperations().hasItems(memoryId)) {
             return Mono.just(new DeduplicationResult(entries, List.of()));
         }
 
@@ -74,6 +74,7 @@ public class SemanticDeduplicator implements MemoryItemDeduplicator {
                                     matchedVectorIds.isEmpty()
                                             ? Map.of()
                                             : store
+                                                    .itemOperations()
                                                     .getItemsByVectorIds(memoryId, matchedVectorIds)
                                                     .stream()
                                                     .filter(item -> item.vectorId() != null)

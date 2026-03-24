@@ -131,7 +131,7 @@ mvn clean install
 <dependency>
   <groupId>com.openmemind.ai</groupId>
   <artifactId>memind-spring-boot-starter</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
+  <version>0.1.0-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -173,6 +173,40 @@ var result = memory.retrieve(memoryId, "用户有什么偏好？",
         RetrievalConfig.Strategy.SIMPLE).block();
 ```
 
+### 纯 Java 启动方式
+
+如果不在 Spring Boot 运行时里，就直接创建运行时对象，再传给 `Memory.builder()`：
+
+```java
+OpenAiApi openAiApi = OpenAiApi.builder()
+        .apiKey(System.getenv("OPENAI_API_KEY"))
+        .baseUrl(System.getenv().getOrDefault("OPENAI_BASE_URL", "https://api.openai.com"))
+        .build();
+
+OpenAiChatModel chatModel = OpenAiChatModel.builder()
+        .openAiApi(openAiApi)
+        .defaultOptions(OpenAiChatOptions.builder().model("gpt-4o-mini").build())
+        .observationRegistry(ObservationRegistry.NOOP)
+        .build();
+
+EmbeddingModel embeddingModel = new OpenAiEmbeddingModel(
+        openAiApi,
+        MetadataMode.NONE,
+        OpenAiEmbeddingOptions.builder().model("text-embedding-3-small").build());
+
+JdbcMemoryAccess jdbc = JdbcStore.sqlite("./data/memind.db");
+
+Memory memory = Memory.builder()
+        .chatClient(new SpringAiStructuredChatClient(ChatClient.builder(chatModel).build()))
+        .store(jdbc.store())
+        .textSearch(jdbc.textSearch())
+        .vector(SpringAiFileVector.file("./data/vector-store.json", embeddingModel))
+        .options(MemoryBuildOptions.builder()
+                .insightBuild(new InsightBuildConfig(2, 2, 8, 2))
+                .build())
+        .build();
+```
+
 ---
 
 ## 示例
@@ -184,22 +218,30 @@ git clone https://github.com/openmemind-ai/memind.git
 cd memind
 ```
 
-在 `memind-example/src/main/resources/application.yml` 中配置 API Key，然后运行：
+示例现在统一放在 `memind-examples/` 下，并共享 `memind-examples/data` 这份测试数据。
+
+配置 `OPENAI_API_KEY` 后，可以先运行 Spring Boot 示例：
 
 ```bash
 # 基础提取 + 检索
-mvn -pl memind-example -am spring-boot:run \
-  -Dspring-boot.run.mainClass=com.openmemind.ai.memory.example.quickstart.QuickStartExample
+mvn -pl memind-examples/memind-example-spring-boot -am spring-boot:run \
+  -Dspring-boot.run.mainClass=com.openmemind.ai.memory.example.springboot.quickstart.QuickStartExample
 ```
 
-| 示例 | 类 | 说明 |
-|------|---|------|
-| **QuickStart** | `quickstart.QuickStartExample` | 基础提取 + 检索流程 |
-| **Insight** | `insight.InsightTreeExample` | Insight Tree 多层级生成（Leaf → Branch → Root） |
-| **Foresight** | `foresight.ForesightExample` | 预测性记忆 — 预判用户需求 |
-| **Tool** | `tool.ToolMemoryExample` | 工具调用追踪与程序性记忆 |
+纯 Java 示例位于 `memind-examples/memind-example-java`，可以直接在 IDE 中运行，或使用 Maven Exec Plugin 按下面这些主类启动。
 
-> 所有类位于 `com.openmemind.ai.memory.example` 包下。
+这些纯 Java 示例现在统一使用上面的对象直连 builder 方式。
+
+| 运行方式 | 示例 | 主类 | 说明 |
+|---------|------|------|------|
+| Spring Boot | **QuickStart** | `com.openmemind.ai.memory.example.springboot.quickstart.QuickStartExample` | 基础提取 + 检索流程 |
+| Spring Boot | **Insight** | `com.openmemind.ai.memory.example.springboot.insight.InsightTreeExample` | Insight Tree 多层级生成（Leaf → Branch → Root） |
+| Spring Boot | **Foresight** | `com.openmemind.ai.memory.example.springboot.foresight.ForesightExample` | 预测性记忆与用户需求预判 |
+| Spring Boot | **Tool** | `com.openmemind.ai.memory.example.springboot.tool.ToolMemoryExample` | 工具调用追踪与程序性记忆 |
+| 纯 Java | **QuickStart** | `com.openmemind.ai.memory.example.java.quickstart.QuickStartExample` | 通过对象直连 `Memory.builder()` 组装运行时 |
+| 纯 Java | **Insight** | `com.openmemind.ai.memory.example.java.insight.InsightTreeExample` | 通过对象直连 `Memory.builder()` 并自定义 `MemoryBuildOptions` |
+| 纯 Java | **Foresight** | `com.openmemind.ai.memory.example.java.foresight.ForesightExample` | 纯 Java 前瞻记忆提取与检索 |
+| 纯 Java | **Tool** | `com.openmemind.ai.memory.example.java.tool.ToolMemoryExample` | 纯 Java 工具调用统计与程序性记忆 |
 
 ---
 

@@ -15,6 +15,9 @@ package com.openmemind.ai.memory.core.extraction;
 
 import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.extraction.context.CommitDecision;
+import com.openmemind.ai.memory.core.extraction.context.CommitDetectionContext;
+import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
@@ -27,10 +30,7 @@ import com.openmemind.ai.memory.core.extraction.step.InsightExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.SegmentProcessor;
-import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDecision;
-import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDetectionContext;
-import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDetector;
-import com.openmemind.ai.memory.core.extraction.streaming.ConversationBufferStore;
+import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.utils.HashUtils;
 import java.time.Duration;
 import java.time.Instant;
@@ -61,8 +61,8 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
     private final MemoryItemExtractStep memoryItemStep;
     private final InsightExtractStep insightStep;
     private final SegmentProcessor segmentProcessor;
-    private final BoundaryDetector boundaryDetector;
-    private final ConversationBufferStore conversationBufferStore;
+    private final ContextCommitDetector contextCommitDetector;
+    private final ConversationBuffer conversationBuffer;
     private final ConcurrentHashMap<String, Object> bufferLocks = new ConcurrentHashMap<>();
 
     public MemoryExtractor(
@@ -73,8 +73,8 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         this.memoryItemStep = Objects.requireNonNull(memoryItemStep, "memoryItemStep is required");
         this.insightStep = Objects.requireNonNull(insightStep, "insightStep is required");
         this.segmentProcessor = null;
-        this.boundaryDetector = null;
-        this.conversationBufferStore = null;
+        this.contextCommitDetector = null;
+        this.conversationBuffer = null;
     }
 
     public MemoryExtractor(
@@ -86,8 +86,8 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         this.memoryItemStep = Objects.requireNonNull(memoryItemStep, "memoryItemStep is required");
         this.insightStep = Objects.requireNonNull(insightStep, "insightStep is required");
         this.segmentProcessor = segmentProcessor;
-        this.boundaryDetector = null;
-        this.conversationBufferStore = null;
+        this.contextCommitDetector = null;
+        this.conversationBuffer = null;
     }
 
     public MemoryExtractor(
@@ -95,14 +95,14 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
             MemoryItemExtractStep memoryItemStep,
             InsightExtractStep insightStep,
             SegmentProcessor segmentProcessor,
-            BoundaryDetector boundaryDetector,
-            ConversationBufferStore conversationBufferStore) {
+            ContextCommitDetector contextCommitDetector,
+            ConversationBuffer conversationBuffer) {
         this.rawDataStep = Objects.requireNonNull(rawDataStep, "rawDataStep is required");
         this.memoryItemStep = Objects.requireNonNull(memoryItemStep, "memoryItemStep is required");
         this.insightStep = Objects.requireNonNull(insightStep, "insightStep is required");
         this.segmentProcessor = segmentProcessor;
-        this.boundaryDetector = boundaryDetector;
-        this.conversationBufferStore = conversationBufferStore;
+        this.contextCommitDetector = contextCommitDetector;
+        this.conversationBuffer = conversationBuffer;
     }
 
     /**
@@ -138,7 +138,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
     }
 
     /**
-     * Extract memory from archived conversation segments (internal streaming entry)
+     * Extract memory from archived conversation segments (internal context entry)
      *
      * <p>Skip normalize + chunk, directly execute: build Segment → caption → vectorize → persist → Item → Insight
      */
@@ -148,7 +148,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
     }
 
     /**
-     * Extract memory from archived conversation segments (internal streaming entry, supports cross seal context)
+     * Extract memory from archived conversation segments (internal context entry, supports cross seal context)
      */
     private Mono<ExtractionResult> extractConversationSegment(
             MemoryId memoryId,
@@ -209,10 +209,10 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         Objects.requireNonNull(message, "message is required");
         Objects.requireNonNull(config, "config is required");
 
-        if (boundaryDetector == null || conversationBufferStore == null) {
+        if (contextCommitDetector == null || conversationBuffer == null) {
             return Mono.error(
                     new IllegalStateException(
-                            "boundaryDetector and conversationBufferStore are required for"
+                            "contextCommitDetector and conversationBuffer are required for"
                                     + " addMessage"));
         }
 
@@ -226,12 +226,12 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                                     return Optional.<PendingExtraction>empty();
                                 }
 
-                                var snapshot = conversationBufferStore.load(bufferKey);
+                                var snapshot = conversationBuffer.load(bufferKey);
                                 var decision =
-                                        boundaryDetector
-                                                .shouldSeal(
-                                                        snapshot, BoundaryDetectionContext.empty())
-                                                .defaultIfEmpty(BoundaryDecision.hold())
+                                        contextCommitDetector
+                                                .shouldCommit(
+                                                        snapshot, CommitDetectionContext.empty())
+                                                .defaultIfEmpty(CommitDecision.hold())
                                                 .block();
 
                                 if (decision == null || !decision.shouldSeal()) {
@@ -247,17 +247,16 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                                         decision.confidence());
 
                                 var sealedMessages = List.copyOf(snapshot);
-                                var endMessage =
-                                        conversationBufferStore.loadMessageCount(bufferKey);
+                                var endMessage = conversationBuffer.loadMessageCount(bufferKey);
                                 var startMessage = endMessage - sealedMessages.size();
 
                                 var sealMetadata = new HashMap<String, Object>();
                                 sealMetadata.put("start_message", startMessage);
                                 sealMetadata.put("end_message", endMessage);
 
-                                conversationBufferStore.clear(bufferKey);
-                                conversationBufferStore.save(bufferKey, List.of(message));
-                                conversationBufferStore.saveMessageCount(bufferKey, endMessage + 1);
+                                conversationBuffer.clear(bufferKey);
+                                conversationBuffer.save(bufferKey, List.of(message));
+                                conversationBuffer.saveMessageCount(bufferKey, endMessage + 1);
 
                                 return Optional.of(
                                         new PendingExtraction(
@@ -278,11 +277,11 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
     }
 
     private void appendToBuffer(String bufferKey, Message message) {
-        var buffer = new ArrayList<>(conversationBufferStore.load(bufferKey));
+        var buffer = new ArrayList<>(conversationBuffer.load(bufferKey));
         buffer.add(message);
-        var count = conversationBufferStore.loadMessageCount(bufferKey) + 1;
-        conversationBufferStore.save(bufferKey, buffer);
-        conversationBufferStore.saveMessageCount(bufferKey, count);
+        var count = conversationBuffer.loadMessageCount(bufferKey) + 1;
+        conversationBuffer.save(bufferKey, buffer);
+        conversationBuffer.saveMessageCount(bufferKey, count);
     }
 
     private Object lockFor(String bufferKey) {

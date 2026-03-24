@@ -86,7 +86,7 @@ public final class RawDataAggregator {
         Map<Long, MemoryItem> itemMap =
                 validIds.isEmpty()
                         ? Map.of()
-                        : store.getItemsByIds(memoryId, validIds).stream()
+                        : store.itemOperations().getItemsByIds(memoryId, validIds).stream()
                                 .collect(Collectors.toMap(MemoryItem::id, mi -> mi, (a, b) -> a));
 
         // 3. Group by rawDataId
@@ -131,7 +131,8 @@ public final class RawDataAggregator {
                 double maxScore =
                         group.stream().mapToDouble(p -> p.result().finalScore()).max().orElse(0);
                 List<String> itemIds = group.stream().map(p -> p.result().sourceId()).toList();
-                Optional<MemoryRawData> rawData = store.getRawData(memoryId, groupKey);
+                Optional<MemoryRawData> rawData =
+                        store.rawDataOperations().getRawData(memoryId, groupKey);
                 String caption = rawData.map(MemoryRawData::caption).orElse(null);
                 if (caption != null && !caption.isBlank()) {
                     rawDataResults.add(
@@ -194,7 +195,7 @@ public final class RawDataAggregator {
         Map<Long, MemoryItem> itemMap =
                 validIds.isEmpty()
                         ? Map.of()
-                        : store.getItemsByIds(memoryId, validIds).stream()
+                        : store.itemOperations().getItemsByIds(memoryId, validIds).stream()
                                 .collect(Collectors.toMap(MemoryItem::id, mi -> mi, (a, b) -> a));
 
         // 3. Group by rawDataId (each null rawDataId is a separate group)
@@ -231,7 +232,8 @@ public final class RawDataAggregator {
             if (groupKey.startsWith("##")) {
                 aggregated.add(best);
             } else {
-                Optional<MemoryRawData> rawData = store.getRawData(memoryId, groupKey);
+                Optional<MemoryRawData> rawData =
+                        store.rawDataOperations().getRawData(memoryId, groupKey);
                 String caption = rawData.map(MemoryRawData::caption).orElse(null);
                 String text = (caption != null && !caption.isBlank()) ? caption : best.text();
 
@@ -291,7 +293,7 @@ public final class RawDataAggregator {
         }
 
         Map<Long, Instant> idToOccurredAt =
-                store.getItemsByIds(memoryId, missingIds).stream()
+                store.itemOperations().getItemsByIds(memoryId, missingIds).stream()
                         .filter(mi -> mi.occurredAt() != null)
                         .collect(
                                 Collectors.toMap(

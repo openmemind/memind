@@ -57,13 +57,8 @@
         </dependency>
 
         <dependency>
-            <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-model-openai</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-vector-store</artifactId>
+            <groupId>com.knuddels</groupId>
+            <artifactId>jtokkit</artifactId>
         </dependency>
 
         <!-- Caffeine Cache -->

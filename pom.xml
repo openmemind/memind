@@ -30,14 +30,14 @@
     <modules>
         <module>memind-dependencies</module>
         <module>memind-core</module>
-        <module>memind-plugin</module>
+        <module>memind-plugins</module>
         <module>memind-evaluation</module>
         <module>memind-spring-boot-starter</module>
-        <module>memind-example</module>
+        <module>memind-examples</module>
     </modules>
 
     <properties>
-        <revision>0.0.1-SNAPSHOT</revision>
+        <revision>0.1.0-SNAPSHOT</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <java.version>21</java.version>
@@ -53,7 +53,6 @@
         <flatten-maven-plugin.version>1.7.3</flatten-maven-plugin.version>
         <google-java-format.version>1.28.0</google-java-format.version>
         <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
-
         <maven.deploy.skip>false</maven.deploy.skip>
 
         <license.plugin.version>4.1</license.plugin.version>

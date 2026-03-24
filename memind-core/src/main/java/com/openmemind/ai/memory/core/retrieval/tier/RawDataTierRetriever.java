@@ -394,12 +394,16 @@ public class RawDataTierRetriever implements TierSearchable {
         if (!rawDataIdScope.isEmpty()) {
             candidates =
                     rawDataIdScope.stream()
-                            .map(id -> memoryStore.getRawData(context.memoryId(), id))
+                            .map(
+                                    id ->
+                                            memoryStore
+                                                    .rawDataOperations()
+                                                    .getRawData(context.memoryId(), id))
                             .filter(java.util.Optional::isPresent)
                             .map(java.util.Optional::get)
                             .toList();
         } else {
-            candidates = memoryStore.listRawData(context.memoryId());
+            candidates = memoryStore.rawDataOperations().listRawData(context.memoryId());
         }
         return candidates.stream()
                 .filter(rd -> rd.captionVectorId() != null)

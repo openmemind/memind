@@ -15,24 +15,25 @@ package com.openmemind.ai.memory.autoconfigure;
 
 import com.openmemind.ai.memory.autoconfigure.extraction.MemoryExtractionAutoConfiguration;
 import com.openmemind.ai.memory.autoconfigure.retrieval.MemoryRetrievalAutoConfiguration;
-import com.openmemind.ai.memory.core.DefaultMemory;
 import com.openmemind.ai.memory.core.Memory;
-import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
-import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
+import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.stats.DefaultToolStatsService;
 import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
-import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 
 /**
  * memind top-level auto-configuration
  *
- * <p>Register {@link DefaultMemory} unified facade Bean.
+ * <p>Register {@link Memory} unified facade bean.
  *
  */
 @AutoConfiguration
@@ -43,12 +44,6 @@ import org.springframework.context.annotation.Bean;
 public class MemoryAutoConfiguration {
 
     @Bean
-    @ConditionalOnMissingBean(ChatClient.class)
-    public ChatClient chatClient(ChatClient.Builder chatClientBuilder) {
-        return chatClientBuilder.build();
-    }
-
-    @Bean
     @ConditionalOnMissingBean(ToolStatsService.class)
     public ToolStatsService toolStatsService(MemoryStore store) {
         return new DefaultToolStatsService(store);
@@ -56,12 +51,25 @@ public class MemoryAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(Memory.class)
+    @ConditionalOnBean({StructuredChatClient.class, MemoryStore.class, MemoryVector.class})
     public Memory memind(
-            MemoryExtractionPipeline extractor,
-            MemoryRetriever retriever,
+            StructuredChatClient chatClient,
             MemoryStore store,
             MemoryVector vector,
-            ToolStatsService toolStatsService) {
-        return new DefaultMemory(extractor, retriever, store, vector, toolStatsService);
+            ObjectProvider<MemoryTextSearch> textSearchProvider,
+            ObjectProvider<MemoryBuildOptions> buildOptionsProvider) {
+        var builder = Memory.builder().chatClient(chatClient).store(store).vector(vector);
+
+        MemoryTextSearch textSearch = textSearchProvider.getIfAvailable();
+        if (textSearch != null) {
+            builder.textSearch(textSearch);
+        }
+
+        MemoryBuildOptions buildOptions = buildOptionsProvider.getIfAvailable();
+        if (buildOptions != null) {
+            builder.options(buildOptions);
+        }
+
+        return builder.build();
     }
 }

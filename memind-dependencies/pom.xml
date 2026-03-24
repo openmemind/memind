@@ -4,13 +4,13 @@
 
     <groupId>com.openmemind.ai</groupId>
     <artifactId>memind-dependencies</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Memind - Dependencies Bom</name>
 
     <properties>
-        <revision>0.0.1-SNAPSHOT</revision>
+        <revision>0.1.0-SNAPSHOT</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <java.version>21</java.version>
@@ -18,13 +18,15 @@
         <maven.compiler.target>${java.version}</maven.compiler.target>
 
         <reactor-bom.version>2025.0.2</reactor-bom.version>
+        <spring-boot.version>4.0.1</spring-boot.version>
+        <spring-ai.version>2.0.0-M2</spring-ai.version>
         <jackson.version>2.21.0</jackson.version>
         <slf4j.version>2.0.17</slf4j.version>
         <mysql.version>9.6.0</mysql.version>
-        <spring-boot.version>4.0.1</spring-boot.version>
-        <spring-ai.version>2.0.0-M2</spring-ai.version>
+        <postgresql.version>42.7.8</postgresql.version>
         <junit-jupiter.version>5.11.4</junit-jupiter.version>
         <caffeine.version>3.1.8</caffeine.version>
+        <jtokkit.version>1.1.0</jtokkit.version>
         <assertj.version>3.27.3</assertj.version>
         <testcontainers.version>2.0.3</testcontainers.version>
         <mockito.version>5.21.0</mockito.version>
@@ -46,14 +48,6 @@
     <dependencyManagement>
         <dependencies>
 
-            <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-dependencies</artifactId>
-                <version>${spring-boot.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-
             <!-- OpenTelemetry -->
             <dependency>
                 <groupId>io.opentelemetry</groupId>
@@ -68,6 +62,24 @@
                 <groupId>io.projectreactor</groupId>
                 <artifactId>reactor-bom</artifactId>
                 <version>${reactor-bom.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Spring Boot -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Spring AI -->
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -108,15 +120,6 @@
                 <scope>import</scope>
             </dependency>
 
-            <!-- Spring AI -->
-            <dependency>
-                <groupId>org.springframework.ai</groupId>
-                <artifactId>spring-ai-bom</artifactId>
-                <version>${spring-ai.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-
             <!-- Jackson -->
             <dependency>
                 <groupId>com.fasterxml.jackson</groupId>
@@ -140,6 +143,13 @@
                 <version>${mysql.version}</version>
             </dependency>
 
+            <!-- PostgreSQL JDBC Driver -->
+            <dependency>
+                <groupId>org.postgresql</groupId>
+                <artifactId>postgresql</artifactId>
+                <version>${postgresql.version}</version>
+            </dependency>
+
             <!-- SQLite JDBC -->
             <dependency>
                 <groupId>org.xerial</groupId>
@@ -152,6 +162,12 @@
                 <groupId>com.github.ben-manes.caffeine</groupId>
                 <artifactId>caffeine</artifactId>
                 <version>${caffeine.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.knuddels</groupId>
+                <artifactId>jtokkit</artifactId>
+                <version>${jtokkit.version}</version>
             </dependency>
 
             <!-- OpenTelemetry Reactor -->
@@ -188,7 +204,17 @@
             </dependency>
             <dependency>
                 <groupId>com.openmemind.ai</groupId>
-                <artifactId>memind-plugin-store-mybatis-plus</artifactId>
+                <artifactId>memind-plugin-jdbc</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.openmemind.ai</groupId>
+                <artifactId>memind-plugin-jdbc-starter</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.openmemind.ai</groupId>
+                <artifactId>memind-plugin-store-mybatis-plus-starter</artifactId>
                 <version>${revision}</version>
             </dependency>
         </dependencies>

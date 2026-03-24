@@ -106,6 +106,7 @@ public class ItemTierRetriever implements TierSearchable {
                                             .toList();
                             Map<String, MemoryItem> vectorIdToItem =
                                     memoryStore
+                                            .itemOperations()
                                             .getItemsByVectorIds(context.memoryId(), vectorIds)
                                             .stream()
                                             .collect(
@@ -229,6 +230,7 @@ public class ItemTierRetriever implements TierSearchable {
                                             .toList();
                             Map<String, MemoryItem> vectorIdToItem =
                                     memoryStore
+                                            .itemOperations()
                                             .getItemsByVectorIds(context.memoryId(), vectorIds)
                                             .stream()
                                             .collect(

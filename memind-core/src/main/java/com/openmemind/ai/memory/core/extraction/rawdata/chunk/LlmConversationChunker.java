@@ -19,6 +19,8 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationCont
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.core.llm.ChatMessages;
+import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.extraction.rawdata.ConversationSegmentationPrompts;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,7 +29,6 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.client.ChatClient;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -42,11 +43,14 @@ public class LlmConversationChunker {
     private static final Logger log = LoggerFactory.getLogger(LlmConversationChunker.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private final ChatClient chatClient;
+    private final StructuredChatClient structuredChatClient;
     private final ConversationChunker fallback;
 
-    public LlmConversationChunker(ChatClient chatClient, ConversationChunker fallback) {
-        this.chatClient = Objects.requireNonNull(chatClient, "chatClient must not be null");
+    public LlmConversationChunker(
+            StructuredChatClient structuredChatClient, ConversationChunker fallback) {
+        this.structuredChatClient =
+                Objects.requireNonNull(
+                        structuredChatClient, "structuredChatClient must not be null");
         this.fallback = Objects.requireNonNull(fallback, "fallback must not be null");
     }
 
@@ -65,15 +69,10 @@ public class LlmConversationChunker {
         var prompt =
                 ConversationSegmentationPrompts.build(messages, config.minMessagesPerSegment())
                         .render(null);
+        var llmMessages = ChatMessages.systemUser(prompt.systemPrompt(), prompt.userPrompt());
 
-        return Mono.fromCallable(
-                        () ->
-                                chatClient
-                                        .prompt()
-                                        .system(prompt.systemPrompt())
-                                        .user(prompt.userPrompt())
-                                        .call()
-                                        .content())
+        return structuredChatClient
+                .call(llmMessages)
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(json -> parseAndBuildSegments(json, messages))
                 .onErrorResume(

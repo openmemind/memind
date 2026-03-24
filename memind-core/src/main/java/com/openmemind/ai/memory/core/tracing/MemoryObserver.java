@@ -22,7 +22,7 @@ import reactor.core.publisher.Mono;
  *
  * <p>Defines the observation wrapping capability for Mono/Flux operations.
  * The default implementation is {@link NoopMemoryObserver} (zero overhead),
- * specific implementations are provided by plugin modules (such as OpenTelemetry).
+ * specific implementations are provided by provider modules (such as OpenTelemetry).
  *
  * <p><b>Constraints:</b> operation supplier must return cold Mono/Flux (lazy), cannot return already
  * subscribed hot streams.

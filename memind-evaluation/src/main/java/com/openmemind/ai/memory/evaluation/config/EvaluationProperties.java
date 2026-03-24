@@ -275,7 +275,7 @@ public class EvaluationProperties {
 
         public static class MemindProperties {
 
-            private String addMode = "streaming";
+            private String addMode = "context";
             private boolean enableInsight = false;
 
             public String getAddMode() {

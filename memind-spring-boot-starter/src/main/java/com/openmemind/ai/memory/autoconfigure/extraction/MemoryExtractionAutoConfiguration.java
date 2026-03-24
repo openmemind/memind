@@ -14,13 +14,14 @@
 package com.openmemind.ai.memory.autoconfigure.extraction;
 
 import com.openmemind.ai.memory.autoconfigure.MemoryExtractionProperties;
-import com.openmemind.ai.memory.autoconfigure.vector.MemoryVectorAutoConfiguration;
+import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
+import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
+import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
+import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
-import com.openmemind.ai.memory.core.extraction.insight.buffer.InMemoryInsightBufferStore;
-import com.openmemind.ai.memory.core.extraction.insight.buffer.InsightBufferStore;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.generator.LlmInsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassifier;
@@ -38,22 +39,18 @@ import com.openmemind.ai.memory.core.extraction.item.dedup.HashBasedDeduplicator
 import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicator;
 import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItemExtractor;
 import com.openmemind.ai.memory.core.extraction.item.extractor.MemoryItemExtractor;
-import com.openmemind.ai.memory.core.extraction.item.strategy.DefaultItemExtractionStrategy;
-import com.openmemind.ai.memory.core.extraction.item.strategy.ToolCallItemExtractionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.strategy.LlmItemExtractionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.strategy.LlmToolCallItemExtractionStrategy;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
-import com.openmemind.ai.memory.core.extraction.rawdata.caption.ConversationCaptionGenerator;
+import com.openmemind.ai.memory.core.extraction.rawdata.caption.LlmConversationCaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
-import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDetector;
-import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDetectorConfig;
-import com.openmemind.ai.memory.core.extraction.streaming.ConversationBufferStore;
-import com.openmemind.ai.memory.core.extraction.streaming.DefaultBoundaryDetector;
-import com.openmemind.ai.memory.core.extraction.streaming.InMemoryConversationBufferStore;
+import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.utils.IdUtils;
@@ -61,10 +58,10 @@ import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -81,7 +78,13 @@ import org.springframework.context.annotation.Bean;
  * receive all processors via {@code List<RawContentProcessor<?>>} injection.
  */
 @AutoConfiguration
-@AutoConfigureAfter({MemoryVectorAutoConfiguration.class})
+@AutoConfigureAfter(
+        name = {
+            "com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.SpringAiLlmAutoConfiguration",
+            "com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.SpringAiVectorAutoConfiguration",
+            "com.openmemind.ai.memory.plugin.jdbc.autoconfigure.JdbcPluginAutoConfiguration",
+            "com.openmemind.ai.memory.plugin.store.mybatis.MemoryMybatisPlusAutoConfiguration"
+        })
 @EnableConfigurationProperties(MemoryExtractionProperties.class)
 public class MemoryExtractionAutoConfiguration {
 
@@ -104,35 +107,55 @@ public class MemoryExtractionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public BoundaryDetector boundaryDetector(MemoryExtractionProperties props) {
+    public CommitDetectorConfig boundaryDetectorConfig(MemoryExtractionProperties props) {
         var b = props.getBoundary();
-        var config =
-                new BoundaryDetectorConfig(
-                        b.getMaxMessages(), b.getMaxTokens(), b.getMinMessagesForLlm());
-        return new DefaultBoundaryDetector(config);
+        return new CommitDetectorConfig(
+                b.getMaxMessages(), b.getMaxTokens(), b.getMinMessagesForLlm());
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public CaptionGenerator captionGenerator(ChatClient.Builder chatClientBuilder) {
-        return new ConversationCaptionGenerator(chatClientBuilder.build());
+    public MemoryBuildOptions memoryBuildOptions(
+            ConversationChunkingConfig conversationChunkingConfig,
+            InsightBuildConfig insightBuildConfig,
+            CommitDetectorConfig commitDetectorConfig) {
+        return MemoryBuildOptions.builder()
+                .conversationChunking(conversationChunkingConfig)
+                .insightBuild(insightBuildConfig)
+                .boundaryDetector(commitDetectorConfig)
+                .build();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public ContextCommitDetector boundaryDetector(CommitDetectorConfig commitDetectorConfig) {
+        return new LlmContextCommitDetector(commitDetectorConfig);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnBean(StructuredChatClient.class)
+    public CaptionGenerator captionGenerator(StructuredChatClient structuredChatClient) {
+        return new LlmConversationCaptionGenerator(structuredChatClient);
     }
 
     // ─── Content Processors (individually overridable) ───
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnBean(StructuredChatClient.class)
     @ConditionalOnProperty(
             name = "memind.extraction.chunking.strategy",
             havingValue = "LLM",
             matchIfMissing = true)
     public LlmConversationChunker llmConversationChunker(
-            ConversationChunkingConfig config, ChatClient.Builder chatClientBuilder) {
-        return new LlmConversationChunker(chatClientBuilder.build(), new ConversationChunker());
+            ConversationChunkingConfig config, StructuredChatClient structuredChatClient) {
+        return new LlmConversationChunker(structuredChatClient, new ConversationChunker());
     }
 
     @Bean
     @ConditionalOnMissingBean(name = "conversationContentProcessor")
+    @ConditionalOnBean(CaptionGenerator.class)
     public ConversationContentProcessor conversationContentProcessor(
             CaptionGenerator captionGenerator,
             ConversationChunkingConfig conversationConfig,
@@ -147,13 +170,16 @@ public class MemoryExtractionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(name = "toolCallContentProcessor")
-    public ToolCallContentProcessor toolCallContentProcessor(ChatClient.Builder chatClientBuilder) {
-        var chatClient = chatClientBuilder.build();
-        return new ToolCallContentProcessor(new ToolCallItemExtractionStrategy(chatClient));
+    @ConditionalOnBean(StructuredChatClient.class)
+    public ToolCallContentProcessor toolCallContentProcessor(
+            StructuredChatClient structuredChatClient) {
+        return new ToolCallContentProcessor(
+                new LlmToolCallItemExtractionStrategy(structuredChatClient));
     }
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnBean({CaptionGenerator.class, MemoryVector.class})
     public RawDataLayer rawDataLayer(
             List<RawContentProcessor<?>> processors,
             CaptionGenerator captionGenerator,
@@ -164,9 +190,9 @@ public class MemoryExtractionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnBean(StructuredChatClient.class)
     public MemoryItemExtractor memoryItemExtractor(
-            ChatClient.Builder chatClientBuilder, List<RawContentProcessor<?>> processors) {
-        var chatClient = chatClientBuilder.build();
+            StructuredChatClient structuredChatClient, List<RawContentProcessor<?>> processors) {
         // Build strategy map from processors that provide their own extraction strategy
         var strategies = new HashMap<String, ItemExtractionStrategy>();
         for (var p : processors) {
@@ -181,7 +207,8 @@ public class MemoryExtractionAutoConfiguration {
                         MemoryCategory.BEHAVIOR,
                         MemoryCategory.EVENT,
                         MemoryCategory.PROCEDURAL);
-        var defaultStrategy = new DefaultItemExtractionStrategy(chatClient, conversationCategories);
+        var defaultStrategy =
+                new LlmItemExtractionStrategy(structuredChatClient, conversationCategories);
         return new DefaultMemoryItemExtractor(defaultStrategy, strategies);
     }
 
@@ -193,6 +220,11 @@ public class MemoryExtractionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnBean({
+        MemoryItemExtractor.class,
+        MemoryItemDeduplicator.class,
+        MemoryVector.class
+    })
     public MemoryItemLayer memoryItemLayer(
             MemoryItemExtractor extractor,
             MemoryItemDeduplicator deduplicator,
@@ -216,14 +248,17 @@ public class MemoryExtractionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public InsightGenerator insightGenerator(ChatClient.Builder chatClientBuilder) {
-        return new LlmInsightGenerator(chatClientBuilder.build());
+    @ConditionalOnBean(StructuredChatClient.class)
+    public InsightGenerator insightGenerator(StructuredChatClient structuredChatClient) {
+        return new LlmInsightGenerator(structuredChatClient);
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public InsightGroupClassifier insightGroupClassifier(ChatClient.Builder chatClientBuilder) {
-        return new LlmInsightGroupClassifier(chatClientBuilder.build());
+    @ConditionalOnBean(StructuredChatClient.class)
+    public InsightGroupClassifier insightGroupClassifier(
+            StructuredChatClient structuredChatClient) {
+        return new LlmInsightGroupClassifier(structuredChatClient);
     }
 
     @Bean
@@ -234,6 +269,7 @@ public class MemoryExtractionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnBean({InsightGenerator.class, MemoryVector.class})
     public InsightTreeReorganizer insightTreeReorganizer(
             InsightGenerator generator,
             MemoryVector vector,
@@ -245,20 +281,21 @@ public class MemoryExtractionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnBean(InsightGroupClassifier.class)
     public InsightGroupRouter insightGroupRouter(InsightGroupClassifier groupClassifier) {
         return new InsightGroupRouter(groupClassifier);
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public InsightBufferStore insightBufferStore() {
-        return new InMemoryInsightBufferStore();
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
+    @ConditionalOnBean({
+        InsightGenerator.class,
+        InsightGroupClassifier.class,
+        InsightGroupRouter.class,
+        InsightTreeReorganizer.class,
+        MemoryVector.class
+    })
     public InsightBuildScheduler insightBuildScheduler(
-            InsightBufferStore bufferStore,
             MemoryStore store,
             InsightGenerator generator,
             InsightGroupClassifier groupClassifier,
@@ -268,7 +305,7 @@ public class MemoryExtractionAutoConfiguration {
             InsightBuildConfig insightBuildConfig,
             ObjectProvider<MemoryObserver> observerProvider) {
         return new InsightBuildScheduler(
-                bufferStore,
+                store.insightBufferStore(),
                 store,
                 generator,
                 groupClassifier,
@@ -282,6 +319,7 @@ public class MemoryExtractionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnBean(InsightBuildScheduler.class)
     public InsightLayer insightLayer(
             MemoryStore store,
             InsightBuildScheduler scheduler,
@@ -295,25 +333,20 @@ public class MemoryExtractionAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean
-    public ConversationBufferStore conversationBufferStore() {
-        return new InMemoryConversationBufferStore();
-    }
-
-    @Bean
     @ConditionalOnMissingBean(MemoryExtractionPipeline.class)
+    @ConditionalOnBean({RawDataLayer.class, MemoryItemLayer.class, InsightLayer.class})
     public MemoryExtractionPipeline memoryExtractor(
             RawDataLayer rawDataLayer,
             MemoryItemLayer memoryItemLayer,
             InsightLayer insightLayer,
-            BoundaryDetector boundaryDetector,
-            ConversationBufferStore conversationBufferStore) {
+            ContextCommitDetector contextCommitDetector,
+            MemoryStore store) {
         return new MemoryExtractor(
                 rawDataLayer,
                 memoryItemLayer,
                 insightLayer,
                 rawDataLayer,
-                boundaryDetector,
-                conversationBufferStore);
+                contextCommitDetector,
+                store.conversationBufferStore());
     }
 }

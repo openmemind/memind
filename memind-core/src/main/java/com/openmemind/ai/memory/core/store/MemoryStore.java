@@ -13,71 +13,112 @@
  */
 package com.openmemind.ai.memory.core.store;
 
-import com.openmemind.ai.memory.core.data.MemoryId;
-import com.openmemind.ai.memory.core.data.MemoryInsight;
-import com.openmemind.ai.memory.core.data.MemoryInsightType;
-import com.openmemind.ai.memory.core.data.MemoryItem;
-import com.openmemind.ai.memory.core.data.MemoryRawData;
-import com.openmemind.ai.memory.core.data.enums.InsightTier;
-import java.time.Duration;
-import java.util.Collection;
+import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
+import com.openmemind.ai.memory.core.store.insight.InsightOperations;
+import com.openmemind.ai.memory.core.store.item.ItemOperations;
+import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
+import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.Objects;
 
 /**
- * Memory data persistence storage interface.
+ * Unified memory storage aggregate.
  */
-public interface MemoryStore {
+public interface MemoryStore extends AutoCloseable {
 
-    void upsertRawData(MemoryId id, List<MemoryRawData> rawDataList);
+    RawDataOperations rawDataOperations();
 
-    Optional<MemoryRawData> getRawData(MemoryId id, String rawDataId);
+    ItemOperations itemOperations();
 
-    Optional<MemoryRawData> getRawDataByContentId(MemoryId id, String contentId);
+    InsightOperations insightOperations();
 
-    List<MemoryRawData> listRawData(MemoryId id);
+    InsightBuffer insightBufferStore();
 
-    List<MemoryRawData> pollRawDataWithoutVector(MemoryId id, int limit, Duration minAge);
+    ConversationBuffer conversationBufferStore();
 
-    void updateRawDataVectorIds(
-            MemoryId id, Map<String, String> vectorIds, Map<String, Object> metadataPatch);
+    @Override
+    default void close() throws Exception {}
 
-    void insertItems(MemoryId id, List<MemoryItem> items);
+    static MemoryStore of(
+            RawDataOperations rawDataOperations,
+            ItemOperations itemOperations,
+            InsightOperations insightOperations,
+            InsightBuffer insightBuffer,
+            ConversationBuffer conversationBuffer) {
+        Objects.requireNonNull(rawDataOperations, "rawDataOperations");
+        Objects.requireNonNull(itemOperations, "itemOperations");
+        Objects.requireNonNull(insightOperations, "insightOperations");
+        Objects.requireNonNull(insightBuffer, "insightBuffer");
+        Objects.requireNonNull(conversationBuffer, "conversationBuffer");
 
-    List<MemoryItem> getItemsByIds(MemoryId id, Collection<Long> itemIds);
+        return new MemoryStore() {
 
-    List<MemoryItem> getItemsByVectorIds(MemoryId id, Collection<String> vectorIds);
+            @Override
+            public RawDataOperations rawDataOperations() {
+                return rawDataOperations;
+            }
 
-    List<MemoryItem> getItemsByContentHashes(MemoryId id, Collection<String> contentHashes);
+            @Override
+            public ItemOperations itemOperations() {
+                return itemOperations;
+            }
 
-    List<MemoryItem> listItems(MemoryId id);
+            @Override
+            public InsightOperations insightOperations() {
+                return insightOperations;
+            }
 
-    boolean hasItems(MemoryId id);
+            @Override
+            public InsightBuffer insightBufferStore() {
+                return insightBuffer;
+            }
 
-    void deleteItems(MemoryId id, Collection<Long> itemIds);
+            @Override
+            public ConversationBuffer conversationBufferStore() {
+                return conversationBuffer;
+            }
 
-    void upsertInsightTypes(List<MemoryInsightType> insightTypes);
+            @Override
+            public void close() throws Exception {
+                RuntimeException closeFailure = null;
+                for (AutoCloseable closeable :
+                        uniqueCloseables(
+                                conversationBuffer,
+                                insightBuffer,
+                                rawDataOperations,
+                                itemOperations,
+                                insightOperations)) {
+                    try {
+                        closeable.close();
+                    } catch (Exception e) {
+                        if (closeFailure == null) {
+                            closeFailure =
+                                    new IllegalStateException("Failed to close memory store", e);
+                        } else {
+                            closeFailure.addSuppressed(e);
+                        }
+                    }
+                }
+                if (closeFailure != null) {
+                    throw closeFailure;
+                }
+            }
+        };
+    }
 
-    Optional<MemoryInsightType> getInsightType(String insightType);
-
-    List<MemoryInsightType> listInsightTypes();
-
-    void upsertInsights(MemoryId id, List<MemoryInsight> insights);
-
-    Optional<MemoryInsight> getInsight(MemoryId id, Long insightId);
-
-    List<MemoryInsight> listInsights(MemoryId id);
-
-    List<MemoryInsight> getInsightsByType(MemoryId id, String insightType);
-
-    List<MemoryInsight> getInsightsByTier(MemoryId id, InsightTier tier);
-
-    Optional<MemoryInsight> getLeafByGroup(MemoryId id, String type, String group);
-
-    Optional<MemoryInsight> getBranchByType(MemoryId id, String type);
-
-    Optional<MemoryInsight> getRootByType(MemoryId id, String type);
-
-    void deleteInsights(MemoryId id, Collection<Long> insightIds);
+    private static List<AutoCloseable> uniqueCloseables(Object... candidates) {
+        List<AutoCloseable> ordered = new ArrayList<>();
+        IdentityHashMap<AutoCloseable, Boolean> seen = new IdentityHashMap<>();
+        for (Object candidate : candidates) {
+            if (!(candidate instanceof AutoCloseable closeable)) {
+                continue;
+            }
+            if (seen.put(closeable, Boolean.TRUE) == null) {
+                ordered.add(closeable);
+            }
+        }
+        return ordered;
+    }
 }

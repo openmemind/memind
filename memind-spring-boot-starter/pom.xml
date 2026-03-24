@@ -36,17 +36,6 @@
             <artifactId>memind-core</artifactId>
             <version>${revision}</version>
         </dependency>
-        <!-- persistent store (MyBatis-Plus + SQLite) -->
-        <dependency>
-            <groupId>com.openmemind.ai</groupId>
-            <artifactId>memind-plugin-store-mybatis-plus</artifactId>
-            <version>${revision}</version>
-        </dependency>
-        <!-- SQLite JDBC driver -->
-        <dependency>
-            <groupId>org.xerial</groupId>
-            <artifactId>sqlite-jdbc</artifactId>
-        </dependency>
 
         <!-- Spring Boot -->
         <dependency>
@@ -55,18 +44,8 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-jdbc</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-configuration-processor</artifactId>
             <optional>true</optional>
-        </dependency>
-
-        <!-- Spring AI OpenAI (ChatClient + EmbeddingModel) -->
-        <dependency>
-            <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-model-openai</artifactId>
         </dependency>
 
         <!-- Test -->

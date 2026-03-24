@@ -21,7 +21,7 @@ import reactor.core.publisher.Mono;
  * Memory extraction pipeline interface.
  *
  * <p>Defines the memory extraction contract: batch extraction via {@link #extract(ExtractionRequest)}
- * and streaming single-message extraction via {@link #addMessage(MemoryId, Message, ExtractionConfig)}.
+ * and context single-message extraction via {@link #addMessage(MemoryId, Message, ExtractionConfig)}.
  *
  * <p>The primary implementation is {@link MemoryExtractor}. Decorators (e.g., tracing) wrap this
  * interface to add cross-cutting concerns.
@@ -37,7 +37,7 @@ public interface MemoryExtractionPipeline {
     Mono<ExtractionResult> extract(ExtractionRequest request);
 
     /**
-     * Process a single message in streaming mode.
+     * Process a single message in context mode.
      *
      * <p>Messages are buffered internally. When boundary detection triggers sealing,
      * the buffered messages are extracted as a conversation segment.

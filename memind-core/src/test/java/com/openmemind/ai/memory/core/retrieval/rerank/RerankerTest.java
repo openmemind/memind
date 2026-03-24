@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.retrieval.rerank;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;

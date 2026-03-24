@@ -29,10 +29,10 @@ import reactor.core.publisher.Mono;
  */
 public class DefaultToolStatsService implements ToolStatsService {
 
-    private final MemoryStore store;
+    private final MemoryStore memoryStore;
 
-    public DefaultToolStatsService(MemoryStore store) {
-        this.store = Objects.requireNonNull(store, "store must not be null");
+    public DefaultToolStatsService(MemoryStore memoryStore) {
+        this.memoryStore = Objects.requireNonNull(memoryStore, "memoryStore must not be null");
     }
 
     @Override
@@ -40,7 +40,7 @@ public class DefaultToolStatsService implements ToolStatsService {
         return Mono.fromCallable(
                 () -> {
                     var items =
-                            store.listItems(memoryId).stream()
+                            memoryStore.itemOperations().listItems(memoryId).stream()
                                     .filter(
                                             item ->
                                                     toolName.equals(
@@ -56,7 +56,7 @@ public class DefaultToolStatsService implements ToolStatsService {
         return Mono.fromCallable(
                 () -> {
                     var grouped =
-                            store.listItems(memoryId).stream()
+                            memoryStore.itemOperations().listItems(memoryId).stream()
                                     .filter(
                                             item ->
                                                     !extractMetadataString(item, "toolName")
