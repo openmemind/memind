@@ -45,6 +45,7 @@ com.openmemind.ai.memory.core.compress
 │   ├─ Atoms.java                          (built-in atom factory)
 │   ├─ BuiltinStrategies.java             (built-in strategy registry)
 │   ├─ StrategyRouter.java                (layered routing)
+│   ├─ LanguageDetector.java              (internal utility for codeFold atom)
 │   ├─ PassthroughStrategy.java
 │   ├─ LlmSummarizeStrategy.java          (LLM fallback with cost gate)
 │   └─ declarative/
@@ -55,8 +56,7 @@ com.openmemind.ai.memory.core.compress
 ├─ detect/
 │   ├─ ContentDetector.java                (detection interface)
 │   ├─ CompositeDetector.java              (detection chain)
-│   ├─ SignatureDetector.java              (signature-based fast matching)
-│   └─ LanguageDetector.java              (code language detection)
+│   └─ SignatureDetector.java              (signature-based fast matching)
 │
 ├─ token/
 │   ├─ TokenEstimator.java                (estimation interface)
@@ -312,7 +312,8 @@ public enum CompressLevel {
 
     /**
      * Target compression ratio. Atoms can use this to adjust behavior.
-     * 0.3 means aim to remove ~30% of tokens.
+     * E.g., LIGHT(0.3) aims to remove ~30% of tokens, keeping ~70%.
+     * AGGRESSIVE(0.85) aims to remove ~85% of tokens, keeping only ~15%.
      */
     public double targetRatio() {
         return targetRatio;
@@ -347,6 +348,26 @@ public record CompressConfig(
     public static CompressConfig defaults() {
         return new CompressConfig(50, CompressLevel.STANDARD, false, false, 500);
     }
+
+    public CompressConfig withMinTokenThreshold(int minTokenThreshold) {
+        return new CompressConfig(minTokenThreshold, defaultLevel, enableTee, enableTracking, llmCostThreshold);
+    }
+
+    public CompressConfig withDefaultLevel(CompressLevel defaultLevel) {
+        return new CompressConfig(minTokenThreshold, defaultLevel, enableTee, enableTracking, llmCostThreshold);
+    }
+
+    public CompressConfig withEnableTee(boolean enableTee) {
+        return new CompressConfig(minTokenThreshold, defaultLevel, enableTee, enableTracking, llmCostThreshold);
+    }
+
+    public CompressConfig withEnableTracking(boolean enableTracking) {
+        return new CompressConfig(minTokenThreshold, defaultLevel, enableTee, enableTracking, llmCostThreshold);
+    }
+
+    public CompressConfig withLlmCostThreshold(int llmCostThreshold) {
+        return new CompressConfig(minTokenThreshold, defaultLevel, enableTee, enableTracking, llmCostThreshold);
+    }
 }
 ```
 
@@ -375,18 +396,24 @@ public record CompressBlock(
     String content,
     String formatHint,
     BlockPriority priority,
-    Map<String, Object> metadata
+    Map<String, Object> hints
 ) {
+    private static final AtomicLong ID_SEQ = new AtomicLong();
+
+    private static String generateId() {
+        return "block-" + ID_SEQ.incrementAndGet();
+    }
+
     public static CompressBlock of(String content) {
-        return new CompressBlock(null, content, null, BlockPriority.NORMAL, Map.of());
+        return new CompressBlock(generateId(), content, null, BlockPriority.NORMAL, Map.of());
     }
 
     public static CompressBlock of(String content, String formatHint) {
-        return new CompressBlock(null, content, formatHint, BlockPriority.NORMAL, Map.of());
+        return new CompressBlock(generateId(), content, formatHint, BlockPriority.NORMAL, Map.of());
     }
 
     public static CompressBlock of(String content, String formatHint, BlockPriority priority) {
-        return new CompressBlock(null, content, formatHint, priority, Map.of());
+        return new CompressBlock(generateId(), content, formatHint, priority, Map.of());
     }
 }
 ```
@@ -653,7 +680,10 @@ public class LlmSummarizeStrategy implements CompressStrategy {
         return chatClient.call(List.of(
                 new ChatMessage(ChatRole.SYSTEM, SUMMARIZE_PROMPT),
                 new ChatMessage(ChatRole.USER, content)
-        )).map(summary -> CompressResult.of(content, summary, name(), ctx));
+        ))
+        .filter(summary -> summary != null && !summary.isBlank())
+        .map(summary -> CompressResult.of(content, summary, name(), ctx))
+        .switchIfEmpty(Mono.just(CompressResult.passthrough(content, originalTokens)));
     }
 }
 ```
@@ -835,7 +865,7 @@ Matches content against known signatures using the first 10 lines:
 
 ### LanguageDetector
 
-Code language detection for the `codeFold` atom. Based on file extension (from hints) or content heuristics.
+Internal utility used by the `codeFold` atom for language-aware code filtering. Not a `ContentDetector` — does not participate in top-level format detection.
 
 ```java
 public class LanguageDetector {
@@ -1009,16 +1039,18 @@ public class CompressPipeline {
                         Duration duration = Duration.ofNanos(System.nanoTime() - start);
 
                         // 7. Tee (optional)
-                        String compressed = result.compressed();
+                        String finalCompressed = result.compressed();
                         if (config.enableTee() && tee != null) {
-                            tee.save(content, detectedFormat)
-                                    .ifPresent(p -> compressed = tee.appendHint(
-                                            compressed, p));
+                            Optional<Path> teePath = tee.save(content, detectedFormat);
+                            if (teePath.isPresent()) {
+                                finalCompressed = tee.appendHint(
+                                        finalCompressed, teePath.get());
+                            }
                         }
 
                         // 8. Tracking (optional)
                         CompressResult finalResult = new CompressResult(
-                                compressed, originalTokens,
+                                finalCompressed, originalTokens,
                                 result.compressedTokens(),
                                 detectedFormat, strategy.name(), duration);
 
@@ -1074,7 +1106,7 @@ public class BudgetCompressPipeline {
     private Mono<BlockTrace> compressBlock(CompressBlock block) {
         CompressRequest req = new CompressRequest(
                 block.content(), block.formatHint(),
-                null, block.metadata());
+                null, block.hints());
 
         return singlePipeline.execute(req)
                 .map(result -> new BlockTrace(
@@ -1231,8 +1263,7 @@ public class DefaultTokenKillerBuilder implements TokenKillerBuilder {
 
         // 6. Assemble detectors
         ContentDetector detector = new CompositeDetector(List.of(
-                new SignatureDetector(),
-                new LanguageDetector()));
+                new SignatureDetector()));
 
         // 7. Assemble pipelines
         CompressPipeline singlePipeline = new CompressPipeline(
@@ -1397,3 +1428,5 @@ Dependency direction: `Memory → TokenKiller` (Memory can depend on TokenKiller
 2. **Budget truncation**: `truncateToTokens` is a hard cut. It does not respect content structure (e.g., may cut in the middle of a JSON object). Smarter truncation can be added per content type.
 3. **Built-in strategy coverage**: v1 will not match RTK's 45+ command modules. Strategies will be added incrementally, prioritizing the most common tools.
 4. **Declarative rule expressiveness**: The YAML schema covers RTK's 8-stage TOML pipeline. More complex logic (state machines, JSON parsing) requires programmatic strategies.
+5. **Atoms are synchronous**: `CompressAtom` is `String -> String` (synchronous). If a future use case requires an async atom (e.g., LLM-based atom), an `AsyncCompressAtom` returning `Mono<String>` can be introduced. For v1, async operations are handled at the `CompressStrategy` level.
+6. **AutoCloseable**: `TokenKiller` does not implement `AutoCloseable` in v1. If `CompressTee` or `CompressTracker` implementations require cleanup, they should manage their own lifecycle. `AutoCloseable` support can be added in a future version if needed.
