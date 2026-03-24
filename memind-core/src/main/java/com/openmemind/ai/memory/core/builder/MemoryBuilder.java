@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.builder;
 
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
@@ -31,6 +32,8 @@ public interface MemoryBuilder {
     MemoryBuilder textSearch(MemoryTextSearch textSearch);
 
     MemoryBuilder vector(MemoryVector vector);
+
+    MemoryBuilder reranker(Reranker reranker);
 
     MemoryBuilder options(MemoryBuildOptions options);
 

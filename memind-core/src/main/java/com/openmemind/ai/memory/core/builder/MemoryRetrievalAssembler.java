@@ -14,7 +14,6 @@
 package com.openmemind.ai.memory.core.builder;
 
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
-import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.cache.CaffeineRetrievalCache;
 import com.openmemind.ai.memory.core.retrieval.cache.RetrievalCache;
@@ -48,7 +47,7 @@ final class MemoryRetrievalAssembler {
                         itemTierRetriever,
                         sufficiencyGate,
                         typedQueryExpander,
-                        new NoopReranker(),
+                        context.reranker(),
                         context.memoryStore());
         SimpleRetrievalStrategy simpleRetrievalStrategy =
                 new SimpleRetrievalStrategy(

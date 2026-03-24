@@ -14,6 +14,7 @@
 package com.openmemind.ai.memory.core.builder;
 
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
@@ -26,6 +27,7 @@ record MemoryAssemblyContext(
         MemoryStore memoryStore,
         MemoryTextSearch textSearch,
         MemoryVector memoryVector,
+        Reranker reranker,
         MemoryBuildOptions options) {
 
     MemoryAssemblyContext {
@@ -39,6 +41,7 @@ record MemoryAssemblyContext(
         Objects.requireNonNull(
                 memoryStore.conversationBufferStore(), "memoryStore.conversationBufferStore()");
         Objects.requireNonNull(memoryVector, "memoryVector");
+        Objects.requireNonNull(reranker, "reranker");
         Objects.requireNonNull(options, "options");
     }
 

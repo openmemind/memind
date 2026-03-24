@@ -23,6 +23,7 @@ import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -87,6 +88,7 @@ class MemoryAssemblersTest {
                         MEMORY_STORE,
                         TEXT_SEARCH,
                         MEMORY_VECTOR,
+                        new NoopReranker(),
                         MemoryBuildOptions.builder().boundaryDetector(boundaryDetector).build());
 
         MemoryExtractor extractor =
@@ -122,6 +124,7 @@ class MemoryAssemblersTest {
                         MEMORY_STORE,
                         TEXT_SEARCH,
                         MEMORY_VECTOR,
+                        new NoopReranker(),
                         MemoryBuildOptions.defaults());
 
         DefaultMemoryRetriever retriever = new MemoryRetrievalAssembler().assemble(context);

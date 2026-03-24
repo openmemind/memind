@@ -18,6 +18,8 @@ import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.llm.rerank.LlmReranker;
+import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.example.java.support.ExampleDataLoader;
 import com.openmemind.ai.memory.example.java.support.ExamplePrinter;
@@ -97,6 +99,7 @@ public final class ForesightExample {
                 .vector(
                         SpringAiFileVector.file(
                                 runtimeDir.resolve("vector-store.json"), embeddingModel))
+                .reranker(createReranker())
                 .options(options)
                 .build();
     }
@@ -130,6 +133,21 @@ public final class ForesightExample {
                                         "OPENAI_EMBEDDING_MODEL",
                                         "text-embedding-3-small"))
                         .build());
+    }
+
+    private static Reranker createReranker() {
+        return new LlmReranker(
+                resolveValue(
+                        "memind.examples.rerank.base-url",
+                        "RERANK_BASE_URL",
+                        "https://api.openai.com"),
+                requireValue(
+                        "memind.examples.rerank.api-key",
+                        "RERANK_API_KEY",
+                        "Missing Rerank API key. Set system property "
+                                + "'memind.examples.rerank.api-key' or environment "
+                                + "variable 'RERANK_API_KEY'."),
+                resolveValue("memind.examples.rerank.model", "RERANK_MODEL", "qwen3-reranker-8b"));
     }
 
     private static OpenAiApi createOpenAiApi() {

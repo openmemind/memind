@@ -16,6 +16,8 @@ package com.openmemind.ai.memory.core.builder;
 import com.openmemind.ai.memory.core.DefaultMemory;
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
+import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.stats.DefaultToolStatsService;
 import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -32,6 +34,7 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     private MemoryStore store;
     private MemoryTextSearch textSearch;
     private MemoryVector vector;
+    private Reranker reranker = new NoopReranker();
     private MemoryBuildOptions options = MemoryBuildOptions.defaults();
 
     @Override
@@ -59,6 +62,12 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     }
 
     @Override
+    public MemoryBuilder reranker(Reranker reranker) {
+        this.reranker = Objects.requireNonNull(reranker, "reranker");
+        return this;
+    }
+
+    @Override
     public MemoryBuilder options(MemoryBuildOptions options) {
         this.options = Objects.requireNonNull(options, "options");
         return this;
@@ -69,7 +78,7 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
         validateRequiredComponents();
 
         MemoryAssemblyContext context =
-                new MemoryAssemblyContext(chatClient, store, textSearch, vector, options);
+                new MemoryAssemblyContext(chatClient, store, textSearch, vector, reranker, options);
         MemoryExtractionAssembly extractionAssembly =
                 new MemoryExtractionAssembler().assemble(context);
         var memoryRetriever = new MemoryRetrievalAssembler().assemble(context);
