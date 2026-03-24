@@ -28,7 +28,7 @@ jobs:
         distribution: 'temurin'
         cache: maven
     - name: License Check
-      run: mvn com.mycila:license-maven-provider:check
+      run: mvn process-sources -Dmaven.test.skip=true
 
     - name: Build Project
       run: mvn clean install -Dmaven.test.skip=true
