@@ -16,7 +16,7 @@ package com.openmemind.ai.memory.core.tracing.decorator;
 import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.RETRIEVAL_QUERY;
 import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.RETRIEVAL_TOP_K;
 
-import com.openmemind.ai.memory.core.retrieval.rerank.Reranker;
+import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.tracing.MemorySpanNames;

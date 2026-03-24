@@ -48,25 +48,25 @@ public class InsightLayer implements InsightExtractStep {
 
     private static final Logger log = LoggerFactory.getLogger(InsightLayer.class);
 
-    private final MemoryStore store;
+    private final MemoryStore memoryStore;
     private final InsightBuildScheduler scheduler;
     private final Set<String> unsupportedContentTypes;
 
-    public InsightLayer(MemoryStore store, InsightBuildScheduler scheduler) {
-        this(store, scheduler, Set.of());
+    public InsightLayer(MemoryStore memoryStore, InsightBuildScheduler scheduler) {
+        this(memoryStore, scheduler, Set.of());
     }
 
     /**
-     * @param store                   memory store
+     * @param memoryStore             memory store
      * @param scheduler               insight build scheduler
      * @param unsupportedContentTypes content types that should be excluded from insight building
      *                                (derived from processors where supportsInsight() returns false)
      */
     public InsightLayer(
-            MemoryStore store,
+            MemoryStore memoryStore,
             InsightBuildScheduler scheduler,
             Set<String> unsupportedContentTypes) {
-        this.store = Objects.requireNonNull(store);
+        this.memoryStore = Objects.requireNonNull(memoryStore);
         this.scheduler = Objects.requireNonNull(scheduler);
         this.unsupportedContentTypes =
                 unsupportedContentTypes != null ? Set.copyOf(unsupportedContentTypes) : Set.of();
@@ -139,7 +139,7 @@ public class InsightLayer implements InsightExtractStep {
     public void flush(MemoryId memoryId, String language) {
         scheduler.awaitPending(memoryId, 5, TimeUnit.MINUTES);
 
-        var insightTypes = store.listInsightTypes();
+        var insightTypes = memoryStore.insightOperations().listInsightTypes();
         if (insightTypes.isEmpty()) {
             insightTypes = DefaultInsightTypes.all();
         }
@@ -186,7 +186,7 @@ public class InsightLayer implements InsightExtractStep {
         if (!result.resolvedInsightTypes().isEmpty()) {
             return result.resolvedInsightTypes();
         }
-        var stored = store.listInsightTypes();
+        var stored = memoryStore.insightOperations().listInsightTypes();
         return stored.isEmpty() ? DefaultInsightTypes.all() : stored;
     }
 

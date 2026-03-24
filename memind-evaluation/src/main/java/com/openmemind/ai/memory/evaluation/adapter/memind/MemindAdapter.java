@@ -19,18 +19,18 @@ import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
+import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
-import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDetector;
-import com.openmemind.ai.memory.core.extraction.streaming.ConversationBufferStore;
+import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig.TierConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
-import com.openmemind.ai.memory.core.retrieval.rerank.Reranker;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.evaluation.adapter.AddMode;
 import com.openmemind.ai.memory.evaluation.adapter.BaseMemoryAdapter;
 import com.openmemind.ai.memory.evaluation.adapter.model.AddRequest;
@@ -141,8 +141,8 @@ public class MemindAdapter extends BaseMemoryAdapter {
     private final MemoryExtractionPipeline extractor;
     private final MemoryRetriever retriever;
     private final ChatClient chatClient;
-    private final BoundaryDetector boundaryDetector;
-    private final ConversationBufferStore bufferStore;
+    private final ContextCommitDetector contextCommitDetector;
+    private final ConversationBuffer bufferStore;
     private final MemoryStore memoryStore;
     private final Reranker reranker;
 
@@ -162,8 +162,8 @@ public class MemindAdapter extends BaseMemoryAdapter {
             MemoryExtractionPipeline extractor,
             MemoryRetriever retriever,
             ChatClient chatClient,
-            BoundaryDetector boundaryDetector,
-            ConversationBufferStore bufferStore,
+            ContextCommitDetector contextCommitDetector,
+            ConversationBuffer bufferStore,
             MemoryStore memoryStore,
             Reranker reranker,
             RetrievalConfig retrievalConfig,
@@ -171,7 +171,7 @@ public class MemindAdapter extends BaseMemoryAdapter {
         this.extractor = extractor;
         this.retriever = retriever;
         this.chatClient = chatClient;
-        this.boundaryDetector = boundaryDetector;
+        this.contextCommitDetector = contextCommitDetector;
         this.bufferStore = bufferStore;
         this.memoryStore = memoryStore;
         this.reranker = reranker;

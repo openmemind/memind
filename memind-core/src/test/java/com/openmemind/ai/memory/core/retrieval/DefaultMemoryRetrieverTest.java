@@ -27,6 +27,7 @@ import com.openmemind.ai.memory.core.retrieval.cache.RetrievalCache;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategy;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -43,10 +44,12 @@ class DefaultMemoryRetrieverTest {
     void shouldFailFastWhenStrategyIsMissing() {
         var cache = mock(RetrievalCache.class);
         var store = mock(MemoryStore.class);
+        var itemOperations = mock(ItemOperations.class);
+        when(store.itemOperations()).thenReturn(itemOperations);
         var retriever = new DefaultMemoryRetriever(cache, store);
         var request = RetrievalRequest.of(memoryId, "query", RetrievalConfig.Strategy.SIMPLE);
 
-        when(store.hasItems(memoryId)).thenReturn(true);
+        when(itemOperations.hasItems(memoryId)).thenReturn(true);
         when(cache.get(eq(memoryId), anyString(), anyString())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> retriever.retrieve(request).block())

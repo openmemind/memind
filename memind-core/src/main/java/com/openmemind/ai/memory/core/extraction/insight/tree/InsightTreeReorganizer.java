@@ -132,7 +132,10 @@ public class InsightTreeReorganizer {
      */
     public void forceResummarizeBranchIfEmpty(
             MemoryId memoryId, MemoryInsightType insightType, String language) {
-        var branch = store.getBranchByType(memoryId, insightType.name()).orElse(null);
+        var branch =
+                store.insightOperations()
+                        .getBranchByType(memoryId, insightType.name())
+                        .orElse(null);
         if (branch == null) {
             return;
         }
@@ -141,7 +144,7 @@ public class InsightTreeReorganizer {
         }
 
         var allLeafs =
-                store.getInsightsByType(memoryId, insightType.name()).stream()
+                store.insightOperations().getInsightsByType(memoryId, insightType.name()).stream()
                         .filter(i -> InsightTier.LEAF.equals(i.tier()))
                         .toList();
         if (allLeafs.isEmpty()) {
@@ -216,12 +219,12 @@ public class InsightTreeReorganizer {
 
         // 1. Query all LEAFs at once (eliminate duplicate queries)
         var allLeafs =
-                store.getInsightsByType(memoryId, insightTypeName).stream()
+                store.insightOperations().getInsightsByType(memoryId, insightTypeName).stream()
                         .filter(i -> InsightTier.LEAF.equals(i.tier()))
                         .toList();
 
         // 2. Get or create BRANCH
-        var existingBranch = store.getBranchByType(memoryId, insightTypeName);
+        var existingBranch = store.insightOperations().getBranchByType(memoryId, insightTypeName);
         var branch =
                 existingBranch.orElseGet(() -> newBranch(memoryId, insightTypeName, insightType));
 
@@ -333,7 +336,7 @@ public class InsightTreeReorganizer {
         var toSave = new ArrayList<MemoryInsight>();
         toSave.add(updatedBranch);
         toSave.addAll(updatedLeafs);
-        store.upsertInsights(memoryId, toSave);
+        store.insightOperations().upsertInsights(memoryId, toSave);
 
         return updatedBranch;
     }
@@ -348,8 +351,8 @@ public class InsightTreeReorganizer {
      * Query once within strip lock, result shared by link and bubble logic
      */
     private RootContext queryRootContext(MemoryId memoryId) {
-        var allBranches = store.getInsightsByTier(memoryId, InsightTier.BRANCH);
-        var configuredTypes = store.listInsightTypes();
+        var allBranches = store.insightOperations().getInsightsByTier(memoryId, InsightTier.BRANCH);
+        var configuredTypes = store.insightOperations().listInsightTypes();
         var rootTypes =
                 (configuredTypes.isEmpty() ? DefaultInsightTypes.all() : configuredTypes)
                         .stream()
@@ -423,11 +426,15 @@ public class InsightTreeReorganizer {
     private void resummarizeRootAndReset(
             MemoryId memoryId, PendingRootResummarize p, String language) {
         try {
-            var freshRoot = store.getRootByType(memoryId, p.rootType().name()).orElse(null);
+            var freshRoot =
+                    store.insightOperations()
+                            .getRootByType(memoryId, p.rootType().name())
+                            .orElse(null);
             if (freshRoot == null) {
                 return;
             }
-            var freshBranches = store.getInsightsByTier(memoryId, InsightTier.BRANCH);
+            var freshBranches =
+                    store.insightOperations().getInsightsByTier(memoryId, InsightTier.BRANCH);
             resummarizeRoot(memoryId, p.rootType(), freshRoot, freshBranches, p.config(), language);
             bubbleTracker.reset(p.rootKey());
         } catch (Exception e) {
@@ -444,7 +451,8 @@ public class InsightTreeReorganizer {
      */
     private MemoryInsight ensureRoot(
             MemoryId memoryId, MemoryInsightType rootType, List<MemoryInsight> allBranches) {
-        return store.getRootByType(memoryId, rootType.name())
+        return store.insightOperations()
+                .getRootByType(memoryId, rootType.name())
                 .orElseGet(
                         () -> {
                             var now = Instant.now();
@@ -470,7 +478,7 @@ public class InsightTreeReorganizer {
                                             null,
                                             childIds,
                                             1);
-                            store.upsertInsights(memoryId, List.of(root));
+                            store.insightOperations().upsertInsights(memoryId, List.of(root));
                             log.info(
                                     "Creating ROOT [type={}, id={}], containing {} BRANCHES",
                                     rootType.name(),
@@ -484,7 +492,7 @@ public class InsightTreeReorganizer {
      * Set ROOT→BRANCH link (idempotent, does not update BRANCH's parentInsightId)
      */
     private void linkBranchToRoot(MemoryId memoryId, MemoryInsight branch, MemoryInsight root) {
-        var latestRoot = store.getInsight(memoryId, root.id()).orElse(root);
+        var latestRoot = store.insightOperations().getInsight(memoryId, root.id()).orElse(root);
         var childIds = new ArrayList<>(latestRoot.childInsightIds());
 
         if (childIds.contains(branch.id())) {
@@ -492,7 +500,8 @@ public class InsightTreeReorganizer {
         }
 
         childIds.add(branch.id());
-        store.upsertInsights(memoryId, List.of(latestRoot.withChildInsightIds(childIds)));
+        store.insightOperations()
+                .upsertInsights(memoryId, List.of(latestRoot.withChildInsightIds(childIds)));
         log.debug(
                 "Linking BRANCH [id={}] → ROOT [type={}, id={}]",
                 branch.id(),
@@ -633,7 +642,7 @@ public class InsightTreeReorganizer {
                         .withLastReasonedAt(now)
                         .withUpdatedAt(now)
                         .withVersion(insight.version() + 1);
-        store.upsertInsights(memoryId, List.of(updated));
+        store.insightOperations().upsertInsights(memoryId, List.of(updated));
         return updated;
     }
 

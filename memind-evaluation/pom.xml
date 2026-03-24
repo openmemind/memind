@@ -36,6 +36,25 @@
             <artifactId>memind-spring-boot-starter</artifactId>
             <version>${revision}</version>
         </dependency>
+        <dependency>
+            <groupId>com.openmemind.ai</groupId>
+            <artifactId>memind-plugin-ai-spring-ai-starter</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.openmemind.ai</groupId>
+            <artifactId>memind-plugin-store-mybatis-plus-starter</artifactId>
+            <version>${revision}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-openai</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
 
         <!-- Progress bar (tqdm-style) -->
         <dependency>

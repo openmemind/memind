@@ -53,30 +53,30 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
 
     private final MemoryItemExtractor extractor;
     private final MemoryItemDeduplicator deduplicator;
-    private final MemoryStore store;
+    private final MemoryStore memoryStore;
     private final MemoryVector vector;
     private final IdUtils.SnowflakeIdGenerator idGenerator;
-    private final SelfVerificationStep selfVerificationStep; // nullable
+    private final LlmSelfVerificationStep selfVerificationStep; // nullable
     private final Set<MemoryCategory> categories; // nullable, null = all
 
     public MemoryItemLayer(
             MemoryItemExtractor extractor,
             MemoryItemDeduplicator deduplicator,
-            MemoryStore store,
+            MemoryStore memoryStore,
             MemoryVector vector) {
-        this(extractor, deduplicator, store, vector, IdUtils.snowflake(), null, null);
+        this(extractor, deduplicator, memoryStore, vector, IdUtils.snowflake(), null, null);
     }
 
     public MemoryItemLayer(
             MemoryItemExtractor extractor,
             MemoryItemDeduplicator deduplicator,
-            MemoryStore store,
+            MemoryStore memoryStore,
             MemoryVector vector,
-            SelfVerificationStep selfVerificationStep) {
+            LlmSelfVerificationStep selfVerificationStep) {
         this(
                 extractor,
                 deduplicator,
-                store,
+                memoryStore,
                 vector,
                 IdUtils.snowflake(),
                 selfVerificationStep,
@@ -86,24 +86,24 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
     public MemoryItemLayer(
             MemoryItemExtractor extractor,
             MemoryItemDeduplicator deduplicator,
-            MemoryStore store,
+            MemoryStore memoryStore,
             MemoryVector vector,
             IdUtils.SnowflakeIdGenerator idGenerator,
-            SelfVerificationStep selfVerificationStep) {
-        this(extractor, deduplicator, store, vector, idGenerator, selfVerificationStep, null);
+            LlmSelfVerificationStep selfVerificationStep) {
+        this(extractor, deduplicator, memoryStore, vector, idGenerator, selfVerificationStep, null);
     }
 
     public MemoryItemLayer(
             MemoryItemExtractor extractor,
             MemoryItemDeduplicator deduplicator,
-            MemoryStore store,
+            MemoryStore memoryStore,
             MemoryVector vector,
             IdUtils.SnowflakeIdGenerator idGenerator,
-            SelfVerificationStep selfVerificationStep,
+            LlmSelfVerificationStep selfVerificationStep,
             Set<MemoryCategory> categories) {
         this.extractor = extractor;
         this.deduplicator = deduplicator;
-        this.store = store;
+        this.memoryStore = memoryStore;
         this.vector = vector;
         this.idGenerator = idGenerator;
         this.selfVerificationStep = selfVerificationStep;
@@ -287,7 +287,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                                                                     contentType))
                                             .toList();
 
-                            store.insertItems(memoryId, newItems);
+                            memoryStore.itemOperations().insertItems(memoryId, newItems);
 
                             return new MemoryItemResult(newItems, resolvedInsightTypes);
                         });
@@ -346,7 +346,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
     }
 
     private List<MemoryInsightType> resolveInsightTypes() {
-        List<MemoryInsightType> fromStore = store.listInsightTypes();
+        List<MemoryInsightType> fromStore = memoryStore.insightOperations().listInsightTypes();
         return fromStore.isEmpty() ? DefaultInsightTypes.all() : fromStore;
     }
 

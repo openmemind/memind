@@ -45,15 +45,27 @@ class InMemoryMemoryStoreTest {
     void upsertRawDataReplacesExistingRecord() {
         var store = new InMemoryMemoryStore();
 
-        store.upsertRawData(
-                MEMORY_ID,
-                List.of(rawData("raw-1", "old caption", "content-1", Map.of("source", "seed"))));
+        store.rawDataOperations()
+                .upsertRawData(
+                        MEMORY_ID,
+                        List.of(
+                                rawData(
+                                        "raw-1",
+                                        "old caption",
+                                        "content-1",
+                                        Map.of("source", "seed"))));
 
-        store.upsertRawData(
-                MEMORY_ID,
-                List.of(rawData("raw-1", "new caption", "content-1", Map.of("source", "updated"))));
+        store.rawDataOperations()
+                .upsertRawData(
+                        MEMORY_ID,
+                        List.of(
+                                rawData(
+                                        "raw-1",
+                                        "new caption",
+                                        "content-1",
+                                        Map.of("source", "updated"))));
 
-        assertThat(store.listRawData(MEMORY_ID))
+        assertThat(store.rawDataOperations().listRawData(MEMORY_ID))
                 .singleElement()
                 .extracting(MemoryRawData::caption)
                 .isEqualTo("new caption");
@@ -64,10 +76,11 @@ class InMemoryMemoryStoreTest {
     void upsertInsightTypesUsesGlobalNamespace() {
         var store = new InMemoryMemoryStore();
 
-        store.upsertInsightTypes(List.of(insightType(1L, "profile"), insightType(2L, "agent")));
+        store.insightOperations()
+                .upsertInsightTypes(List.of(insightType(1L, "profile"), insightType(2L, "agent")));
 
-        assertThat(store.getInsightType("profile")).isPresent();
-        assertThat(store.listInsightTypes())
+        assertThat(store.insightOperations().getInsightType("profile")).isPresent();
+        assertThat(store.insightOperations().listInsightTypes())
                 .extracting(MemoryInsightType::name)
                 .containsExactlyInAnyOrder("profile", "agent");
     }
@@ -77,11 +90,13 @@ class InMemoryMemoryStoreTest {
     void deleteItemsRemovesOnlyRequestedItems() {
         var store = new InMemoryMemoryStore();
 
-        store.insertItems(MEMORY_ID, List.of(item(1L), item(2L), item(3L)));
+        store.itemOperations().insertItems(MEMORY_ID, List.of(item(1L), item(2L), item(3L)));
 
-        store.deleteItems(MEMORY_ID, List.of(2L, 3L));
+        store.itemOperations().deleteItems(MEMORY_ID, List.of(2L, 3L));
 
-        assertThat(store.listItems(MEMORY_ID)).extracting(MemoryItem::id).containsExactly(1L);
+        assertThat(store.itemOperations().listItems(MEMORY_ID))
+                .extracting(MemoryItem::id)
+                .containsExactly(1L);
     }
 
     @Test
@@ -89,11 +104,12 @@ class InMemoryMemoryStoreTest {
     void deleteInsightsRemovesOnlyRequestedInsights() {
         var store = new InMemoryMemoryStore();
 
-        store.upsertInsights(MEMORY_ID, List.of(insight(10L), insight(20L), insight(30L)));
+        store.insightOperations()
+                .upsertInsights(MEMORY_ID, List.of(insight(10L), insight(20L), insight(30L)));
 
-        store.deleteInsights(MEMORY_ID, List.of(20L, 30L));
+        store.insightOperations().deleteInsights(MEMORY_ID, List.of(20L, 30L));
 
-        assertThat(store.listInsights(MEMORY_ID))
+        assertThat(store.insightOperations().listInsights(MEMORY_ID))
                 .extracting(MemoryInsight::id)
                 .containsExactly(10L);
     }

@@ -18,6 +18,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
@@ -30,10 +31,13 @@ import com.openmemind.ai.memory.core.retrieval.tier.InsightTreeExpander;
 import com.openmemind.ai.memory.core.retrieval.tier.ItemTierRetriever;
 import com.openmemind.ai.memory.core.retrieval.tier.TierResult;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.item.ItemOperations;
+import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.textsearch.TextSearchResult;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -55,12 +59,18 @@ class SimpleRetrievalStrategyTest {
     @Mock private ItemTierRetriever itemRetriever;
     @Mock private MemoryTextSearch textSearch;
     @Mock private MemoryStore memoryStore;
+    @Mock private ItemOperations itemOperations;
+    @Mock private RawDataOperations rawDataOperations;
 
     private SimpleRetrievalStrategy strategy;
     private QueryContext context;
 
     @BeforeEach
     void setUp() {
+        lenient().when(memoryStore.itemOperations()).thenReturn(itemOperations);
+        lenient().when(memoryStore.rawDataOperations()).thenReturn(rawDataOperations);
+        lenient().when(itemOperations.getItemsByIds(any(), any())).thenReturn(List.of());
+        lenient().when(rawDataOperations.getRawData(any(), any())).thenReturn(Optional.empty());
         strategy =
                 new SimpleRetrievalStrategy(
                         insightRetriever, itemRetriever, textSearch, memoryStore);

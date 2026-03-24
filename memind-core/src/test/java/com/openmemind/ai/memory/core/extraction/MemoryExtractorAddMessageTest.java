@@ -21,17 +21,17 @@ import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.extraction.context.CommitDecision;
+import com.openmemind.ai.memory.core.extraction.context.CommitDetectionContext;
+import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.extraction.step.InsightExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.SegmentProcessor;
-import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDecision;
-import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDetectionContext;
-import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDetector;
-import com.openmemind.ai.memory.core.extraction.streaming.ConversationBufferStore;
-import com.openmemind.ai.memory.core.extraction.streaming.InMemoryConversationBufferStore;
+import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.InMemoryConversationBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -56,8 +56,8 @@ class MemoryExtractorAddMessageTest {
     @Mock MemoryItemExtractStep memoryItemStep;
     @Mock InsightExtractStep insightStep;
     @Mock SegmentProcessor segmentProcessor;
-    @Mock BoundaryDetector boundaryDetector;
-    @Mock ConversationBufferStore bufferStore;
+    @Mock ContextCommitDetector contextCommitDetector;
+    @Mock ConversationBuffer bufferStore;
 
     MemoryExtractor extractor;
     MemoryId memoryId;
@@ -70,7 +70,7 @@ class MemoryExtractorAddMessageTest {
                         memoryItemStep,
                         insightStep,
                         segmentProcessor,
-                        boundaryDetector,
+                        contextCommitDetector,
                         bufferStore);
         memoryId = DefaultMemoryId.of("user1", "agent1");
     }
@@ -103,8 +103,8 @@ class MemoryExtractorAddMessageTest {
             Message msg = Message.user("How are you?");
             when(bufferStore.load("user1:agent1")).thenReturn(new ArrayList<>());
             when(bufferStore.loadMessageCount("user1:agent1")).thenReturn(0);
-            when(boundaryDetector.shouldSeal(anyList(), any(BoundaryDetectionContext.class)))
-                    .thenReturn(Mono.just(BoundaryDecision.hold()));
+            when(contextCommitDetector.shouldCommit(anyList(), any(CommitDetectionContext.class)))
+                    .thenReturn(Mono.just(CommitDecision.hold()));
 
             StepVerifier.create(extractor.addMessage(memoryId, msg, ExtractionConfig.defaults()))
                     .verifyComplete();
@@ -126,8 +126,8 @@ class MemoryExtractorAddMessageTest {
 
             when(bufferStore.load("user1:agent1")).thenReturn(existingBuffer);
             when(bufferStore.loadMessageCount("user1:agent1")).thenReturn(1);
-            when(boundaryDetector.shouldSeal(anyList(), any(BoundaryDetectionContext.class)))
-                    .thenReturn(Mono.just(BoundaryDecision.seal(0.9, "test")));
+            when(contextCommitDetector.shouldCommit(anyList(), any(CommitDetectionContext.class)))
+                    .thenReturn(Mono.just(CommitDecision.commit(0.9, "test")));
             when(segmentProcessor.processSegment(any(), any(), any(), any(), any()))
                     .thenReturn(Mono.just(RawDataResult.empty()));
 
@@ -144,7 +144,7 @@ class MemoryExtractorAddMessageTest {
         @Test
         @DisplayName("Preserve follow-up message appended while sealing is still extracting")
         void preserves_follow_up_message_during_inflight_extraction() throws Exception {
-            var realStore = new InMemoryConversationBufferStore();
+            var realStore = new InMemoryConversationBuffer();
             realStore.save("user1:agent1", List.of(Message.assistant("I am fine")));
             realStore.saveMessageCount("user1:agent1", 1);
 
@@ -167,7 +167,7 @@ class MemoryExtractorAddMessageTest {
                                                 }
                                                 return RawDataResult.empty();
                                             }),
-                            (messages, context) -> Mono.just(BoundaryDecision.seal(0.9, "test")),
+                            (messages, context) -> Mono.just(CommitDecision.commit(0.9, "test")),
                             realStore);
 
             var trigger = Message.user("Tell me more");
@@ -206,14 +206,14 @@ class MemoryExtractorAddMessageTest {
         @Test
         @DisplayName("Assistant messages from concurrent callers do not lose buffered messages")
         void assistant_messages_do_not_get_lost_under_concurrency() throws Exception {
-            var realStore = new SlowSnapshotConversationBufferStore();
+            var realStore = new SlowSnapshotConversationBuffer();
             MemoryExtractor localExtractor =
                     new MemoryExtractor(
                             unusedRawDataStep(),
                             unusedMemoryItemStep(),
                             unusedInsightStep(),
                             segmentProcessor,
-                            boundaryDetector,
+                            contextCommitDetector,
                             realStore);
             var first = Message.assistant("first");
             var second = Message.assistant("second");
@@ -269,8 +269,7 @@ class MemoryExtractorAddMessageTest {
                 Mono.just(com.openmemind.ai.memory.core.extraction.result.InsightResult.empty());
     }
 
-    private static final class SlowSnapshotConversationBufferStore
-            implements ConversationBufferStore {
+    private static final class SlowSnapshotConversationBuffer implements ConversationBuffer {
 
         private final ConcurrentHashMap<String, List<Message>> buffers = new ConcurrentHashMap<>();
         private final ConcurrentHashMap<String, Integer> messageCounts = new ConcurrentHashMap<>();

@@ -37,6 +37,7 @@ import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightPointGenerateResponse;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.utils.IdUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Instant;
@@ -62,6 +63,7 @@ class InsightTreeReorganizerTest {
     @Mock private InsightGenerator generator;
     @Mock private MemoryVector vector;
     @Mock private MemoryStore store;
+    @Mock private InsightOperations insightOps;
 
     private final MemoryId memoryId = () -> "test-memory";
     private final IdUtils.SnowflakeIdGenerator idGenerator = IdUtils.snowflake();
@@ -77,6 +79,7 @@ class InsightTreeReorganizerTest {
     void setUp() {
         config = InsightTreeConfig.defaults(); // branchBubble=3, rootBubble=2, minBranches=2
         bubbleTracker = new BubbleTracker();
+        when(store.insightOperations()).thenReturn(insightOps);
         reorganizer =
                 new InsightTreeReorganizer(generator, vector, store, bubbleTracker, idGenerator);
     }
@@ -92,15 +95,15 @@ class InsightTreeReorganizerTest {
         void shouldLinkLeafButNotResummarizeBelowThreshold() {
             var leaf = createLeaf(1L, "The user likes coffee");
 
-            when(store.getInsightsByType(memoryId, TYPE_NAME)).thenReturn(List.of(leaf));
-            when(store.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.empty());
-            when(store.getInsightsByTier(memoryId, InsightTier.BRANCH)).thenReturn(List.of());
-            when(store.listInsightTypes()).thenReturn(List.of());
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME)).thenReturn(List.of(leaf));
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.empty());
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH)).thenReturn(List.of());
+            when(insightOps.listInsightTypes()).thenReturn(List.of());
 
             reorganizer.onLeafUpdated(memoryId, TYPE_NAME, createInsightType(), leaf, config);
 
             // BRANCH should be created and linked (through saveInsights)
-            verify(store, atLeastOnce())
+            verify(insightOps, atLeastOnce())
                     .upsertInsights(
                             eq(memoryId),
                             argThat(
@@ -114,7 +117,7 @@ class InsightTreeReorganizerTest {
                                                                                             1L))));
 
             // LEAF should have parentInsightId set
-            verify(store, atLeastOnce())
+            verify(insightOps, atLeastOnce())
                     .upsertInsights(
                             eq(memoryId),
                             argThat(
@@ -138,15 +141,15 @@ class InsightTreeReorganizerTest {
         void shouldCreateBranchWhenThresholdReached() {
             var leaf = createLeaf(3L, "Third piece of information");
 
-            when(store.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.empty());
-            when(store.getInsightsByType(memoryId, TYPE_NAME))
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.empty());
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME))
                     .thenReturn(
                             List.of(
                                     createLeaf(1L, "First piece"),
                                     createLeaf(2L, "Second piece"),
                                     leaf));
-            when(store.getInsightsByTier(memoryId, InsightTier.BRANCH)).thenReturn(List.of());
-            when(store.listInsightTypes()).thenReturn(List.of());
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH)).thenReturn(List.of());
+            when(insightOps.listInsightTypes()).thenReturn(List.of());
 
             var point =
                     new InsightPoint(
@@ -166,7 +169,7 @@ class InsightTreeReorganizerTest {
             reorganizer.onLeafUpdated(memoryId, TYPE_NAME, createInsightType(), leaf, config);
 
             // Verify BRANCH is saved in batchLinkLeafsToBranch through saveInsights
-            verify(store, atLeastOnce())
+            verify(insightOps, atLeastOnce())
                     .upsertInsights(
                             eq(memoryId),
                             argThat(
@@ -198,11 +201,12 @@ class InsightTreeReorganizerTest {
             var leaf2 = createLeaf(2L, "Second piece");
             var leaf3 = createLeaf(3L, "Third piece");
 
-            when(store.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch));
-            when(store.getInsightsByType(memoryId, TYPE_NAME))
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch));
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME))
                     .thenReturn(List.of(leaf1, leaf2, leaf3));
-            when(store.getInsightsByTier(memoryId, InsightTier.BRANCH)).thenReturn(List.of(branch));
-            when(store.listInsightTypes()).thenReturn(List.of());
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
+                    .thenReturn(List.of(branch));
+            when(insightOps.listInsightTypes()).thenReturn(List.of());
 
             var point =
                     new InsightPoint(
@@ -223,7 +227,7 @@ class InsightTreeReorganizerTest {
 
             // Verify batchLinkLeafsToBranch saves in bulk (including branch + leaf parentId
             // updates)
-            verify(store, atLeastOnce())
+            verify(insightOps, atLeastOnce())
                     .upsertInsights(
                             eq(memoryId),
                             argThat(
@@ -266,15 +270,16 @@ class InsightTreeReorganizerTest {
             var branch = createBranch(10L);
             var leaf = createLeaf(3L, "Third piece of information");
 
-            when(store.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch));
-            when(store.getInsightsByType(memoryId, TYPE_NAME))
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch));
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME))
                     .thenReturn(
                             List.of(
                                     createLeaf(1L, "First piece"),
                                     createLeaf(2L, "Second piece"),
                                     leaf));
-            when(store.getInsightsByTier(memoryId, InsightTier.BRANCH)).thenReturn(List.of(branch));
-            when(store.listInsightTypes()).thenReturn(List.of());
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
+                    .thenReturn(List.of(branch));
+            when(insightOps.listInsightTypes()).thenReturn(List.of());
 
             var point =
                     new InsightPoint(
@@ -304,10 +309,10 @@ class InsightTreeReorganizerTest {
         void shouldNotResummarizeBelowThreshold() {
             var leaf = createLeaf(1L, "First piece");
 
-            when(store.getInsightsByType(memoryId, TYPE_NAME)).thenReturn(List.of(leaf));
-            when(store.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.empty());
-            when(store.getInsightsByTier(memoryId, InsightTier.BRANCH)).thenReturn(List.of());
-            when(store.listInsightTypes()).thenReturn(List.of());
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME)).thenReturn(List.of(leaf));
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.empty());
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH)).thenReturn(List.of());
+            when(insightOps.listInsightTypes()).thenReturn(List.of());
 
             reorganizer.onLeafUpdated(memoryId, TYPE_NAME, createInsightType(), leaf, config);
 
@@ -332,12 +337,12 @@ class InsightTreeReorganizerTest {
             var leaf = createLeaf(1L, "New information");
             var rootInsightType = createRootInsightType(ROOT_TYPE_NAME);
 
-            when(store.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch1));
-            when(store.getInsightsByType(memoryId, TYPE_NAME)).thenReturn(List.of(leaf));
-            when(store.getInsightsByTier(memoryId, InsightTier.BRANCH))
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch1));
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME)).thenReturn(List.of(leaf));
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
                     .thenReturn(List.of(branch1, branch2));
-            when(store.listInsightTypes()).thenReturn(List.of(rootInsightType));
-            when(store.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.empty());
+            when(insightOps.listInsightTypes()).thenReturn(List.of(rootInsightType));
+            when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.empty());
 
             reorganizer.onLeafUpdated(
                     memoryId, TYPE_NAME, createInsightType(), leaf, highThresholdConfig);
@@ -348,7 +353,7 @@ class InsightTreeReorganizerTest {
                             any(), any(), anyList(), anyInt(), nullable(String.class));
 
             // But ROOT should be created and include BRANCH as child
-            verify(store, atLeastOnce())
+            verify(insightOps, atLeastOnce())
                     .upsertInsights(
                             eq(memoryId),
                             argThat(
@@ -377,13 +382,13 @@ class InsightTreeReorganizerTest {
             var leaf = createLeaf(3L, "New information");
             var rootInsightType = createRootInsightType(ROOT_TYPE_NAME);
 
-            when(store.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch1));
-            when(store.getInsightsByType(memoryId, TYPE_NAME))
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch1));
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME))
                     .thenReturn(List.of(createLeaf(1L, "Old information"), leaf));
-            when(store.getInsightsByTier(memoryId, InsightTier.BRANCH))
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
                     .thenReturn(List.of(branch1, branch2));
-            when(store.listInsightTypes()).thenReturn(List.of(rootInsightType));
-            when(store.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.empty());
+            when(insightOps.listInsightTypes()).thenReturn(List.of(rootInsightType));
+            when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.empty());
 
             var point =
                     new InsightPoint(
@@ -400,7 +405,7 @@ class InsightTreeReorganizerTest {
             reorganizer.onLeafUpdated(memoryId, TYPE_NAME, createInsightType(), leaf, config);
 
             // Verify ROOT is created (ensureRoot uses saveInsight to save the root itself)
-            verify(store, atLeastOnce())
+            verify(insightOps, atLeastOnce())
                     .upsertInsights(
                             eq(memoryId),
                             argThat(
@@ -418,14 +423,14 @@ class InsightTreeReorganizerTest {
             var leaf = createLeaf(3L, "New information");
             var rootInsightType = createRootInsightType(ROOT_TYPE_NAME);
 
-            when(store.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch1));
-            when(store.getInsight(memoryId, 100L)).thenReturn(Optional.of(root));
-            when(store.getInsightsByType(memoryId, TYPE_NAME))
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch1));
+            when(insightOps.getInsight(memoryId, 100L)).thenReturn(Optional.of(root));
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME))
                     .thenReturn(List.of(createLeaf(1L, "Old information"), leaf));
-            when(store.getInsightsByTier(memoryId, InsightTier.BRANCH))
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
                     .thenReturn(List.of(branch1, branch2));
-            when(store.listInsightTypes()).thenReturn(List.of(rootInsightType));
-            when(store.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.of(root));
+            when(insightOps.listInsightTypes()).thenReturn(List.of(rootInsightType));
+            when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.of(root));
 
             var branchPoint =
                     new InsightPoint(
@@ -475,14 +480,14 @@ class InsightTreeReorganizerTest {
             var rootInsightType = createRootInsightType(ROOT_TYPE_NAME);
             var rootKey = "test-memory::root::" + ROOT_TYPE_NAME;
 
-            when(store.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch1));
-            when(store.getInsight(memoryId, 100L)).thenReturn(Optional.of(root));
-            when(store.getInsightsByType(memoryId, TYPE_NAME))
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch1));
+            when(insightOps.getInsight(memoryId, 100L)).thenReturn(Optional.of(root));
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME))
                     .thenReturn(List.of(createLeaf(1L, "Old information"), leaf));
-            when(store.getInsightsByTier(memoryId, InsightTier.BRANCH))
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
                     .thenReturn(List.of(branch1, branch2));
-            when(store.listInsightTypes()).thenReturn(List.of(rootInsightType));
-            when(store.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.of(root));
+            when(insightOps.listInsightTypes()).thenReturn(List.of(rootInsightType));
+            when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.of(root));
 
             var branchPoint =
                     new InsightPoint(
@@ -527,16 +532,17 @@ class InsightTreeReorganizerTest {
             var root1 = createRoot(100L, "user-profile", List.of(10L, 20L));
             var root2 = createRoot(200L, "behavior-analysis", List.of(10L, 20L));
 
-            when(store.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch1));
-            when(store.getInsightsByType(memoryId, TYPE_NAME))
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch1));
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME))
                     .thenReturn(List.of(createLeaf(1L, "Old information"), leaf));
-            when(store.getInsightsByTier(memoryId, InsightTier.BRANCH))
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
                     .thenReturn(List.of(branch1, branch2));
-            when(store.listInsightTypes()).thenReturn(List.of(rootType1, rootType2));
-            when(store.getRootByType(memoryId, "user-profile")).thenReturn(Optional.of(root1));
-            when(store.getRootByType(memoryId, "behavior-analysis")).thenReturn(Optional.of(root2));
-            when(store.getInsight(memoryId, 100L)).thenReturn(Optional.of(root1));
-            when(store.getInsight(memoryId, 200L)).thenReturn(Optional.of(root2));
+            when(insightOps.listInsightTypes()).thenReturn(List.of(rootType1, rootType2));
+            when(insightOps.getRootByType(memoryId, "user-profile")).thenReturn(Optional.of(root1));
+            when(insightOps.getRootByType(memoryId, "behavior-analysis"))
+                    .thenReturn(Optional.of(root2));
+            when(insightOps.getInsight(memoryId, 100L)).thenReturn(Optional.of(root1));
+            when(insightOps.getInsight(memoryId, 200L)).thenReturn(Optional.of(root2));
 
             var branchPoint =
                     new InsightPoint(
@@ -594,15 +600,17 @@ class InsightTreeReorganizerTest {
             var rootInsightType = createRootInsightType(ROOT_TYPE_NAME);
 
             // Two types share the same set of mocks
-            when(store.getBranchByType(memoryId, "type-a")).thenReturn(Optional.of(branchA));
-            when(store.getBranchByType(memoryId, "type-b")).thenReturn(Optional.of(branchB));
-            when(store.getInsight(memoryId, 100L)).thenReturn(Optional.of(root));
-            when(store.getInsightsByType(eq(memoryId), eq("type-a"))).thenReturn(List.of(leafA));
-            when(store.getInsightsByType(eq(memoryId), eq("type-b"))).thenReturn(List.of(leafB));
-            when(store.getInsightsByTier(memoryId, InsightTier.BRANCH))
+            when(insightOps.getBranchByType(memoryId, "type-a")).thenReturn(Optional.of(branchA));
+            when(insightOps.getBranchByType(memoryId, "type-b")).thenReturn(Optional.of(branchB));
+            when(insightOps.getInsight(memoryId, 100L)).thenReturn(Optional.of(root));
+            when(insightOps.getInsightsByType(eq(memoryId), eq("type-a")))
+                    .thenReturn(List.of(leafA));
+            when(insightOps.getInsightsByType(eq(memoryId), eq("type-b")))
+                    .thenReturn(List.of(leafB));
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
                     .thenReturn(List.of(branchA, branchB));
-            when(store.listInsightTypes()).thenReturn(List.of(rootInsightType));
-            when(store.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.of(root));
+            when(insightOps.listInsightTypes()).thenReturn(List.of(rootInsightType));
+            when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.of(root));
 
             var branchPoint =
                     new InsightPoint(
@@ -833,14 +841,14 @@ class InsightTreeReorganizerTest {
             var leaf = createLeaf(1L, "agent information");
             var agentInsightType = createInsightTypeWithNameAndScope(TYPE_NAME, MemoryScope.AGENT);
 
-            when(store.getInsightsByType(memoryId, TYPE_NAME)).thenReturn(List.of(leaf));
-            when(store.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.empty());
-            when(store.getInsightsByTier(memoryId, InsightTier.BRANCH)).thenReturn(List.of());
-            when(store.listInsightTypes()).thenReturn(List.of());
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME)).thenReturn(List.of(leaf));
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.empty());
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH)).thenReturn(List.of());
+            when(insightOps.listInsightTypes()).thenReturn(List.of());
 
             reorganizer.onLeafUpdated(memoryId, TYPE_NAME, agentInsightType, leaf, config);
 
-            verify(store, atLeastOnce())
+            verify(insightOps, atLeastOnce())
                     .upsertInsights(
                             eq(memoryId),
                             argThat(
@@ -863,17 +871,17 @@ class InsightTreeReorganizerTest {
             var leaf = createLeaf(1L, "agent information");
             var agentRootType = createRootInsightTypeWithScope(ROOT_TYPE_NAME, MemoryScope.AGENT);
 
-            when(store.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch1));
-            when(store.getInsightsByType(memoryId, TYPE_NAME)).thenReturn(List.of(leaf));
-            when(store.getInsightsByTier(memoryId, InsightTier.BRANCH))
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch1));
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME)).thenReturn(List.of(leaf));
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
                     .thenReturn(List.of(branch1, branch2));
-            when(store.listInsightTypes()).thenReturn(List.of(agentRootType));
-            when(store.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.empty());
+            when(insightOps.listInsightTypes()).thenReturn(List.of(agentRootType));
+            when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.empty());
 
             reorganizer.onLeafUpdated(
                     memoryId, TYPE_NAME, createInsightType(), leaf, highThresholdConfig);
 
-            verify(store, atLeastOnce())
+            verify(insightOps, atLeastOnce())
                     .upsertInsights(
                             eq(memoryId),
                             argThat(

@@ -20,6 +20,9 @@ import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
+import com.openmemind.ai.memory.core.extraction.context.ContextRequest;
+import com.openmemind.ai.memory.core.extraction.context.ContextWindow;
+import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
@@ -31,11 +34,16 @@ import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
+import com.openmemind.ai.memory.core.utils.TokenUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -53,22 +61,38 @@ public class DefaultMemory implements Memory {
 
     private final MemoryExtractionPipeline extractor;
     private final MemoryRetriever retriever;
-    private final MemoryStore store;
+    private final MemoryStore memoryStore;
     private final MemoryVector vector;
     private final ToolStatsService toolStatsService;
+    private final InsightLayer insightLayer;
+    private final AutoCloseable lifecycle;
+    private final AtomicBoolean closed = new AtomicBoolean();
 
     public DefaultMemory(
             MemoryExtractionPipeline extractor,
             MemoryRetriever retriever,
-            MemoryStore store,
+            MemoryStore memoryStore,
             MemoryVector vector,
             ToolStatsService toolStatsService) {
+        this(extractor, retriever, memoryStore, vector, toolStatsService, null, null);
+    }
+
+    public DefaultMemory(
+            MemoryExtractionPipeline extractor,
+            MemoryRetriever retriever,
+            MemoryStore memoryStore,
+            MemoryVector vector,
+            ToolStatsService toolStatsService,
+            InsightLayer insightLayer,
+            AutoCloseable lifecycle) {
         this.extractor = Objects.requireNonNull(extractor, "extractor must not be null");
         this.retriever = Objects.requireNonNull(retriever, "retriever must not be null");
-        this.store = Objects.requireNonNull(store, "store must not be null");
+        this.memoryStore = Objects.requireNonNull(memoryStore, "memoryStore must not be null");
         this.vector = Objects.requireNonNull(vector, "vector must not be null");
         this.toolStatsService =
                 Objects.requireNonNull(toolStatsService, "toolStatsService must not be null");
+        this.insightLayer = insightLayer;
+        this.lifecycle = lifecycle;
     }
 
     // ===== Generic extraction =====
@@ -109,6 +133,68 @@ public class DefaultMemory implements Memory {
         return extractor.addMessage(memoryId, message, config);
     }
 
+    // ===== Context =====
+
+    @Override
+    public Mono<ContextWindow> getContext(ContextRequest request) {
+        Objects.requireNonNull(request, "request is required");
+
+        ConversationBuffer buffer = memoryStore.conversationBufferStore();
+        var bufferKey = request.memoryId().toIdentifier();
+        List<Message> messages = List.copyOf(buffer.load(bufferKey));
+        int bufferTokens = TokenUtils.countTokens(messages);
+
+        if (!request.includeMemories() || messages.isEmpty()) {
+            return Mono.just(ContextWindow.bufferOnly(messages, bufferTokens));
+        }
+
+        String query = buildQueryFromRecentMessages(messages);
+        return retriever
+                .retrieve(RetrievalRequest.of(request.memoryId(), query, request.strategy()))
+                .map(
+                        memories -> {
+                            int memoriesTokens = TokenUtils.countTokens(memories.formattedResult());
+                            return new ContextWindow(
+                                    messages, memories, bufferTokens + memoriesTokens);
+                        });
+    }
+
+    @Override
+    public Mono<ExtractionResult> commit(MemoryId memoryId) {
+        return commit(memoryId, ExtractionConfig.defaults());
+    }
+
+    @Override
+    public Mono<ExtractionResult> commit(MemoryId memoryId, ExtractionConfig config) {
+        Objects.requireNonNull(memoryId, "memoryId is required");
+        Objects.requireNonNull(config, "config is required");
+
+        ConversationBuffer buffer = memoryStore.conversationBufferStore();
+        var bufferKey = memoryId.toIdentifier();
+        List<Message> messages = List.copyOf(buffer.drain(bufferKey));
+
+        if (messages.isEmpty()) {
+            return Mono.just(
+                    ExtractionResult.success(
+                            memoryId,
+                            com.openmemind.ai.memory.core.extraction.result.RawDataResult.empty(),
+                            com.openmemind.ai.memory.core.extraction.result.MemoryItemResult
+                                    .empty(),
+                            com.openmemind.ai.memory.core.extraction.result.InsightResult.empty(),
+                            Duration.ZERO));
+        }
+
+        return extract(memoryId, new ConversationContent(messages), config);
+    }
+
+    private static String buildQueryFromRecentMessages(List<Message> messages) {
+        int tail = Math.min(messages.size(), 5);
+        return messages.subList(messages.size() - tail, messages.size()).stream()
+                .map(Message::textContent)
+                .filter(t -> t != null && !t.isBlank())
+                .collect(Collectors.joining(" "));
+    }
+
     // ===== Memory retrieval =====
 
     @Override
@@ -129,7 +215,8 @@ public class DefaultMemory implements Memory {
             return Mono.<Void>empty();
         }
 
-        return Mono.fromCallable(() -> store.getItemsByIds(memoryId, requestedIds))
+        return Mono.fromCallable(
+                        () -> memoryStore.itemOperations().getItemsByIds(memoryId, requestedIds))
                 .map(
                         items ->
                                 items.stream()
@@ -142,7 +229,12 @@ public class DefaultMemory implements Memory {
                                 vectorIds.isEmpty()
                                         ? Mono.<Void>empty()
                                         : vector.deleteBatch(memoryId, vectorIds))
-                .then(Mono.<Void>fromRunnable(() -> store.deleteItems(memoryId, requestedIds)))
+                .then(
+                        Mono.<Void>fromRunnable(
+                                () ->
+                                        memoryStore
+                                                .itemOperations()
+                                                .deleteItems(memoryId, requestedIds)))
                 .doOnSuccess(ignored -> retriever.onDataChanged(memoryId));
     }
 
@@ -153,7 +245,11 @@ public class DefaultMemory implements Memory {
             return Mono.<Void>empty();
         }
 
-        return Mono.<Void>fromRunnable(() -> store.deleteInsights(memoryId, requestedIds))
+        return Mono.<Void>fromRunnable(
+                        () ->
+                                memoryStore
+                                        .insightOperations()
+                                        .deleteInsights(memoryId, requestedIds))
                 .doOnSuccess(ignored -> retriever.onDataChanged(memoryId));
     }
 
@@ -179,5 +275,31 @@ public class DefaultMemory implements Memory {
     @Override
     public Mono<Map<String, ToolCallStats>> getAllToolStats(MemoryId memoryId) {
         return toolStatsService.getAllToolStats(memoryId);
+    }
+
+    @Override
+    public void flushInsights(MemoryId memoryId, String language) {
+        Objects.requireNonNull(memoryId, "memoryId");
+        if (insightLayer == null) {
+            return;
+        }
+        if (language == null || language.isBlank()) {
+            insightLayer.flush(memoryId);
+            return;
+        }
+        insightLayer.flush(memoryId, language);
+    }
+
+    @Override
+    public void close() {
+        if (!closed.compareAndSet(false, true) || lifecycle == null) {
+            return;
+        }
+
+        try {
+            lifecycle.close();
+        } catch (Exception e) {
+            log.warn("Failed to close memory lifecycle", e);
+        }
     }
 }

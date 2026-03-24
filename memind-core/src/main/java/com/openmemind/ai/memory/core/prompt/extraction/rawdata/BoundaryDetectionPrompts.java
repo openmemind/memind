@@ -13,8 +13,8 @@
  */
 package com.openmemind.ai.memory.core.prompt.extraction.rawdata;
 
+import com.openmemind.ai.memory.core.extraction.context.CommitDetectionContext;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
-import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDetectionContext;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
 import java.time.Duration;
 import java.time.ZoneId;
@@ -211,7 +211,7 @@ public final class BoundaryDetectionPrompts {
      * @param context Detection context
      * @return PromptTemplate ready to be rendered with a language
      */
-    public static PromptTemplate build(List<Message> buffer, BoundaryDetectionContext context) {
+    public static PromptTemplate build(List<Message> buffer, CommitDetectionContext context) {
         if (buffer == null || buffer.isEmpty()) {
             throw new IllegalArgumentException("Message buffer cannot be null or empty");
         }

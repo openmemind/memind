@@ -21,13 +21,13 @@ import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
-import com.openmemind.ai.memory.core.extraction.insight.buffer.BufferEntry;
-import com.openmemind.ai.memory.core.extraction.insight.buffer.InsightBufferStore;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassifier;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupRouter;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.buffer.BufferEntry;
+import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.tracing.MemoryAttributes;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.tracing.MemorySpanNames;
@@ -67,7 +67,7 @@ public class InsightBuildScheduler implements Closeable {
 
     private static final Logger log = LoggerFactory.getLogger(InsightBuildScheduler.class);
 
-    private final InsightBufferStore bufferStore;
+    private final InsightBuffer bufferStore;
     private final MemoryStore store;
     private final InsightGenerator generator;
     private final InsightGroupClassifier groupClassifier;
@@ -111,7 +111,7 @@ public class InsightBuildScheduler implements Closeable {
             pendingFutures = new ConcurrentHashMap<>();
 
     public InsightBuildScheduler(
-            InsightBufferStore bufferStore,
+            InsightBuffer bufferStore,
             MemoryStore store,
             InsightGenerator generator,
             InsightGroupClassifier groupClassifier,
@@ -134,7 +134,7 @@ public class InsightBuildScheduler implements Closeable {
     }
 
     public InsightBuildScheduler(
-            InsightBufferStore bufferStore,
+            InsightBuffer bufferStore,
             MemoryStore store,
             InsightGenerator generator,
             InsightGroupClassifier groupClassifier,
@@ -352,7 +352,8 @@ public class InsightBuildScheduler implements Closeable {
                             itemIds.size());
                 }
 
-                insightType = store.getInsightType(insightTypeName).orElse(null);
+                insightType =
+                        store.insightOperations().getInsightType(insightTypeName).orElse(null);
                 if (insightType == null) {
                     log.warn(
                             "InsightType does not exist [type={}]，skipping subsequent phases",
@@ -417,7 +418,7 @@ public class InsightBuildScheduler implements Closeable {
         }
 
         var ungroupedItemIds = ungroupedEntries.stream().map(BufferEntry::itemId).toList();
-        var items = store.getItemsByIds(memoryId, ungroupedItemIds);
+        var items = store.itemOperations().getItemsByIds(memoryId, ungroupedItemIds);
 
         var existingGroupNames = ctx.existingGroupNames().stream().toList();
 
@@ -514,10 +515,13 @@ public class InsightBuildScheduler implements Closeable {
             String language) {
 
         var unbuiltItemIds = unbuiltEntries.stream().map(BufferEntry::itemId).toList();
-        var items = store.getItemsByIds(memoryId, unbuiltItemIds);
+        var items = store.itemOperations().getItemsByIds(memoryId, unbuiltItemIds);
 
         // Find existing LEAF (at most one)
-        var existingLeaf = store.getLeafByGroup(memoryId, insightTypeName, groupName).orElse(null);
+        var existingLeaf =
+                store.insightOperations()
+                        .getLeafByGroup(memoryId, insightTypeName, groupName)
+                        .orElse(null);
         var existingPoints =
                 existingLeaf != null && existingLeaf.points() != null
                         ? existingLeaf.points()
@@ -587,7 +591,7 @@ public class InsightBuildScheduler implements Closeable {
                             1);
         }
 
-        store.upsertInsights(memoryId, List.of(leafInsight));
+        store.insightOperations().upsertInsights(memoryId, List.of(leafInsight));
         bufferStore.markBuilt(memoryId, insightTypeName, unbuiltItemIds);
         log.debug(
                 "Phase 3 Build completed [type={}, group={}, points={}, version={}]",

@@ -32,7 +32,7 @@ public final class HashUtils {
     private static final int SAMPLE_SIZE = 1024;
 
     /**
-     * Calculate the SHA-256 hash value of a string (streaming chunked, suitable for large text)
+     * Calculate the SHA-256 hash value of a string (context chunked, suitable for large text)
      *
      * <p>Chunked calls {@link MessageDigest#update}, memory peak is only a single chunk's byte[],
      * avoiding a single {@code getBytes()} producing a byte array as large as the original text.

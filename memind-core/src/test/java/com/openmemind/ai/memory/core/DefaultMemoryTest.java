@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -42,11 +43,14 @@ import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.insight.InsightOperations;
+import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -65,6 +69,8 @@ class DefaultMemoryTest {
     @Mock private MemoryExtractor extractor;
     @Mock private MemoryRetriever retriever;
     @Mock private MemoryStore store;
+    @Mock private ItemOperations itemOperations;
+    @Mock private InsightOperations insightOperations;
     @Mock private MemoryVector vector;
     @Mock private ToolStatsService toolStatsService;
 
@@ -73,6 +79,8 @@ class DefaultMemoryTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(store.itemOperations()).thenReturn(itemOperations);
+        lenient().when(store.insightOperations()).thenReturn(insightOperations);
         memind = new DefaultMemory(extractor, retriever, store, vector, toolStatsService);
         memoryId = DefaultMemoryId.of("user1", "agent1");
     }
@@ -141,15 +149,15 @@ class DefaultMemoryTest {
         void deleteItemsDeletesVectorsThenStoreRowsAndInvalidatesRetriever() {
             var itemIds = List.of(1L, 2L);
             var items = List.of(memoryItem(1L, "vec-1"), memoryItem(2L, "vec-2"));
-            when(store.getItemsByIds(memoryId, itemIds)).thenReturn(items);
+            when(itemOperations.getItemsByIds(memoryId, itemIds)).thenReturn(items);
             when(vector.deleteBatch(memoryId, List.of("vec-1", "vec-2"))).thenReturn(Mono.empty());
 
             StepVerifier.create(memind.deleteItems(memoryId, itemIds)).verifyComplete();
 
-            InOrder inOrder = inOrder(store, vector, retriever);
-            inOrder.verify(store).getItemsByIds(memoryId, itemIds);
+            InOrder inOrder = inOrder(itemOperations, vector, retriever);
+            inOrder.verify(itemOperations).getItemsByIds(memoryId, itemIds);
             inOrder.verify(vector).deleteBatch(memoryId, List.of("vec-1", "vec-2"));
-            inOrder.verify(store).deleteItems(memoryId, itemIds);
+            inOrder.verify(itemOperations).deleteItems(memoryId, itemIds);
             inOrder.verify(retriever).onDataChanged(memoryId);
         }
 
@@ -157,13 +165,14 @@ class DefaultMemoryTest {
         @DisplayName("deleteItems skips vector delete when no vector ids exist")
         void deleteItemsSkipsVectorDeleteWhenNoVectorIdsExist() {
             var itemIds = List.of(3L);
-            when(store.getItemsByIds(memoryId, itemIds)).thenReturn(List.of(memoryItem(3L, null)));
+            when(itemOperations.getItemsByIds(memoryId, itemIds))
+                    .thenReturn(List.of(memoryItem(3L, null)));
 
             StepVerifier.create(memind.deleteItems(memoryId, itemIds)).verifyComplete();
 
-            InOrder inOrder = inOrder(store, retriever);
-            inOrder.verify(store).getItemsByIds(memoryId, itemIds);
-            inOrder.verify(store).deleteItems(memoryId, itemIds);
+            InOrder inOrder = inOrder(itemOperations, retriever);
+            inOrder.verify(itemOperations).getItemsByIds(memoryId, itemIds);
+            inOrder.verify(itemOperations).deleteItems(memoryId, itemIds);
             inOrder.verify(retriever).onDataChanged(memoryId);
             verifyNoInteractions(vector);
         }
@@ -175,11 +184,31 @@ class DefaultMemoryTest {
 
             StepVerifier.create(memind.deleteInsights(memoryId, insightIds)).verifyComplete();
 
-            InOrder inOrder = inOrder(store, retriever);
-            inOrder.verify(store).deleteInsights(memoryId, insightIds);
+            InOrder inOrder = inOrder(insightOperations, retriever);
+            inOrder.verify(insightOperations).deleteInsights(memoryId, insightIds);
             inOrder.verify(retriever).onDataChanged(memoryId);
             verifyNoInteractions(vector);
         }
+    }
+
+    @Test
+    @DisplayName("close is idempotent")
+    void closeIsIdempotent() {
+        AtomicInteger closeCount = new AtomicInteger();
+        memind =
+                new DefaultMemory(
+                        extractor,
+                        retriever,
+                        store,
+                        vector,
+                        toolStatsService,
+                        null,
+                        closeCount::incrementAndGet);
+
+        memind.close();
+        memind.close();
+
+        assertThat(closeCount).hasValue(1);
     }
 
     // ===== Agent Memory Reporting =====

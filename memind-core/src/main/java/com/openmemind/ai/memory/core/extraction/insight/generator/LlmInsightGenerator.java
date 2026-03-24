@@ -17,6 +17,8 @@ import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
+import com.openmemind.ai.memory.core.llm.ChatMessages;
+import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.extraction.insight.BranchAggregationPrompts;
 import com.openmemind.ai.memory.core.prompt.extraction.insight.InsightLeafPrompts;
 import com.openmemind.ai.memory.core.prompt.extraction.insight.InteractionGuideSynthesisPrompts;
@@ -26,25 +28,26 @@ import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.client.ChatClient;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
 
 /**
- * Insight generator based on ChatClient
+ * Insight generator based on StructuredChatClient
  *
- * <p>Call LLM to generate/update Insight summary, using Spring AI structured output
+ * <p>Call LLM to generate/update insight summaries using the framework-neutral LLM SPI.
  *
  */
 public class LlmInsightGenerator implements InsightGenerator {
 
     private static final Logger log = LoggerFactory.getLogger(LlmInsightGenerator.class);
 
-    private final ChatClient chatClient;
+    private final StructuredChatClient structuredChatClient;
 
-    public LlmInsightGenerator(ChatClient chatClient) {
-        this.chatClient = Objects.requireNonNull(chatClient, "chatClient must not be null");
+    public LlmInsightGenerator(StructuredChatClient structuredChatClient) {
+        this.structuredChatClient =
+                Objects.requireNonNull(
+                        structuredChatClient, "structuredChatClient must not be null");
     }
 
     @Override
@@ -68,21 +71,12 @@ public class LlmInsightGenerator implements InsightGenerator {
                                 + additionalContext
                                 + "\n</AdditionalContext>"
                         : promptResult.userPrompt();
+        var messages = ChatMessages.systemUser(promptResult.systemPrompt(), userPrompt);
 
-        return Mono.fromCallable(
-                        () -> {
-                            var response =
-                                    chatClient
-                                            .prompt()
-                                            .system(promptResult.systemPrompt())
-                                            .user(userPrompt)
-                                            .call()
-                                            .entity(InsightPointGenerateResponse.class);
-                            if (response == null || response.points().isEmpty()) {
-                                return new InsightPointGenerateResponse(List.of());
-                            }
-                            return response;
-                        })
+        return structuredChatClient
+                .call(messages, InsightPointGenerateResponse.class)
+                .map(this::emptyIfMissing)
+                .switchIfEmpty(Mono.just(new InsightPointGenerateResponse(List.of())))
                 .subscribeOn(Schedulers.boundedElastic())
                 .retryWhen(
                         Retry.backoff(3, Duration.ofSeconds(2))
@@ -110,21 +104,13 @@ public class LlmInsightGenerator implements InsightGenerator {
                 BranchAggregationPrompts.build(
                                 insightType, existingPoints, leafInsights, targetTokens)
                         .render(language);
+        var messages =
+                ChatMessages.systemUser(promptResult.systemPrompt(), promptResult.userPrompt());
 
-        return Mono.fromCallable(
-                        () -> {
-                            var response =
-                                    chatClient
-                                            .prompt()
-                                            .system(promptResult.systemPrompt())
-                                            .user(promptResult.userPrompt())
-                                            .call()
-                                            .entity(InsightPointGenerateResponse.class);
-                            if (response == null || response.points().isEmpty()) {
-                                return new InsightPointGenerateResponse(List.of());
-                            }
-                            return response;
-                        })
+        return structuredChatClient
+                .call(messages, InsightPointGenerateResponse.class)
+                .map(this::emptyIfMissing)
+                .switchIfEmpty(Mono.just(new InsightPointGenerateResponse(List.of())))
                 .subscribeOn(Schedulers.boundedElastic())
                 .retryWhen(
                         Retry.backoff(3, Duration.ofSeconds(2))
@@ -157,22 +143,13 @@ public class LlmInsightGenerator implements InsightGenerator {
                                     rootInsightType, existingSummary, branchInsights, targetTokens);
                 };
         var promptResult = template.render(language);
+        var messages =
+                ChatMessages.systemUser(promptResult.systemPrompt(), promptResult.userPrompt());
 
-        return Mono.fromCallable(
-                        () -> {
-                            var spec = chatClient.prompt();
-                            if (promptResult.hasSystemPrompt()) {
-                                spec = spec.system(promptResult.systemPrompt());
-                            }
-                            var response =
-                                    spec.user(promptResult.userPrompt())
-                                            .call()
-                                            .entity(InsightPointGenerateResponse.class);
-                            if (response == null || response.points().isEmpty()) {
-                                return new InsightPointGenerateResponse(List.of());
-                            }
-                            return response;
-                        })
+        return structuredChatClient
+                .call(messages, InsightPointGenerateResponse.class)
+                .map(this::emptyIfMissing)
+                .switchIfEmpty(Mono.just(new InsightPointGenerateResponse(List.of())))
                 .subscribeOn(Schedulers.boundedElastic())
                 .retryWhen(
                         Retry.backoff(3, Duration.ofSeconds(2))
@@ -184,5 +161,12 @@ public class LlmInsightGenerator implements InsightGenerator {
                                                                 + " {}",
                                                         signal.totalRetries() + 1,
                                                         signal.failure().getMessage())));
+    }
+
+    private InsightPointGenerateResponse emptyIfMissing(InsightPointGenerateResponse response) {
+        if (response == null || response.points() == null || response.points().isEmpty()) {
+            return new InsightPointGenerateResponse(List.of());
+        }
+        return response;
     }
 }

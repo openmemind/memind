@@ -1,3 +1,0 @@
-com.openmemind.ai.memory.plugin.store.mybatis.MemoryMybatisPlusAutoConfiguration
-com.openmemind.ai.memory.plugin.store.mybatis.mysql.MemoryMysqlAutoConfiguration
-com.openmemind.ai.memory.plugin.store.mybatis.sqlite.MemorySqliteAutoConfiguration

@@ -131,7 +131,7 @@ Then add the Spring Boot Starter to your project's `pom.xml`:
 <dependency>
   <groupId>com.openmemind.ai</groupId>
   <artifactId>memind-spring-boot-starter</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
+  <version>0.1.0-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -173,6 +173,41 @@ var result = memory.retrieve(memoryId, "What does the user prefer?",
         RetrievalConfig.Strategy.SIMPLE).block();
 ```
 
+### Pure Java Bootstrap
+
+Outside Spring Boot, assemble the runtime objects directly and pass them into
+`Memory.builder()`:
+
+```java
+OpenAiApi openAiApi = OpenAiApi.builder()
+        .apiKey(System.getenv("OPENAI_API_KEY"))
+        .baseUrl(System.getenv().getOrDefault("OPENAI_BASE_URL", "https://api.openai.com"))
+        .build();
+
+OpenAiChatModel chatModel = OpenAiChatModel.builder()
+        .openAiApi(openAiApi)
+        .defaultOptions(OpenAiChatOptions.builder().model("gpt-4o-mini").build())
+        .observationRegistry(ObservationRegistry.NOOP)
+        .build();
+
+EmbeddingModel embeddingModel = new OpenAiEmbeddingModel(
+        openAiApi,
+        MetadataMode.NONE,
+        OpenAiEmbeddingOptions.builder().model("text-embedding-3-small").build());
+
+JdbcMemoryAccess jdbc = JdbcStore.sqlite("./data/memind.db");
+
+Memory memory = Memory.builder()
+        .chatClient(new SpringAiStructuredChatClient(ChatClient.builder(chatModel).build()))
+        .store(jdbc.store())
+        .textSearch(jdbc.textSearch())
+        .vector(SpringAiFileVector.file("./data/vector-store.json", embeddingModel))
+        .options(MemoryBuildOptions.builder()
+                .insightBuild(new InsightBuildConfig(2, 2, 8, 2))
+                .build())
+        .build();
+```
+
 ---
 
 ## Examples
@@ -184,22 +219,30 @@ git clone https://github.com/openmemind-ai/memind.git
 cd memind
 ```
 
-Configure your API key in `memind-example/src/main/resources/application.yml`, then run:
+Examples now live under `memind-examples/` and share one data directory at `memind-examples/data`.
+
+Configure `OPENAI_API_KEY`, then run one of the Spring Boot examples:
 
 ```bash
 # Basic extract + retrieve
-mvn -pl memind-example -am spring-boot:run \
-  -Dspring-boot.run.mainClass=com.openmemind.ai.memory.example.quickstart.QuickStartExample
+mvn -pl memind-examples/memind-example-spring-boot -am spring-boot:run \
+  -Dspring-boot.run.mainClass=com.openmemind.ai.memory.example.springboot.quickstart.QuickStartExample
 ```
 
-| Example | Class | Description |
-|---------|-------|-------------|
-| **QuickStart** | `quickstart.QuickStartExample` | Basic extract + retrieve flow |
-| **Insight** | `insight.InsightTreeExample` | Insight Tree multi-tier generation (Leaf → Branch → Root) |
-| **Foresight** | `foresight.ForesightExample` | Predictive memory — anticipate user needs |
-| **Tool** | `tool.ToolMemoryExample` | Tool call tracking & procedural memory |
+Pure Java examples are available in `memind-examples/memind-example-java`. Run the same scenario mains from your IDE, or invoke them with Maven Exec Plugin using the fully qualified class names below.
 
-> All classes under `com.openmemind.ai.memory.example` package.
+They now use the same object-first builder approach shown above.
+
+| Runtime | Example | Main Class | Description |
+|---------|---------|------------|-------------|
+| Spring Boot | **QuickStart** | `com.openmemind.ai.memory.example.springboot.quickstart.QuickStartExample` | Basic extract + retrieve flow |
+| Spring Boot | **Insight** | `com.openmemind.ai.memory.example.springboot.insight.InsightTreeExample` | Insight Tree multi-tier generation (Leaf → Branch → Root) |
+| Spring Boot | **Foresight** | `com.openmemind.ai.memory.example.springboot.foresight.ForesightExample` | Predictive memory — anticipate user needs |
+| Spring Boot | **Tool** | `com.openmemind.ai.memory.example.springboot.tool.ToolMemoryExample` | Tool call tracking and procedural memory |
+| Pure Java | **QuickStart** | `com.openmemind.ai.memory.example.java.quickstart.QuickStartExample` | Object-first builder with direct Spring AI runtime objects |
+| Pure Java | **Insight** | `com.openmemind.ai.memory.example.java.insight.InsightTreeExample` | Object-first builder with custom `MemoryBuildOptions` |
+| Pure Java | **Foresight** | `com.openmemind.ai.memory.example.java.foresight.ForesightExample` | Pure Java foresight extraction and retrieval |
+| Pure Java | **Tool** | `com.openmemind.ai.memory.example.java.tool.ToolMemoryExample` | Pure Java tool memory and procedural recall |
 
 ---
 

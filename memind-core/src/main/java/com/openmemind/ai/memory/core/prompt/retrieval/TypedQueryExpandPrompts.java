@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
  *
  * <p>Generates typed alternative search queries (lex/vec/hyde) to find
  * information missed by the initial retrieval round. Used by
- * {@link com.openmemind.ai.memory.core.retrieval.deep.ChatClientTypedQueryExpander}.
+ * {@link com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander}.
  */
 public final class TypedQueryExpandPrompts {
 

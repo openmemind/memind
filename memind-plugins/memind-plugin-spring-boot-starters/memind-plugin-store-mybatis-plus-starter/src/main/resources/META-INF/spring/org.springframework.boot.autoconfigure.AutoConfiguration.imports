@@ -1,0 +1,2 @@
+com.openmemind.ai.memory.plugin.store.mybatis.MemoryMybatisPlusAutoConfiguration
+com.openmemind.ai.memory.plugin.store.mybatis.schema.MemorySchemaAutoConfiguration

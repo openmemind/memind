@@ -41,26 +41,26 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
 
     private final Map<String, RetrievalStrategy> strategies;
     private final RetrievalCache cache;
-    private final MemoryStore store;
+    private final MemoryStore memoryStore;
     private final MemoryTextSearch textSearch; // nullable
     private final QueryRewriter queryRewriter; // nullable
 
-    public DefaultMemoryRetriever(RetrievalCache cache, MemoryStore store) {
-        this(cache, store, null, null);
+    public DefaultMemoryRetriever(RetrievalCache cache, MemoryStore memoryStore) {
+        this(cache, memoryStore, null, null);
     }
 
     public DefaultMemoryRetriever(
-            RetrievalCache cache, MemoryStore store, MemoryTextSearch textSearch) {
-        this(cache, store, textSearch, null);
+            RetrievalCache cache, MemoryStore memoryStore, MemoryTextSearch textSearch) {
+        this(cache, memoryStore, textSearch, null);
     }
 
     public DefaultMemoryRetriever(
             RetrievalCache cache,
-            MemoryStore store,
+            MemoryStore memoryStore,
             MemoryTextSearch textSearch,
             QueryRewriter queryRewriter) {
         this.cache = Objects.requireNonNull(cache, "cache must not be null");
-        this.store = Objects.requireNonNull(store, "store must not be null");
+        this.memoryStore = Objects.requireNonNull(memoryStore, "memoryStore must not be null");
         this.textSearch = textSearch; // nullable
         this.queryRewriter = queryRewriter; // nullable
         this.strategies = new ConcurrentHashMap<>();
@@ -89,7 +89,7 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
                             + " query, strategy)");
         }
 
-        if (!store.hasItems(request.memoryId())) {
+        if (!memoryStore.itemOperations().hasItems(request.memoryId())) {
             log.debug(
                     "No memory entries, skipping retrieval process: memoryId={}",
                     request.memoryId().toIdentifier());

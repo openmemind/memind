@@ -16,16 +16,16 @@ package com.openmemind.ai.memory.evaluation.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.openmemind.ai.memory.autoconfigure.MemoryExtractionProperties;
-import com.openmemind.ai.memory.core.extraction.insight.buffer.InsightBufferStore;
-import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDetector;
-import com.openmemind.ai.memory.core.extraction.streaming.BoundaryDetectorConfig;
-import com.openmemind.ai.memory.core.extraction.streaming.DefaultBoundaryDetector;
+import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
+import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
+import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
+import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
 import com.openmemind.ai.memory.evaluation.checkpoint.CheckpointStore;
-import com.openmemind.ai.memory.plugin.store.mybatis.MybatisPlusInsightBufferStore;
+import com.openmemind.ai.memory.plugin.store.mybatis.MybatisPlusInsightBuffer;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.InsightBufferMapper;
 import io.netty.channel.ChannelOption;
 import java.time.Duration;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -94,25 +94,25 @@ public class EvaluationConfiguration {
     // ─── Overrides ──────────────────────────────────
 
     /**
-     * Override starter's default BoundaryDetector (rule-based) with LLM-based detection
+     * Override starter's default ContextCommitDetector (rule-based) with LLM-based detection
      * for more accurate conversation segmentation during evaluation.
      */
     @Bean
-    public BoundaryDetector boundaryDetector(
-            ChatClient.Builder chatClientBuilder, MemoryExtractionProperties props) {
+    public ContextCommitDetector boundaryDetector(
+            StructuredChatClient structuredChatClient, MemoryExtractionProperties props) {
         var b = props.getBoundary();
         var config =
-                new BoundaryDetectorConfig(
+                new CommitDetectorConfig(
                         b.getMaxMessages(), b.getMaxTokens(), b.getMinMessagesForLlm());
-        return new DefaultBoundaryDetector(config, chatClientBuilder.build());
+        return new LlmContextCommitDetector(config, structuredChatClient);
     }
 
     /**
-     * Override starter's InMemoryInsightBufferStore with MyBatis-backed persistent store
+     * Override starter's InMemoryInsightBuffer with MyBatis-backed persistent store
      * so that the insight buffer survives restarts during long benchmark runs.
      */
     @Bean
-    public InsightBufferStore insightBufferStore(InsightBufferMapper insightBufferMapper) {
-        return new MybatisPlusInsightBufferStore(insightBufferMapper);
+    public InsightBuffer insightBufferStore(InsightBufferMapper insightBufferMapper) {
+        return new MybatisPlusInsightBuffer(insightBufferMapper);
     }
 }

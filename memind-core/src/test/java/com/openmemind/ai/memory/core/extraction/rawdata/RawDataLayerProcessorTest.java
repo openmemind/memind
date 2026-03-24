@@ -27,6 +27,7 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRec
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Instant;
 import java.util.List;
@@ -39,8 +40,13 @@ import reactor.core.publisher.Mono;
 class RawDataLayerProcessorTest {
 
     private final MemoryStore store = mock(MemoryStore.class);
+    private final RawDataOperations rawDataOps = mock(RawDataOperations.class);
     private final MemoryVector vector = mock(MemoryVector.class);
     private final CaptionGenerator defaultCaption = mock(CaptionGenerator.class);
+
+    {
+        when(store.rawDataOperations()).thenReturn(rawDataOps);
+    }
 
     @Nested
     @DisplayName("getProcessor routing")
@@ -65,7 +71,8 @@ class RawDataLayerProcessorTest {
             var content = ConversationContent.builder().addUserMessage("hello").build();
 
             when(defaultCaption.generateForSegments(any(), any())).thenReturn(Mono.just(List.of()));
-            when(store.getRawDataByContentId(any(), any())).thenReturn(java.util.Optional.empty());
+            when(rawDataOps.getRawDataByContentId(any(), any()))
+                    .thenReturn(java.util.Optional.empty());
             when(vector.storeBatch(any(), any(), any())).thenReturn(Mono.just(List.of()));
 
             layer.extract(
@@ -99,7 +106,8 @@ class RawDataLayerProcessorTest {
             var content = new ToolCallContent(List.of(record));
 
             when(defaultCaption.generateForSegments(any(), any())).thenReturn(Mono.just(List.of()));
-            when(store.getRawDataByContentId(any(), any())).thenReturn(java.util.Optional.empty());
+            when(rawDataOps.getRawDataByContentId(any(), any()))
+                    .thenReturn(java.util.Optional.empty());
             when(vector.storeBatch(any(), any(), any())).thenReturn(Mono.just(List.of()));
 
             layer.extract(
@@ -138,7 +146,8 @@ class RawDataLayerProcessorTest {
                         }
                     };
 
-            when(store.getRawDataByContentId(any(), any())).thenReturn(java.util.Optional.empty());
+            when(rawDataOps.getRawDataByContentId(any(), any()))
+                    .thenReturn(java.util.Optional.empty());
 
             assertThatThrownBy(
                             () ->
@@ -175,7 +184,8 @@ class RawDataLayerProcessorTest {
                     };
 
             when(defaultCaption.generateForSegments(any(), any())).thenReturn(Mono.just(List.of()));
-            when(store.getRawDataByContentId(any(), any())).thenReturn(java.util.Optional.empty());
+            when(rawDataOps.getRawDataByContentId(any(), any()))
+                    .thenReturn(java.util.Optional.empty());
             when(vector.storeBatch(any(), any(), any())).thenReturn(Mono.just(List.of()));
 
             layer.extract(

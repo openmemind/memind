@@ -13,19 +13,22 @@
  */
 package com.openmemind.ai.memory.core.utils;
 
+import com.knuddels.jtokkit.Encodings;
+import com.knuddels.jtokkit.api.Encoding;
+import com.knuddels.jtokkit.api.EncodingType;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import java.util.List;
 import java.util.stream.Collectors;
-import org.springframework.ai.tokenizer.JTokkitTokenCountEstimator;
 
 /**
  * Utility for estimating token counts of text and conversation messages.
  *
- * <p>Uses {@link JTokkitTokenCountEstimator} internally — no external configuration needed.
+ * <p>Uses jtokkit internally — no external configuration needed.
  */
 public final class TokenUtils {
 
-    private static final JTokkitTokenCountEstimator ESTIMATOR = new JTokkitTokenCountEstimator();
+    private static final Encoding ENCODING =
+            Encodings.newLazyEncodingRegistry().getEncoding(EncodingType.CL100K_BASE);
 
     private TokenUtils() {}
 
@@ -39,7 +42,7 @@ public final class TokenUtils {
         if (text == null || text.isBlank()) {
             return 0;
         }
-        return ESTIMATOR.estimate(text);
+        return ENCODING.countTokens(text);
     }
 
     /**
@@ -55,6 +58,6 @@ public final class TokenUtils {
             return 0;
         }
         var text = messages.stream().map(Message::textContent).collect(Collectors.joining("\n"));
-        return ESTIMATOR.estimate(text);
+        return ENCODING.countTokens(text);
     }
 }
