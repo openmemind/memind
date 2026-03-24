@@ -66,13 +66,14 @@ compress/
 
 ---
 
-## Task 1: Data Models (model/)
+## Task 1: Data Models and TokenEstimator Interface (model/, token/)
 
-Foundation types that everything else depends on. No logic, just records.
+Foundation types that everything else depends on. No logic, just records. Also includes `TokenEstimator` interface since `CompressContext` depends on it.
 
 **Files:**
 - Create: `compress/model/CompressLevel.java`
 - Create: `compress/model/BlockPriority.java`
+- Create: `compress/token/TokenEstimator.java` (interface only)
 - Create: `compress/model/CompressContext.java`
 - Create: `compress/model/CompressRequest.java`
 - Create: `compress/model/CompressResult.java`
@@ -115,21 +116,17 @@ Run: `mvn test -pl memind-core -Dtest="CompressLevelTest" -DfailIfNoTests=false`
 
 Test `estimateTokens()` delegates to `TokenEstimator`.
 
-- [ ] **Step 5: Implement CompressContext record**
+- [ ] **Step 5: Implement TokenEstimator interface and CompressContext record**
+
+Create `compress/token/TokenEstimator.java` as a single-method interface:
 
 ```java
-public record CompressContext(
-    TokenEstimator estimator,
-    CompressLevel level,
-    Map<String, Object> hints
-) {
-    public int estimateTokens(String text) {
-        return estimator.estimate(text);
-    }
+public interface TokenEstimator {
+    int estimate(String text);
 }
 ```
 
-Note: `TokenEstimator` interface doesn't exist yet — create a minimal version (just the interface) so this compiles. Full implementation in Task 3.
+Then implement `CompressContext` record per spec, referencing this interface.
 
 - [ ] **Step 6: Write tests for CompressRequest**
 
@@ -171,8 +168,9 @@ Run: `mvn test -pl memind-core -Dtest="com.openmemind.ai.memory.core.compress.mo
 
 ```bash
 git add memind-core/src/main/java/com/openmemind/ai/memory/core/compress/model/
+git add memind-core/src/main/java/com/openmemind/ai/memory/core/compress/token/TokenEstimator.java
 git add memind-core/src/test/java/com/openmemind/ai/memory/core/compress/model/
-git commit -m "feat(compress): add TokenKiller data models"
+git commit -m "feat(compress): add TokenKiller data models and TokenEstimator interface"
 ```
 
 ---
@@ -205,12 +203,13 @@ git commit -m "feat(compress): add CompressConfig with immutable modification"
 
 ---
 
-## Task 3: Token Estimation (token/)
+## Task 3: JtiktokenEstimator Implementation (token/)
 
 **Files:**
-- Create: `compress/token/TokenEstimator.java`
 - Create: `compress/token/JtiktokenEstimator.java`
 - Test: `compress/token/JtiktokenEstimatorTest.java`
+
+Note: `TokenEstimator` interface was already created in Task 1.
 
 - [ ] **Step 1: Write tests for JtiktokenEstimator**
 
@@ -235,9 +234,9 @@ class JtiktokenEstimatorTest {
 }
 ```
 
-- [ ] **Step 2: Implement TokenEstimator interface and JtiktokenEstimator**
+- [ ] **Step 2: Implement JtiktokenEstimator**
 
-`TokenEstimator` is a single-method interface. `JtiktokenEstimator` delegates to existing `TokenUtils.countTokens()`.
+Delegates to existing `TokenUtils.countTokens()`. Handles null/empty input.
 
 - [ ] **Step 3: Run tests**
 
@@ -260,8 +259,13 @@ The composable transformation primitives.
 **Files:**
 - Create: `compress/strategy/CompressAtom.java`
 - Create: `compress/strategy/Atoms.java`
+- Create: `compress/strategy/LanguageDetector.java`
+- Create: `compress/strategy/StateMachineConfig.java`
 - Test: `compress/strategy/CompressAtomTest.java`
-- Test: `compress/strategy/AtomsTest.java`
+- Test: `compress/strategy/AtomsGeneralTest.java`
+- Test: `compress/strategy/AtomsSpecializedTest.java`
+
+**Dependencies:** Task 1 (models + TokenEstimator interface)
 
 - [ ] **Step 1: Write tests for CompressAtom composition**
 
@@ -313,11 +317,21 @@ Each atom is a static factory method returning a `CompressAtom`. Implementation 
 
 - [ ] **Step 6: Run atoms tests**
 
-Run: `mvn test -pl memind-core -Dtest="AtomsTest"`
+Run: `mvn test -pl memind-core -Dtest="AtomsGeneralTest"`
+
+- [ ] **Step 6.5: Commit general-purpose atoms**
+
+```bash
+git add memind-core/src/main/java/com/openmemind/ai/memory/core/compress/strategy/CompressAtom.java
+git add memind-core/src/main/java/com/openmemind/ai/memory/core/compress/strategy/Atoms.java
+git add memind-core/src/test/java/com/openmemind/ai/memory/core/compress/strategy/CompressAtomTest.java
+git add memind-core/src/test/java/com/openmemind/ai/memory/core/compress/strategy/AtomsGeneralTest.java
+git commit -m "feat(compress): add CompressAtom interface and general-purpose atoms"
+```
 
 - [ ] **Step 7: Write tests for specialized atoms**
 
-Test `patternGroup()`, `errorExtract()`, `codeFold()`, `jsonSchema()`, `jsonCompact()`, `logNormalize()`, `treeCompact()`, `statsSummary()`, `ndjsonAggregate()`.
+Test `patternGroup()`, `errorExtract()`, `codeFold()`, `jsonSchema()`, `jsonCompact()`, `logNormalize()`, `treeCompact()`, `statsSummary()`, `ndjsonAggregate()`, `stateMachineParse()`.
 
 Use realistic test data for each (e.g., actual ESLint output for `patternGroup`, actual pytest output for `errorExtract`).
 
@@ -328,19 +342,32 @@ Key implementation notes:
 - `jsonSchema()`: Use Jackson `ObjectMapper` to parse JSON, recursively extract types.
 - `logNormalize()`: Regex patterns for timestamps, UUIDs, hex values, paths.
 - `statsSummary()`: Count lines, extract numeric patterns.
+- `stateMachineParse()`: Takes a `StateMachineConfig` record that defines state transitions. Create `StateMachineConfig` as:
+
+```java
+public record StateMachineConfig(
+    String headerPattern,       // regex to identify header section
+    String failurePattern,      // regex to identify failure lines
+    String summaryPattern       // regex to identify summary section
+) {
+    public static StateMachineConfig pytest() {
+        return new StateMachineConfig("^=+.*=+$", "^FAILED", "^=+.*=+$");
+    }
+}
+```
 
 - [ ] **Step 9: Run all atom tests**
 
-Run: `mvn test -pl memind-core -Dtest="AtomsTest"`
+Run: `mvn test -pl memind-core -Dtest="AtomsSpecializedTest"`
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 10: Commit specialized atoms**
 
 ```bash
-git add memind-core/src/main/java/com/openmemind/ai/memory/core/compress/strategy/CompressAtom.java
 git add memind-core/src/main/java/com/openmemind/ai/memory/core/compress/strategy/Atoms.java
 git add memind-core/src/main/java/com/openmemind/ai/memory/core/compress/strategy/LanguageDetector.java
-git add memind-core/src/test/java/com/openmemind/ai/memory/core/compress/strategy/
-git commit -m "feat(compress): add CompressAtom and built-in atoms"
+git add memind-core/src/main/java/com/openmemind/ai/memory/core/compress/strategy/StateMachineConfig.java
+git add memind-core/src/test/java/com/openmemind/ai/memory/core/compress/strategy/AtomsSpecializedTest.java
+git commit -m "feat(compress): add specialized atoms (codeFold, jsonSchema, stateMachine, etc.)"
 ```
 
 ---
@@ -382,6 +409,13 @@ Per spec. Constructor takes 4 strategy lists + fallback. All stored as immutable
 - [ ] **Step 7: Implement BuiltinStrategies**
 
 Register all 14 built-in strategies per spec table. Each uses `CompressStrategy.named().formatHint().detect().atoms().build()`.
+
+- [ ] **Step 7.5: Write tests for BuiltinStrategies**
+
+Create `BuiltinStrategiesTest.java`. For each of the 14 strategies, verify:
+- `name()` returns expected value
+- `supports(matchingContent, formatHint)` returns true
+- `supports(nonMatchingContent, null)` returns false
 
 - [ ] **Step 8: Run all strategy tests**
 
@@ -449,6 +483,14 @@ Test cost gate: content below threshold → passthrough. Test savings check: est
 
 Per spec. `supports()` always returns false (only used as explicit fallback). Cost gate logic in `compress()`. Guard against null/blank LLM response.
 
+Uses `ChatMessage` and `ChatRole` from `com.openmemind.ai.memory.core.llm` package. Define `SUMMARIZE_PROMPT` as a private constant:
+
+```java
+private static final String SUMMARIZE_PROMPT =
+    "Compress the following text to preserve all key information while minimizing token count. "
+    + "Remove redundancy, noise, and formatting. Output only the compressed result.";
+```
+
 - [ ] **Step 3: Run tests**
 
 Run: `mvn test -pl memind-core -Dtest="LlmSummarizeStrategyTest"`
@@ -473,7 +515,20 @@ git commit -m "feat(compress): add LLM fallback strategy with cost gate"
 - Test: `compress/strategy/declarative/RuleParserTest.java`
 - Test: `compress/strategy/declarative/RuleToStrategyConverterTest.java`
 
-- [ ] **Step 1: Write tests for RuleDefinition**
+- [ ] **Step 1: Add jackson-dataformat-yaml dependency to memind-core/pom.xml**
+
+Add to `memind-core/pom.xml` dependencies section:
+
+```xml
+<dependency>
+    <groupId>com.fasterxml.jackson.dataformat</groupId>
+    <artifactId>jackson-dataformat-yaml</artifactId>
+</dependency>
+```
+
+Version is managed by `memind-dependencies` BOM (Jackson version already declared there).
+
+- [ ] **Step 2: Write tests for RuleDefinition**
 
 Test record construction and sealed FilterStep variants.
 
@@ -487,7 +542,7 @@ Parse a YAML string into `List<RuleDefinition>`. Test all FilterStep types are p
 
 - [ ] **Step 4: Implement RuleParser**
 
-Use Jackson YAML (`jackson-dataformat-yaml` — check if already a dependency, if not add to `memind-core/pom.xml`). Parse YAML into `RuleDefinition` objects. Support classpath loading.
+Use Jackson YAML (`jackson-dataformat-yaml`). Parse YAML into `RuleDefinition` objects. `parseClasspath(String dir)` scans all `*.yml` files under the given classpath directory. Support both classpath and filesystem loading.
 
 - [ ] **Step 5: Write tests for RuleToStrategyConverter**
 
@@ -508,6 +563,7 @@ Run: `mvn test -pl memind-core -Dtest="com.openmemind.ai.memory.core.compress.st
 - [ ] **Step 9: Commit**
 
 ```bash
+git add memind-core/pom.xml
 git add memind-core/src/main/java/com/openmemind/ai/memory/core/compress/strategy/declarative/
 git add memind-core/src/test/java/com/openmemind/ai/memory/core/compress/strategy/declarative/
 git add memind-core/src/main/resources/compress-rules/
@@ -523,7 +579,9 @@ git commit -m "feat(compress): add declarative YAML rule engine"
 - Create: `compress/tracking/CompressTracker.java`
 - Create: `compress/tracking/CompressRecord.java`
 - Create: `compress/tracking/CompressStats.java`
+- Create: `compress/tracking/InMemoryCompressTracker.java`
 - Test: `compress/tee/CompressTeeTest.java`
+- Test: `compress/tracking/InMemoryCompressTrackerTest.java`
 
 - [ ] **Step 1: Write tests for CompressTee**
 
@@ -533,13 +591,17 @@ Test: content < 500 chars → not saved. Test: content >= 500 chars → saved to
 
 Per spec. File naming: `{epochMillis}_{label}.log`. Rotation deletes oldest files.
 
-- [ ] **Step 3: Implement tracking records and interface**
+- [ ] **Step 3: Implement tracking records, interface, and InMemoryCompressTracker**
 
-`CompressRecord` and `CompressStats` are records (no logic). `CompressTracker` is an interface with `record()`, `summary()`, `recent()`.
+`CompressRecord` and `CompressStats` are records. `CompressTracker` is an interface with `record()`, `summary()`, `recent()`. `InMemoryCompressTracker` is a simple in-memory implementation using `CopyOnWriteArrayList` for thread safety.
+
+- [ ] **Step 3.5: Write tests for InMemoryCompressTracker**
+
+Test `record()` stores records, `summary()` aggregates correctly, `recent(limit)` returns most recent N records.
 
 - [ ] **Step 4: Run tests**
 
-Run: `mvn test -pl memind-core -Dtest="CompressTeeTest"`
+Run: `mvn test -pl memind-core -Dtest="CompressTeeTest,InMemoryCompressTrackerTest"`
 
 - [ ] **Step 5: Commit**
 
@@ -635,12 +697,26 @@ git commit -m "feat(compress): add BudgetCompressPipeline with greedy allocation
 
 - [ ] **Step 1: Write tests for TokenKiller.create() (zero-config)**
 
+Use sufficiently long test data to exceed `minTokenThreshold` (50 tokens), or configure builder with `config(CompressConfig.defaults().withMinTokenThreshold(0))`:
+
 ```java
 @Test
 @DisplayName("create() returns working TokenKiller with built-in strategies")
 void createReturnsWorkingInstance() {
-    TokenKiller tk = TokenKiller.create();
-    StepVerifier.create(tk.compress("On branch main\nChanges not staged for commit:\n  modified: file.txt"))
+    TokenKiller tk = TokenKiller.builder()
+        .config(CompressConfig.defaults().withMinTokenThreshold(0))
+        .build();
+    String gitStatus = "On branch main\n"
+        + "Changes not staged for commit:\n"
+        + "  (use \"git add <file>...\" to update what will be committed)\n"
+        + "  (use \"git restore <file>...\" to discard changes in working directory)\n"
+        + "\tmodified:   src/main/java/App.java\n"
+        + "\tmodified:   src/main/java/Config.java\n"
+        + "\tmodified:   src/test/java/AppTest.java\n"
+        + "\nUntracked files:\n"
+        + "  (use \"git add <file>...\" to include in what will be committed)\n"
+        + "\tnew-feature.txt\n";
+    StepVerifier.create(tk.compress(gitStatus))
         .assertNext(result -> {
             assertThat(result.savedTokens()).isGreaterThan(0);
             assertThat(result.strategyUsed()).isEqualTo("git-status");
@@ -718,9 +794,6 @@ git commit -m "test(compress): add TokenKiller integration tests"
 
 ## Task 14: Build Verification and Cleanup
 
-**Files:**
-- Modify: `memind-core/pom.xml` (if jackson-dataformat-yaml needed)
-
 - [ ] **Step 1: Run full build with all checks**
 
 Run: `mvn clean verify -pl memind-core`
@@ -744,7 +817,8 @@ Expected: All tests pass, including existing tests (no regressions).
 - [ ] **Step 5: Commit any fixes**
 
 ```bash
-git add -A
+git add memind-core/src/main/java/com/openmemind/ai/memory/core/compress/
+git add memind-core/src/test/java/com/openmemind/ai/memory/core/compress/
 git commit -m "chore(compress): fix code style and build checks"
 ```
 
@@ -754,15 +828,15 @@ git commit -m "chore(compress): fix code style and build checks"
 
 | Task | Component | Dependencies | Estimated Steps |
 |------|-----------|-------------|-----------------|
-| 1 | Data Models | None | 15 |
+| 1 | Data Models + TokenEstimator interface | None | 15 |
 | 2 | CompressConfig | None | 4 |
-| 3 | Token Estimation | None | 4 |
-| 4 | CompressAtom + Atoms | Task 1, 3 | 10 |
-| 5 | CompressStrategy + Router | Task 4 | 9 |
+| 3 | JtiktokenEstimator | Task 1 | 4 |
+| 4 | CompressAtom + Atoms | Task 1 | 12 |
+| 5 | CompressStrategy + Router | Task 4 | 10 |
 | 6 | Content Detection | None | 4 |
 | 7 | LLM Fallback | Task 5 | 4 |
-| 8 | Declarative Rules | Task 4, 5 | 9 |
-| 9 | Tee + Tracking | Task 1 | 5 |
+| 8 | Declarative Rules | Task 4, 5 | 10 |
+| 9 | Tee + Tracking | Task 1 | 6 |
 | 10 | CompressPipeline | Task 5, 6, 9 | 4 |
 | 11 | BudgetCompressPipeline | Task 10 | 4 |
 | 12 | TokenKiller Facade | Task 10, 11 | 8 |
