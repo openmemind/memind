@@ -21,7 +21,6 @@ import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.extraction.rawdata.BoundaryDetectionPrompts;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -51,20 +50,21 @@ public class LlmContextCommitDetector implements ContextCommitDetector {
     }
 
     @Override
-    public Mono<CommitDecision> shouldCommit(List<Message> buffer, CommitDetectionContext context) {
-        if (buffer == null || buffer.isEmpty()) {
+    public Mono<CommitDecision> shouldCommit(CommitDetectionInput input) {
+        if (input == null || input.history().isEmpty() || input.incomingMessages().isEmpty()) {
             return Mono.just(CommitDecision.hold());
         }
+        List<Message> candidateWindow = input.candidateWindow();
 
-        if (buffer.size() >= config.maxMessages()) {
+        if (candidateWindow.size() >= config.maxMessages()) {
             log.debug(
-                    "L1 hard limit triggered: buffer.size()={} >= maxMessages={}",
-                    buffer.size(),
+                    "L1 hard limit triggered: candidateWindow.size()={} >= maxMessages={}",
+                    candidateWindow.size(),
                     config.maxMessages());
             return Mono.just(CommitDecision.commit(1.0, "hard_limit"));
         }
 
-        int tokens = TokenUtils.countTokens(buffer);
+        int tokens = TokenUtils.countTokens(candidateWindow);
         if (tokens >= config.maxTokens()) {
             log.debug(
                     "L1.5 token limit triggered: tokens={} >= maxTokens={}",
@@ -73,12 +73,13 @@ public class LlmContextCommitDetector implements ContextCommitDetector {
             return Mono.just(CommitDecision.commit(1.0, "token_limit"));
         }
 
-        boolean hasEnoughMessagesForLlm = buffer.size() >= config.minMessagesForLlm();
+        Duration timeGap = input.timeGap();
+        boolean hasEnoughMessagesForLlm = candidateWindow.size() >= config.minMessagesForLlm();
         if (!hasEnoughMessagesForLlm) {
-            if (hasTimeGap(buffer, FALLBACK_TIME_GAP)) {
+            if (hasTimeGap(timeGap, FALLBACK_TIME_GAP)) {
                 log.debug(
-                        "Time-gap fallback triggered before LLM threshold: gap between last two"
-                                + " messages exceeds {}",
+                        "Time-gap fallback triggered before LLM threshold: gap between history"
+                                + " and incoming messages exceeds {}",
                         FALLBACK_TIME_GAP);
                 return Mono.just(CommitDecision.commit(0.9, "time_gap"));
             }
@@ -86,9 +87,12 @@ public class LlmContextCommitDetector implements ContextCommitDetector {
         }
 
         if (structuredChatClient != null) {
-            log.debug("L3 LLM detection: buffer.size()={}", buffer.size());
-            var enrichedContext = new CommitDetectionContext(computeTimeGap(buffer));
-            return callLlm(buffer, enrichedContext)
+            log.debug(
+                    "L3 LLM detection: history.size()={}, incoming.size()={}",
+                    input.history().size(),
+                    input.incomingMessages().size());
+            var enrichedContext = new CommitDetectionContext(timeGap);
+            return callLlm(input, enrichedContext)
                     .onErrorResume(
                             e -> {
                                 log.warn(
@@ -99,9 +103,10 @@ public class LlmContextCommitDetector implements ContextCommitDetector {
                             });
         }
 
-        if (hasTimeGap(buffer, FALLBACK_TIME_GAP)) {
+        if (hasTimeGap(timeGap, FALLBACK_TIME_GAP)) {
             log.debug(
-                    "Time-gap fallback triggered: gap between last two messages exceeds {}",
+                    "Time-gap fallback triggered: gap between history and incoming messages"
+                            + " exceeds {}",
                     FALLBACK_TIME_GAP);
             return Mono.just(CommitDecision.commit(0.9, "time_gap"));
         }
@@ -109,8 +114,11 @@ public class LlmContextCommitDetector implements ContextCommitDetector {
         return Mono.just(CommitDecision.hold());
     }
 
-    protected Mono<CommitDecision> callLlm(List<Message> buffer, CommitDetectionContext context) {
-        var prompt = BoundaryDetectionPrompts.build(buffer, context).render(null);
+    protected Mono<CommitDecision> callLlm(
+            CommitDetectionInput input, CommitDetectionContext context) {
+        var prompt =
+                BoundaryDetectionPrompts.build(input.history(), input.incomingMessages(), context)
+                        .render(null);
         var messages = ChatMessages.systemUser(prompt.systemPrompt(), prompt.userPrompt());
         return structuredChatClient
                 .call(messages, LlmResponse.class)
@@ -128,17 +136,7 @@ public class LlmContextCommitDetector implements ContextCommitDetector {
                 : CommitDecision.hold();
     }
 
-    private Duration computeTimeGap(List<Message> buffer) {
-        if (buffer.size() < 2) {
-            return null;
-        }
-        Instant last = buffer.getLast().timestamp();
-        Instant prev = buffer.get(buffer.size() - 2).timestamp();
-        return (last == null || prev == null) ? null : Duration.between(prev, last);
-    }
-
-    private boolean hasTimeGap(List<Message> buffer, Duration threshold) {
-        Duration gap = computeTimeGap(buffer);
+    private boolean hasTimeGap(Duration gap, Duration threshold) {
         return gap != null && gap.compareTo(threshold) > 0;
     }
 

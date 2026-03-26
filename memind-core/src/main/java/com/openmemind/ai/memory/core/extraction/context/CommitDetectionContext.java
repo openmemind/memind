@@ -18,7 +18,8 @@ import java.time.Duration;
 /**
  * Boundary detection context
  *
- * @param lastTimeGap The time interval between the last two messages
+ * @param lastTimeGap The time interval between the last history message and the first incoming
+ *     message
  */
 public record CommitDetectionContext(Duration lastTimeGap) {
 

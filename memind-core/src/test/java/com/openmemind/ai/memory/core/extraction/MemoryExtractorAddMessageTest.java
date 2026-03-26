@@ -15,14 +15,14 @@ package com.openmemind.ai.memory.core.extraction;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.context.CommitDecision;
-import com.openmemind.ai.memory.core.extraction.context.CommitDetectionContext;
+import com.openmemind.ai.memory.core.extraction.context.CommitDetectionInput;
 import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
@@ -109,14 +109,36 @@ class MemoryExtractorAddMessageTest {
             Message msg = Message.user("How are you?");
             when(pendingBufferStore.load("user1:agent1")).thenReturn(new ArrayList<>());
             when(pendingBufferStore.loadMessageCount("user1:agent1")).thenReturn(0);
-            when(contextCommitDetector.shouldCommit(anyList(), any(CommitDetectionContext.class)))
-                    .thenReturn(Mono.just(CommitDecision.hold()));
 
             StepVerifier.create(extractor.addMessage(memoryId, msg, ExtractionConfig.defaults()))
                     .verifyComplete();
 
             verify(recentBufferStore).append("user1:agent1", msg);
             verify(pendingBufferStore).save("user1:agent1", List.of(msg));
+        }
+
+        @Test
+        @DisplayName("Pass history and current user message to boundary detector")
+        void passes_history_and_current_message_to_detector() {
+            Message existing = Message.assistant("Earlier detail");
+            Message current = Message.user("New question");
+            when(pendingBufferStore.load("user1:agent1")).thenReturn(List.of(existing));
+            when(pendingBufferStore.loadMessageCount("user1:agent1")).thenReturn(1);
+            when(contextCommitDetector.shouldCommit(any(CommitDetectionInput.class)))
+                    .thenReturn(Mono.just(CommitDecision.hold()));
+
+            StepVerifier.create(
+                            extractor.addMessage(memoryId, current, ExtractionConfig.defaults()))
+                    .verifyComplete();
+
+            verify(contextCommitDetector)
+                    .shouldCommit(
+                            argThat(
+                                    input ->
+                                            input.history().equals(List.of(existing))
+                                                    && input.incomingMessages()
+                                                            .equals(List.of(current))));
+            verify(pendingBufferStore).save("user1:agent1", List.of(existing, current));
         }
     }
 
@@ -143,7 +165,7 @@ class MemoryExtractorAddMessageTest {
                             unusedInsightStep(),
                             (mid, segment, type, contentId, metadata) ->
                                     Mono.just(RawDataResult.empty()),
-                            (messages, context) -> Mono.just(CommitDecision.commit(0.9, "test")),
+                            input -> Mono.just(CommitDecision.commit(0.9, "test")),
                             pendingStore,
                             recentStore);
 
@@ -187,7 +209,7 @@ class MemoryExtractorAddMessageTest {
                                                 }
                                                 return RawDataResult.empty();
                                             }),
-                            (messages, context) -> Mono.just(CommitDecision.commit(0.9, "test")),
+                            input -> Mono.just(CommitDecision.commit(0.9, "test")),
                             pendingStore,
                             recentStore);
 

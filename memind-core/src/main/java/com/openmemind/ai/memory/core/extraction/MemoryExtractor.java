@@ -17,6 +17,7 @@ import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.context.CommitDecision;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectionContext;
+import com.openmemind.ai.memory.core.extraction.context.CommitDetectionInput;
 import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
@@ -236,10 +237,19 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                                 }
 
                                 var snapshot = pendingConversationBuffer.load(bufferKey);
+                                if (snapshot.isEmpty()) {
+                                    appendToPendingBuffer(bufferKey, message);
+                                    return Optional.<PendingExtraction>empty();
+                                }
+
+                                var detectionInput =
+                                        new CommitDetectionInput(
+                                                snapshot,
+                                                List.of(message),
+                                                CommitDetectionContext.empty());
                                 var decision =
                                         contextCommitDetector
-                                                .shouldCommit(
-                                                        snapshot, CommitDetectionContext.empty())
+                                                .shouldCommit(detectionInput)
                                                 .defaultIfEmpty(CommitDecision.hold())
                                                 .block();
 

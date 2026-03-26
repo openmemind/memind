@@ -23,10 +23,10 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Boundary detection prompt construction — unique entry point.
+ * Boundary detection prompt construction.
  *
- * <p>Splits the message buffer into conversation_history and new_messages, combined with contextual
- * time interval information, to determine whether to seal the conversation boundary.
+ * <p>Renders explicit conversation history and new messages, combined with contextual time interval
+ * information, to determine whether to seal the conversation boundary.
  */
 public final class BoundaryDetectionPrompts {
 
@@ -207,18 +207,22 @@ public final class BoundaryDetectionPrompts {
     /**
      * Construct boundary detection prompt
      *
-     * @param buffer Message buffer (must contain at least 1 message)
+     * @param history Existing pending conversation history
+     * @param newMessages Newly arrived messages that may start a new topic
      * @param context Detection context
      * @return PromptTemplate ready to be rendered with a language
      */
-    public static PromptTemplate build(List<Message> buffer, CommitDetectionContext context) {
-        if (buffer == null || buffer.isEmpty()) {
-            throw new IllegalArgumentException("Message buffer cannot be null or empty");
+    public static PromptTemplate build(
+            List<Message> history, List<Message> newMessages, CommitDetectionContext context) {
+        if (history == null) {
+            throw new IllegalArgumentException("History cannot be null");
         }
-
-        int size = buffer.size();
-        List<Message> history = size > 1 ? buffer.subList(0, size - 1) : List.of();
-        List<Message> newMessages = buffer.subList(Math.max(0, size - 1), size);
+        if (newMessages == null || newMessages.isEmpty()) {
+            throw new IllegalArgumentException("New messages cannot be null or empty");
+        }
+        if (context == null) {
+            throw new IllegalArgumentException("Context cannot be null");
+        }
 
         String timeGapSection =
                 context.lastTimeGap() != null

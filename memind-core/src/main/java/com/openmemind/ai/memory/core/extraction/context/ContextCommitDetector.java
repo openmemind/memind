@@ -13,8 +13,6 @@
  */
 package com.openmemind.ai.memory.core.extraction.context;
 
-import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
-import java.util.List;
 import reactor.core.publisher.Mono;
 
 /**
@@ -27,9 +25,8 @@ public interface ContextCommitDetector {
     /**
      * Determines whether the current buffer should be sealed
      *
-     * @param buffer Current message buffer
-     * @param context Detection context
+     * @param input Explicit history plus incoming message window
      * @return Boundary detection decision
      */
-    Mono<CommitDecision> shouldCommit(List<Message> buffer, CommitDetectionContext context);
+    Mono<CommitDecision> shouldCommit(CommitDetectionInput input);
 }

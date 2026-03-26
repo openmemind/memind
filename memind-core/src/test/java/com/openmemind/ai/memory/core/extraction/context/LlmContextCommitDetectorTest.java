@@ -43,7 +43,7 @@ class LlmContextCommitDetectorTest {
 
         @Override
         protected Mono<CommitDecision> callLlm(
-                List<Message> buffer, CommitDetectionContext context) {
+                CommitDetectionInput input, CommitDetectionContext context) {
             return stubbedResult;
         }
     }
@@ -56,9 +56,13 @@ class LlmContextCommitDetectorTest {
         @DisplayName("Should seal when buffer reaches maxMessages")
         void shouldSealWhenBufferReachesMaxMessages() {
             var detector = new LlmContextCommitDetector(new CommitDetectorConfig(3, 8192, 2));
-            var buffer = List.of(Message.user("m0"), Message.assistant("m1"), Message.user("m2"));
+            var input =
+                    new CommitDetectionInput(
+                            List.of(Message.user("m0"), Message.assistant("m1")),
+                            List.of(Message.user("m2")),
+                            EMPTY_CONTEXT);
 
-            StepVerifier.create(detector.shouldCommit(buffer, EMPTY_CONTEXT))
+            StepVerifier.create(detector.shouldCommit(input))
                     .assertNext(
                             decision -> {
                                 assertThat(decision.shouldSeal()).isTrue();
@@ -79,13 +83,15 @@ class LlmContextCommitDetectorTest {
                     new StubLlmContextCommitDetector(
                             new CommitDetectorConfig(20, 8192, 3),
                             Mono.just(CommitDecision.commit(0.85, "topic_change")));
-            var buffer =
-                    List.of(
-                            Message.user("Let's talk about Java"),
-                            Message.assistant("Java is object oriented"),
-                            Message.user("Let's talk about Python"));
+            var input =
+                    new CommitDetectionInput(
+                            List.of(
+                                    Message.user("Let's talk about Java"),
+                                    Message.assistant("Java is object oriented")),
+                            List.of(Message.user("Let's talk about Python")),
+                            EMPTY_CONTEXT);
 
-            StepVerifier.create(detector.shouldCommit(buffer, EMPTY_CONTEXT))
+            StepVerifier.create(detector.shouldCommit(input))
                     .assertNext(
                             decision -> {
                                 assertThat(decision.shouldSeal()).isTrue();
@@ -102,13 +108,13 @@ class LlmContextCommitDetectorTest {
                     new StubLlmContextCommitDetector(
                             new CommitDetectorConfig(20, 8192, 2),
                             Mono.error(new RuntimeException("LLM unavailable")));
-            var buffer =
-                    List.of(
-                            Message.user("Hello"),
-                            Message.assistant("Hello!"),
-                            Message.user("Goodbye"));
+            var input =
+                    new CommitDetectionInput(
+                            List.of(Message.user("Hello"), Message.assistant("Hello!")),
+                            List.of(Message.user("Goodbye")),
+                            EMPTY_CONTEXT);
 
-            StepVerifier.create(detector.shouldCommit(buffer, EMPTY_CONTEXT))
+            StepVerifier.create(detector.shouldCommit(input))
                     .assertNext(decision -> assertThat(decision.shouldSeal()).isFalse())
                     .verifyComplete();
         }
@@ -122,12 +128,15 @@ class LlmContextCommitDetectorTest {
         @DisplayName("Should seal on long time gap when no LLM client is configured")
         void shouldSealOnLongTimeGapWhenNoLlmClientConfigured() {
             var detector = new LlmContextCommitDetector(new CommitDetectorConfig(20, 8192, 3));
-            var buffer =
-                    List.of(
-                            Message.user("Earlier", Instant.parse("2024-03-15T10:00:00Z")),
-                            Message.assistant("Later", Instant.parse("2024-03-15T10:45:00Z")));
+            var input =
+                    new CommitDetectionInput(
+                            List.of(Message.user("Earlier", Instant.parse("2024-03-15T10:00:00Z"))),
+                            List.of(
+                                    Message.assistant(
+                                            "Later", Instant.parse("2024-03-15T10:45:00Z"))),
+                            EMPTY_CONTEXT);
 
-            StepVerifier.create(detector.shouldCommit(buffer, EMPTY_CONTEXT))
+            StepVerifier.create(detector.shouldCommit(input))
                     .assertNext(
                             decision -> {
                                 assertThat(decision.shouldSeal()).isTrue();
