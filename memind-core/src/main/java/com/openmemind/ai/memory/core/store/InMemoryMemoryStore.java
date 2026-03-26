@@ -13,10 +13,6 @@
  */
 package com.openmemind.ai.memory.core.store;
 
-import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
-import com.openmemind.ai.memory.core.store.buffer.InMemoryConversationBuffer;
-import com.openmemind.ai.memory.core.store.buffer.InMemoryInsightBuffer;
-import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.store.insight.InMemoryInsightOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.InMemoryItemOperations;
@@ -32,8 +28,6 @@ public class InMemoryMemoryStore implements MemoryStore {
     private final RawDataOperations rawDataOperations = new InMemoryRawDataOperations();
     private final ItemOperations itemOperations = new InMemoryItemOperations();
     private final InsightOperations insightOperations = new InMemoryInsightOperations();
-    private final InsightBuffer insightBuffer = new InMemoryInsightBuffer();
-    private final ConversationBuffer conversationBuffer = new InMemoryConversationBuffer();
 
     @Override
     public RawDataOperations rawDataOperations() {
@@ -48,15 +42,5 @@ public class InMemoryMemoryStore implements MemoryStore {
     @Override
     public InsightOperations insightOperations() {
         return insightOperations;
-    }
-
-    @Override
-    public InsightBuffer insightBufferStore() {
-        return insightBuffer;
-    }
-
-    @Override
-    public ConversationBuffer conversationBufferStore() {
-        return conversationBuffer;
     }
 }

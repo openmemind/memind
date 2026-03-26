@@ -14,6 +14,7 @@
 package com.openmemind.ai.memory.plugin.jdbc;
 
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import javax.sql.DataSource;
 
@@ -23,6 +24,8 @@ import javax.sql.DataSource;
 public interface JdbcMemoryAccess extends AutoCloseable {
 
     MemoryStore store();
+
+    MemoryBuffer buffer();
 
     MemoryTextSearch textSearch();
 

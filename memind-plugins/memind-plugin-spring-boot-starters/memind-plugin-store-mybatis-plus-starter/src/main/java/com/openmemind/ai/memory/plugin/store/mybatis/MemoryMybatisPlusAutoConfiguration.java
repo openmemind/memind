@@ -23,6 +23,9 @@ import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerIntercept
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.buffer.InMemoryRecentConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.store.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
@@ -127,15 +130,26 @@ public class MemoryMybatisPlusAutoConfiguration {
     public MemoryStore memoryStore(
             RawDataOperations rawDataOperations,
             ItemOperations itemOperations,
-            InsightOperations insightOperations,
+            InsightOperations insightOperations) {
+        return MemoryStore.of(rawDataOperations, itemOperations, insightOperations);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(RecentConversationBuffer.class)
+    public RecentConversationBuffer recentConversationBuffer() {
+        return new InMemoryRecentConversationBuffer();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(MemoryBuffer.class)
+    public MemoryBuffer memoryBuffer(
             InsightBufferMapper insightBufferMapper,
-            ConversationBufferMapper conversationBufferMapper) {
-        return MemoryStore.of(
-                rawDataOperations,
-                itemOperations,
-                insightOperations,
+            ConversationBufferMapper conversationBufferMapper,
+            RecentConversationBuffer recentConversationBuffer) {
+        return MemoryBuffer.of(
                 new MybatisPlusInsightBuffer(insightBufferMapper),
-                new MybatisPlusConversationBuffer(conversationBufferMapper));
+                new MybatisPlusConversationBuffer(conversationBufferMapper),
+                recentConversationBuffer);
     }
 
     @Bean

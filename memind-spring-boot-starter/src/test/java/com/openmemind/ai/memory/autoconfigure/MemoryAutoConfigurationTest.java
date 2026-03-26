@@ -23,6 +23,8 @@ import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.InMemoryConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.InMemoryInsightBuffer;
 import com.openmemind.ai.memory.core.store.buffer.InMemoryRecentConversationBuffer;
 import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
@@ -119,10 +121,10 @@ class MemoryAutoConfigurationTest {
         }
 
         @Bean
-        MemoryBuffer memoryBuffer(MemoryStore memoryStore) {
+        MemoryBuffer memoryBuffer() {
             return MemoryBuffer.of(
-                    memoryStore.insightBufferStore(),
-                    memoryStore.conversationBufferStore(),
+                    new InMemoryInsightBuffer(),
+                    new InMemoryConversationBuffer(),
                     new InMemoryRecentConversationBuffer());
         }
 
@@ -161,10 +163,10 @@ class MemoryAutoConfigurationTest {
         }
 
         @Bean
-        MemoryBuffer memoryBuffer(MemoryStore memoryStore) {
+        MemoryBuffer memoryBuffer() {
             return MemoryBuffer.of(
-                    memoryStore.insightBufferStore(),
-                    memoryStore.conversationBufferStore(),
+                    new InMemoryInsightBuffer(),
+                    new InMemoryConversationBuffer(),
                     new InMemoryRecentConversationBuffer());
         }
     }

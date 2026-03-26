@@ -14,6 +14,9 @@
 package com.openmemind.ai.memory.plugin.jdbc.autoconfigure;
 
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.buffer.InMemoryRecentConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.store.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlInsightBuffer;
@@ -52,31 +55,49 @@ public class JdbcPluginAutoConfiguration {
         return switch (detectDialect(dataSource)) {
             case SQLITE -> {
                 var store = new SqliteMemoryStore(dataSource, createIfNotExist);
-                yield MemoryStore.of(
-                        store,
-                        store,
-                        store,
-                        new SqliteInsightBuffer(dataSource, createIfNotExist),
-                        new SqliteConversationBuffer(dataSource, createIfNotExist));
+                yield MemoryStore.of(store, store, store);
             }
             case MYSQL -> {
                 var store = new MysqlMemoryStore(dataSource, createIfNotExist);
-                yield MemoryStore.of(
-                        store,
-                        store,
-                        store,
-                        new MysqlInsightBuffer(dataSource, createIfNotExist),
-                        new MysqlConversationBuffer(dataSource, createIfNotExist));
+                yield MemoryStore.of(store, store, store);
             }
             case POSTGRESQL -> {
                 var store = new PostgresqlMemoryStore(dataSource, createIfNotExist);
-                yield MemoryStore.of(
-                        store,
-                        store,
-                        store,
-                        new PostgresqlInsightBuffer(dataSource, createIfNotExist),
-                        new PostgresqlConversationBuffer(dataSource, createIfNotExist));
+                yield MemoryStore.of(store, store, store);
             }
+        };
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(RecentConversationBuffer.class)
+    public RecentConversationBuffer recentConversationBuffer() {
+        return new InMemoryRecentConversationBuffer();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(MemoryBuffer.class)
+    public MemoryBuffer memoryBuffer(
+            DataSource dataSource,
+            Environment environment,
+            RecentConversationBuffer recentConversationBuffer) {
+        boolean createIfNotExist =
+                environment.getProperty("memind.store.init-schema", Boolean.class, true);
+        return switch (detectDialect(dataSource)) {
+            case SQLITE ->
+                    MemoryBuffer.of(
+                            new SqliteInsightBuffer(dataSource, createIfNotExist),
+                            new SqliteConversationBuffer(dataSource, createIfNotExist),
+                            recentConversationBuffer);
+            case MYSQL ->
+                    MemoryBuffer.of(
+                            new MysqlInsightBuffer(dataSource, createIfNotExist),
+                            new MysqlConversationBuffer(dataSource, createIfNotExist),
+                            recentConversationBuffer);
+            case POSTGRESQL ->
+                    MemoryBuffer.of(
+                            new PostgresqlInsightBuffer(dataSource, createIfNotExist),
+                            new PostgresqlConversationBuffer(dataSource, createIfNotExist),
+                            recentConversationBuffer);
         };
     }
 

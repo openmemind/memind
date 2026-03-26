@@ -52,14 +52,10 @@ class MemoryAssemblersTest {
     private static final InsightOperations INSIGHT_OPERATIONS = proxy(InsightOperations.class);
     private static final MemoryTextSearch TEXT_SEARCH = proxy(MemoryTextSearch.class);
     private static final InsightBuffer INSIGHT_BUFFER_STORE = proxy(InsightBuffer.class);
-    private static final InsightBuffer LEGACY_STORE_INSIGHT_BUFFER = proxy(InsightBuffer.class);
     private static final PendingConversationBuffer PENDING_CONVERSATION_BUFFER =
             proxy(PendingConversationBuffer.class);
     private static final RecentConversationBuffer RECENT_CONVERSATION_BUFFER =
             proxy(RecentConversationBuffer.class);
-    private static final com.openmemind.ai.memory.core.store.buffer.ConversationBuffer
-            LEGACY_STORE_CONVERSATION_BUFFER =
-                    proxy(com.openmemind.ai.memory.core.store.buffer.ConversationBuffer.class);
     private static final MemoryBuffer MEMORY_BUFFER =
             MemoryBuffer.of(
                     INSIGHT_BUFFER_STORE, PENDING_CONVERSATION_BUFFER, RECENT_CONVERSATION_BUFFER);
@@ -79,17 +75,6 @@ class MemoryAssemblersTest {
                 @Override
                 public InsightOperations insightOperations() {
                     return INSIGHT_OPERATIONS;
-                }
-
-                @Override
-                public InsightBuffer insightBufferStore() {
-                    return LEGACY_STORE_INSIGHT_BUFFER;
-                }
-
-                @Override
-                public com.openmemind.ai.memory.core.store.buffer.ConversationBuffer
-                        conversationBufferStore() {
-                    return LEGACY_STORE_CONVERSATION_BUFFER;
                 }
             };
 

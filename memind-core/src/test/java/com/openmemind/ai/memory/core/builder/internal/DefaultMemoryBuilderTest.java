@@ -257,8 +257,6 @@ class DefaultMemoryBuilderTest {
         private final RawDataOperations rawDataOperations;
         private final ItemOperations itemOperations;
         private final InsightOperations insightOperations;
-        private final InsightBuffer legacyInsightBuffer = proxy(InsightBuffer.class);
-        private final ConversationBuffer legacyConversationBuffer = proxy(ConversationBuffer.class);
         private final AtomicInteger closeCount;
 
         private FixedMemoryStore(
@@ -285,16 +283,6 @@ class DefaultMemoryBuilderTest {
         @Override
         public InsightOperations insightOperations() {
             return insightOperations;
-        }
-
-        @Override
-        public InsightBuffer insightBufferStore() {
-            return legacyInsightBuffer;
-        }
-
-        @Override
-        public ConversationBuffer conversationBufferStore() {
-            return legacyConversationBuffer;
         }
 
         @Override

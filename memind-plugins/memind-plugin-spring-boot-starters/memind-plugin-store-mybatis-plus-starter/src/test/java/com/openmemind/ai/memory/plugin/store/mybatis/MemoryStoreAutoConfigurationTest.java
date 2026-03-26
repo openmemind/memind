@@ -25,6 +25,7 @@ import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.plugin.store.mybatis.handler.DefaultDBFieldHandler;
 import com.openmemind.ai.memory.plugin.store.mybatis.schema.MemorySchemaAutoConfiguration;
@@ -73,12 +74,11 @@ class MemoryStoreAutoConfigurationTest {
                                 assertThat(context).hasNotFailed();
                                 assertThat(context).hasSingleBean(DataSource.class);
                                 assertThat(context).hasSingleBean(MemoryStore.class);
+                                assertThat(context).hasSingleBean(MemoryBuffer.class);
                                 MemoryStore memoryStore = context.getBean(MemoryStore.class);
                                 assertThat(memoryStore.rawDataOperations()).isNotNull();
                                 assertThat(memoryStore.itemOperations()).isNotNull();
                                 assertThat(memoryStore.insightOperations()).isNotNull();
-                                assertThat(memoryStore.insightBufferStore()).isNotNull();
-                                assertThat(memoryStore.conversationBufferStore()).isNotNull();
                                 assertThat(context).doesNotHaveBean(InsightBuffer.class);
                                 assertThat(context).doesNotHaveBean(ConversationBuffer.class);
                                 assertThat(context).hasSingleBean(MybatisPlusInterceptor.class);
@@ -129,8 +129,9 @@ class MemoryStoreAutoConfigurationTest {
                                 assertThat(context).hasNotFailed();
                                 context.getBean(DdlApplicationRunner.class)
                                         .run(new DefaultApplicationArguments(new String[0]));
-                                MemoryStore memoryStore = context.getBean(MemoryStore.class);
-                                var conversationBufferStore = memoryStore.conversationBufferStore();
+                                MemoryBuffer memoryBuffer = context.getBean(MemoryBuffer.class);
+                                var conversationBufferStore =
+                                        memoryBuffer.pendingConversationBuffer();
                                 var memoryId = new DefaultMemoryId("u1", "a1");
                                 String sessionId = memoryId.toIdentifier();
 

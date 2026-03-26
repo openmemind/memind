@@ -143,17 +143,6 @@ public class MemoryExtractionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean({MemoryStore.class, RecentConversationBuffer.class})
-    public MemoryBuffer memoryBuffer(
-            MemoryStore store, RecentConversationBuffer recentConversationBuffer) {
-        return MemoryBuffer.of(
-                store.insightBufferStore(),
-                store.conversationBufferStore(),
-                recentConversationBuffer);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
     @ConditionalOnBean(StructuredChatClient.class)
     public CaptionGenerator captionGenerator(StructuredChatClient structuredChatClient) {
         return new LlmConversationCaptionGenerator(structuredChatClient);
@@ -309,6 +298,7 @@ public class MemoryExtractionAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBean({
+        MemoryBuffer.class,
         InsightGenerator.class,
         InsightGroupClassifier.class,
         InsightGroupRouter.class,
@@ -355,7 +345,12 @@ public class MemoryExtractionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(MemoryExtractionPipeline.class)
-    @ConditionalOnBean({RawDataLayer.class, MemoryItemLayer.class, InsightLayer.class})
+    @ConditionalOnBean({
+        RawDataLayer.class,
+        MemoryItemLayer.class,
+        InsightLayer.class,
+        MemoryBuffer.class
+    })
     public MemoryExtractionPipeline memoryExtractor(
             RawDataLayer rawDataLayer,
             MemoryItemLayer memoryItemLayer,

@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteInsightBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryStore;
@@ -38,11 +39,12 @@ class JdbcStoreTest {
         JdbcMemoryAccess jdbc = JdbcStore.sqlite(tempDir.resolve("memind.db").toString());
 
         assertThat(jdbc.store()).isInstanceOf(MemoryStore.class);
+        assertThat(jdbc.buffer()).isInstanceOf(MemoryBuffer.class);
         assertThat(jdbc.store().rawDataOperations()).isInstanceOf(SqliteMemoryStore.class);
         assertThat(jdbc.store().itemOperations()).isInstanceOf(SqliteMemoryStore.class);
         assertThat(jdbc.store().insightOperations()).isInstanceOf(SqliteMemoryStore.class);
-        assertThat(jdbc.store().insightBufferStore()).isInstanceOf(SqliteInsightBuffer.class);
-        assertThat(jdbc.store().conversationBufferStore())
+        assertThat(jdbc.buffer().insightBuffer()).isInstanceOf(SqliteInsightBuffer.class);
+        assertThat(jdbc.buffer().pendingConversationBuffer())
                 .isInstanceOf(SqliteConversationBuffer.class);
         assertThat(jdbc.textSearch()).isInstanceOf(SqliteMemoryTextSearch.class);
     }

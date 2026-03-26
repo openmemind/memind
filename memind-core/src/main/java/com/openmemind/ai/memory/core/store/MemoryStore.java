@@ -13,8 +13,6 @@
  */
 package com.openmemind.ai.memory.core.store;
 
-import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
-import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
@@ -34,24 +32,16 @@ public interface MemoryStore extends AutoCloseable {
 
     InsightOperations insightOperations();
 
-    InsightBuffer insightBufferStore();
-
-    ConversationBuffer conversationBufferStore();
-
     @Override
     default void close() throws Exception {}
 
     static MemoryStore of(
             RawDataOperations rawDataOperations,
             ItemOperations itemOperations,
-            InsightOperations insightOperations,
-            InsightBuffer insightBuffer,
-            ConversationBuffer conversationBuffer) {
+            InsightOperations insightOperations) {
         Objects.requireNonNull(rawDataOperations, "rawDataOperations");
         Objects.requireNonNull(itemOperations, "itemOperations");
         Objects.requireNonNull(insightOperations, "insightOperations");
-        Objects.requireNonNull(insightBuffer, "insightBuffer");
-        Objects.requireNonNull(conversationBuffer, "conversationBuffer");
 
         return new MemoryStore() {
 
@@ -71,25 +61,10 @@ public interface MemoryStore extends AutoCloseable {
             }
 
             @Override
-            public InsightBuffer insightBufferStore() {
-                return insightBuffer;
-            }
-
-            @Override
-            public ConversationBuffer conversationBufferStore() {
-                return conversationBuffer;
-            }
-
-            @Override
             public void close() throws Exception {
                 RuntimeException closeFailure = null;
                 for (AutoCloseable closeable :
-                        uniqueCloseables(
-                                conversationBuffer,
-                                insightBuffer,
-                                rawDataOperations,
-                                itemOperations,
-                                insightOperations)) {
+                        uniqueCloseables(rawDataOperations, itemOperations, insightOperations)) {
                     try {
                         closeable.close();
                     } catch (Exception e) {

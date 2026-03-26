@@ -21,6 +21,7 @@ import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.textsearch.TextSearchResult;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryStore;
@@ -61,6 +62,7 @@ class JdbcPluginAutoConfigurationSqliteTest {
                         context -> {
                             assertThat(context).hasNotFailed();
                             assertThat(context).hasSingleBean(MemoryStore.class);
+                            assertThat(context).hasSingleBean(MemoryBuffer.class);
                             assertThat(context).hasSingleBean(MemoryTextSearch.class);
                             assertThat(context.getBean(MemoryTextSearch.class))
                                     .isInstanceOf(SqliteMemoryTextSearch.class);
@@ -69,6 +71,7 @@ class JdbcPluginAutoConfigurationSqliteTest {
 
                             DataSource dataSource = context.getBean(DataSource.class);
                             MemoryStore memoryStore = context.getBean(MemoryStore.class);
+                            MemoryBuffer memoryBuffer = context.getBean(MemoryBuffer.class);
                             assertThat(memoryStore.rawDataOperations())
                                     .isInstanceOf(SqliteMemoryStore.class);
                             assertThat(memoryStore.itemOperations())
@@ -113,7 +116,7 @@ class JdbcPluginAutoConfigurationSqliteTest {
                             assertThat(results.getFirst().documentId()).isEqualTo("1");
 
                             DefaultMemoryId memoryId = DefaultMemoryId.of("user-1", "agent-1");
-                            var insightBufferStore = memoryStore.insightBufferStore();
+                            var insightBufferStore = memoryBuffer.insightBuffer();
                             insightBufferStore.append(memoryId, "profile", List.of(101L, 102L));
                             insightBufferStore.assignGroup(
                                     memoryId, "profile", List.of(101L), "food");
@@ -126,7 +129,7 @@ class JdbcPluginAutoConfigurationSqliteTest {
                                     .extracting(entry -> entry.itemId())
                                     .containsExactly(101L);
 
-                            var conversationBufferStore = memoryStore.conversationBufferStore();
+                            var conversationBufferStore = memoryBuffer.pendingConversationBuffer();
                             String sessionId = memoryId.toIdentifier();
                             Message userMessage =
                                     Message.user(

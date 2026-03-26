@@ -14,6 +14,8 @@
 package com.openmemind.ai.memory.plugin.jdbc;
 
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.buffer.InMemoryRecentConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlInsightBuffer;
@@ -130,9 +132,14 @@ public final class JdbcStore {
                 var insightBufferStore = new SqliteInsightBuffer(dataSource, createIfNotExist);
                 var conversationBufferStore =
                         new SqliteConversationBuffer(dataSource, createIfNotExist);
+                var memoryBuffer =
+                        MemoryBuffer.of(
+                                insightBufferStore,
+                                conversationBufferStore,
+                                new InMemoryRecentConversationBuffer());
                 yield new DefaultJdbcMemoryAccess(
-                        MemoryStore.of(
-                                store, store, store, insightBufferStore, conversationBufferStore),
+                        MemoryStore.of(store, store, store),
+                        memoryBuffer,
                         new SqliteMemoryTextSearch(dataSource, createIfNotExist),
                         dataSource);
             }
@@ -141,9 +148,14 @@ public final class JdbcStore {
                 var insightBufferStore = new MysqlInsightBuffer(dataSource, createIfNotExist);
                 var conversationBufferStore =
                         new MysqlConversationBuffer(dataSource, createIfNotExist);
+                var memoryBuffer =
+                        MemoryBuffer.of(
+                                insightBufferStore,
+                                conversationBufferStore,
+                                new InMemoryRecentConversationBuffer());
                 yield new DefaultJdbcMemoryAccess(
-                        MemoryStore.of(
-                                store, store, store, insightBufferStore, conversationBufferStore),
+                        MemoryStore.of(store, store, store),
+                        memoryBuffer,
                         new MysqlMemoryTextSearch(dataSource, createIfNotExist),
                         dataSource);
             }
@@ -152,9 +164,14 @@ public final class JdbcStore {
                 var insightBufferStore = new PostgresqlInsightBuffer(dataSource, createIfNotExist);
                 var conversationBufferStore =
                         new PostgresqlConversationBuffer(dataSource, createIfNotExist);
+                var memoryBuffer =
+                        MemoryBuffer.of(
+                                insightBufferStore,
+                                conversationBufferStore,
+                                new InMemoryRecentConversationBuffer());
                 yield new DefaultJdbcMemoryAccess(
-                        MemoryStore.of(
-                                store, store, store, insightBufferStore, conversationBufferStore),
+                        MemoryStore.of(store, store, store),
+                        memoryBuffer,
                         new PostgresqlMemoryTextSearch(dataSource, createIfNotExist),
                         dataSource);
             }
@@ -175,11 +192,15 @@ public final class JdbcStore {
     }
 
     private record DefaultJdbcMemoryAccess(
-            MemoryStore store, MemoryTextSearch textSearch, DataSource dataSource)
+            MemoryStore store,
+            MemoryBuffer buffer,
+            MemoryTextSearch textSearch,
+            DataSource dataSource)
             implements JdbcMemoryAccess {
 
         private DefaultJdbcMemoryAccess {
             Objects.requireNonNull(store, "store");
+            Objects.requireNonNull(buffer, "buffer");
             Objects.requireNonNull(textSearch, "textSearch");
             Objects.requireNonNull(dataSource, "dataSource");
         }
@@ -187,7 +208,7 @@ public final class JdbcStore {
         @Override
         public void close() throws Exception {
             RuntimeException closeFailure = null;
-            for (AutoCloseable closeable : uniqueCloseables(textSearch, store)) {
+            for (AutoCloseable closeable : uniqueCloseables(textSearch, buffer, store)) {
                 try {
                     closeable.close();
                 } catch (Exception e) {
