@@ -40,6 +40,7 @@ class ContextRequestTest {
             assertThat(request.memoryId()).isEqualTo(memoryId);
             assertThat(request.maxTokens()).isEqualTo(80000);
             assertThat(request.includeMemories()).isTrue();
+            assertThat(request.recentMessageLimit()).isEqualTo(10);
             assertThat(request.strategy()).isEqualTo(RetrievalConfig.Strategy.SIMPLE);
         }
 
@@ -50,6 +51,7 @@ class ContextRequestTest {
 
             assertThat(request.strategy()).isEqualTo(RetrievalConfig.Strategy.DEEP);
             assertThat(request.includeMemories()).isTrue();
+            assertThat(request.recentMessageLimit()).isEqualTo(10);
         }
 
         @Test
@@ -58,6 +60,7 @@ class ContextRequestTest {
             var request = ContextRequest.bufferOnly(memoryId, 80000);
 
             assertThat(request.includeMemories()).isFalse();
+            assertThat(request.recentMessageLimit()).isEqualTo(10);
         }
     }
 
@@ -86,6 +89,21 @@ class ContextRequestTest {
         void rejects_negative_max_tokens() {
             assertThatThrownBy(() -> ContextRequest.of(memoryId, -1))
                     .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
+        @DisplayName("Rejects non-positive recentMessageLimit")
+        void rejects_non_positive_recent_message_limit() {
+            assertThatThrownBy(
+                            () ->
+                                    new ContextRequest(
+                                            memoryId,
+                                            100,
+                                            true,
+                                            RetrievalConfig.Strategy.SIMPLE,
+                                            0))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("recentMessageLimit");
         }
     }
 }

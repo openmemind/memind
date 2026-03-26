@@ -24,17 +24,24 @@ import java.util.Objects;
  * @param maxTokens        maximum token budget for the assembled context window
  * @param includeMemories  whether to retrieve relevant memories via vector search
  * @param strategy         retrieval strategy to use when {@code includeMemories} is true
+ * @param recentMessageLimit maximum number of recent conversation messages to load
  */
 public record ContextRequest(
         MemoryId memoryId,
         int maxTokens,
         boolean includeMemories,
-        RetrievalConfig.Strategy strategy) {
+        RetrievalConfig.Strategy strategy,
+        int recentMessageLimit) {
+
+    private static final int DEFAULT_RECENT_MESSAGE_LIMIT = 10;
 
     public ContextRequest {
         Objects.requireNonNull(memoryId, "memoryId is required");
         if (maxTokens <= 0) {
             throw new IllegalArgumentException("maxTokens must be positive");
+        }
+        if (recentMessageLimit <= 0) {
+            throw new IllegalArgumentException("recentMessageLimit must be positive");
         }
     }
 
@@ -46,7 +53,12 @@ public record ContextRequest(
      * @return context request with memory retrieval enabled
      */
     public static ContextRequest of(MemoryId memoryId, int maxTokens) {
-        return new ContextRequest(memoryId, maxTokens, true, RetrievalConfig.Strategy.SIMPLE);
+        return new ContextRequest(
+                memoryId,
+                maxTokens,
+                true,
+                RetrievalConfig.Strategy.SIMPLE,
+                DEFAULT_RECENT_MESSAGE_LIMIT);
     }
 
     /**
@@ -59,7 +71,8 @@ public record ContextRequest(
      */
     public static ContextRequest of(
             MemoryId memoryId, int maxTokens, RetrievalConfig.Strategy strategy) {
-        return new ContextRequest(memoryId, maxTokens, true, strategy);
+        return new ContextRequest(
+                memoryId, maxTokens, true, strategy, DEFAULT_RECENT_MESSAGE_LIMIT);
     }
 
     /**
@@ -70,6 +83,11 @@ public record ContextRequest(
      * @return context request with memory retrieval disabled
      */
     public static ContextRequest bufferOnly(MemoryId memoryId, int maxTokens) {
-        return new ContextRequest(memoryId, maxTokens, false, RetrievalConfig.Strategy.SIMPLE);
+        return new ContextRequest(
+                memoryId,
+                maxTokens,
+                false,
+                RetrievalConfig.Strategy.SIMPLE,
+                DEFAULT_RECENT_MESSAGE_LIMIT);
     }
 }
