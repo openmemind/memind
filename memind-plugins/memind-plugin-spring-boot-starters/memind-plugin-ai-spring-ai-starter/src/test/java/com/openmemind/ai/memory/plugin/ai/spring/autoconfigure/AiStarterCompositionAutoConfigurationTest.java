@@ -25,6 +25,10 @@ import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.buffer.InMemoryConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.InMemoryInsightBuffer;
+import com.openmemind.ai.memory.core.store.buffer.InMemoryRecentConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import com.openmemind.ai.memory.plugin.ai.spring.SpringAiMemoryVector;
 import com.openmemind.ai.memory.plugin.ai.spring.SpringAiStructuredChatClient;
@@ -49,7 +53,9 @@ class AiStarterCompositionAutoConfigurationTest {
                             "memind.vector.store-path=/tmp/memind-starter-composition-vector-store.json");
 
     @Test
-    @DisplayName("Base starter plus AI starter wires the expected top-level beans")
+    @DisplayName(
+            "Base starter plus AI starter wires the expected top-level beans when memory buffer is"
+                    + " present")
     void baseStarterPlusAiStarterWiresExpectedBeans() {
         contextRunner
                 .withUserConfiguration(AiPrerequisitesConfig.class)
@@ -73,6 +79,26 @@ class AiStarterCompositionAutoConfigurationTest {
     }
 
     @Test
+    @DisplayName(
+            "Base starter plus AI starter backs off from extraction and memory beans when memory"
+                    + " buffer is missing")
+    void baseStarterPlusAiStarterBacksOffWithoutMemoryBuffer() {
+        contextRunner
+                .withUserConfiguration(AiProviderOnlyConfig.class)
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+                            assertThat(context).hasSingleBean(StructuredChatClient.class);
+                            assertThat(context).hasSingleBean(MemoryVector.class);
+                            assertThat(context).hasSingleBean(MemoryRetriever.class);
+                            assertThat(context.getBean(MemoryRetriever.class))
+                                    .isInstanceOf(DefaultMemoryRetriever.class);
+                            assertThat(context).doesNotHaveBean(MemoryExtractionPipeline.class);
+                            assertThat(context).doesNotHaveBean(Memory.class);
+                        });
+    }
+
+    @Test
     @DisplayName("Base starter plus AI starter backs off cleanly without Spring AI provider beans")
     void baseStarterPlusAiStarterBacksOffWithoutProviderBeans() {
         contextRunner
@@ -90,6 +116,34 @@ class AiStarterCompositionAutoConfigurationTest {
 
     @Configuration
     static class AiPrerequisitesConfig {
+        @Bean
+        MemoryStore memoryStore() {
+            return new InMemoryMemoryStore();
+        }
+
+        @Bean
+        MemoryBuffer memoryBuffer() {
+            return MemoryBuffer.of(
+                    new InMemoryInsightBuffer(),
+                    new InMemoryConversationBuffer(),
+                    new InMemoryRecentConversationBuffer());
+        }
+
+        @Bean
+        EmbeddingModel embeddingModel() {
+            return mock(EmbeddingModel.class);
+        }
+
+        @Bean
+        ChatClient.Builder chatClientBuilder() {
+            var builder = mock(ChatClient.Builder.class);
+            when(builder.build()).thenReturn(mock(ChatClient.class));
+            return builder;
+        }
+    }
+
+    @Configuration
+    static class AiProviderOnlyConfig {
         @Bean
         MemoryStore memoryStore() {
             return new InMemoryMemoryStore();
