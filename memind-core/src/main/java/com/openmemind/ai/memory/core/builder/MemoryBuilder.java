@@ -17,6 +17,7 @@ import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 
@@ -28,6 +29,8 @@ public interface MemoryBuilder {
     MemoryBuilder chatClient(StructuredChatClient chatClient);
 
     MemoryBuilder store(MemoryStore store);
+
+    MemoryBuilder buffer(MemoryBuffer buffer);
 
     MemoryBuilder textSearch(MemoryTextSearch textSearch);
 

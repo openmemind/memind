@@ -18,6 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
+import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
+import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
@@ -27,8 +29,10 @@ import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
 import com.openmemind.ai.memory.core.store.MemoryStore;
-import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.store.buffer.PendingConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
@@ -48,8 +52,17 @@ class MemoryAssemblersTest {
     private static final InsightOperations INSIGHT_OPERATIONS = proxy(InsightOperations.class);
     private static final MemoryTextSearch TEXT_SEARCH = proxy(MemoryTextSearch.class);
     private static final InsightBuffer INSIGHT_BUFFER_STORE = proxy(InsightBuffer.class);
-    private static final ConversationBuffer CONVERSATION_BUFFER_STORE =
-            proxy(ConversationBuffer.class);
+    private static final InsightBuffer LEGACY_STORE_INSIGHT_BUFFER = proxy(InsightBuffer.class);
+    private static final PendingConversationBuffer PENDING_CONVERSATION_BUFFER =
+            proxy(PendingConversationBuffer.class);
+    private static final RecentConversationBuffer RECENT_CONVERSATION_BUFFER =
+            proxy(RecentConversationBuffer.class);
+    private static final com.openmemind.ai.memory.core.store.buffer.ConversationBuffer
+            LEGACY_STORE_CONVERSATION_BUFFER =
+                    proxy(com.openmemind.ai.memory.core.store.buffer.ConversationBuffer.class);
+    private static final MemoryBuffer MEMORY_BUFFER =
+            MemoryBuffer.of(
+                    INSIGHT_BUFFER_STORE, PENDING_CONVERSATION_BUFFER, RECENT_CONVERSATION_BUFFER);
     private static final MemoryVector MEMORY_VECTOR = proxy(MemoryVector.class);
     private static final MemoryStore MEMORY_STORE =
             new MemoryStore() {
@@ -70,29 +83,32 @@ class MemoryAssemblersTest {
 
                 @Override
                 public InsightBuffer insightBufferStore() {
-                    return INSIGHT_BUFFER_STORE;
+                    return LEGACY_STORE_INSIGHT_BUFFER;
                 }
 
                 @Override
-                public ConversationBuffer conversationBufferStore() {
-                    return CONVERSATION_BUFFER_STORE;
+                public com.openmemind.ai.memory.core.store.buffer.ConversationBuffer
+                        conversationBufferStore() {
+                    return LEGACY_STORE_CONVERSATION_BUFFER;
                 }
             };
 
     @Test
-    void extractionAssemblerUsesUnifiedStoreBuffersAndBoundaryOptions() {
+    void extractionAssemblerUsesMemoryBufferAndBoundaryOptions() {
         CommitDetectorConfig boundaryDetector = new CommitDetectorConfig(6, 2048, 4);
         MemoryAssemblyContext context =
                 new MemoryAssemblyContext(
                         CHAT_CLIENT,
                         MEMORY_STORE,
+                        MEMORY_BUFFER,
                         TEXT_SEARCH,
                         MEMORY_VECTOR,
                         new NoopReranker(),
                         MemoryBuildOptions.builder().boundaryDetector(boundaryDetector).build());
 
-        MemoryExtractor extractor =
-                (MemoryExtractor) new MemoryExtractionAssembler().assemble(context).pipeline();
+        MemoryExtractionAssembly assembly = new MemoryExtractionAssembler().assemble(context);
+        MemoryExtractor extractor = (MemoryExtractor) assembly.pipeline();
+        InsightLayer insightLayer = assembly.insightLayer();
 
         RawDataLayer rawDataLayer = readField(extractor, "rawDataStep", RawDataLayer.class);
         CaptionGenerator defaultCaptionGenerator =
@@ -105,15 +121,19 @@ class MemoryAssemblersTest {
                 readField(conversationProcessor, "captionGenerator", CaptionGenerator.class);
         LlmContextCommitDetector actualBoundaryDetector =
                 readField(extractor, "contextCommitDetector", LlmContextCommitDetector.class);
+        InsightBuildScheduler scheduler =
+                readField(insightLayer, "scheduler", InsightBuildScheduler.class);
         MemoryStore rawDataStore = readField(rawDataLayer, "memoryStore", MemoryStore.class);
-        ConversationBuffer conversationBuffer =
-                readField(extractor, "conversationBuffer", ConversationBuffer.class);
+        PendingConversationBuffer pendingConversationBuffer =
+                readField(extractor, "pendingConversationBuffer", PendingConversationBuffer.class);
+        InsightBuffer insightBuffer = readField(scheduler, "bufferStore", InsightBuffer.class);
 
         assertThat(processorCaptionGenerator).isSameAs(defaultCaptionGenerator);
         assertThat(readField(actualBoundaryDetector, "config", CommitDetectorConfig.class))
                 .isEqualTo(boundaryDetector);
         assertThat(rawDataStore).isSameAs(MEMORY_STORE);
-        assertThat(conversationBuffer).isSameAs(CONVERSATION_BUFFER_STORE);
+        assertThat(pendingConversationBuffer).isSameAs(PENDING_CONVERSATION_BUFFER);
+        assertThat(insightBuffer).isSameAs(INSIGHT_BUFFER_STORE);
     }
 
     @Test
@@ -122,6 +142,7 @@ class MemoryAssemblersTest {
                 new MemoryAssemblyContext(
                         CHAT_CLIENT,
                         MEMORY_STORE,
+                        MEMORY_BUFFER,
                         TEXT_SEARCH,
                         MEMORY_VECTOR,
                         new NoopReranker(),

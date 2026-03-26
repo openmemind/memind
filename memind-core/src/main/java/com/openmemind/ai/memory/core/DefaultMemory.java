@@ -34,11 +34,15 @@ import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
-import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.store.buffer.PendingConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -62,6 +66,7 @@ public class DefaultMemory implements Memory {
     private final MemoryExtractionPipeline extractor;
     private final MemoryRetriever retriever;
     private final MemoryStore memoryStore;
+    private final MemoryBuffer memoryBuffer;
     private final MemoryVector vector;
     private final ToolStatsService toolStatsService;
     private final InsightLayer insightLayer;
@@ -72,15 +77,17 @@ public class DefaultMemory implements Memory {
             MemoryExtractionPipeline extractor,
             MemoryRetriever retriever,
             MemoryStore memoryStore,
+            MemoryBuffer memoryBuffer,
             MemoryVector vector,
             ToolStatsService toolStatsService) {
-        this(extractor, retriever, memoryStore, vector, toolStatsService, null, null);
+        this(extractor, retriever, memoryStore, memoryBuffer, vector, toolStatsService, null, null);
     }
 
     public DefaultMemory(
             MemoryExtractionPipeline extractor,
             MemoryRetriever retriever,
             MemoryStore memoryStore,
+            MemoryBuffer memoryBuffer,
             MemoryVector vector,
             ToolStatsService toolStatsService,
             InsightLayer insightLayer,
@@ -88,6 +95,7 @@ public class DefaultMemory implements Memory {
         this.extractor = Objects.requireNonNull(extractor, "extractor must not be null");
         this.retriever = Objects.requireNonNull(retriever, "retriever must not be null");
         this.memoryStore = Objects.requireNonNull(memoryStore, "memoryStore must not be null");
+        this.memoryBuffer = Objects.requireNonNull(memoryBuffer, "memoryBuffer must not be null");
         this.vector = Objects.requireNonNull(vector, "vector must not be null");
         this.toolStatsService =
                 Objects.requireNonNull(toolStatsService, "toolStatsService must not be null");
@@ -139,9 +147,13 @@ public class DefaultMemory implements Memory {
     public Mono<ContextWindow> getContext(ContextRequest request) {
         Objects.requireNonNull(request, "request is required");
 
-        ConversationBuffer buffer = memoryStore.conversationBufferStore();
+        RecentConversationBuffer recentConversationBuffer = memoryBuffer.recentConversationBuffer();
         var bufferKey = request.memoryId().toIdentifier();
-        List<Message> messages = List.copyOf(buffer.load(bufferKey));
+        List<Message> messages =
+                trimRecentMessages(
+                        recentConversationBuffer.loadRecent(
+                                bufferKey, request.recentMessageLimit()),
+                        request.maxTokens());
         int bufferTokens = TokenUtils.countTokens(messages);
 
         if (!request.includeMemories() || messages.isEmpty()) {
@@ -169,9 +181,10 @@ public class DefaultMemory implements Memory {
         Objects.requireNonNull(memoryId, "memoryId is required");
         Objects.requireNonNull(config, "config is required");
 
-        ConversationBuffer buffer = memoryStore.conversationBufferStore();
+        PendingConversationBuffer pendingConversationBuffer =
+                memoryBuffer.pendingConversationBuffer();
         var bufferKey = memoryId.toIdentifier();
-        List<Message> messages = List.copyOf(buffer.drain(bufferKey));
+        List<Message> messages = List.copyOf(pendingConversationBuffer.drain(bufferKey));
 
         if (messages.isEmpty()) {
             return Mono.just(
@@ -193,6 +206,30 @@ public class DefaultMemory implements Memory {
                 .map(Message::textContent)
                 .filter(t -> t != null && !t.isBlank())
                 .collect(Collectors.joining(" "));
+    }
+
+    private static List<Message> trimRecentMessages(List<Message> messages, int maxTokens) {
+        if (messages == null || messages.isEmpty()) {
+            return List.of();
+        }
+        if (TokenUtils.countTokens(messages) <= maxTokens) {
+            return List.copyOf(messages);
+        }
+
+        List<Message> retained = new ArrayList<>();
+        int totalTokens = 0;
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            Message message = messages.get(i);
+            int messageTokens = TokenUtils.countTokens(List.of(message));
+            if (!retained.isEmpty() && totalTokens + messageTokens > maxTokens) {
+                break;
+            }
+            retained.add(message);
+            totalTokens += messageTokens;
+        }
+
+        Collections.reverse(retained);
+        return List.copyOf(retained);
     }
 
     // ===== Memory retrieval =====

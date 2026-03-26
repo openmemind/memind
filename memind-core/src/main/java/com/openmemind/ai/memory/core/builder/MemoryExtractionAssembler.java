@@ -94,7 +94,7 @@ final class MemoryExtractionAssembler {
         InsightGroupRouter insightGroupRouter = new InsightGroupRouter(insightGroupClassifier);
         InsightBuildScheduler insightBuildScheduler =
                 new InsightBuildScheduler(
-                        context.insightBufferStore(),
+                        context.insightBuffer(),
                         context.memoryStore(),
                         insightGenerator,
                         insightGroupClassifier,
@@ -119,7 +119,7 @@ final class MemoryExtractionAssembler {
                         insightLayer,
                         rawDataLayer,
                         contextCommitDetector,
-                        context.conversationBufferStore());
+                        context.pendingConversationBuffer());
         return new MemoryExtractionAssembly(pipeline, insightLayer, insightBuildScheduler);
     }
 

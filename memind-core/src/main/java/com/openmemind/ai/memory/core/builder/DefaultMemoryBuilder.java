@@ -21,6 +21,7 @@ import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.stats.DefaultToolStatsService;
 import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.util.ArrayList;
@@ -32,6 +33,7 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
 
     private StructuredChatClient chatClient;
     private MemoryStore store;
+    private MemoryBuffer buffer;
     private MemoryTextSearch textSearch;
     private MemoryVector vector;
     private Reranker reranker = new NoopReranker();
@@ -46,6 +48,12 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     @Override
     public MemoryBuilder store(MemoryStore store) {
         this.store = Objects.requireNonNull(store, "store");
+        return this;
+    }
+
+    @Override
+    public MemoryBuilder buffer(MemoryBuffer buffer) {
+        this.buffer = Objects.requireNonNull(buffer, "buffer");
         return this;
     }
 
@@ -78,7 +86,8 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
         validateRequiredComponents();
 
         MemoryAssemblyContext context =
-                new MemoryAssemblyContext(chatClient, store, textSearch, vector, reranker, options);
+                new MemoryAssemblyContext(
+                        chatClient, store, buffer, textSearch, vector, reranker, options);
         MemoryExtractionAssembly extractionAssembly =
                 new MemoryExtractionAssembler().assemble(context);
         var memoryRetriever = new MemoryRetrievalAssembler().assemble(context);
@@ -87,15 +96,17 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
                 extractionAssembly.pipeline(),
                 memoryRetriever,
                 context.memoryStore(),
+                context.memoryBuffer(),
                 context.memoryVector(),
                 toolStatsService,
                 extractionAssembly.insightLayer(),
                 lifecycle(
-                        extractionAssembly.lifecycle(),
-                        context.memoryStore(),
+                        context.memoryVector(),
                         context.textSearch(),
                         context.chatClient(),
-                        context.memoryVector()));
+                        context.memoryStore(),
+                        context.memoryBuffer(),
+                        extractionAssembly.lifecycle()));
     }
 
     MemoryBuildOptions buildOptions() {
@@ -109,24 +120,16 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
         if (store == null) {
             throw new IllegalStateException("Missing required store");
         }
+        if (buffer == null) {
+            throw new IllegalStateException("Missing required buffer");
+        }
         if (vector == null) {
             throw new IllegalStateException("Missing required vector");
         }
     }
 
-    private AutoCloseable lifecycle(
-            AutoCloseable extractionLifecycle,
-            MemoryStore memoryStore,
-            MemoryTextSearch memoryTextSearch,
-            StructuredChatClient structuredChatClient,
-            MemoryVector memoryVector) {
-        List<AutoCloseable> closeables =
-                uniqueCloseables(
-                        extractionLifecycle,
-                        autoCloseable(memoryVector),
-                        autoCloseable(memoryTextSearch),
-                        autoCloseable(structuredChatClient),
-                        memoryStore);
+    private AutoCloseable lifecycle(Object... candidates) {
+        List<AutoCloseable> closeables = uniqueCloseables(candidates);
 
         return () -> {
             RuntimeException closeFailure = null;
@@ -152,10 +155,11 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
         return candidate instanceof AutoCloseable closeable ? closeable : null;
     }
 
-    private static List<AutoCloseable> uniqueCloseables(AutoCloseable... closeables) {
+    private static List<AutoCloseable> uniqueCloseables(Object... candidates) {
         List<AutoCloseable> ordered = new ArrayList<>();
         IdentityHashMap<AutoCloseable, Boolean> seen = new IdentityHashMap<>();
-        for (AutoCloseable closeable : closeables) {
+        for (Object candidate : candidates) {
+            AutoCloseable closeable = autoCloseable(candidate);
             if (closeable != null && seen.put(closeable, Boolean.TRUE) == null) {
                 ordered.add(closeable);
             }

@@ -32,6 +32,8 @@ import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.store.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
@@ -54,14 +56,16 @@ class DefaultMemoryBuilderTest {
     private static final InsightBuffer INSIGHT_BUFFER_STORE = proxy(InsightBuffer.class);
     private static final ConversationBuffer CONVERSATION_BUFFER_STORE =
             proxy(ConversationBuffer.class);
+    private static final RecentConversationBuffer RECENT_CONVERSATION_BUFFER =
+            proxy(RecentConversationBuffer.class);
     private static final MemoryVector MEMORY_VECTOR = proxy(MemoryVector.class);
     private static final MemoryStore MEMORY_STORE =
-            new FixedMemoryStore(
-                    RAW_DATA_OPERATIONS,
-                    ITEM_OPERATIONS,
-                    INSIGHT_OPERATIONS,
+            new FixedMemoryStore(RAW_DATA_OPERATIONS, ITEM_OPERATIONS, INSIGHT_OPERATIONS, null);
+    private static final MemoryBuffer MEMORY_BUFFER =
+            new FixedMemoryBuffer(
                     INSIGHT_BUFFER_STORE,
                     CONVERSATION_BUFFER_STORE,
+                    RECENT_CONVERSATION_BUFFER,
                     null);
 
     @Test
@@ -78,15 +82,39 @@ class DefaultMemoryBuilderTest {
 
     @Test
     void buildFailsWhenStoreIsMissing() {
-        assertThatThrownBy(() -> Memory.builder().chatClient(CHAT_CLIENT).build())
+        assertThatThrownBy(
+                        () ->
+                                Memory.builder()
+                                        .chatClient(CHAT_CLIENT)
+                                        .buffer(MEMORY_BUFFER)
+                                        .vector(MEMORY_VECTOR)
+                                        .build())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("store");
     }
 
     @Test
+    void buildFailsWhenBufferIsMissing() {
+        assertThatThrownBy(
+                        () ->
+                                Memory.builder()
+                                        .chatClient(CHAT_CLIENT)
+                                        .store(MEMORY_STORE)
+                                        .vector(MEMORY_VECTOR)
+                                        .build())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("buffer");
+    }
+
+    @Test
     void buildFailsWhenVectorIsMissing() {
         assertThatThrownBy(
-                        () -> Memory.builder().chatClient(CHAT_CLIENT).store(MEMORY_STORE).build())
+                        () ->
+                                Memory.builder()
+                                        .chatClient(CHAT_CLIENT)
+                                        .store(MEMORY_STORE)
+                                        .buffer(MEMORY_BUFFER)
+                                        .build())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("vector");
     }
@@ -97,6 +125,7 @@ class DefaultMemoryBuilderTest {
                 Memory.builder()
                         .chatClient(CHAT_CLIENT)
                         .store(MEMORY_STORE)
+                        .buffer(MEMORY_BUFFER)
                         .vector(MEMORY_VECTOR)
                         .build();
 
@@ -110,6 +139,7 @@ class DefaultMemoryBuilderTest {
                         Memory.builder()
                                 .chatClient(CHAT_CLIENT)
                                 .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
                                 .vector(MEMORY_VECTOR)
                                 .build();
 
@@ -136,6 +166,7 @@ class DefaultMemoryBuilderTest {
                         Memory.builder()
                                 .chatClient(CHAT_CLIENT)
                                 .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
                                 .vector(MEMORY_VECTOR)
                                 .options(
                                         MemoryBuildOptions.builder()
@@ -159,40 +190,45 @@ class DefaultMemoryBuilderTest {
     }
 
     @Test
-    void buildUsesUnifiedStoreSubcomponents() {
+    void buildUsesStoreAndBufferSubcomponents() {
         DefaultMemory memory =
                 (DefaultMemory)
                         Memory.builder()
                                 .chatClient(CHAT_CLIENT)
                                 .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
                                 .vector(MEMORY_VECTOR)
                                 .build();
 
         MemoryExtractor extractor = readField(memory, "extractor", MemoryExtractor.class);
         RawDataLayer rawDataLayer = readField(extractor, "rawDataStep", RawDataLayer.class);
         MemoryStore rawDataStore = readField(rawDataLayer, "memoryStore", MemoryStore.class);
-        ConversationBuffer conversationBuffer =
-                readField(extractor, "conversationBuffer", ConversationBuffer.class);
+        ConversationBuffer pendingConversationBuffer =
+                readField(extractor, "pendingConversationBuffer", ConversationBuffer.class);
+        MemoryBuffer memoryBuffer = readField(memory, "memoryBuffer", MemoryBuffer.class);
 
         assertThat(rawDataStore).isSameAs(MEMORY_STORE);
-        assertThat(conversationBuffer).isSameAs(CONVERSATION_BUFFER_STORE);
+        assertThat(pendingConversationBuffer).isSameAs(CONVERSATION_BUFFER_STORE);
+        assertThat(memoryBuffer).isSameAs(MEMORY_BUFFER);
     }
 
     @Test
     void closeClosesCloseableComponentsOnlyOnce() {
         AtomicInteger storeCloseCount = new AtomicInteger();
+        AtomicInteger bufferCloseCount = new AtomicInteger();
         AtomicInteger textSearchCloseCount = new AtomicInteger();
         AtomicInteger chatClientCloseCount = new AtomicInteger();
         AtomicInteger vectorCloseCount = new AtomicInteger();
 
         MemoryStore store =
                 new FixedMemoryStore(
-                        RAW_DATA_OPERATIONS,
-                        ITEM_OPERATIONS,
-                        INSIGHT_OPERATIONS,
+                        RAW_DATA_OPERATIONS, ITEM_OPERATIONS, INSIGHT_OPERATIONS, storeCloseCount);
+        MemoryBuffer buffer =
+                new FixedMemoryBuffer(
                         INSIGHT_BUFFER_STORE,
                         CONVERSATION_BUFFER_STORE,
-                        storeCloseCount);
+                        RECENT_CONVERSATION_BUFFER,
+                        bufferCloseCount);
         CloseTrackingTextSearch textSearch = new CloseTrackingTextSearch(textSearchCloseCount);
         TrackingChatClient chatClient = new TrackingChatClient(chatClientCloseCount);
         CloseTrackingVector vector = new CloseTrackingVector(vectorCloseCount);
@@ -201,6 +237,7 @@ class DefaultMemoryBuilderTest {
                 Memory.builder()
                         .chatClient(chatClient)
                         .store(store)
+                        .buffer(buffer)
                         .textSearch(textSearch)
                         .vector(vector)
                         .build();
@@ -209,6 +246,7 @@ class DefaultMemoryBuilderTest {
         memory.close();
 
         assertThat(storeCloseCount).hasValue(1);
+        assertThat(bufferCloseCount).hasValue(1);
         assertThat(textSearchCloseCount).hasValue(1);
         assertThat(chatClientCloseCount).hasValue(1);
         assertThat(vectorCloseCount).hasValue(1);
@@ -219,22 +257,18 @@ class DefaultMemoryBuilderTest {
         private final RawDataOperations rawDataOperations;
         private final ItemOperations itemOperations;
         private final InsightOperations insightOperations;
-        private final InsightBuffer insightBuffer;
-        private final ConversationBuffer conversationBuffer;
+        private final InsightBuffer legacyInsightBuffer = proxy(InsightBuffer.class);
+        private final ConversationBuffer legacyConversationBuffer = proxy(ConversationBuffer.class);
         private final AtomicInteger closeCount;
 
         private FixedMemoryStore(
                 RawDataOperations rawDataOperations,
                 ItemOperations itemOperations,
                 InsightOperations insightOperations,
-                InsightBuffer insightBuffer,
-                ConversationBuffer conversationBuffer,
                 AtomicInteger closeCount) {
             this.rawDataOperations = rawDataOperations;
             this.itemOperations = itemOperations;
             this.insightOperations = insightOperations;
-            this.insightBuffer = insightBuffer;
-            this.conversationBuffer = conversationBuffer;
             this.closeCount = closeCount;
         }
 
@@ -255,12 +289,53 @@ class DefaultMemoryBuilderTest {
 
         @Override
         public InsightBuffer insightBufferStore() {
-            return insightBuffer;
+            return legacyInsightBuffer;
         }
 
         @Override
         public ConversationBuffer conversationBufferStore() {
-            return conversationBuffer;
+            return legacyConversationBuffer;
+        }
+
+        @Override
+        public void close() {
+            if (closeCount != null) {
+                closeCount.incrementAndGet();
+            }
+        }
+    }
+
+    private static final class FixedMemoryBuffer implements MemoryBuffer {
+
+        private final InsightBuffer insightBuffer;
+        private final ConversationBuffer pendingConversationBuffer;
+        private final RecentConversationBuffer recentConversationBuffer;
+        private final AtomicInteger closeCount;
+
+        private FixedMemoryBuffer(
+                InsightBuffer insightBuffer,
+                ConversationBuffer pendingConversationBuffer,
+                RecentConversationBuffer recentConversationBuffer,
+                AtomicInteger closeCount) {
+            this.insightBuffer = insightBuffer;
+            this.pendingConversationBuffer = pendingConversationBuffer;
+            this.recentConversationBuffer = recentConversationBuffer;
+            this.closeCount = closeCount;
+        }
+
+        @Override
+        public InsightBuffer insightBuffer() {
+            return insightBuffer;
+        }
+
+        @Override
+        public ConversationBuffer pendingConversationBuffer() {
+            return pendingConversationBuffer;
+        }
+
+        @Override
+        public RecentConversationBuffer recentConversationBuffer() {
+            return recentConversationBuffer;
         }
 
         @Override

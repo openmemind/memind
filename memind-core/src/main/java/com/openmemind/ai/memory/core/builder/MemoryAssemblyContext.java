@@ -16,8 +16,10 @@ package com.openmemind.ai.memory.core.builder;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.store.MemoryStore;
-import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.store.buffer.PendingConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.util.Objects;
@@ -25,6 +27,7 @@ import java.util.Objects;
 record MemoryAssemblyContext(
         StructuredChatClient chatClient,
         MemoryStore memoryStore,
+        MemoryBuffer memoryBuffer,
         MemoryTextSearch textSearch,
         MemoryVector memoryVector,
         Reranker reranker,
@@ -36,20 +39,27 @@ record MemoryAssemblyContext(
         Objects.requireNonNull(memoryStore.rawDataOperations(), "memoryStore.rawDataOperations()");
         Objects.requireNonNull(memoryStore.itemOperations(), "memoryStore.itemOperations()");
         Objects.requireNonNull(memoryStore.insightOperations(), "memoryStore.insightOperations()");
+        Objects.requireNonNull(memoryBuffer, "memoryBuffer");
+        Objects.requireNonNull(memoryBuffer.insightBuffer(), "memoryBuffer.insightBuffer()");
         Objects.requireNonNull(
-                memoryStore.insightBufferStore(), "memoryStore.insightBufferStore()");
+                memoryBuffer.pendingConversationBuffer(),
+                "memoryBuffer.pendingConversationBuffer()");
         Objects.requireNonNull(
-                memoryStore.conversationBufferStore(), "memoryStore.conversationBufferStore()");
+                memoryBuffer.recentConversationBuffer(), "memoryBuffer.recentConversationBuffer()");
         Objects.requireNonNull(memoryVector, "memoryVector");
         Objects.requireNonNull(reranker, "reranker");
         Objects.requireNonNull(options, "options");
     }
 
-    InsightBuffer insightBufferStore() {
-        return memoryStore.insightBufferStore();
+    InsightBuffer insightBuffer() {
+        return memoryBuffer.insightBuffer();
     }
 
-    ConversationBuffer conversationBufferStore() {
-        return memoryStore.conversationBufferStore();
+    PendingConversationBuffer pendingConversationBuffer() {
+        return memoryBuffer.pendingConversationBuffer();
+    }
+
+    RecentConversationBuffer recentConversationBuffer() {
+        return memoryBuffer.recentConversationBuffer();
     }
 }

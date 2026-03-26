@@ -43,6 +43,7 @@ import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
@@ -69,6 +70,7 @@ class DefaultMemoryTest {
     @Mock private MemoryExtractor extractor;
     @Mock private MemoryRetriever retriever;
     @Mock private MemoryStore store;
+    @Mock private MemoryBuffer memoryBuffer;
     @Mock private ItemOperations itemOperations;
     @Mock private InsightOperations insightOperations;
     @Mock private MemoryVector vector;
@@ -81,7 +83,9 @@ class DefaultMemoryTest {
     void setUp() {
         lenient().when(store.itemOperations()).thenReturn(itemOperations);
         lenient().when(store.insightOperations()).thenReturn(insightOperations);
-        memind = new DefaultMemory(extractor, retriever, store, vector, toolStatsService);
+        memind =
+                new DefaultMemory(
+                        extractor, retriever, store, memoryBuffer, vector, toolStatsService);
         memoryId = DefaultMemoryId.of("user1", "agent1");
     }
 
@@ -200,6 +204,7 @@ class DefaultMemoryTest {
                         extractor,
                         retriever,
                         store,
+                        memoryBuffer,
                         vector,
                         toolStatsService,
                         null,

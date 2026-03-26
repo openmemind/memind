@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -29,6 +30,7 @@ import com.openmemind.ai.memory.core.extraction.result.InsightResult;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
+import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
@@ -36,6 +38,10 @@ import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.store.buffer.InMemoryConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.InMemoryRecentConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.store.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Duration;
 import java.time.Instant;
@@ -60,15 +66,24 @@ class DefaultMemoryContextTest {
     @Mock MemoryVector vector;
     @Mock ToolStatsService toolStatsService;
 
-    ConversationBuffer conversationBuffer;
+    ConversationBuffer pendingConversationBuffer;
+    RecentConversationBuffer recentConversationBuffer;
+    MemoryBuffer memoryBuffer;
     DefaultMemory memory;
     MemoryId memoryId;
 
     @BeforeEach
     void setUp() {
-        conversationBuffer = new InMemoryConversationBuffer();
-        when(memoryStore.conversationBufferStore()).thenReturn(conversationBuffer);
-        memory = new DefaultMemory(extractor, retriever, memoryStore, vector, toolStatsService);
+        pendingConversationBuffer = new InMemoryConversationBuffer();
+        recentConversationBuffer = new InMemoryRecentConversationBuffer();
+        memoryBuffer =
+                MemoryBuffer.of(
+                        mock(InsightBuffer.class),
+                        pendingConversationBuffer,
+                        recentConversationBuffer);
+        memory =
+                new DefaultMemory(
+                        extractor, retriever, memoryStore, memoryBuffer, vector, toolStatsService);
         memoryId = DefaultMemoryId.of("user1", "agent1");
     }
 
@@ -79,8 +94,10 @@ class DefaultMemoryContextTest {
         @Test
         @DisplayName("Returns buffer-only when includeMemories=false")
         void buffer_only_when_memories_disabled() {
-            conversationBuffer.save(
-                    "user1:agent1", List.of(Message.user("Hello"), Message.assistant("Hi")));
+            pendingConversationBuffer.save(
+                    "user1:agent1", List.of(Message.user("stale"), Message.assistant("pending")));
+            recentConversationBuffer.append("user1:agent1", Message.user("Hello"));
+            recentConversationBuffer.append("user1:agent1", Message.assistant("Hi"));
 
             var request = ContextRequest.bufferOnly(memoryId, 80000);
 
@@ -88,6 +105,9 @@ class DefaultMemoryContextTest {
                     .assertNext(
                             ctx -> {
                                 assertThat(ctx.recentMessages()).hasSize(2);
+                                assertThat(ctx.recentMessages())
+                                        .extracting(Message::textContent)
+                                        .containsExactly("Hello", "Hi");
                                 assertThat(ctx.hasMemories()).isFalse();
                                 assertThat(ctx.totalTokens()).isGreaterThan(0);
                             })
@@ -111,8 +131,8 @@ class DefaultMemoryContextTest {
         @Test
         @DisplayName("Retrieves memories when buffer is non-empty and includeMemories=true")
         void retrieves_memories_when_buffer_non_empty() {
-            conversationBuffer.save(
-                    "user1:agent1", List.of(Message.user("Tell me about my project")));
+            recentConversationBuffer.append(
+                    "user1:agent1", Message.user("Tell me about my project"));
 
             var scored =
                     new ScoredResult(
@@ -147,6 +167,35 @@ class DefaultMemoryContextTest {
                             })
                     .verifyComplete();
         }
+
+        @Test
+        @DisplayName("Loads only the configured recent message window")
+        void loads_only_recent_message_window() {
+            for (int i = 1; i <= 12; i++) {
+                recentConversationBuffer.append("user1:agent1", Message.user("message-" + i));
+            }
+
+            var request =
+                    new ContextRequest(memoryId, 80000, false, RetrievalConfig.Strategy.SIMPLE, 10);
+
+            StepVerifier.create(memory.getContext(request))
+                    .assertNext(
+                            ctx ->
+                                    assertThat(ctx.recentMessages())
+                                            .extracting(Message::textContent)
+                                            .containsExactly(
+                                                    "message-3",
+                                                    "message-4",
+                                                    "message-5",
+                                                    "message-6",
+                                                    "message-7",
+                                                    "message-8",
+                                                    "message-9",
+                                                    "message-10",
+                                                    "message-11",
+                                                    "message-12"))
+                    .verifyComplete();
+        }
     }
 
     @Nested
@@ -172,7 +221,10 @@ class DefaultMemoryContextTest {
         void clears_buffer_and_extracts() {
             var messages =
                     List.of(Message.user("I like Python"), Message.assistant("Python is great!"));
-            conversationBuffer.save("user1:agent1", messages);
+            pendingConversationBuffer.save("user1:agent1", messages);
+            recentConversationBuffer.append("user1:agent1", Message.user("Keep recent user"));
+            recentConversationBuffer.append(
+                    "user1:agent1", Message.assistant("Keep recent assistant"));
 
             var expectedResult =
                     ExtractionResult.success(
@@ -187,17 +239,17 @@ class DefaultMemoryContextTest {
                     .assertNext(result -> assertThat(result).isNotNull())
                     .verifyComplete();
 
-            // Buffer should be cleared after commit
-            assertThat(conversationBuffer.load("user1:agent1")).isEmpty();
-
-            // Extraction should have been called
+            assertThat(pendingConversationBuffer.load("user1:agent1")).isEmpty();
+            assertThat(recentConversationBuffer.loadRecent("user1:agent1", 10))
+                    .extracting(Message::textContent)
+                    .containsExactly("Keep recent user", "Keep recent assistant");
             verify(extractor).extract(any());
         }
 
         @Test
         @DisplayName("Commit with custom config passes config to extraction")
         void commit_with_custom_config() {
-            conversationBuffer.save("user1:agent1", List.of(Message.user("test")));
+            pendingConversationBuffer.save("user1:agent1", List.of(Message.user("test")));
 
             var expectedResult =
                     ExtractionResult.success(
@@ -214,7 +266,7 @@ class DefaultMemoryContextTest {
                     .assertNext(result -> assertThat(result).isNotNull())
                     .verifyComplete();
 
-            assertThat(conversationBuffer.load("user1:agent1")).isEmpty();
+            assertThat(pendingConversationBuffer.load("user1:agent1")).isEmpty();
         }
     }
 }
