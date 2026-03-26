@@ -13,6 +13,8 @@
  */
 package com.openmemind.ai.memory.core.extraction.insight.scheduler;
 
+import com.openmemind.ai.memory.core.buffer.BufferEntry;
+import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
@@ -26,8 +28,6 @@ import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassi
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupRouter;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
 import com.openmemind.ai.memory.core.store.MemoryStore;
-import com.openmemind.ai.memory.core.store.buffer.BufferEntry;
-import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.tracing.MemoryAttributes;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.tracing.MemorySpanNames;

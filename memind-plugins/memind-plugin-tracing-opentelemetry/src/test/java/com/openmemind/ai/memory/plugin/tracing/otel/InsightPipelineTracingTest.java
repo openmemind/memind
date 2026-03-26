@@ -15,6 +15,9 @@ package com.openmemind.ai.memory.plugin.tracing.otel;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.buffer.BufferEntry;
+import com.openmemind.ai.memory.core.buffer.InsightBuffer;
+import com.openmemind.ai.memory.core.buffer.InsightBuffer.UngroupedContext;
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
@@ -32,9 +35,6 @@ import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeConfig;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
 import com.openmemind.ai.memory.core.store.MemoryStore;
-import com.openmemind.ai.memory.core.store.buffer.BufferEntry;
-import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
-import com.openmemind.ai.memory.core.store.buffer.InsightBuffer.UngroupedContext;
 import com.openmemind.ai.memory.core.tracing.MemorySpanNames;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightGenerator;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightGroupClassifier;

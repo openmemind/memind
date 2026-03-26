@@ -15,13 +15,13 @@ package com.openmemind.ai.memory.plugin.jdbc.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.buffer.ConversationBuffer;
+import com.openmemind.ai.memory.core.buffer.InsightBuffer;
+import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
-import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
-import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
-import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.textsearch.TextSearchResult;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryStore;

@@ -13,9 +13,9 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.internal.buffer;
 
+import com.openmemind.ai.memory.core.buffer.BufferEntry;
+import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.data.MemoryId;
-import com.openmemind.ai.memory.core.store.buffer.BufferEntry;
-import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JdbcExecutor;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;

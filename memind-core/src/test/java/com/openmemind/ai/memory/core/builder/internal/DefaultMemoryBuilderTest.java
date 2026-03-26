@@ -18,6 +18,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.DefaultMemory;
 import com.openmemind.ai.memory.core.Memory;
+import com.openmemind.ai.memory.core.buffer.ConversationBuffer;
+import com.openmemind.ai.memory.core.buffer.InsightBuffer;
+import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuilder;
 import com.openmemind.ai.memory.core.data.MemoryId;
@@ -30,10 +34,6 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationCont
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.store.MemoryStore;
-import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
-import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
-import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
-import com.openmemind.ai.memory.core.store.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;

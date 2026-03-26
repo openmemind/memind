@@ -13,13 +13,13 @@
  */
 package com.openmemind.ai.memory.core.builder;
 
+import com.openmemind.ai.memory.core.buffer.InsightBuffer;
+import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
+import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.store.MemoryStore;
-import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
-import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
-import com.openmemind.ai.memory.core.store.buffer.PendingConversationBuffer;
-import com.openmemind.ai.memory.core.store.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.util.Objects;

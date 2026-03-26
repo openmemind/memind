@@ -16,8 +16,8 @@ package com.openmemind.ai.memory.plugin.jdbc;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.store.MemoryStore;
-import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteInsightBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryStore;

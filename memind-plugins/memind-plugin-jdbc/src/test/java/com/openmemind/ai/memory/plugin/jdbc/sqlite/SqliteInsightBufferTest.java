@@ -16,9 +16,9 @@ package com.openmemind.ai.memory.plugin.jdbc.sqlite;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.openmemind.ai.memory.core.buffer.BufferEntry;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
-import com.openmemind.ai.memory.core.store.buffer.BufferEntry;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;

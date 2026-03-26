@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.evaluation.adapter.memind;
 
+import com.openmemind.ai.memory.core.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
@@ -30,7 +31,6 @@ import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.store.MemoryStore;
-import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.evaluation.adapter.AddMode;
 import com.openmemind.ai.memory.evaluation.adapter.BaseMemoryAdapter;
 import com.openmemind.ai.memory.evaluation.adapter.model.AddRequest;

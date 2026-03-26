@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core.store.buffer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.openmemind.ai.memory.core.buffer.InMemoryRecentConversationBuffer;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.DisplayName;

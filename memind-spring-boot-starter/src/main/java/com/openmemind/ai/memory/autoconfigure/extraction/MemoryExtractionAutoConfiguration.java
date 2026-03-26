@@ -14,6 +14,9 @@
 package com.openmemind.ai.memory.autoconfigure.extraction;
 
 import com.openmemind.ai.memory.autoconfigure.MemoryExtractionProperties;
+import com.openmemind.ai.memory.core.buffer.InMemoryRecentConversationBuffer;
+import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
@@ -52,9 +55,6 @@ import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationCo
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.store.MemoryStore;
-import com.openmemind.ai.memory.core.store.buffer.InMemoryRecentConversationBuffer;
-import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
-import com.openmemind.ai.memory.core.store.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.utils.IdUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;

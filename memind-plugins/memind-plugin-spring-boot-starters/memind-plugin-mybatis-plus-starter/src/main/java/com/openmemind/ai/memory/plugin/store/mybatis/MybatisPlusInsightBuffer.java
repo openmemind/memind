@@ -15,9 +15,9 @@ package com.openmemind.ai.memory.plugin.store.mybatis;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.openmemind.ai.memory.core.buffer.BufferEntry;
+import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.data.MemoryId;
-import com.openmemind.ai.memory.core.store.buffer.BufferEntry;
-import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.InsightBufferDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.InsightBufferMapper;
 import java.util.List;

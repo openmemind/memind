@@ -15,9 +15,9 @@ package com.openmemind.ai.memory.core.extraction.insight.buffer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.buffer.BufferEntry;
+import com.openmemind.ai.memory.core.buffer.InMemoryInsightBuffer;
 import com.openmemind.ai.memory.core.data.MemoryId;
-import com.openmemind.ai.memory.core.store.buffer.BufferEntry;
-import com.openmemind.ai.memory.core.store.buffer.InMemoryInsightBuffer;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

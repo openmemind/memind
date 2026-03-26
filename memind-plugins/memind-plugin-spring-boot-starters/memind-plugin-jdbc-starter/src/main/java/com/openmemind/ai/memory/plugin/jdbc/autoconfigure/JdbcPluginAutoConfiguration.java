@@ -13,10 +13,10 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.autoconfigure;
 
+import com.openmemind.ai.memory.core.buffer.InMemoryRecentConversationBuffer;
+import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.store.MemoryStore;
-import com.openmemind.ai.memory.core.store.buffer.InMemoryRecentConversationBuffer;
-import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
-import com.openmemind.ai.memory.core.store.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlInsightBuffer;

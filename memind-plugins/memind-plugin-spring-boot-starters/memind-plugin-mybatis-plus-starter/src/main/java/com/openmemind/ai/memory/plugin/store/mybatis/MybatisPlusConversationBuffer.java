@@ -14,9 +14,9 @@
 package com.openmemind.ai.memory.plugin.store.mybatis;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.openmemind.ai.memory.core.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
-import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.ConversationBufferConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.ConversationBufferDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.ConversationBufferMapper;
