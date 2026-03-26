@@ -31,6 +31,7 @@ import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.SegmentProcessor;
 import com.openmemind.ai.memory.core.store.buffer.PendingConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.utils.HashUtils;
 import java.time.Duration;
 import java.time.Instant;
@@ -63,6 +64,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
     private final SegmentProcessor segmentProcessor;
     private final ContextCommitDetector contextCommitDetector;
     private final PendingConversationBuffer pendingConversationBuffer;
+    private final RecentConversationBuffer recentConversationBuffer;
     private final ConcurrentHashMap<String, Object> bufferLocks = new ConcurrentHashMap<>();
 
     public MemoryExtractor(
@@ -75,6 +77,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         this.segmentProcessor = null;
         this.contextCommitDetector = null;
         this.pendingConversationBuffer = null;
+        this.recentConversationBuffer = null;
     }
 
     public MemoryExtractor(
@@ -88,6 +91,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         this.segmentProcessor = segmentProcessor;
         this.contextCommitDetector = null;
         this.pendingConversationBuffer = null;
+        this.recentConversationBuffer = null;
     }
 
     public MemoryExtractor(
@@ -96,13 +100,15 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
             InsightExtractStep insightStep,
             SegmentProcessor segmentProcessor,
             ContextCommitDetector contextCommitDetector,
-            PendingConversationBuffer pendingConversationBuffer) {
+            PendingConversationBuffer pendingConversationBuffer,
+            RecentConversationBuffer recentConversationBuffer) {
         this.rawDataStep = Objects.requireNonNull(rawDataStep, "rawDataStep is required");
         this.memoryItemStep = Objects.requireNonNull(memoryItemStep, "memoryItemStep is required");
         this.insightStep = Objects.requireNonNull(insightStep, "insightStep is required");
         this.segmentProcessor = segmentProcessor;
         this.contextCommitDetector = contextCommitDetector;
         this.pendingConversationBuffer = pendingConversationBuffer;
+        this.recentConversationBuffer = recentConversationBuffer;
     }
 
     /**
@@ -209,11 +215,13 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         Objects.requireNonNull(message, "message is required");
         Objects.requireNonNull(config, "config is required");
 
-        if (contextCommitDetector == null || pendingConversationBuffer == null) {
+        if (contextCommitDetector == null
+                || pendingConversationBuffer == null
+                || recentConversationBuffer == null) {
             return Mono.error(
                     new IllegalStateException(
-                            "contextCommitDetector and pendingConversationBuffer are required for"
-                                    + " addMessage"));
+                            "contextCommitDetector, pendingConversationBuffer, and"
+                                    + " recentConversationBuffer are required for addMessage"));
         }
 
         var bufferKey = memoryId.toIdentifier();
@@ -221,8 +229,9 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         return Mono.fromCallable(
                         () -> {
                             synchronized (lockFor(bufferKey)) {
+                                recentConversationBuffer.append(bufferKey, message);
                                 if (message.role() == Message.Role.ASSISTANT) {
-                                    appendToBuffer(bufferKey, message);
+                                    appendToPendingBuffer(bufferKey, message);
                                     return Optional.<PendingExtraction>empty();
                                 }
 
@@ -235,7 +244,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                                                 .block();
 
                                 if (decision == null || !decision.shouldSeal()) {
-                                    appendToBuffer(bufferKey, message);
+                                    appendToPendingBuffer(bufferKey, message);
                                     return Optional.<PendingExtraction>empty();
                                 }
 
@@ -278,7 +287,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                                         .orElseGet(Mono::empty));
     }
 
-    private void appendToBuffer(String bufferKey, Message message) {
+    private void appendToPendingBuffer(String bufferKey, Message message) {
         var buffer = new ArrayList<>(pendingConversationBuffer.load(bufferKey));
         buffer.add(message);
         var count = pendingConversationBuffer.loadMessageCount(bufferKey) + 1;

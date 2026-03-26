@@ -119,7 +119,8 @@ final class MemoryExtractionAssembler {
                         insightLayer,
                         rawDataLayer,
                         contextCommitDetector,
-                        context.pendingConversationBuffer());
+                        context.pendingConversationBuffer(),
+                        context.recentConversationBuffer());
         return new MemoryExtractionAssembly(pipeline, insightLayer, insightBuildScheduler);
     }
 

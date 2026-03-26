@@ -32,6 +32,9 @@ import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.SegmentProcessor;
 import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.store.buffer.InMemoryConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.InMemoryRecentConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.PendingConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.RecentConversationBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -57,7 +60,8 @@ class MemoryExtractorAddMessageTest {
     @Mock InsightExtractStep insightStep;
     @Mock SegmentProcessor segmentProcessor;
     @Mock ContextCommitDetector contextCommitDetector;
-    @Mock ConversationBuffer bufferStore;
+    @Mock PendingConversationBuffer pendingBufferStore;
+    @Mock RecentConversationBuffer recentBufferStore;
 
     MemoryExtractor extractor;
     MemoryId memoryId;
@@ -71,7 +75,8 @@ class MemoryExtractorAddMessageTest {
                         insightStep,
                         segmentProcessor,
                         contextCommitDetector,
-                        bufferStore);
+                        pendingBufferStore,
+                        recentBufferStore);
         memoryId = DefaultMemoryId.of("user1", "agent1");
     }
 
@@ -83,13 +88,14 @@ class MemoryExtractorAddMessageTest {
         @DisplayName("Directly accumulate to buffer, no boundary detection triggered")
         void accumulates_without_boundary_check() {
             Message msg = Message.assistant("Hello");
-            when(bufferStore.load("user1:agent1")).thenReturn(List.of());
-            when(bufferStore.loadMessageCount("user1:agent1")).thenReturn(0);
+            when(pendingBufferStore.load("user1:agent1")).thenReturn(List.of());
+            when(pendingBufferStore.loadMessageCount("user1:agent1")).thenReturn(0);
 
             StepVerifier.create(extractor.addMessage(memoryId, msg, ExtractionConfig.defaults()))
                     .verifyComplete();
 
-            verify(bufferStore).save("user1:agent1", List.of(msg));
+            verify(recentBufferStore).append("user1:agent1", msg);
+            verify(pendingBufferStore).save("user1:agent1", List.of(msg));
         }
     }
 
@@ -101,15 +107,16 @@ class MemoryExtractorAddMessageTest {
         @DisplayName("Append to buffer, return empty")
         void appends_to_buffer_returns_empty() {
             Message msg = Message.user("How are you?");
-            when(bufferStore.load("user1:agent1")).thenReturn(new ArrayList<>());
-            when(bufferStore.loadMessageCount("user1:agent1")).thenReturn(0);
+            when(pendingBufferStore.load("user1:agent1")).thenReturn(new ArrayList<>());
+            when(pendingBufferStore.loadMessageCount("user1:agent1")).thenReturn(0);
             when(contextCommitDetector.shouldCommit(anyList(), any(CommitDetectionContext.class)))
                     .thenReturn(Mono.just(CommitDecision.hold()));
 
             StepVerifier.create(extractor.addMessage(memoryId, msg, ExtractionConfig.defaults()))
                     .verifyComplete();
 
-            verify(bufferStore).save("user1:agent1", List.of(msg));
+            verify(recentBufferStore).append("user1:agent1", msg);
+            verify(pendingBufferStore).save("user1:agent1", List.of(msg));
         }
     }
 
@@ -120,33 +127,46 @@ class MemoryExtractorAddMessageTest {
         @Test
         @DisplayName("Seal buffer, extract memory, trigger message into new buffer")
         void seals_buffer_and_extracts() {
-            Message existing = Message.assistant("I am fine");
-            Message trigger = Message.user("Tell me more");
-            List<Message> existingBuffer = new ArrayList<>(List.of(existing));
+            var pendingStore = new InMemoryConversationBuffer();
+            var recentStore = new InMemoryRecentConversationBuffer();
+            var existing = Message.assistant("I am fine");
+            var trigger = Message.user("Tell me more");
 
-            when(bufferStore.load("user1:agent1")).thenReturn(existingBuffer);
-            when(bufferStore.loadMessageCount("user1:agent1")).thenReturn(1);
-            when(contextCommitDetector.shouldCommit(anyList(), any(CommitDetectionContext.class)))
-                    .thenReturn(Mono.just(CommitDecision.commit(0.9, "test")));
-            when(segmentProcessor.processSegment(any(), any(), any(), any(), any()))
-                    .thenReturn(Mono.just(RawDataResult.empty()));
+            pendingStore.save("user1:agent1", List.of(existing));
+            pendingStore.saveMessageCount("user1:agent1", 1);
+            recentStore.append("user1:agent1", existing);
+
+            MemoryExtractor localExtractor =
+                    new MemoryExtractor(
+                            unusedRawDataStep(),
+                            unusedMemoryItemStep(),
+                            unusedInsightStep(),
+                            (mid, segment, type, contentId, metadata) ->
+                                    Mono.just(RawDataResult.empty()),
+                            (messages, context) -> Mono.just(CommitDecision.commit(0.9, "test")),
+                            pendingStore,
+                            recentStore);
 
             StepVerifier.create(
-                            extractor.addMessage(
+                            localExtractor.addMessage(
                                     memoryId, trigger, ExtractionConfig.withoutInsight()))
                     .assertNext(result -> assertThat(result).isNotNull())
                     .verifyComplete();
 
-            verify(bufferStore).clear("user1:agent1");
-            verify(bufferStore).save("user1:agent1", List.of(trigger));
+            assertThat(pendingStore.load("user1:agent1")).containsExactly(trigger);
+            assertThat(recentStore.loadRecent("user1:agent1", 10))
+                    .containsExactly(existing, trigger);
         }
 
         @Test
         @DisplayName("Preserve follow-up message appended while sealing is still extracting")
         void preserves_follow_up_message_during_inflight_extraction() throws Exception {
-            var realStore = new InMemoryConversationBuffer();
-            realStore.save("user1:agent1", List.of(Message.assistant("I am fine")));
-            realStore.saveMessageCount("user1:agent1", 1);
+            var pendingStore = new InMemoryConversationBuffer();
+            var recentStore = new InMemoryRecentConversationBuffer();
+            var existing = Message.assistant("I am fine");
+            pendingStore.save("user1:agent1", List.of(existing));
+            pendingStore.saveMessageCount("user1:agent1", 1);
+            recentStore.append("user1:agent1", existing);
 
             var extractionStarted = new CountDownLatch(1);
             var releaseExtraction = new CountDownLatch(1);
@@ -168,7 +188,8 @@ class MemoryExtractorAddMessageTest {
                                                 return RawDataResult.empty();
                                             }),
                             (messages, context) -> Mono.just(CommitDecision.commit(0.9, "test")),
-                            realStore);
+                            pendingStore,
+                            recentStore);
 
             var trigger = Message.user("Tell me more");
             var followUp = Message.assistant("Additional detail");
@@ -195,7 +216,9 @@ class MemoryExtractorAddMessageTest {
                 assertThat(triggerFuture.get(5, TimeUnit.SECONDS)).isNotNull();
             }
 
-            assertThat(realStore.load("user1:agent1")).containsExactly(trigger, followUp);
+            assertThat(pendingStore.load("user1:agent1")).containsExactly(trigger, followUp);
+            assertThat(recentStore.loadRecent("user1:agent1", 10))
+                    .containsExactly(existing, trigger, followUp);
         }
     }
 
@@ -206,7 +229,8 @@ class MemoryExtractorAddMessageTest {
         @Test
         @DisplayName("Assistant messages from concurrent callers do not lose buffered messages")
         void assistant_messages_do_not_get_lost_under_concurrency() throws Exception {
-            var realStore = new SlowSnapshotConversationBuffer();
+            var pendingStore = new SlowSnapshotConversationBuffer();
+            var recentStore = new InMemoryRecentConversationBuffer();
             MemoryExtractor localExtractor =
                     new MemoryExtractor(
                             unusedRawDataStep(),
@@ -214,7 +238,8 @@ class MemoryExtractorAddMessageTest {
                             unusedInsightStep(),
                             segmentProcessor,
                             contextCommitDetector,
-                            realStore);
+                            pendingStore,
+                            recentStore);
             var first = Message.assistant("first");
             var second = Message.assistant("second");
             var ready = new CountDownLatch(2);
@@ -250,8 +275,10 @@ class MemoryExtractorAddMessageTest {
                 secondFuture.get(5, TimeUnit.SECONDS);
             }
 
-            assertThat(realStore.load("user1:agent1")).containsExactlyInAnyOrder(first, second);
-            assertThat(realStore.loadMessageCount("user1:agent1")).isEqualTo(2);
+            assertThat(pendingStore.load("user1:agent1")).containsExactlyInAnyOrder(first, second);
+            assertThat(pendingStore.loadMessageCount("user1:agent1")).isEqualTo(2);
+            assertThat(recentStore.loadRecent("user1:agent1", 10))
+                    .containsExactlyInAnyOrder(first, second);
         }
     }
 
