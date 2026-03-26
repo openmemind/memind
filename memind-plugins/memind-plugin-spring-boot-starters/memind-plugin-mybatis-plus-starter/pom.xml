@@ -25,9 +25,9 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>memind-plugin-store-mybatis-plus-starter</artifactId>
-    <name>Memind - MyBatis-Plus Store Plugin Starter</name>
-    <description>MyBatis-Plus + MySQL implementation for Memory4j memory store</description>
+    <artifactId>memind-plugin-mybatis-plus-starter</artifactId>
+    <name>Memind - MyBatis-Plus Plugin Starter</name>
+    <description>MyBatis-Plus implementation for memory store, memory buffer, and text search</description>
 
     <dependencies>
         <!-- Core -->

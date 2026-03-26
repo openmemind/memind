@@ -43,7 +43,7 @@
         </dependency>
         <dependency>
             <groupId>com.openmemind.ai</groupId>
-            <artifactId>memind-plugin-store-mybatis-plus-starter</artifactId>
+            <artifactId>memind-plugin-mybatis-plus-starter</artifactId>
             <version>${revision}</version>
         </dependency>
 
