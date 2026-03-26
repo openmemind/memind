@@ -122,6 +122,17 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
             String type,
             String contentId,
             Map<String, Object> metadata) {
+        return processSegment(memoryId, segment, type, contentId, metadata, null);
+    }
+
+    @Override
+    public Mono<RawDataResult> processSegment(
+            MemoryId memoryId,
+            Segment segment,
+            String type,
+            String contentId,
+            Map<String, Object> metadata,
+            String language) {
 
         // Idempotency check
         Optional<MemoryRawData> existing =
@@ -134,7 +145,7 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
 
         // Skip chunk, start directly from caption
         return defaultCaptionGenerator
-                .generateForSegments(List.of(segment))
+                .generateForSegments(List.of(segment), language)
                 .flatMap(segments -> vectorize(memoryId, segments))
                 .map(
                         segments -> {

@@ -45,4 +45,25 @@ public interface SegmentProcessor {
             String type,
             String contentId,
             Map<String, Object> metadata);
+
+    /**
+     * Process segmented content with language hint.
+     *
+     * @param memoryId Memory identifier
+     * @param segment Segmented content
+     * @param type Data type
+     * @param contentId Content identifier (for idempotency)
+     * @param metadata Metadata
+     * @param language Target language, can be null
+     * @return Processing result
+     */
+    default Mono<RawDataResult> processSegment(
+            MemoryId memoryId,
+            Segment segment,
+            String type,
+            String contentId,
+            Map<String, Object> metadata,
+            String language) {
+        return processSegment(memoryId, segment, type, contentId, metadata);
+    }
 }

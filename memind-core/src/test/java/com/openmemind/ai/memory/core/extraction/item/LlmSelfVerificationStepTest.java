@@ -130,6 +130,42 @@ class LlmSelfVerificationStepTest {
         }
 
         @Test
+        @DisplayName("Should render self verification prompt with explicit language")
+        void shouldRenderSelfVerificationPromptWithExplicitLanguage() {
+            var existingEntries =
+                    List.of(createEntry("The username is Zhang San, I am 30 years old"));
+            var referenceTime = Instant.parse("2024-03-15T10:00:00Z");
+            var structuredLlmClient =
+                    new FakeStructuredChatClient(new MemoryItemExtractionResponse(List.of()));
+            var step = new LlmSelfVerificationStep(structuredLlmClient);
+
+            StepVerifier.create(
+                            step.verify(
+                                    ORIGINAL_TEXT,
+                                    existingEntries,
+                                    RAW_DATA_ID,
+                                    referenceTime,
+                                    List.of(),
+                                    null,
+                                    null,
+                                    "zh-CN"))
+                    .expectNext(List.of())
+                    .verifyComplete();
+
+            var prompt =
+                    SelfVerificationPrompts.build(
+                                    ORIGINAL_TEXT,
+                                    existingEntries,
+                                    referenceTime,
+                                    List.of(),
+                                    null,
+                                    null)
+                            .render("zh-CN");
+            assertThat(structuredLlmClient.lastMessages())
+                    .isEqualTo(ChatMessages.systemUser(prompt.systemPrompt(), prompt.userPrompt()));
+        }
+
+        @Test
         @DisplayName("Should clamp confidence and default insight types")
         void shouldClampConfidenceAndDefaultInsightTypes() {
             var response =

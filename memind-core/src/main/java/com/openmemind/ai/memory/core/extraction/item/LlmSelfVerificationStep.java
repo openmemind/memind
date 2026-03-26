@@ -78,6 +78,26 @@ public class LlmSelfVerificationStep {
             List<MemoryInsightType> insightTypes,
             String userName,
             Set<MemoryCategory> categories) {
+        return verify(
+                originalText,
+                existingEntries,
+                rawDataId,
+                referenceTime,
+                insightTypes,
+                userName,
+                categories,
+                null);
+    }
+
+    public Mono<List<ExtractedMemoryEntry>> verify(
+            String originalText,
+            List<ExtractedMemoryEntry> existingEntries,
+            String rawDataId,
+            Instant referenceTime,
+            List<MemoryInsightType> insightTypes,
+            String userName,
+            Set<MemoryCategory> categories,
+            String language) {
 
         var promptResult =
                 SelfVerificationPrompts.build(
@@ -87,7 +107,7 @@ public class LlmSelfVerificationStep {
                                 insightTypes,
                                 userName,
                                 categories)
-                        .render(null);
+                        .render(language);
         var messages =
                 ChatMessages.systemUser(promptResult.systemPrompt(), promptResult.userPrompt());
 

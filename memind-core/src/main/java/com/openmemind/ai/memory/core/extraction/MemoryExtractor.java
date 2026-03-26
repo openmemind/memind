@@ -191,7 +191,13 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 new ExtractionRequest(memoryId, null, ContentTypes.CONVERSATION, Map.of(), config);
 
         return segmentProcessor
-                .processSegment(memoryId, segment, "CONVERSATION", contentId, sealMetadata)
+                .processSegment(
+                        memoryId,
+                        segment,
+                        "CONVERSATION",
+                        contentId,
+                        sealMetadata,
+                        config.language())
                 .flatMap(rawResult -> extractMemoryItem(request, rawResult))
                 .flatMap(pair -> extractInsight(request, pair))
                 .map(triple -> toSuccessResult(memoryId, triple, startTime))

@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core.extraction;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -241,6 +242,32 @@ class MemoryExtractorAddMessageTest {
             assertThat(pendingStore.load("user1:agent1")).containsExactly(trigger, followUp);
             assertThat(recentStore.loadRecent("user1:agent1", 10))
                     .containsExactly(existing, trigger, followUp);
+        }
+
+        @Test
+        @DisplayName("Seal path forwards extraction language to segment processor")
+        void forwards_language_to_segment_processor_when_boundary_seals() {
+            Message existing = Message.assistant("I am fine");
+            Message trigger = Message.user("Tell me more");
+            when(pendingBufferStore.load("user1:agent1")).thenReturn(List.of(existing));
+            when(pendingBufferStore.loadMessageCount("user1:agent1")).thenReturn(1);
+            when(contextCommitDetector.shouldCommit(any(CommitDetectionInput.class)))
+                    .thenReturn(Mono.just(CommitDecision.commit(0.9, "test")));
+            when(segmentProcessor.processSegment(
+                            eq(memoryId), any(), eq("CONVERSATION"), any(), any(), eq("zh-CN")))
+                    .thenReturn(Mono.just(RawDataResult.empty()));
+
+            StepVerifier.create(
+                            extractor.addMessage(
+                                    memoryId,
+                                    trigger,
+                                    ExtractionConfig.withoutInsight().withLanguage("zh-CN")))
+                    .assertNext(result -> assertThat(result).isNotNull())
+                    .verifyComplete();
+
+            verify(segmentProcessor)
+                    .processSegment(
+                            eq(memoryId), any(), eq("CONVERSATION"), any(), any(), eq("zh-CN"));
         }
     }
 

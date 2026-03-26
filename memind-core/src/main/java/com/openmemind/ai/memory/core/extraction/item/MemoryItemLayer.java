@@ -124,7 +124,10 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 .flatMap(
                         entries ->
                                 applySelfVerification(
-                                        entries, rawDataResult.segments(), resolvedInsightTypes))
+                                        entries,
+                                        rawDataResult.segments(),
+                                        resolvedInsightTypes,
+                                        config.language()))
                 // Phase 2: deduplication
                 .flatMap(entries -> deduplicator.deduplicate(memoryId, entries))
                 .map(DeduplicationResult::newEntries)
@@ -206,7 +209,8 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
     private Mono<List<ExtractedMemoryEntry>> applySelfVerification(
             List<ExtractedMemoryEntry> entries,
             List<ParsedSegment> segments,
-            List<MemoryInsightType> insightTypes) {
+            List<MemoryInsightType> insightTypes,
+            String language) {
         if (selfVerificationStep == null) {
             return Mono.just(entries);
         }
@@ -228,7 +232,8 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                         referenceTime,
                         insightTypes,
                         userName,
-                        categories)
+                        categories,
+                        language)
                 .map(
                         missedEntries -> {
                             if (missedEntries.isEmpty()) {
