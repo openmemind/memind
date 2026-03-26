@@ -25,9 +25,9 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>memind-plugin-store-jdbc</artifactId>
-    <name>Memind - Store JDBC Plugin</name>
-    <description>Pure JDBC implementations for memory store, text search, insight buffer, and conversation buffer</description>
+    <artifactId>memind-plugin-jdbc</artifactId>
+    <name>Memind - JDBC Plugin</name>
+    <description>Pure JDBC implementations for memory store, memory buffer, and text search</description>
 
     <dependencies>
         <dependency>

@@ -25,14 +25,14 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>memind-plugin-store-jdbc-starter</artifactId>
-    <name>Memind - Store JDBC Plugin Starter</name>
-    <description>Spring Boot starter for JDBC-based memory store, text search, insight buffer, and conversation buffer</description>
+    <artifactId>memind-plugin-jdbc-starter</artifactId>
+    <name>Memind - JDBC Plugin Starter</name>
+    <description>Spring Boot starter for JDBC-based memory store, memory buffer, and text search</description>
 
     <dependencies>
         <dependency>
             <groupId>com.openmemind.ai</groupId>
-            <artifactId>memind-plugin-store-jdbc</artifactId>
+            <artifactId>memind-plugin-jdbc</artifactId>
             <version>${revision}</version>
         </dependency>
 

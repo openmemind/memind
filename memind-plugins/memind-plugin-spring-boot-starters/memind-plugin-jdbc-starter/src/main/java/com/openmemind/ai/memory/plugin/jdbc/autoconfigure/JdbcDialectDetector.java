@@ -36,7 +36,7 @@ class JdbcDialectDetector {
             }
 
             throw new IllegalStateException(
-                    "memind-provider-store-jdbc-starter does not support DataSource product '"
+                    "memind-plugin-jdbc-starter does not support DataSource product '"
                             + connection.getMetaData().getDatabaseProductName()
                             + "' with URL '"
                             + connection.getMetaData().getURL()

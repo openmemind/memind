@@ -46,7 +46,7 @@
         </dependency>
         <dependency>
             <groupId>com.openmemind.ai</groupId>
-            <artifactId>memind-plugin-store-jdbc</artifactId>
+            <artifactId>memind-plugin-jdbc</artifactId>
             <version>${revision}</version>
         </dependency>
         <dependency>
