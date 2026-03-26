@@ -21,6 +21,7 @@ import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.stats.DefaultToolStatsService;
 import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import org.springframework.beans.factory.ObjectProvider;
@@ -51,14 +52,21 @@ public class MemoryAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(Memory.class)
-    @ConditionalOnBean({StructuredChatClient.class, MemoryStore.class, MemoryVector.class})
+    @ConditionalOnBean({
+        StructuredChatClient.class,
+        MemoryStore.class,
+        MemoryBuffer.class,
+        MemoryVector.class
+    })
     public Memory memind(
             StructuredChatClient chatClient,
             MemoryStore store,
+            MemoryBuffer buffer,
             MemoryVector vector,
             ObjectProvider<MemoryTextSearch> textSearchProvider,
             ObjectProvider<MemoryBuildOptions> buildOptionsProvider) {
-        var builder = Memory.builder().chatClient(chatClient).store(store).vector(vector);
+        var builder =
+                Memory.builder().chatClient(chatClient).store(store).buffer(buffer).vector(vector);
 
         MemoryTextSearch textSearch = textSearchProvider.getIfAvailable();
         if (textSearch != null) {

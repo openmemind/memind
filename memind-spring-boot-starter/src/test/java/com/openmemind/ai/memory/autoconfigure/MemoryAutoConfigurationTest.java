@@ -23,7 +23,9 @@ import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.buffer.ConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.InMemoryRecentConversationBuffer;
 import com.openmemind.ai.memory.core.store.buffer.InsightBuffer;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import com.openmemind.ai.memory.core.vector.VectorSearchResult;
@@ -91,6 +93,18 @@ class MemoryAutoConfigurationTest {
                         });
     }
 
+    @Test
+    @DisplayName("Back off when memory buffer is missing")
+    void backsOffWhenMemoryBufferIsMissing() {
+        contextRunner
+                .withUserConfiguration(MissingBufferConfig.class)
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+                            assertThat(context).doesNotHaveBean(Memory.class);
+                        });
+    }
+
     @Configuration(proxyBeanMethods = false)
     static class RequiredRuntimeConfig {
 
@@ -102,6 +116,14 @@ class MemoryAutoConfigurationTest {
         @Bean
         MemoryStore memoryStore() {
             return new InMemoryMemoryStore();
+        }
+
+        @Bean
+        MemoryBuffer memoryBuffer(MemoryStore memoryStore) {
+            return MemoryBuffer.of(
+                    memoryStore.insightBufferStore(),
+                    memoryStore.conversationBufferStore(),
+                    new InMemoryRecentConversationBuffer());
         }
 
         @Bean
@@ -136,6 +158,33 @@ class MemoryAutoConfigurationTest {
         @Bean
         MemoryStore memoryStore() {
             return new InMemoryMemoryStore();
+        }
+
+        @Bean
+        MemoryBuffer memoryBuffer(MemoryStore memoryStore) {
+            return MemoryBuffer.of(
+                    memoryStore.insightBufferStore(),
+                    memoryStore.conversationBufferStore(),
+                    new InMemoryRecentConversationBuffer());
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class MissingBufferConfig {
+
+        @Bean
+        StructuredChatClient structuredChatClient() {
+            return new NoopStructuredChatClient();
+        }
+
+        @Bean
+        MemoryStore memoryStore() {
+            return new InMemoryMemoryStore();
+        }
+
+        @Bean
+        MemoryVector memoryVector() {
+            return new NoopMemoryVector();
         }
     }
 

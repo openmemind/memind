@@ -52,6 +52,9 @@ import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationCo
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.buffer.InMemoryRecentConversationBuffer;
+import com.openmemind.ai.memory.core.store.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.store.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.utils.IdUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
@@ -130,6 +133,23 @@ public class MemoryExtractionAutoConfiguration {
     @ConditionalOnMissingBean
     public ContextCommitDetector boundaryDetector(CommitDetectorConfig commitDetectorConfig) {
         return new LlmContextCommitDetector(commitDetectorConfig);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public RecentConversationBuffer recentConversationBuffer() {
+        return new InMemoryRecentConversationBuffer();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnBean({MemoryStore.class, RecentConversationBuffer.class})
+    public MemoryBuffer memoryBuffer(
+            MemoryStore store, RecentConversationBuffer recentConversationBuffer) {
+        return MemoryBuffer.of(
+                store.insightBufferStore(),
+                store.conversationBufferStore(),
+                recentConversationBuffer);
     }
 
     @Bean
@@ -297,6 +317,7 @@ public class MemoryExtractionAutoConfiguration {
     })
     public InsightBuildScheduler insightBuildScheduler(
             MemoryStore store,
+            MemoryBuffer buffer,
             InsightGenerator generator,
             InsightGroupClassifier groupClassifier,
             InsightGroupRouter groupRouter,
@@ -305,7 +326,7 @@ public class MemoryExtractionAutoConfiguration {
             InsightBuildConfig insightBuildConfig,
             ObjectProvider<MemoryObserver> observerProvider) {
         return new InsightBuildScheduler(
-                store.insightBufferStore(),
+                buffer.insightBuffer(),
                 store,
                 generator,
                 groupClassifier,
@@ -340,13 +361,14 @@ public class MemoryExtractionAutoConfiguration {
             MemoryItemLayer memoryItemLayer,
             InsightLayer insightLayer,
             ContextCommitDetector contextCommitDetector,
-            MemoryStore store) {
+            MemoryBuffer buffer) {
         return new MemoryExtractor(
                 rawDataLayer,
                 memoryItemLayer,
                 insightLayer,
                 rawDataLayer,
                 contextCommitDetector,
-                store.conversationBufferStore());
+                buffer.pendingConversationBuffer(),
+                buffer.recentConversationBuffer());
     }
 }
