@@ -24,7 +24,7 @@ import java.util.Set;
  * <p>Buffer items to be processed by InsightType, supporting grouping tags and build status tracking.
  *
  */
-public interface InsightBuffer {
+public interface InsightBuffer extends AutoCloseable {
 
     /**
      * Batch context in the ungrouped stage, returning ungrouped entries and existing group names in one scan.
@@ -100,4 +100,7 @@ public interface InsightBuffer {
         }
         return false;
     }
+
+    @Override
+    default void close() throws Exception {}
 }

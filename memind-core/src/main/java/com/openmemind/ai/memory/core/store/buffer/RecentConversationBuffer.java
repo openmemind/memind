@@ -13,10 +13,20 @@
  */
 package com.openmemind.ai.memory.core.store.buffer;
 
+import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import java.util.List;
+
 /**
- * Stream buffer persistent storage
- *
- * <p>Persist the message buffer of the ConversationSession to prevent loss of unarchived messages due to application crashes.
- *
+ * Rolling recent-conversation window used for context assembly.
  */
-public interface ConversationBuffer extends PendingConversationBuffer {}
+public interface RecentConversationBuffer extends AutoCloseable {
+
+    void append(String sessionId, Message message);
+
+    List<Message> loadRecent(String sessionId, int limit);
+
+    void clear(String sessionId);
+
+    @Override
+    default void close() throws Exception {}
+}
