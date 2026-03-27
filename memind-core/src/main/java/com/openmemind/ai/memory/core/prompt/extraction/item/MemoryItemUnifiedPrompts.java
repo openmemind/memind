@@ -100,6 +100,7 @@ public final class MemoryItemUnifiedPrompts {
 
             {{CATEGORY_CONTEXT}}
             {{IDENTITY_CONTEXT}}
+            {{SUBJECT_CONTEXT}}
             {{TEMPORAL_CONTEXT}}
 
             # Scoring Guidelines
@@ -409,6 +410,7 @@ public final class MemoryItemUnifiedPrompts {
                 .userPrompt(USER_PROMPT_TEMPLATE)
                 .variable("CATEGORY_CONTEXT", buildCategoryContext(categories, insightTypes))
                 .variable("IDENTITY_CONTEXT", buildIdentityContext(userName))
+                .variable("SUBJECT_CONTEXT", buildSubjectClarityContext(userName))
                 .variable("TEMPORAL_CONTEXT", buildTimeContext(segmentText, referenceTime))
                 .variable("CONVERSATION", segmentText != null ? segmentText : "")
                 .build();
@@ -479,11 +481,30 @@ public final class MemoryItemUnifiedPrompts {
             Use "User" to refer to the user consistently in all extracted items.
             """;
 
+    static final String SUBJECT_CLARITY_TEMPLATE =
+            """
+            # Subject Clarity
+            Every memory item must be understandable without the original conversation.
+            "{{OWNER_LABEL}}" refers only to the memory owner.
+            If the item is about someone other than {{OWNER_LABEL}}, explicitly name that subject \
+            with a stable role phrase, such as "{{OWNER_LABEL}}的朋友", "朋友的继子", or \
+            "{{OWNER_LABEL}}的同事们".
+            Do NOT use bare pronouns like "他", "她", "他们", or "自己" when the referent is \
+            not unmistakably clear from the same sentence.
+            Prefer repeating explicit role phrases over ambiguous pronouns.
+            If the subject cannot be made explicit from the source text, do not extract the item.
+            """;
+
     static String buildIdentityContext(String userName) {
         if (userName == null || userName.isBlank()) {
             return IDENTITY_DEFAULT;
         }
         return IDENTITY_WITH_NAME.replace("{{USER_NAME}}", userName);
+    }
+
+    static String buildSubjectClarityContext(String userName) {
+        String ownerLabel = (userName == null || userName.isBlank()) ? "User" : userName;
+        return SUBJECT_CLARITY_TEMPLATE.replace("{{OWNER_LABEL}}", ownerLabel);
     }
 
     // ── Temporal Context ─────────────────────────────────────────────────────

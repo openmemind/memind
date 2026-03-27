@@ -97,6 +97,8 @@ public final class SelfVerificationPrompts {
 
             {{IDENTITY_CONTEXT}}
 
+            {{SUBJECT_CONTEXT}}
+
             {{TEMPORAL_CONTEXT}}
 
             # Scoring Guidelines
@@ -303,6 +305,11 @@ public final class SelfVerificationPrompts {
                         MemoryItemUnifiedPrompts.buildCategoryContext(categories, insightTypes))
                 .variable(
                         "IDENTITY_CONTEXT", MemoryItemUnifiedPrompts.buildIdentityContext(userName))
+                .variable(
+                        "SUBJECT_CONTEXT",
+                        MemoryItemUnifiedPrompts.buildSubjectClarityContext(userName)
+                                + "\nReject any item if a reader cannot identify who each pronoun"
+                                + " refers to without reading the original conversation.")
                 .variable(
                         "TEMPORAL_CONTEXT",
                         MemoryItemUnifiedPrompts.buildTimeContext(originalText, referenceTime))

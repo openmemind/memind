@@ -168,6 +168,29 @@ class SelfVerificationPromptsTest {
                 .contains("reference anchor for resolving relative expressions");
     }
 
+    @Test
+    @DisplayName("Review prompt should reject ambiguous third-party pronouns")
+    void shouldRejectAmbiguousThirdPartyPronouns() {
+        var template =
+                SelfVerificationPrompts.build(
+                        """
+                        [2026-03-27 02:18] user: 我朋友最近越来越觉得自己不想再照顾继子了。
+                        """,
+                        List.of(),
+                        Instant.parse("2026-03-27T02:18:00Z"),
+                        List.of(createInsightType("relationships", List.of("profile"))),
+                        null,
+                        Set.of(MemoryCategory.PROFILE, MemoryCategory.EVENT));
+        var result = template.render("English");
+
+        assertThat(result.systemPrompt())
+                .contains("# Subject Clarity")
+                .contains("\"User\" refers only to the memory owner")
+                .contains("Do NOT use bare pronouns like \"他\", \"她\", \"他们\", or \"自己\"")
+                .contains(
+                        "Reject any item if a reader cannot identify who each pronoun refers to");
+    }
+
     private static MemoryInsightType createInsightType(String name, List<String> categories) {
         return new MemoryInsightType(
                 null,

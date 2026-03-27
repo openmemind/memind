@@ -105,6 +105,30 @@ class MemoryItemUnifiedPromptsTest {
                 .contains("reference anchor for resolving relative expressions");
     }
 
+    @Test
+    @DisplayName("Rendered prompt should require explicit third-party subject references")
+    void shouldRequireExplicitThirdPartySubjectReferences() {
+        var insightTypes = List.of(createInsightType("relationships", List.of("profile")));
+        var template =
+                MemoryItemUnifiedPrompts.build(
+                        insightTypes,
+                        """
+                        [2026-03-27 02:18] user: 我朋友最近越来越觉得自己不想再照顾继子了。
+                        """,
+                        Instant.parse("2026-03-27T02:18:00Z"),
+                        null,
+                        Set.of(MemoryCategory.PROFILE, MemoryCategory.EVENT));
+
+        var result = template.render("English");
+
+        assertThat(result.systemPrompt())
+                .contains("# Subject Clarity")
+                .contains("\"User\" refers only to the memory owner")
+                .contains("explicitly name that subject with a stable role phrase")
+                .contains("Do NOT use bare pronouns like \"他\", \"她\", \"他们\", or \"自己\"")
+                .contains("If the subject cannot be made explicit from the source text");
+    }
+
     private static MemoryInsightType createInsightType(String name, List<String> categories) {
         return new MemoryInsightType(
                 null,
