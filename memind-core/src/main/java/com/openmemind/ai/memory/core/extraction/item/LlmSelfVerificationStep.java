@@ -152,7 +152,7 @@ public class LlmSelfVerificationStep {
         return new ExtractedMemoryEntry(
                 item.content(),
                 clamp(item.confidence()),
-                resolveOccurredAt(item.occurredAt(), referenceTime),
+                resolveOccurredAt(item.occurredAt()),
                 rawDataId,
                 null,
                 item.insightTypes() != null ? item.insightTypes() : List.of(),
@@ -161,14 +161,14 @@ public class LlmSelfVerificationStep {
                 item.category());
     }
 
-    private static Instant resolveOccurredAt(String llmValue, Instant fallback) {
+    private static Instant resolveOccurredAt(String llmValue) {
         if (llmValue != null && !llmValue.isBlank()) {
             try {
                 return Instant.parse(llmValue);
             } catch (Exception ignored) {
             }
         }
-        return fallback;
+        return null;
     }
 
     private static float clamp(float value) {

@@ -221,6 +221,31 @@ class SqliteMemoryStoreTest {
     }
 
     @Test
+    void itemsCanPersistWithNullOccurredAt() {
+        MemoryItem itemWithoutOccurredAt =
+                new MemoryItem(
+                        103L,
+                        memoryId.toIdentifier(),
+                        "stable profile fact",
+                        MemoryScope.USER,
+                        MemoryCategory.PROFILE,
+                        ContentTypes.CONVERSATION,
+                        "vec-103",
+                        "rd-103",
+                        "hash-103",
+                        null,
+                        Map.of("kind", "profile"),
+                        BASE_TIME,
+                        MemoryItemType.FACT);
+
+        store.insertItems(memoryId, List.of(itemWithoutOccurredAt));
+
+        assertThat(store.getItemsByIds(memoryId, List.of(103L)))
+                .singleElement()
+                .satisfies(item -> assertThat(item.occurredAt()).isNull());
+    }
+
+    @Test
     void insightTypesCanBeUpsertedAndListed() {
         MemoryInsightType initial =
                 new MemoryInsightType(

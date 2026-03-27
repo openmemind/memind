@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS memory_item (
     vector_id     TEXT,
     raw_data_id   TEXT,
     content_hash  TEXT,
-    occurred_at   TEXT         NOT NULL,
+    occurred_at   TEXT,
     type          TEXT         NOT NULL DEFAULT 'FACT',
     raw_data_type TEXT         NOT NULL DEFAULT 'CONVERSATION',
     metadata      TEXT,

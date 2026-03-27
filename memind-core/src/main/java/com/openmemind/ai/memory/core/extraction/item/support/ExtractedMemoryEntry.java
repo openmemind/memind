@@ -25,7 +25,7 @@ import java.util.Map;
  *
  * @param content Memory content
  * @param confidence Confidence level (used only for filtering, not persisted)
- * @param occurredAt Time when the memory occurred (LLM parsing or referenceTime fallback)
+ * @param occurredAt Semantic time when the memory occurred (null for non-temporal items)
  * @param rawDataId Source data ID
  * @param contentHash Content hash (filled after deduplication)
  * @param insightTypes List of matched InsightType names (can be empty)

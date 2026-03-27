@@ -47,7 +47,7 @@ public record MemoryItem(
         /* Content hash (for deduplication) */
         String contentHash,
 
-        /* Memory occurrence time (LLM parsing or source message timestamp fallback, null=permanent fact) */
+        /* Semantic memory occurrence time (null for non-temporal items) */
         Instant occurredAt,
 
         /* Additional key-value metadata (including insightTypes, whenToUse, etc.) */

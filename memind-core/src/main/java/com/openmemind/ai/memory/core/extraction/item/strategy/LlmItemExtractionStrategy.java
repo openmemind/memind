@@ -137,7 +137,7 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
                                 new ExtractedMemoryEntry(
                                         item.content(),
                                         clamp(item.confidence()),
-                                        resolveOccurredAt(item.occurredAt(), referenceTime),
+                                        resolveOccurredAt(item.occurredAt()),
                                         segment.rawDataId(),
                                         null,
                                         item.insightTypes() != null
@@ -217,14 +217,14 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
                 null);
     }
 
-    static Instant resolveOccurredAt(String llmValue, Instant fallback) {
+    static Instant resolveOccurredAt(String llmValue) {
         if (llmValue != null && !llmValue.isBlank()) {
             try {
                 return Instant.parse(llmValue);
             } catch (Exception ignored) {
             }
         }
-        return fallback;
+        return null;
     }
 
     static Map<String, Object> mergeMetadata(

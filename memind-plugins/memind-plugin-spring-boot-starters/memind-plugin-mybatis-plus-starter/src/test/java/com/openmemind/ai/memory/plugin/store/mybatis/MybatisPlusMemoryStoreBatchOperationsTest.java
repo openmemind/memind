@@ -206,6 +206,24 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
                         });
     }
 
+    @Test
+    @DisplayName("insertItems allows null occurredAt for non-temporal items")
+    void insertItemsAllowsNullOccurredAtForNonTemporalItems() {
+        newContextRunner(tempDir.resolve("null-occurred-at.db"))
+                .run(
+                        context -> {
+                            ItemOperations itemOps =
+                                    context.getBean(MemoryStore.class).itemOperations();
+
+                            itemOps.insertItems(
+                                    MEMORY_ID, List.of(memoryItem(10L, "stable preference", null)));
+
+                            assertThat(itemOps.listItems(MEMORY_ID))
+                                    .singleElement()
+                                    .satisfies(item -> assertThat(item.occurredAt()).isNull());
+                        });
+    }
+
     private ApplicationContextRunner newContextRunner(Path dbPath) {
         return new ApplicationContextRunner()
                 .withConfiguration(
@@ -236,6 +254,10 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
     }
 
     private static MemoryItem memoryItem(Long id, String content) {
+        return memoryItem(id, content, BASE_TIME);
+    }
+
+    private static MemoryItem memoryItem(Long id, String content, Instant occurredAt) {
         return new MemoryItem(
                 id,
                 MEMORY_ID.toIdentifier(),
@@ -246,7 +268,7 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
                 "vector-" + id,
                 "raw-" + id,
                 "hash-" + id,
-                BASE_TIME,
+                occurredAt,
                 Map.of("content", content),
                 BASE_TIME,
                 MemoryItemType.FACT);

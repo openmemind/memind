@@ -184,6 +184,39 @@ class LlmSelfVerificationStepTest {
                             })
                     .verifyComplete();
         }
+
+        @Test
+        @DisplayName("Should keep occurredAt null when the review result has no semantic time")
+        void shouldKeepOccurredAtNullWhenTheReviewResultHasNoSemanticTime() {
+            var response =
+                    new MemoryItemExtractionResponse(
+                            List.of(
+                                    new MemoryItemExtractionResponse.ExtractedItem(
+                                            "User tends to blame themselves when facing trusted"
+                                                    + " people",
+                                            0.95f,
+                                            null,
+                                            List.of("behavior"),
+                                            null,
+                                            "behavior")));
+            var step = new LlmSelfVerificationStep(new FakeStructuredChatClient(response));
+
+            StepVerifier.create(
+                            step.verify(
+                                    ORIGINAL_TEXT,
+                                    List.of(),
+                                    RAW_DATA_ID,
+                                    Instant.parse("2026-03-27T02:18:00Z"),
+                                    List.of(),
+                                    null,
+                                    null))
+                    .assertNext(
+                            result -> {
+                                assertThat(result).hasSize(1);
+                                assertThat(result.getFirst().occurredAt()).isNull();
+                            })
+                    .verifyComplete();
+        }
     }
 
     private static ExtractedMemoryEntry createEntry(String content) {

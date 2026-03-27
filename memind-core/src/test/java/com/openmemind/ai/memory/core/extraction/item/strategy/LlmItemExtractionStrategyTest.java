@@ -27,6 +27,21 @@ import org.junit.jupiter.api.Test;
 class LlmItemExtractionStrategyTest {
 
     @Test
+    @DisplayName("resolveOccurredAt should return null when LLM omits the time")
+    void resolveOccurredAtShouldReturnNullWhenLlmOmitsTheTime() {
+        assertThat(LlmItemExtractionStrategy.resolveOccurredAt(null)).isNull();
+        assertThat(LlmItemExtractionStrategy.resolveOccurredAt("  ")).isNull();
+    }
+
+    @Test
+    @DisplayName("resolveOccurredAt should parse LLM provided ISO timestamp")
+    void resolveOccurredAtShouldParseLlmProvidedIsoTimestamp() {
+        Instant occurredAt = LlmItemExtractionStrategy.resolveOccurredAt("2026-03-27T02:18:00Z");
+
+        assertThat(occurredAt).isEqualTo(Instant.parse("2026-03-27T02:18:00Z"));
+    }
+
+    @Test
     @DisplayName("resolveUserName should ignore assistant-role userName values")
     void resolveUserNameShouldIgnoreAssistantRoleUserNameValues() {
         var segment =
