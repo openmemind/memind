@@ -72,6 +72,38 @@ class MemoryItemUnifiedPromptsTest {
                 .contains("Avoid conversational framing like \"Assistant suggested:\"");
     }
 
+    @Test
+    @DisplayName("Rendered prompt should enforce strict occurredAt semantics")
+    void shouldEnforceStrictOccurredAtSemantics() {
+        var insightTypes =
+                List.of(
+                        createInsightType("profile", List.of("profile")),
+                        createInsightType("experiences", List.of("event")),
+                        createInsightType("procedural", List.of("procedural")));
+        var template =
+                MemoryItemUnifiedPrompts.build(
+                        insightTypes,
+                        """
+                        [2026-03-27 02:18] user: 当对方是我信任的人时，我总会先找自己的问题。
+                        """,
+                        Instant.parse("2026-03-27T02:18:00Z"),
+                        null,
+                        Set.of(
+                                MemoryCategory.PROFILE,
+                                MemoryCategory.BEHAVIOR,
+                                MemoryCategory.EVENT,
+                                MemoryCategory.PROCEDURAL));
+
+        var result = template.render("English");
+
+        assertThat(result.systemPrompt())
+                .contains("Profile, behavior, procedural, tool, and skill items should normally set")
+                .contains("Event items should populate `occurredAt` only when the text itself")
+                .contains(
+                        "Do NOT use message timestamps or conversation timestamps as `occurredAt`")
+                .contains("reference anchor for resolving relative expressions");
+    }
+
     private static MemoryInsightType createInsightType(String name, List<String> categories) {
         return new MemoryInsightType(
                 null,

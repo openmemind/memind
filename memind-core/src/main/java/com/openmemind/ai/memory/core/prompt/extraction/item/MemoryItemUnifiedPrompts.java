@@ -44,8 +44,9 @@ public final class MemoryItemUnifiedPrompts {
     static final String RESOLVE_DATES_INSTRUCTION =
             """
             Resolve relative expressions ("yesterday", "next month") to absolute dates. \
-            Embed the resolved date in the content and populate `occurredAt` with the \
-            ISO-8601 UTC timestamp.\
+            Only populate `occurredAt` when the text itself provides semantic temporal evidence \
+            for the memory. Do NOT infer `occurredAt` from the reference date or message \
+            timestamp alone.\
             """;
 
     // ── System & User Prompt Templates ───────────────────────────────────────
@@ -113,8 +114,15 @@ public final class MemoryItemUnifiedPrompts {
             ## occurredAt
             Temporal Content Embedding rules for time-specific memories:
             - Time-specific memories: embed the resolved absolute date in the content AND \
-            populate `occurredAt` with the ISO-8601 UTC timestamp (e.g., "2025-02-07T00:00:00Z").
-            - Non-temporal items (stable facts, preferences): set `occurredAt` to null.
+            populate `occurredAt` with the ISO-8601 UTC timestamp (e.g., "2025-02-07T00:00:00Z") \
+            only when the text itself states or clearly implies that time.
+            - Profile, behavior, procedural, tool, and skill items should normally set \
+            `occurredAt` to null.
+            - Event items should populate `occurredAt` only when the text itself contains \
+            explicit temporal evidence such as a date, relative date phrase, or clear \
+            start/end marker.
+            - Do NOT use message timestamps or conversation timestamps as `occurredAt` by \
+            default. They are for resolving relative expressions, not for persistence defaults.
 
             <OutputFormat>
             Return a JSON object ONLY. No extra text.
@@ -322,9 +330,9 @@ public final class MemoryItemUnifiedPrompts {
                 {
                   "content": "Virtual threads caused HikariCP connection pool exhaustion; solved by setting maximumPoolSize to 10-20",
                   "confidence": 0.95,
-                  "occurredAt": "2025-03-15T00:00:00Z",
+                  "occurredAt": null,
                   "insightTypes": ["procedural"],
-                  "category_reason": "Specific problem (pool exhaustion) with concrete solution (pool size 10-20).",
+                  "category_reason": "Reusable troubleshooting knowledge. Keep occurredAt null because the memory is operational guidance, not a dated event record.",
                   "category": "procedural"
                 },
                 {
@@ -490,9 +498,10 @@ public final class MemoryItemUnifiedPrompts {
                             ? "\nFallback Reference Date: " + DATE_FMT.format(referenceTime)
                             : "";
             return "# Temporal Resolution\n"
-                    + "Messages contain timestamps (e.g., [2023-05-25 13:17]). Use EACH"
-                    + " message's timestamp as the precise anchor for resolving relative time"
-                    + " within that message."
+                    + "Messages contain timestamps (e.g., [2023-05-25 13:17]). Use each message's"
+                    + " timestamp only as a reference anchor for resolving relative expressions"
+                    + " within that message. Do NOT copy message timestamps into occurredAt unless"
+                    + " the memory text itself makes that time semantically explicit."
                     + fallback
                     + "\n\n"
                     + RESOLVE_DATES_INSTRUCTION
@@ -501,7 +510,8 @@ public final class MemoryItemUnifiedPrompts {
             return "# Temporal Resolution\n"
                     + "Today's date: "
                     + DATE_FMT.format(referenceTime)
-                    + ". Use this to resolve relative temporal references.\n\n"
+                    + ". Use this only to resolve relative temporal references. Do NOT treat it"
+                    + " as a default occurredAt.\n\n"
                     + RESOLVE_DATES_INSTRUCTION
                     + "\n";
         } else {

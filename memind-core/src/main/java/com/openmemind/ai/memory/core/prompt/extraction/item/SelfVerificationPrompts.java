@@ -103,8 +103,15 @@ public final class SelfVerificationPrompts {
 
             ## occurredAt
             - Time-specific memories: embed the resolved absolute date in the content AND \
-            populate `occurredAt` with the ISO-8601 UTC timestamp (e.g., "2025-02-07T00:00:00Z").
-            - Non-temporal items (stable facts, preferences): set `occurredAt` to null.
+            populate `occurredAt` with the ISO-8601 UTC timestamp (e.g., "2025-02-07T00:00:00Z") \
+            only when the text itself states or clearly implies that time.
+            - Profile, behavior, procedural, tool, and skill items should normally set \
+            `occurredAt` to null.
+            - Event items should populate `occurredAt` only when the text itself contains \
+            explicit temporal evidence such as a date, relative date phrase, or clear \
+            start/end marker.
+            - Do NOT use message timestamps or conversation timestamps as `occurredAt` by \
+            default. They are for resolving relative expressions, not for persistence defaults.
 
             <OutputFormat>
             Return a JSON object ONLY. No extra text. No markdown fences.
@@ -170,9 +177,9 @@ public final class SelfVerificationPrompts {
               "items": [
                 {
                   "content": "Virtual threads caused HikariCP connection pool exhaustion because virtual thread count far exceeds pool size limit; solved by setting maximumPoolSize to 10-20",
-                  "occurredAt": "2026-03-18T00:00:00Z",
+                  "occurredAt": null,
                   "insightTypes": ["procedural"],
-                  "category_reason": "Problem (pool exhaustion) with root cause (thread count > pool size) and solution (maximumPoolSize 10-20). The first pass only captured the problem but missed the cause and fix from the assistant's response.",
+                  "category_reason": "Problem (pool exhaustion) with root cause (thread count > pool size) and solution (maximumPoolSize 10-20). The first pass only captured the problem but missed the cause and fix from the assistant's response. Keep occurredAt null because this is reusable operational knowledge rather than a dated event memory.",
                   "category": "procedural"
                 }
               ]

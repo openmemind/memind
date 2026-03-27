@@ -137,6 +137,36 @@ class SelfVerificationPromptsTest {
                 .contains("NOT conversational framing like \"assistant suggested...\"");
     }
 
+    @Test
+    @DisplayName("Review prompt should enforce strict occurredAt semantics")
+    void shouldEnforceStrictOccurredAtSemantics() {
+        var template =
+                SelfVerificationPrompts.build(
+                        """
+                        [2026-03-27 02:18] user: 当对方是我信任的人时，我总会先找自己的问题。
+                        """,
+                        List.of(),
+                        Instant.parse("2026-03-27T02:18:00Z"),
+                        List.of(
+                                createInsightType("profile", List.of("profile")),
+                                createInsightType("behavior", List.of("behavior")),
+                                createInsightType("procedural", List.of("procedural"))),
+                        null,
+                        Set.of(
+                                MemoryCategory.PROFILE,
+                                MemoryCategory.BEHAVIOR,
+                                MemoryCategory.EVENT,
+                                MemoryCategory.PROCEDURAL));
+        var result = template.render("English");
+
+        assertThat(result.systemPrompt())
+                .contains("Profile, behavior, procedural, tool, and skill items should normally set")
+                .contains("Event items should populate `occurredAt` only when the text itself")
+                .contains(
+                        "Do NOT use message timestamps or conversation timestamps as `occurredAt`")
+                .contains("reference anchor for resolving relative expressions");
+    }
+
     private static MemoryInsightType createInsightType(String name, List<String> categories) {
         return new MemoryInsightType(
                 null,
