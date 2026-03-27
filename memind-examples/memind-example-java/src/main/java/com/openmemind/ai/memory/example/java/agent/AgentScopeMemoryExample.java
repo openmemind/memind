@@ -11,14 +11,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.example.java.tool;
+package com.openmemind.ai.memory.example.java.agent;
 
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
+import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
+import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.LlmReranker;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
+import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
+import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
+import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.example.java.support.ExampleDataLoader;
 import com.openmemind.ai.memory.example.java.support.ExamplePrinter;
 import com.openmemind.ai.memory.plugin.ai.spring.SpringAiFileVector;
@@ -41,55 +46,97 @@ import org.springframework.ai.openai.OpenAiEmbeddingOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 
 /**
- * Tool memory example for the pure Java integration path.
+ * Agent-scope memory example for the pure Java integration path.
  */
-public final class ToolMemoryExample {
+public final class AgentScopeMemoryExample {
 
-    private static final Logger log = LoggerFactory.getLogger(ToolMemoryExample.class);
+    private static final Logger log = LoggerFactory.getLogger(AgentScopeMemoryExample.class);
+    private static final String LANGUAGE = "Chinese";
 
-    private ToolMemoryExample() {}
+    private AgentScopeMemoryExample() {}
 
     public static void main(String[] args) {
-        run(createMemory("tool", MemoryBuildOptions.defaults()), new ExampleDataLoader());
+        var runtime = createRuntime("agent", agentOptions());
+        run(runtime.memory(), runtime.store(), new ExampleDataLoader());
     }
 
-    private static void run(Memory memory, ExampleDataLoader loader) {
-        var memoryId = DefaultMemoryId.of("user-tool", "memind");
+    private static void run(Memory memory, MemoryStore store, ExampleDataLoader loader) {
+        var memoryId = DefaultMemoryId.of("user-agent-scope", "memind");
+        var config = ExtractionConfig.agentOnly().withLanguage(LANGUAGE);
+        var dataFiles = new String[] {"agent/messages-1.json", "agent/messages-2.json"};
+        var labels = new String[] {"directives + playbooks", "resolutions"};
 
-        ExamplePrinter.printSection("Step 1: Report Tool Calls — reportToolCalls()");
-        var toolRecords = loader.loadToolCalls("tool/tool-calls.json");
-        log.info("  loaded {} tool call records", toolRecords.size());
+        for (int i = 0; i < dataFiles.length; i++) {
+            ExamplePrinter.printSection(
+                    "Step " + (i + 1) + ": Extract Agent Memory — " + labels[i]);
+            var messages = loader.loadMessages(dataFiles[i]);
+            log.info("  loaded {} messages", messages.size());
 
-        var toolResult = memory.reportToolCalls(memoryId, toolRecords).block();
-        ExamplePrinter.printExtractionResult(toolResult);
+            var result = memory.addMessages(memoryId, messages, config).block();
+            ExamplePrinter.printExtractionResult(result);
+        }
 
-        ExamplePrinter.printSection("Step 2: Tool Statistics — getToolStats() / getAllToolStats()");
-        log.info("  ── grep_code stats ──");
-        ExamplePrinter.printToolStats(
-                "grep_code", memory.getToolStats(memoryId, "grep_code").block());
+        ExamplePrinter.printSection("Step 3: Flush Agent Insights — flushInsights()");
+        log.info("  flushing agent insight tree...");
+        long flushStartedAt = System.currentTimeMillis();
+        memory.flushInsights(memoryId, LANGUAGE);
+        log.info("  flush completed in {}ms", System.currentTimeMillis() - flushStartedAt);
 
-        log.info("  ── all tool stats ──");
-        ExamplePrinter.printAllToolStats(memory.getAllToolStats(memoryId).block());
+        ExamplePrinter.printSection("Step 4: Agent Insight Tree — Full Structure");
+        ExamplePrinter.printInsightTree(store, memoryId);
+
+        retrieveAgentMemory(
+                memory, memoryId, "Step 5: Retrieve Directive Memory", "开始修改生产配置前必须准备什么？");
+        retrieveAgentMemory(
+                memory, memoryId, "Step 6: Retrieve Playbook Memory", "收到 webhook 重试告警时应该怎么排查？");
+        retrieveAgentMemory(
+                memory, memoryId, "Step 7: Retrieve Resolution Memory", "staging 启动失败的问题后来怎么解决的？");
     }
 
-    private static Memory createMemory(String scenario, MemoryBuildOptions options) {
+    private static void retrieveAgentMemory(
+            Memory memory, DefaultMemoryId memoryId, String title, String query) {
+        ExamplePrinter.printSection(title);
+        log.info("  query: {}", query);
+
+        long startedAt = System.currentTimeMillis();
+        var retrieval =
+                memory.retrieve(
+                                RetrievalRequest.agentMemory(
+                                        memoryId, query, RetrievalConfig.Strategy.SIMPLE))
+                        .block();
+        ExamplePrinter.printRetrievalResult(retrieval, System.currentTimeMillis() - startedAt);
+    }
+
+    private static MemoryBuildOptions agentOptions() {
+        InsightBuildConfig defaults = MemoryBuildOptions.defaults().insightBuild();
+        return MemoryBuildOptions.builder()
+                .insightBuild(
+                        new InsightBuildConfig(2, 2, defaults.concurrency(), defaults.maxRetries()))
+                .build();
+    }
+
+    private static AgentScopeRuntime createRuntime(String scenario, MemoryBuildOptions options) {
         Path runtimeDir = resolveRuntimeDir(scenario);
         String jdbcUrl = resolveJdbcUrl(runtimeDir);
         prepareRuntimeLayout(runtimeDir, jdbcUrl);
         StructuredChatClient chatClient = createChatClient();
         EmbeddingModel embeddingModel = createEmbeddingModel();
         JdbcMemoryAccess jdbc = createJdbcAccess(jdbcUrl);
+        MemoryStore memoryStore = jdbc.store();
 
-        return Memory.builder()
-                .chatClient(chatClient)
-                .store(jdbc.store())
-                .textSearch(jdbc.textSearch())
-                .vector(
-                        SpringAiFileVector.file(
-                                runtimeDir.resolve("vector-store.json"), embeddingModel))
-                .reranker(createReranker())
-                .options(options)
-                .build();
+        Memory memory =
+                Memory.builder()
+                        .chatClient(chatClient)
+                        .store(memoryStore)
+                        .textSearch(jdbc.textSearch())
+                        .vector(
+                                SpringAiFileVector.file(
+                                        runtimeDir.resolve("vector-store.json"), embeddingModel))
+                        .reranker(createReranker())
+                        .options(options)
+                        .build();
+
+        return new AgentScopeRuntime(memory, memoryStore);
     }
 
     private static StructuredChatClient createChatClient() {
@@ -242,7 +289,7 @@ public final class ToolMemoryExample {
     }
 
     private static void ensureSqliteParentDirectory(String jdbcUrl) throws Exception {
-        if (detectDialect(jdbcUrl) != JdbcDialect.SQLITE) {
+        if (detectDialect(jdbcUrl) != Dialect.SQLITE) {
             return;
         }
 
@@ -256,6 +303,20 @@ public final class ToolMemoryExample {
         if (parent != null) {
             Files.createDirectories(parent);
         }
+    }
+
+    private static Dialect detectDialect(String jdbcUrl) {
+        String normalized = jdbcUrl.toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("jdbc:mysql:")) {
+            return Dialect.MYSQL;
+        }
+        if (normalized.startsWith("jdbc:postgresql:")) {
+            return Dialect.POSTGRESQL;
+        }
+        if (normalized.startsWith("jdbc:sqlite:")) {
+            return Dialect.SQLITE;
+        }
+        throw new IllegalArgumentException("Unsupported JDBC URL for examples: " + jdbcUrl);
     }
 
     private static String extractSqlitePath(String jdbcUrl) {
@@ -272,23 +333,11 @@ public final class ToolMemoryExample {
         return rawPath;
     }
 
-    private static JdbcDialect detectDialect(String jdbcUrl) {
-        String normalized = jdbcUrl.toLowerCase(Locale.ROOT);
-        if (normalized.contains(":sqlite:")) {
-            return JdbcDialect.SQLITE;
-        }
-        if (normalized.contains(":mysql:")) {
-            return JdbcDialect.MYSQL;
-        }
-        if (normalized.contains(":postgresql:")) {
-            return JdbcDialect.POSTGRESQL;
-        }
-        throw new IllegalStateException("Unsupported JDBC URL for pure Java example: " + jdbcUrl);
-    }
-
-    private enum JdbcDialect {
+    private enum Dialect {
         SQLITE,
         MYSQL,
         POSTGRESQL
     }
+
+    private record AgentScopeRuntime(Memory memory, MemoryStore store) {}
 }

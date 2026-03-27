@@ -55,14 +55,26 @@ public final class InsightTypeRoutingPrompts {
               e.g., "What am I working on?" "When did I start this project?"
             - behavior: Query asks about HABITS/ROUTINES — recurring patterns.
               e.g., "What's my morning routine?" "How often do I exercise?"
-            - procedural: Query asks about HOW-TO — procedures, solutions, agent directives.
-              e.g., "How did I fix that HikariCP issue?" "What did I tell you about code style?"
+            - directives: Query asks about DURABLE AGENT RULES — boundaries, response rules, \
+              and collaboration preferences.
+              e.g., "What did I tell you about code style?" "How should you respond to me?"
+            - playbooks: Query asks about REUSABLE WORKFLOWS — repeatable methods for \
+              handling a class of tasks.
+              e.g., "How should repository comparisons be done?" "What's the workflow for \
+              prompt refinement?"
+            - resolutions: Query asks about RESOLVED PROBLEMS — stable fixes, conclusions, or \
+              troubleshooting outcomes.
+              e.g., "How did I fix that HikariCP issue?" "What conclusion did we reach about \
+              the grouping problem?"
 
             # Boundary Cases
             - "What programming languages do I know?" → identity (stable skill), NOT experiences
             - "What programming language am I learning?" → experiences (time-bound activity)
             - "I like using Kotlin" → preferences (opinion), NOT identity
             - "My colleague Zhang handles the backend" → relationships (person) + experiences (team context)
+            - "Show the plan before changes" → directives, NOT resolutions
+            - "Compare repositories by scope → taxonomy → storage" → playbooks, NOT experiences
+            - "Virtual threads exhausted HikariCP; fix by setting maximumPoolSize" → resolutions, NOT playbooks
 
             {{conversation_section}}
 

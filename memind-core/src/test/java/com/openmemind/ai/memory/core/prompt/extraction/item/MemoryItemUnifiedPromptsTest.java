@@ -32,7 +32,9 @@ class MemoryItemUnifiedPromptsTest {
                 List.of(
                         createInsightType("profile", List.of("profile")),
                         createInsightType("experiences", List.of("event")),
-                        createInsightType("procedural", List.of("procedural")));
+                        createInsightType("directives", List.of("directive")),
+                        createInsightType("playbooks", List.of("playbook")),
+                        createInsightType("resolutions", List.of("resolution")));
         var template =
                 MemoryItemUnifiedPrompts.build(
                         insightTypes,
@@ -50,9 +52,39 @@ class MemoryItemUnifiedPromptsTest {
     }
 
     @Test
-    @DisplayName("Rendered prompt should exclude supportive assistant suggestions from procedural")
-    void shouldExcludeSupportiveAssistantSuggestionsFromProcedural() {
-        var insightTypes = List.of(createInsightType("procedural", List.of("procedural")));
+    @DisplayName("Rendered prompt should describe new agent categories and strict gating")
+    void shouldDescribeNewAgentCategoriesAndStrictGating() {
+        var insightTypes =
+                List.of(
+                        createInsightType("directives", List.of("directive")),
+                        createInsightType("playbooks", List.of("playbook")),
+                        createInsightType("resolutions", List.of("resolution")));
+        var template =
+                MemoryItemUnifiedPrompts.build(
+                        insightTypes,
+                        "user: compare the repositories before proposing changes",
+                        Instant.parse("2026-03-28T00:00:00Z"),
+                        null,
+                        Set.of(
+                                MemoryCategory.DIRECTIVE,
+                                MemoryCategory.PLAYBOOK,
+                                MemoryCategory.RESOLUTION));
+
+        var result = template.render("English");
+
+        assertThat(result.systemPrompt())
+                .contains("directive")
+                .contains("playbook")
+                .contains("resolution")
+                .contains("if uncertain between agent memory and nothing, prefer nothing")
+                .contains("one-off control messages");
+    }
+
+    @Test
+    @DisplayName(
+            "Rendered prompt should exclude supportive assistant suggestions from agent memory")
+    void shouldExcludeSupportiveAssistantSuggestionsFromAgentMemory() {
+        var insightTypes = List.of(createInsightType("directives", List.of("directive")));
         var template =
                 MemoryItemUnifiedPrompts.build(
                         insightTypes,
@@ -62,7 +94,7 @@ class MemoryItemUnifiedPromptsTest {
                         """,
                         Instant.parse("2026-03-27T00:00:00Z"),
                         null,
-                        Set.of(MemoryCategory.PROCEDURAL));
+                        Set.of(MemoryCategory.DIRECTIVE));
 
         var result = template.render("English");
 
@@ -79,7 +111,7 @@ class MemoryItemUnifiedPromptsTest {
                 List.of(
                         createInsightType("profile", List.of("profile")),
                         createInsightType("experiences", List.of("event")),
-                        createInsightType("procedural", List.of("procedural")));
+                        createInsightType("directives", List.of("directive")));
         var template =
                 MemoryItemUnifiedPrompts.build(
                         insightTypes,
@@ -92,13 +124,14 @@ class MemoryItemUnifiedPromptsTest {
                                 MemoryCategory.PROFILE,
                                 MemoryCategory.BEHAVIOR,
                                 MemoryCategory.EVENT,
-                                MemoryCategory.PROCEDURAL));
+                                MemoryCategory.DIRECTIVE));
 
         var result = template.render("English");
 
         assertThat(result.systemPrompt())
                 .contains(
-                        "Profile, behavior, procedural, tool, and skill items should normally set")
+                        "Profile, behavior, directive, playbook, resolution, and tool items should"
+                                + " normally set")
                 .contains("Event items should populate `occurredAt` only when the text itself")
                 .contains(
                         "Do NOT use message timestamps or conversation timestamps as `occurredAt`")

@@ -215,7 +215,9 @@ public class MemoryExtractionAutoConfiguration {
                         MemoryCategory.PROFILE,
                         MemoryCategory.BEHAVIOR,
                         MemoryCategory.EVENT,
-                        MemoryCategory.PROCEDURAL);
+                        MemoryCategory.DIRECTIVE,
+                        MemoryCategory.PLAYBOOK,
+                        MemoryCategory.RESOLUTION);
         var defaultStrategy =
                 new LlmItemExtractionStrategy(structuredChatClient, conversationCategories);
         return new DefaultMemoryItemExtractor(defaultStrategy, strategies);
@@ -244,7 +246,9 @@ public class MemoryExtractionAutoConfiguration {
                         MemoryCategory.PROFILE,
                         MemoryCategory.BEHAVIOR,
                         MemoryCategory.EVENT,
-                        MemoryCategory.PROCEDURAL);
+                        MemoryCategory.DIRECTIVE,
+                        MemoryCategory.PLAYBOOK,
+                        MemoryCategory.RESOLUTION);
         return new MemoryItemLayer(
                 extractor,
                 deduplicator,

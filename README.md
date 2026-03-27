@@ -236,13 +236,15 @@ They now use the same object-first builder approach shown above.
 | Runtime | Example | Main Class | Description |
 |---------|---------|------------|-------------|
 | Spring Boot | **QuickStart** | `com.openmemind.ai.memory.example.springboot.quickstart.QuickStartExample` | Basic extract + retrieve flow |
+| Spring Boot | **Agent Scope** | `com.openmemind.ai.memory.example.springboot.agent.AgentScopeMemoryExample` | Agent-scope extraction, insight tree flush, and retrieval for directives, playbooks, and resolutions |
 | Spring Boot | **Insight** | `com.openmemind.ai.memory.example.springboot.insight.InsightTreeExample` | Insight Tree multi-tier generation (Leaf → Branch → Root) |
 | Spring Boot | **Foresight** | `com.openmemind.ai.memory.example.springboot.foresight.ForesightExample` | Predictive memory — anticipate user needs |
-| Spring Boot | **Tool** | `com.openmemind.ai.memory.example.springboot.tool.ToolMemoryExample` | Tool call tracking and procedural memory |
+| Spring Boot | **Tool** | `com.openmemind.ai.memory.example.springboot.tool.ToolMemoryExample` | Tool call tracking and aggregated tool statistics |
 | Pure Java | **QuickStart** | `com.openmemind.ai.memory.example.java.quickstart.QuickStartExample` | Object-first builder with direct Spring AI runtime objects |
+| Pure Java | **Agent Scope** | `com.openmemind.ai.memory.example.java.agent.AgentScopeMemoryExample` | Object-first agent-scope extraction with insight tree flush and targeted retrieval |
 | Pure Java | **Insight** | `com.openmemind.ai.memory.example.java.insight.InsightTreeExample` | Object-first builder with custom `MemoryBuildOptions` |
 | Pure Java | **Foresight** | `com.openmemind.ai.memory.example.java.foresight.ForesightExample` | Pure Java foresight extraction and retrieval |
-| Pure Java | **Tool** | `com.openmemind.ai.memory.example.java.tool.ToolMemoryExample` | Pure Java tool memory and procedural recall |
+| Pure Java | **Tool** | `com.openmemind.ai.memory.example.java.tool.ToolMemoryExample` | Pure Java tool call tracking and aggregated statistics |
 
 ---
 

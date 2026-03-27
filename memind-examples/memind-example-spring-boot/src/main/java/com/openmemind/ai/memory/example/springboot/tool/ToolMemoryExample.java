@@ -15,9 +15,6 @@ package com.openmemind.ai.memory.example.springboot.tool;
 
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
-import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
-import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
-import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.example.springboot.support.ExampleDataLoader;
 import com.openmemind.ai.memory.example.springboot.support.ExamplePrinter;
 import java.util.Map;
@@ -74,30 +71,5 @@ public class ToolMemoryExample {
 
         log.info("  ── all tool stats ──");
         ExamplePrinter.printAllToolStats(memory.getAllToolStats(memoryId).block());
-
-        ExamplePrinter.printSection("Step 3: Extract PROCEDURAL Memory — addMessages(agentOnly)");
-        var messages = loader.loadMessages("tool/messages.json");
-        log.info("  loaded {} messages", messages.size());
-
-        var result =
-                memory.addMessages(
-                                memoryId,
-                                messages,
-                                ExtractionConfig.agentOnly()
-                                        .withEnableInsight(false)
-                                        .withLanguage("Chinese"))
-                        .block();
-        ExamplePrinter.printExtractionResult(result);
-
-        ExamplePrinter.printSection("Step 4: Retrieve Agent Memory — retrieve(agentMemory)");
-        var query = "部署流程是怎样的？";
-        log.info("  query: {}", query);
-        long startedAt = System.currentTimeMillis();
-        var retrieval =
-                memory.retrieve(
-                                RetrievalRequest.agentMemory(
-                                        memoryId, query, RetrievalConfig.Strategy.SIMPLE))
-                        .block();
-        ExamplePrinter.printRetrievalResult(retrieval, System.currentTimeMillis() - startedAt);
     }
 }

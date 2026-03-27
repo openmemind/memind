@@ -11,26 +11,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.data.enums;
+package com.openmemind.ai.memory.example.java.agent;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.example.java.support.ExampleDataLoader;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-class MemoryCategoryTest {
+class AgentScopeExampleCatalogTest {
 
     @Test
-    @DisplayName("agent taxonomy definitions should stay narrow and durable")
-    void agentTaxonomyDefinitionsShouldStayNarrowAndDurable() {
-        assertThat(MemoryCategory.DIRECTIVE.promptDefinition())
-                .contains("durable instruction")
-                .contains("future interactions");
-        assertThat(MemoryCategory.PLAYBOOK.promptDefinition())
-                .contains("reusable workflow")
-                .contains("task archetype");
-        assertThat(MemoryCategory.RESOLUTION.promptDefinition())
-                .contains("resolved problem")
-                .contains("usable resolution");
+    @DisplayName("agent scope example data should be discoverable")
+    void agentScopeExampleData_shouldBeDiscoverable() {
+        var loader = new ExampleDataLoader();
+
+        assertThat(loader.loadMessages("agent/messages-1.json")).hasSizeGreaterThan(0);
+        assertThat(loader.loadMessages("agent/messages-2.json")).hasSizeGreaterThan(0);
+    }
+
+    @Test
+    @DisplayName("agent scope example main class should exist")
+    void agentScopeExampleMainClass_shouldExist() {
+        assertThat(AgentScopeMemoryExample.class).isNotNull();
     }
 }

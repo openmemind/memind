@@ -143,6 +143,21 @@ class MemoryItemExtractionPromptBuilderTest {
                             .systemPrompt();
             assertThat(prompt).contains("# Examples");
         }
+
+        @Test
+        @DisplayName("system prompt should describe new split agent categories")
+        void systemPromptShouldDescribeNewAgentCategories() {
+            var insightTypes = DefaultInsightTypes.all();
+            String prompt =
+                    MemoryItemPrompts.buildUnified(insightTypes, "dummy")
+                            .render("English")
+                            .systemPrompt();
+            assertThat(prompt)
+                    .contains("directive")
+                    .contains("playbook")
+                    .contains("resolution")
+                    .doesNotContain("## " + "proc" + "edural");
+        }
     }
 
     @Nested
@@ -176,8 +191,8 @@ class MemoryItemExtractionPromptBuilderTest {
                     .contains("Temporal Content Embedding")
                     .contains("Time-specific memories")
                     .contains(
-                            "Profile, behavior, procedural, tool, and skill items should"
-                                    + " normally set")
+                            "Profile, behavior, directive, playbook, resolution, and tool items"
+                                    + " should normally set")
                     .contains("Event items should populate `occurredAt` only when the text itself")
                     .contains("ISO-8601");
         }
