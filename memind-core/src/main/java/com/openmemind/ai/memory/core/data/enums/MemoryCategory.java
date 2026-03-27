@@ -83,10 +83,11 @@ public enum MemoryCategory {
             "procedural",
             "Reusable procedures, problem-solution pairs, and agent behavioral directives",
             """
-            Core: Describes reusable operational knowledge for the agent.
-            Characteristics: Step-by-step instructions, problem-solution pairs, or behavioral directives from the user.
-            Test: Is this something the agent should remember for future tasks or interactions?
-            Includes: configuration recipes, setup guides, step-by-step workflows, bug fixes with solutions, user directives on agent behavior.
+            Core: Describes durable agent instructions or reusable operational knowledge.
+            Characteristics: Stable user directives, step-by-step instructions, or problem-solution knowledge that remains useful beyond the current conversation.
+            Test: Is this something the agent should reuse in future tasks or interactions without depending on the original conversational moment?
+            Includes: configuration recipes, setup guides, step-by-step workflows, bug fixes with solutions, stable user directives on agent behavior.
+            Excludes: emotional support, encouragement, reflective coaching questions, therapeutic phrasing, and one-off conversational suggestions from the assistant unless the user explicitly adopts them as an ongoing routine, preference, or instruction.
             Note: "Enable X by setting Y=true" -> procedural; "Virtual threads caused pool exhaustion; solved by setting poolSize=10" -> procedural; "Don't add comments to my code" -> procedural; "User enabled X" -> event.\
             """,
             MemoryScope.AGENT,

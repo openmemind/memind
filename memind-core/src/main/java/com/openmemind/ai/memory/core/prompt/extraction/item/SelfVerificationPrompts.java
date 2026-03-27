@@ -60,16 +60,20 @@ public final class SelfVerificationPrompts {
 
             # Extraction Scope
             - Extract from BOTH user AND assistant messages. User messages reveal personal \
-            facts, preferences, and context. Assistant messages often contain technical \
-            solutions, configuration recipes, and diagnostic conclusions — these are equally \
-            valuable as procedural items.
+            facts, preferences, and context. Keep assistant content ONLY when it contains \
+            reusable operational knowledge, concrete technical guidance, diagnostic \
+            conclusions, or durable agent directives.
             - When the user asks a question and the assistant provides a solution, extract the \
-            combined problem+solution as a procedural item, NOT just "user asked about X".
+            neutral problem+solution as a procedural item, NOT just "user asked about X", and \
+            NOT conversational framing like "assistant suggested...".
             - Do NOT extract: Greetings, small talk, praise toward the assistant.
+            - Do NOT extract assistant emotional support, encouragement, validation, reflective \
+            coaching questions, or therapeutic phrasing unless the user explicitly adopts them \
+            as a lasting routine, preference, or instruction.
 
             # Common Miss Patterns
             Focus on these frequently missed patterns during review:
-            1. **Assistant solutions**: Technical solutions, configuration advice, and diagnostic \
+            1. **Technical assistant solutions**: Technical solutions, configuration advice, and diagnostic \
             conclusions from assistant messages are often missed by the first pass.
             2. **Problem + solution pairs**: The first pass may capture the problem but miss the \
             cause and solution. Combine them into a procedural item.
@@ -82,6 +86,7 @@ public final class SelfVerificationPrompts {
             where the first pass only captured one.
             6. **Team/project context**: Team member roles, infrastructure details, and project \
             context that the first pass treated as background noise.
+            Do NOT treat supportive or therapeutic assistant language as a missed procedural memory.
 
             # Extraction Bias
             When uncertain whether something was missed, extract it. The downstream \
@@ -213,6 +218,25 @@ public final class SelfVerificationPrompts {
             {"items": []}
 
             Why good: All facts in the conversation are already covered. No duplicates generated.
+
+            ## Bad Example: Supportive assistant language (WRONG)
+
+            Conversation:
+            [2026-03-18 10:07] assistant: When you feel like you lost, try asking yourself \
+            what else you are feeling without judgment.
+
+            Output (WRONG):
+            {
+              "items": [
+                {
+                  "content": "Assistant suggested that User ask what else they are feeling without judgment",
+                  "category": "procedural"
+                }
+              ]
+            }
+
+            -> Wrong: Supportive or therapeutic assistant language is not a missed procedural memory \
+            unless the user later adopts it as a lasting routine or instruction.
 
             ## Bad Example: Rephrasing an existing item (WRONG)
 

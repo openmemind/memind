@@ -31,7 +31,8 @@ class MemoryItemUnifiedPromptsTest {
         var insightTypes =
                 List.of(
                         createInsightType("profile", List.of("profile")),
-                        createInsightType("experiences", List.of("event")));
+                        createInsightType("experiences", List.of("event")),
+                        createInsightType("procedural", List.of("procedural")));
         var template =
                 MemoryItemUnifiedPrompts.build(
                         insightTypes,
@@ -46,6 +47,29 @@ class MemoryItemUnifiedPromptsTest {
         assertThat(result.systemPrompt()).contains("**event**");
         assertThat(result.systemPrompt()).contains("Alice");
         assertThat(result.systemPrompt()).contains("# Temporal Resolution");
+    }
+
+    @Test
+    @DisplayName("Rendered prompt should exclude supportive assistant suggestions from procedural")
+    void shouldExcludeSupportiveAssistantSuggestionsFromProcedural() {
+        var insightTypes = List.of(createInsightType("procedural", List.of("procedural")));
+        var template =
+                MemoryItemUnifiedPrompts.build(
+                        insightTypes,
+                        """
+                        [2026-03-27 01:54] user: 我总是觉得自己输了。
+                        [2026-03-27 01:55] assistant: 当你感到“我输了”时，先不要评判，只问自己“除了输，我还感受到什么？”
+                        """,
+                        Instant.parse("2026-03-27T00:00:00Z"),
+                        null,
+                        Set.of(MemoryCategory.PROCEDURAL));
+
+        var result = template.render("English");
+
+        assertThat(result.systemPrompt())
+                .contains("Do NOT extract assistant emotional support")
+                .contains("reflective coaching questions")
+                .contains("Avoid conversational framing like \"Assistant suggested:\"");
     }
 
     private static MemoryInsightType createInsightType(String name, List<String> categories) {

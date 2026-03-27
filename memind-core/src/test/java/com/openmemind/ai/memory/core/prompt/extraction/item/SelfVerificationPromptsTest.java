@@ -112,6 +112,31 @@ class SelfVerificationPromptsTest {
         assertThat(result.userPrompt()).contains("(none -- this is the first extraction pass)");
     }
 
+    @Test
+    @DisplayName(
+            "Review prompt should not treat supportive assistant language as missed procedural")
+    void shouldExcludeSupportiveAssistantSuggestionsFromReview() {
+        var template =
+                SelfVerificationPrompts.build(
+                        """
+                        [2026-03-27 01:54] user: 我总是觉得自己输了。
+                        [2026-03-27 01:55] assistant: 当你感到“我输了”时，先不要评判，只问自己“除了输，我还感受到什么？”
+                        """,
+                        List.of(),
+                        Instant.parse("2026-03-27T00:00:00Z"),
+                        List.of(createInsightType("procedural", List.of("procedural"))),
+                        null,
+                        Set.of(MemoryCategory.PROCEDURAL));
+        var result = template.render("English");
+
+        assertThat(result.systemPrompt())
+                .contains("Do NOT extract assistant emotional support")
+                .contains(
+                        "Do NOT treat supportive or therapeutic assistant language as a missed "
+                                + "procedural memory")
+                .contains("NOT conversational framing like \"assistant suggested...\"");
+    }
+
     private static MemoryInsightType createInsightType(String name, List<String> categories) {
         return new MemoryInsightType(
                 null,

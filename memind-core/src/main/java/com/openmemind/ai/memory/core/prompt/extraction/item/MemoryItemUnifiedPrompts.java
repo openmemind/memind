@@ -76,17 +76,25 @@ public final class MemoryItemUnifiedPrompts {
 
             # Extraction Scope & What NOT to Extract
             - Extract from BOTH user AND assistant messages. User messages reveal personal facts, \
-            preferences, and context. Assistant messages often contain technical solutions, \
-            configuration recipes, and diagnostic conclusions — these are equally valuable as \
-            procedural items.
+            preferences, and context. Keep assistant content ONLY when it contains reusable \
+            operational knowledge, concrete technical guidance, diagnostic conclusions, or \
+            durable agent directives.
             - When the user asks a question and the assistant provides a solution, extract the \
-            combined problem+solution as a procedural item, NOT just "user asked about X".
+            neutral problem+solution or reusable instruction as a procedural item, NOT just \
+            "user asked about X".
             - Do NOT extract: Greetings, small talk, praise toward the assistant.
             - Do NOT extract: Vague platitudes without user context.
+            - Do NOT extract assistant emotional support, encouragement, validation, reflective \
+            coaching questions, or therapeutic phrasing unless the user explicitly adopts them \
+            as a lasting routine, preference, or instruction.
+            - For procedural items, normalize to reusable knowledge or the durable directive \
+            itself. Avoid conversational framing like "Assistant suggested:", "Assistant advised \
+            the user to", or "At 2026-03-27 the assistant said...".
 
             # Extraction Bias
             When uncertain whether something is worth extracting, extract it. \
-            The downstream deduplication system handles redundancy. \
+            The downstream deduplication system handles redundancy for factual and operational \
+            content. \
             Missing a valuable memory is worse than creating a slightly redundant one.
 
             {{CATEGORY_CONTEXT}}
@@ -169,6 +177,8 @@ public final class MemoryItemUnifiedPrompts {
             - "Teammate Zhang is responsible for backend services" -> event (team context, not profile)
             - "Don't add comments to my code" -> procedural (agent directive, not profile)
             - "User follows a fixed process/SOP for X (e.g., stop bleeding → root cause → postmortem)" -> procedural if it is a reusable method that others could follow; behavior if it is described as the user's personal recurring habit
+            - "Assistant says 'be gentle with yourself', offers reassurance, or asks a reflective coaching question" -> Do NOT extract unless the user later adopts it as their own recurring practice or instruction
+            - "Assistant gives a concrete configuration fix, diagnostic conclusion, or reusable workflow" -> procedural
             - General industry or technology facts not specific to the user ("Rust has a steep learning curve") -> Do NOT extract unless they directly describe the user's own experience, decision, or outcome
             """;
 
@@ -360,6 +370,17 @@ public final class MemoryItemUnifiedPrompts {
               ]
             }
             -> Wrong: this is profile. Personal code style preference, not a directive to the agent.
+
+            Bad:
+            {
+              "items": [
+                {
+                  "content": "Assistant suggested that User gently remind themselves 'I am learning to come back, no need to rush'",
+                  "category": "procedural"
+                }
+              ]
+            }
+            -> Wrong: assistant emotional support or reflective guidance is not durable operational knowledge unless the user later adopts it as their own routine or instruction.
             """;
 
     // ── Constructor ──────────────────────────────────────────────────────────
