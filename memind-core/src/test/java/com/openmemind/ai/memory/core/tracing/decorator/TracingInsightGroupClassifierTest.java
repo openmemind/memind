@@ -46,8 +46,8 @@ class TracingInsightGroupClassifierTest {
         void delegatesAndWraps() {
             var item =
                     new MemoryItem(
-                            1L, "m1", "content", null, null, null, null, null, null, null, null, null,
-                            null, null);
+                            1L, "m1", "content", null, null, null, null, null, null, null, null,
+                            null, null, null);
             var insightType =
                     new MemoryInsightType(
                             1L, "PROFILE", "desc", null, List.of(), 400, null, null, null, null,

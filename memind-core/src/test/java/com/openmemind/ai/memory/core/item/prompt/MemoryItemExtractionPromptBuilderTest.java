@@ -175,7 +175,10 @@ class MemoryItemExtractionPromptBuilderTest {
             assertThat(prompt)
                     .contains("Temporal Content Embedding")
                     .contains("Time-specific memories")
-                    .contains("Non-temporal items")
+                    .contains(
+                            "Profile, behavior, procedural, tool, and skill items should"
+                                    + " normally set")
+                    .contains("Event items should populate `occurredAt` only when the text itself")
                     .contains("ISO-8601");
         }
     }

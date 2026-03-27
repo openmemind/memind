@@ -160,7 +160,8 @@ class SelfVerificationPromptsTest {
         var result = template.render("English");
 
         assertThat(result.systemPrompt())
-                .contains("Profile, behavior, procedural, tool, and skill items should normally set")
+                .contains(
+                        "Profile, behavior, procedural, tool, and skill items should normally set")
                 .contains("Event items should populate `occurredAt` only when the text itself")
                 .contains(
                         "Do NOT use message timestamps or conversation timestamps as `occurredAt`")

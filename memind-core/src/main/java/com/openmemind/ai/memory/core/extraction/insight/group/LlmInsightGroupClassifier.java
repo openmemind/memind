@@ -20,11 +20,15 @@ import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.extraction.insight.InsightGroupPrompts;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +43,40 @@ import reactor.util.retry.Retry;
 public class LlmInsightGroupClassifier implements InsightGroupClassifier {
 
     private static final Logger log = LoggerFactory.getLogger(LlmInsightGroupClassifier.class);
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
+    private static final Pattern LEADING_DATE =
+            Pattern.compile("^(?:\\d{4}[-/.年]\\d{1,2}[-/.月]\\d{1,2}(?:日)?)\\s*[:：-]?\\s*");
+    private static final Pattern LEADING_METADATA =
+            Pattern.compile("^(?:#{1,6}\\s*|[-*]\\s*|第[一二三四五六七八九十\\d]+[次阶段章节]\\s*)");
+    private static final Pattern SPLIT_CLAUSE = Pattern.compile("[\\r\\n,，。；;！？!?：:]");
+    private static final Pattern LEADING_SPEAKER =
+            Pattern.compile(
+                    "^(?:user|assistant|system|用户|助手|系统)\\s*[:：]\\s*", Pattern.CASE_INSENSITIVE);
+    private static final Set<String> GENERIC_GROUP_NAMES =
+            Set.of(
+                    "general",
+                    "other",
+                    "misc",
+                    "miscellaneous",
+                    "unknown",
+                    "note",
+                    "notes",
+                    "session note",
+                    "session notes",
+                    "session record",
+                    "chat record",
+                    "record",
+                    "records",
+                    "其他",
+                    "其它",
+                    "综合",
+                    "杂项",
+                    "通用",
+                    "未知",
+                    "记录",
+                    "会话记录",
+                    "对话记录",
+                    "聊天记录");
 
     private final StructuredChatClient structuredChatClient;
 
@@ -128,7 +166,9 @@ public class LlmInsightGroupClassifier implements InsightGroupClassifier {
                 }
             }
             if (!groupItems.isEmpty()) {
-                result.computeIfAbsent(assignment.groupName(), key -> new ArrayList<>())
+                var sanitizedGroupName =
+                        sanitizeGroupName(assignment.groupName(), groupItems, insightType);
+                result.computeIfAbsent(sanitizedGroupName, key -> new ArrayList<>())
                         .addAll(groupItems);
             }
         }
@@ -151,5 +191,106 @@ public class LlmInsightGroupClassifier implements InsightGroupClassifier {
 
     private Map<String, List<MemoryItem>> fallbackSingleGroup(List<MemoryItem> items) {
         return Map.of("General", new ArrayList<>(items));
+    }
+
+    private String sanitizeGroupName(
+            String rawGroupName, List<MemoryItem> groupItems, MemoryInsightType insightType) {
+        var normalized = normalizeGroupName(rawGroupName);
+        if (!isInvalidGroupName(normalized, insightType)) {
+            return normalized;
+        }
+        var fallback = buildFallbackGroupName(groupItems);
+        log.debug(
+                "Replacing invalid insight group name [{}] with fallback [{}] [type={}]",
+                rawGroupName,
+                fallback,
+                insightType.name());
+        return fallback;
+    }
+
+    private String normalizeGroupName(String groupName) {
+        if (groupName == null) {
+            return "";
+        }
+        var normalized = groupName.trim();
+        normalized = LEADING_METADATA.matcher(normalized).replaceFirst("");
+        normalized = LEADING_DATE.matcher(normalized).replaceFirst("");
+        normalized = normalized.replace('\"', ' ').replace('\'', ' ').trim();
+        return WHITESPACE.matcher(normalized).replaceAll(" ").trim();
+    }
+
+    private boolean isInvalidGroupName(String groupName, MemoryInsightType insightType) {
+        if (groupName.isBlank()) {
+            return true;
+        }
+        if (groupName.equalsIgnoreCase(insightType.name())) {
+            return true;
+        }
+        var normalizedLowerCase = groupName.toLowerCase();
+        if (GENERIC_GROUP_NAMES.contains(normalizedLowerCase)) {
+            return true;
+        }
+        return normalizedLowerCase.contains("会话记录")
+                || normalizedLowerCase.contains("对话记录")
+                || normalizedLowerCase.contains("聊天记录")
+                || normalizedLowerCase.contains("session note")
+                || normalizedLowerCase.contains("session record")
+                || normalizedLowerCase.contains("chat record");
+    }
+
+    private String buildFallbackGroupName(List<MemoryItem> groupItems) {
+        var candidates = new HashSet<String>();
+        for (var item : groupItems) {
+            var candidate = firstReadableClause(item.content());
+            if (!candidate.isBlank()) {
+                candidates.add(candidate);
+            }
+        }
+        return candidates.stream()
+                .sorted(
+                        Comparator.<String>comparingInt(String::length)
+                                .reversed()
+                                .thenComparing(Comparator.naturalOrder()))
+                .findFirst()
+                .orElse("General");
+    }
+
+    private String firstReadableClause(String content) {
+        if (content == null || content.isBlank()) {
+            return "";
+        }
+        var normalized = content.trim();
+        normalized = LEADING_DATE.matcher(normalized).replaceFirst("");
+        normalized = LEADING_SPEAKER.matcher(normalized).replaceFirst("");
+        for (var rawClause : SPLIT_CLAUSE.split(normalized)) {
+            var clause = normalizeClause(rawClause);
+            if (!clause.isBlank()) {
+                return clause;
+            }
+        }
+        return normalizeClause(normalized);
+    }
+
+    private String normalizeClause(String clause) {
+        var normalized = clause == null ? "" : clause.trim();
+        normalized = normalized.replaceAll("^[\\[\\]【】()（）\"'“”‘’]+", "");
+        normalized = normalized.replaceAll("[\\[\\]【】()（）\"'“”‘’]+$", "");
+        normalized = WHITESPACE.matcher(normalized).replaceAll(" ").trim();
+        if (normalized.isBlank()) {
+            return "";
+        }
+        if (normalized.contains(" ")) {
+            var words = normalized.split(" ");
+            if (words.length > 6) {
+                normalized = String.join(" ", List.of(words).subList(0, 6));
+            }
+            return normalized;
+        }
+        var codePointCount = normalized.codePointCount(0, normalized.length());
+        if (codePointCount <= 12) {
+            return normalized;
+        }
+        var endIndex = normalized.offsetByCodePoints(0, 12);
+        return normalized.substring(0, endIndex);
     }
 }

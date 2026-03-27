@@ -187,15 +187,11 @@ public class LlmSelfVerificationStep {
             return List.of();
         }
 
-        return response.items().stream()
-                .map(item -> toEntry(item, rawDataId, observedAt))
-                .toList();
+        return response.items().stream().map(item -> toEntry(item, rawDataId, observedAt)).toList();
     }
 
     private static ExtractedMemoryEntry toEntry(
-            MemoryItemExtractionResponse.ExtractedItem item,
-            String rawDataId,
-            Instant observedAt) {
+            MemoryItemExtractionResponse.ExtractedItem item, String rawDataId, Instant observedAt) {
         return new ExtractedMemoryEntry(
                 item.content(),
                 clamp(item.confidence()),

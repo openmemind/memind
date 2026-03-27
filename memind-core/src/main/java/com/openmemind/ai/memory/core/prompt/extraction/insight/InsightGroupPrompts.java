@@ -67,9 +67,14 @@ public final class InsightGroupPrompts {
             A single-item group is fine when the topic is genuinely distinct. The key \
             test: could you describe what ALL items in this group have in common in \
             one specific phrase? If not, the group is too broad — split it.
-            4. Naming: New group names must be specific, descriptive micro-summaries \
-            (2-6 words) representing the core subject. Use "Morning Coffee Preferences" \
-            not "Beverages". Do NOT repeat the dimension name as a group name.
+            4. Naming: New group names must be natural, standalone theme labels that a \
+            human can understand without extra context. Prefer concise noun phrases \
+            (roughly 2-6 English words or short Chinese labels), not sentence fragments \
+            or compressed summaries. Use "Morning Coffee Preferences" or "开发工具偏好", \
+            not "Beverages". Do NOT stitch together a broad topic and one specific example \
+            into one title (bad: "自我抚慰与动物园心安"). Do NOT use metadata-like labels \
+            such as dates, session notes, or record headers (bad: "2026-03-27 会话记录"). \
+            Do NOT repeat the dimension name as a group name.
             5. Language: Group names MUST match the language of the items exactly. \
             Chinese items → Chinese group names. English items → English group names.
 
@@ -90,7 +95,8 @@ public final class InsightGroupPrompts {
             ## Step 3 — Validate
             - Every item ID appears exactly once.
             - No group name duplicates the dimension name.
-            - Group names match the item language.\
+            - Group names match the item language.
+            - Group names are natural, standalone theme labels, not metadata or stitched titles.\
             """;
 
     private static final String OUTPUT =
@@ -109,7 +115,7 @@ public final class InsightGroupPrompts {
             }
 
             Field descriptions:
-            - `groupName`: Exact existing group name or a new descriptive name (2-6 words).
+            - `groupName`: Exact existing group name or a new natural, standalone theme label.
             - `itemIds`: Array of item ID strings assigned to this group.
             - `reason`: CRITICAL. Briefly explain the shared sub-topic that binds these items. \
             This field is for reasoning only and will NOT be stored.\
@@ -237,7 +243,37 @@ public final class InsightGroupPrompts {
             }
 
             -> Wrong: Items are Chinese but group name is English. Group names must match \
-            the item language. Also merged tool preferences with code style preferences.\
+            the item language. Also merged tool preferences with code style preferences.
+
+            ## Bad Example 4: Stitched title (WRONG)
+
+            {
+              "assignments": [
+                {
+                  "groupName": "自我抚慰与动物园心安",
+                  "itemIds": ["30", "31"]
+                }
+              ]
+            }
+
+            -> Wrong: This stitches together a broad topic ("自我抚慰") and one specific \
+            example/context ("动物园心安"). A valid group name should be one natural, \
+            standalone theme label such as "自我安抚方式" or "动物园带来的安定感", \
+            depending on the actual shared topic.
+
+            ## Bad Example 5: Metadata-like title (WRONG)
+
+            {
+              "assignments": [
+                {
+                  "groupName": "2026-03-27 会话记录",
+                  "itemIds": ["32"]
+                }
+              ]
+            }
+
+            -> Wrong: Dates, session notes, and record headers are metadata, not semantic \
+            group names. Use the actual topic of the item instead.\
             """;
 
     // ==================== Public API ====================
