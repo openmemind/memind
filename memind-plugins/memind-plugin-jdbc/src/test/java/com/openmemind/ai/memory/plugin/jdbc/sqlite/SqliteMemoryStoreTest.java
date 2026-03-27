@@ -222,6 +222,7 @@ class SqliteMemoryStoreTest {
 
     @Test
     void itemsCanPersistWithNullOccurredAt() {
+        Instant observedAt = BASE_TIME.plusSeconds(30);
         MemoryItem itemWithoutOccurredAt =
                 new MemoryItem(
                         103L,
@@ -234,6 +235,7 @@ class SqliteMemoryStoreTest {
                         "rd-103",
                         "hash-103",
                         null,
+                        observedAt,
                         Map.of("kind", "profile"),
                         BASE_TIME,
                         MemoryItemType.FACT);
@@ -242,7 +244,11 @@ class SqliteMemoryStoreTest {
 
         assertThat(store.getItemsByIds(memoryId, List.of(103L)))
                 .singleElement()
-                .satisfies(item -> assertThat(item.occurredAt()).isNull());
+                .satisfies(
+                        item -> {
+                            assertThat(item.occurredAt()).isNull();
+                            assertThat(item.observedAt()).isEqualTo(observedAt);
+                        });
     }
 
     @Test
@@ -461,6 +467,7 @@ class SqliteMemoryStoreTest {
                 rawDataId,
                 contentHash,
                 BASE_TIME.minusSeconds(60),
+                BASE_TIME.minusSeconds(55),
                 Map.of("origin", content),
                 BASE_TIME.minusSeconds(30),
                 MemoryItemType.FACT);

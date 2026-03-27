@@ -41,6 +41,7 @@ public final class ItemConverter {
         dataObject.setRawDataId(record.rawDataId());
         dataObject.setContentHash(record.contentHash());
         dataObject.setOccurredAt(record.occurredAt());
+        dataObject.setObservedAt(record.observedAt());
         dataObject.setMetadata(record.metadata());
         dataObject.setCreatedAt(record.createdAt() != null ? record.createdAt() : Instant.now());
         dataObject.setUpdatedAt(Instant.now());
@@ -61,6 +62,7 @@ public final class ItemConverter {
                 dataObject.getRawDataId(),
                 dataObject.getContentHash(),
                 dataObject.getOccurredAt(),
+                dataObject.getObservedAt(),
                 dataObject.getMetadata(),
                 dataObject.getCreatedAt(),
                 dataObject.getType() != null

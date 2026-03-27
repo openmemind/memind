@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS memory_item (
     raw_data_id   VARCHAR(64),
     content_hash  VARCHAR(128),
     occurred_at   TIMESTAMPTZ,
+    observed_at   TIMESTAMPTZ,
     type          VARCHAR(16)              NOT NULL DEFAULT 'FACT',
     raw_data_type VARCHAR(32)              NOT NULL DEFAULT 'CONVERSATION',
     metadata      JSONB,

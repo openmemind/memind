@@ -377,6 +377,7 @@ class DefaultMemoryTest {
                 "raw-" + itemId,
                 "hash-" + itemId,
                 Instant.now(),
+                Instant.now(),
                 Map.of(),
                 Instant.now(),
                 MemoryItemType.FACT);

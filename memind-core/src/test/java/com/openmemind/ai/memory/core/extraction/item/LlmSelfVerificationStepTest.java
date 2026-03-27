@@ -217,12 +217,49 @@ class LlmSelfVerificationStepTest {
                             })
                     .verifyComplete();
         }
+
+        @Test
+        @DisplayName("Should preserve observedAt from the source segment")
+        void shouldPreserveObservedAtFromTheSourceSegment() {
+            var response =
+                    new MemoryItemExtractionResponse(
+                            List.of(
+                                    new MemoryItemExtractionResponse.ExtractedItem(
+                                            "User tends to blame themselves when facing trusted"
+                                                    + " people",
+                                            0.95f,
+                                            null,
+                                            List.of("behavior"),
+                                            null,
+                                            "behavior")));
+            var step = new LlmSelfVerificationStep(new FakeStructuredChatClient(response));
+            var observedAt = Instant.parse("2026-03-27T02:18:00Z");
+
+            StepVerifier.create(
+                            step.verify(
+                                    ORIGINAL_TEXT,
+                                    List.of(),
+                                    RAW_DATA_ID,
+                                    Instant.parse("2026-03-27T02:18:00Z"),
+                                    List.of(),
+                                    null,
+                                    null,
+                                    null,
+                                    observedAt))
+                    .assertNext(
+                            result -> {
+                                assertThat(result).hasSize(1);
+                                assertThat(result.getFirst().observedAt()).isEqualTo(observedAt);
+                            })
+                    .verifyComplete();
+        }
     }
 
     private static ExtractedMemoryEntry createEntry(String content) {
         return new ExtractedMemoryEntry(
                 content,
                 1.0f,
+                Instant.parse("2024-03-15T10:00:00Z"),
                 Instant.parse("2024-03-15T10:00:00Z"),
                 RAW_DATA_ID,
                 null,

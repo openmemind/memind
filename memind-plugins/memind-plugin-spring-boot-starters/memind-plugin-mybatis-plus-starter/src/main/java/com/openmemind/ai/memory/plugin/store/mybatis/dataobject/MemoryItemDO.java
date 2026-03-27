@@ -41,6 +41,9 @@ public class MemoryItemDO extends BaseDO {
     @TableField(typeHandler = InstantTypeHandler.class)
     private Instant occurredAt;
 
+    @TableField(typeHandler = InstantTypeHandler.class)
+    private Instant observedAt;
+
     @TableField(typeHandler = JacksonTypeHandler.class)
     private Map<String, Object> metadata;
 
@@ -142,6 +145,14 @@ public class MemoryItemDO extends BaseDO {
 
     public void setOccurredAt(Instant occurredAt) {
         this.occurredAt = occurredAt;
+    }
+
+    public Instant getObservedAt() {
+        return observedAt;
+    }
+
+    public void setObservedAt(Instant observedAt) {
+        this.observedAt = observedAt;
     }
 
     public Map<String, Object> getMetadata() {

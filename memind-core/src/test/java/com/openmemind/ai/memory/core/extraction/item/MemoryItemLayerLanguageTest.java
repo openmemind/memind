@@ -28,6 +28,7 @@ import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicato
 import com.openmemind.ai.memory.core.extraction.item.extractor.MemoryItemExtractor;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -57,11 +58,24 @@ class MemoryItemLayerLanguageTest {
                         extractor, deduplicator, memoryStore, vector, selfVerificationStep);
 
         var segment =
-                new ParsedSegment("user: hello", "caption", 0, 1, "raw-001", java.util.Map.of());
+                new ParsedSegment(
+                        "user: hello",
+                        "caption",
+                        0,
+                        1,
+                        "raw-001",
+                        java.util.Map.of(
+                                "messages",
+                                java.util.List.of(
+                                        Message.user(
+                                                "hello",
+                                                Instant.parse("2024-03-15T10:00:00Z"),
+                                                "User"))));
         var extractedEntry =
                 new ExtractedMemoryEntry(
                         "hello",
                         1.0f,
+                        Instant.parse("2024-03-15T10:00:00Z"),
                         Instant.parse("2024-03-15T10:00:00Z"),
                         "raw-001",
                         null,
@@ -91,11 +105,14 @@ class MemoryItemLayerLanguageTest {
                 .verifyComplete();
 
         assertThat(selfVerificationStep.capturedLanguage()).isEqualTo("zh-CN");
+        assertThat(selfVerificationStep.capturedObservedAt())
+                .isEqualTo(Instant.parse("2024-03-15T10:00:00Z"));
     }
 
     private static final class CapturingSelfVerificationStep extends LlmSelfVerificationStep {
 
         private String capturedLanguage;
+        private Instant capturedObservedAt;
 
         private CapturingSelfVerificationStep() {
             super(mock(StructuredChatClient.class));
@@ -110,13 +127,19 @@ class MemoryItemLayerLanguageTest {
                 List<com.openmemind.ai.memory.core.data.MemoryInsightType> insightTypes,
                 String userName,
                 java.util.Set<com.openmemind.ai.memory.core.data.enums.MemoryCategory> categories,
-                String language) {
+                String language,
+                Instant observedAt) {
             capturedLanguage = language;
+            capturedObservedAt = observedAt;
             return Mono.just(List.of());
         }
 
         private String capturedLanguage() {
             return capturedLanguage;
+        }
+
+        private Instant capturedObservedAt() {
+            return capturedObservedAt;
         }
     }
 }

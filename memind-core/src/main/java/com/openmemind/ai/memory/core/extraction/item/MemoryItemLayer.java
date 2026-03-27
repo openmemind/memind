@@ -196,6 +196,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 entry.content(),
                 entry.confidence(),
                 entry.occurredAt(),
+                entry.observedAt(),
                 entry.rawDataId(),
                 entry.contentHash(),
                 normalized,
@@ -221,6 +222,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
         String rawDataId = segments.isEmpty() ? null : segments.getFirst().rawDataId();
 
         Instant referenceTime = resolveReferenceTime(segments);
+        Instant observedAt = resolveObservedAt(segments);
 
         String userName = resolveUserName(segments);
 
@@ -233,7 +235,8 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                         insightTypes,
                         userName,
                         categories,
-                        language)
+                        language,
+                        observedAt)
                 .map(
                         missedEntries -> {
                             if (missedEntries.isEmpty()) {
@@ -334,6 +337,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 entry.rawDataId(),
                 entry.contentHash(),
                 entry.occurredAt(),
+                entry.observedAt(),
                 buildItemMetadata(entry),
                 Instant.now(),
                 entry.type());
@@ -360,19 +364,26 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
     }
 
     private static Instant resolveReferenceTime(List<ParsedSegment> segments) {
+        Instant observedAt = resolveObservedAt(segments);
+        return observedAt != null ? observedAt : Instant.now();
+    }
+
+    private static Instant resolveObservedAt(List<ParsedSegment> segments) {
         for (int i = segments.size() - 1; i >= 0; i--) {
             ParsedSegment segment = segments.get(i);
             if (segment.metadata() != null) {
                 Object messagesObj = segment.metadata().get("messages");
                 if (messagesObj instanceof List<?> messageList && !messageList.isEmpty()) {
-                    Object last = messageList.getLast();
-                    if (last instanceof Message m && m.timestamp() != null) {
-                        return m.timestamp();
+                    for (int j = messageList.size() - 1; j >= 0; j--) {
+                        Object message = messageList.get(j);
+                        if (message instanceof Message m && m.timestamp() != null) {
+                            return m.timestamp();
+                        }
                     }
                 }
             }
         }
-        return Instant.now();
+        return null;
     }
 
     private static String resolveUserName(List<ParsedSegment> segments) {

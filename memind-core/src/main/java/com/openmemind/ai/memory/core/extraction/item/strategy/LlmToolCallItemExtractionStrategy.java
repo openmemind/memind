@@ -24,7 +24,6 @@ import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.extraction.item.ToolItemPrompts;
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -87,6 +86,7 @@ public class LlmToolCallItemExtractionStrategy implements ItemExtractionStrategy
                                 Mono.justOrEmpty(
                                         toEntry(
                                                 response,
+                                                segment,
                                                 segment.rawDataId(),
                                                 toolName,
                                                 callCount,
@@ -100,6 +100,7 @@ public class LlmToolCallItemExtractionStrategy implements ItemExtractionStrategy
 
     private ExtractedMemoryEntry toEntry(
             ToolItemResponse response,
+            ParsedSegment segment,
             String rawDataId,
             String toolName,
             int callCount,
@@ -117,11 +118,13 @@ public class LlmToolCallItemExtractionStrategy implements ItemExtractionStrategy
         itemMetadata.put("failCount", String.valueOf(failCount));
         itemMetadata.put("avgDurationMs", avgDurationMs);
         itemMetadata.put("score", String.valueOf(response.score()));
+        var observedAt = LlmItemExtractionStrategy.resolveObservedAt(segment);
 
         return new ExtractedMemoryEntry(
                 response.content(),
                 1.0f,
-                Instant.now(),
+                null,
+                observedAt,
                 rawDataId,
                 null,
                 List.of(),

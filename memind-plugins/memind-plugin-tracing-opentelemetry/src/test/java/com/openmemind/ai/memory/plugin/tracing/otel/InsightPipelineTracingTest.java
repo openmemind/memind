@@ -151,6 +151,7 @@ class InsightPipelineTracingTest {
                 null,
                 null,
                 Instant.now(),
+                Instant.now(),
                 null,
                 Instant.now(),
                 null);

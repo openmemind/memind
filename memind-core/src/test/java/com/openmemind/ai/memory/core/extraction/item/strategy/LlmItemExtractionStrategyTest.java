@@ -42,6 +42,41 @@ class LlmItemExtractionStrategyTest {
     }
 
     @Test
+    @DisplayName("resolveObservedAt should use the latest source message timestamp")
+    void resolveObservedAtShouldUseTheLatestSourceMessageTimestamp() {
+        var segment =
+                new ParsedSegment(
+                        "text",
+                        null,
+                        0,
+                        1,
+                        "raw-1",
+                        Map.of(
+                                "messages",
+                                List.of(
+                                        Message.user(
+                                                "hello",
+                                                Instant.parse("2026-03-27T02:17:00Z"),
+                                                "User"),
+                                        new Message(
+                                                Message.Role.ASSISTANT,
+                                                List.of(),
+                                                Instant.parse("2026-03-27T02:18:00Z"),
+                                                null))));
+
+        assertThat(LlmItemExtractionStrategy.resolveObservedAt(segment))
+                .isEqualTo(Instant.parse("2026-03-27T02:18:00Z"));
+    }
+
+    @Test
+    @DisplayName("resolveObservedAt should return null when source messages have no timestamp")
+    void resolveObservedAtShouldReturnNullWhenSourceMessagesHaveNoTimestamp() {
+        var segment = new ParsedSegment("text", null, 0, 1, "raw-1", Map.of());
+
+        assertThat(LlmItemExtractionStrategy.resolveObservedAt(segment)).isNull();
+    }
+
+    @Test
     @DisplayName("resolveUserName should ignore assistant-role userName values")
     void resolveUserNameShouldIgnoreAssistantRoleUserNameValues() {
         var segment =

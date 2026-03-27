@@ -220,7 +220,12 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
 
                             assertThat(itemOps.listItems(MEMORY_ID))
                                     .singleElement()
-                                    .satisfies(item -> assertThat(item.occurredAt()).isNull());
+                                    .satisfies(
+                                            item -> {
+                                                assertThat(item.occurredAt()).isNull();
+                                                assertThat(item.observedAt())
+                                                        .isEqualTo(BASE_TIME.plusSeconds(30));
+                                            });
                         });
     }
 
@@ -269,6 +274,7 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
                 "raw-" + id,
                 "hash-" + id,
                 occurredAt,
+                BASE_TIME.plusSeconds(30),
                 Map.of("content", content),
                 BASE_TIME,
                 MemoryItemType.FACT);

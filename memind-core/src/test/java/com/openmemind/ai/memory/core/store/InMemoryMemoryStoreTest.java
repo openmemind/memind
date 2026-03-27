@@ -160,6 +160,7 @@ class InMemoryMemoryStoreTest {
                 "raw-" + id,
                 "hash-" + id,
                 BASE_TIME,
+                BASE_TIME.plusSeconds(5),
                 Map.of("id", id),
                 BASE_TIME,
                 MemoryItemType.FACT);

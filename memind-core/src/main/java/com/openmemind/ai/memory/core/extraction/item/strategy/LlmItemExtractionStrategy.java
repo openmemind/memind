@@ -131,6 +131,8 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
             return List.of();
         }
 
+        var observedAt = resolveObservedAt(segment);
+
         return response.items().stream()
                 .map(
                         item ->
@@ -138,6 +140,7 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
                                         item.content(),
                                         clamp(item.confidence()),
                                         resolveOccurredAt(item.occurredAt()),
+                                        observedAt,
                                         segment.rawDataId(),
                                         null,
                                         item.insightTypes() != null
@@ -191,6 +194,7 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
             ParsedSegment segment,
             Instant referenceTime) {
 
+        var observedAt = resolveObservedAt(segment);
         var metadata = new LinkedHashMap<String, Object>();
         if (item.evidence() != null && !item.evidence().isBlank()) {
             metadata.put("evidence", item.evidence());
@@ -209,6 +213,7 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
                 item.content(),
                 1.0f,
                 referenceTime,
+                observedAt,
                 segment.rawDataId(),
                 null,
                 List.of(),
@@ -222,6 +227,21 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
             try {
                 return Instant.parse(llmValue);
             } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    static Instant resolveObservedAt(ParsedSegment segment) {
+        if (segment.metadata() != null) {
+            Object messagesObj = segment.metadata().get("messages");
+            if (messagesObj instanceof List<?> messageList && !messageList.isEmpty()) {
+                for (int i = messageList.size() - 1; i >= 0; i--) {
+                    Object message = messageList.get(i);
+                    if (message instanceof Message m && m.timestamp() != null) {
+                        return m.timestamp();
+                    }
+                }
             }
         }
         return null;
@@ -245,16 +265,8 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
     }
 
     static Instant resolveReferenceTime(ParsedSegment segment) {
-        if (segment.metadata() != null) {
-            Object messagesObj = segment.metadata().get("messages");
-            if (messagesObj instanceof List<?> messageList && !messageList.isEmpty()) {
-                Object last = messageList.getLast();
-                if (last instanceof Message m && m.timestamp() != null) {
-                    return m.timestamp();
-                }
-            }
-        }
-        return Instant.now();
+        var observedAt = resolveObservedAt(segment);
+        return observedAt != null ? observedAt : Instant.now();
     }
 
     static String resolveUserName(ParsedSegment segment) {

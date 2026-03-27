@@ -50,6 +50,9 @@ public record MemoryItem(
         /* Semantic memory occurrence time (null for non-temporal items) */
         Instant occurredAt,
 
+        /* Source observation time from the original message/segment (null when unavailable) */
+        Instant observedAt,
+
         /* Additional key-value metadata (including insightTypes, whenToUse, etc.) */
         Map<String, Object> metadata,
 

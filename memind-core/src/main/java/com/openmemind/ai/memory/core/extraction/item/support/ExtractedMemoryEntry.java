@@ -26,6 +26,7 @@ import java.util.Map;
  * @param content Memory content
  * @param confidence Confidence level (used only for filtering, not persisted)
  * @param occurredAt Semantic time when the memory occurred (null for non-temporal items)
+ * @param observedAt Source observation time from the original message/segment
  * @param rawDataId Source data ID
  * @param contentHash Content hash (filled after deduplication)
  * @param insightTypes List of matched InsightType names (can be empty)
@@ -35,6 +36,7 @@ public record ExtractedMemoryEntry(
         String content,
         float confidence,
         Instant occurredAt,
+        Instant observedAt,
         String rawDataId,
         String contentHash,
         List<String> insightTypes,
@@ -50,6 +52,7 @@ public record ExtractedMemoryEntry(
                 content,
                 confidence,
                 occurredAt,
+                observedAt,
                 rawDataId,
                 contentHash,
                 insightTypes,

@@ -48,7 +48,15 @@ public class LlmSelfVerificationStep {
     public Mono<List<ExtractedMemoryEntry>> verify(
             String originalText, List<ExtractedMemoryEntry> existingEntries, String rawDataId) {
         return verify(
-                originalText, existingEntries, rawDataId, Instant.now(), List.of(), null, null);
+                originalText,
+                existingEntries,
+                rawDataId,
+                Instant.now(),
+                List.of(),
+                null,
+                null,
+                null,
+                null);
     }
 
     public Mono<List<ExtractedMemoryEntry>> verify(
@@ -57,7 +65,15 @@ public class LlmSelfVerificationStep {
             String rawDataId,
             Instant referenceTime) {
         return verify(
-                originalText, existingEntries, rawDataId, referenceTime, List.of(), null, null);
+                originalText,
+                existingEntries,
+                rawDataId,
+                referenceTime,
+                List.of(),
+                null,
+                null,
+                null,
+                null);
     }
 
     public Mono<List<ExtractedMemoryEntry>> verify(
@@ -67,7 +83,15 @@ public class LlmSelfVerificationStep {
             Instant referenceTime,
             List<MemoryInsightType> insightTypes) {
         return verify(
-                originalText, existingEntries, rawDataId, referenceTime, insightTypes, null, null);
+                originalText,
+                existingEntries,
+                rawDataId,
+                referenceTime,
+                insightTypes,
+                null,
+                null,
+                null,
+                null);
     }
 
     public Mono<List<ExtractedMemoryEntry>> verify(
@@ -86,6 +110,7 @@ public class LlmSelfVerificationStep {
                 insightTypes,
                 userName,
                 categories,
+                null,
                 null);
     }
 
@@ -98,6 +123,28 @@ public class LlmSelfVerificationStep {
             String userName,
             Set<MemoryCategory> categories,
             String language) {
+        return verify(
+                originalText,
+                existingEntries,
+                rawDataId,
+                referenceTime,
+                insightTypes,
+                userName,
+                categories,
+                language,
+                null);
+    }
+
+    public Mono<List<ExtractedMemoryEntry>> verify(
+            String originalText,
+            List<ExtractedMemoryEntry> existingEntries,
+            String rawDataId,
+            Instant referenceTime,
+            List<MemoryInsightType> insightTypes,
+            String userName,
+            Set<MemoryCategory> categories,
+            String language,
+            Instant observedAt) {
 
         var promptResult =
                 SelfVerificationPrompts.build(
@@ -113,7 +160,7 @@ public class LlmSelfVerificationStep {
 
         return structuredChatClient
                 .call(messages, MemoryItemExtractionResponse.class)
-                .map(response -> toEntries(response, rawDataId, referenceTime))
+                .map(response -> toEntries(response, rawDataId, observedAt))
                 .switchIfEmpty(Mono.just(List.of()))
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnNext(
@@ -135,24 +182,25 @@ public class LlmSelfVerificationStep {
     }
 
     private List<ExtractedMemoryEntry> toEntries(
-            MemoryItemExtractionResponse response, String rawDataId, Instant referenceTime) {
+            MemoryItemExtractionResponse response, String rawDataId, Instant observedAt) {
         if (response == null || response.items() == null) {
             return List.of();
         }
 
         return response.items().stream()
-                .map(item -> toEntry(item, rawDataId, referenceTime))
+                .map(item -> toEntry(item, rawDataId, observedAt))
                 .toList();
     }
 
     private static ExtractedMemoryEntry toEntry(
             MemoryItemExtractionResponse.ExtractedItem item,
             String rawDataId,
-            Instant referenceTime) {
+            Instant observedAt) {
         return new ExtractedMemoryEntry(
                 item.content(),
                 clamp(item.confidence()),
                 resolveOccurredAt(item.occurredAt()),
+                observedAt,
                 rawDataId,
                 null,
                 item.insightTypes() != null ? item.insightTypes() : List.of(),

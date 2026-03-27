@@ -120,6 +120,7 @@ class SemanticDeduplicatorTest {
                 content,
                 0.9f,
                 Instant.parse("2026-03-20T00:00:00Z"),
+                Instant.parse("2026-03-20T00:00:01Z"),
                 "raw-1",
                 null,
                 List.of(),
@@ -140,6 +141,7 @@ class SemanticDeduplicatorTest {
                 "raw-1",
                 "hash-" + id,
                 Instant.parse("2026-03-20T00:00:00Z"),
+                Instant.parse("2026-03-20T00:00:01Z"),
                 Map.of(),
                 Instant.parse("2026-03-20T00:00:00Z"),
                 MemoryItemType.FACT);

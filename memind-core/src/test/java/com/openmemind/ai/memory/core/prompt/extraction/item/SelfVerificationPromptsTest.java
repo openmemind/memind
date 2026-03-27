@@ -190,6 +190,7 @@ class SelfVerificationPromptsTest {
                 content,
                 0.9f,
                 null,
+                null,
                 "raw-001",
                 null,
                 List.of(),

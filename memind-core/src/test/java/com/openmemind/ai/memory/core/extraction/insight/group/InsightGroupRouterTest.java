@@ -109,7 +109,7 @@ class InsightGroupRouterTest {
 
     private MemoryItem createItemWithMetadata(Map<String, Object> metadata) {
         return new MemoryItem(
-                1L, "m1", "content", null, null, null, null, null, null, null, metadata, null,
+                1L, "m1", "content", null, null, null, null, null, null, null, null, metadata, null,
                 null);
     }
 }
