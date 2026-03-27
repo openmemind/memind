@@ -187,8 +187,7 @@ class SelfVerificationPromptsTest {
                 .contains("# Subject Clarity")
                 .contains("\"User\" refers only to the memory owner")
                 .contains("Do NOT use bare pronouns like \"他\", \"她\", \"他们\", or \"自己\"")
-                .contains(
-                        "Reject any item if a reader cannot identify who each pronoun refers to");
+                .contains("Reject any item if a reader cannot identify who each pronoun refers to");
     }
 
     private static MemoryInsightType createInsightType(String name, List<String> categories) {

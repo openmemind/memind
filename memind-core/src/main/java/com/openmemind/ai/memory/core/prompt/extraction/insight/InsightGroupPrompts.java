@@ -33,9 +33,13 @@ public final class InsightGroupPrompts {
 
     private static final String OBJECTIVE =
             """
-            You are a semantic grouping engine. Your task is to assign memory items \
-            into thematic groups under a given insight dimension. Each group clusters \
-            items that share the same specific sub-topic.\
+            You are a semantic grouping engine. Assign memory items into thematic groups \
+            under a given insight dimension.
+
+            Primary goal: namespace stability, not novelty.
+            Prefer reusing an existing group whenever it is a reasonable semantic fit.
+            Create a new group only when the items form a genuinely distinct enduring \
+            sub-theme that is not already represented.
             """;
 
     private static final String CONTEXT =
@@ -46,57 +50,85 @@ public final class InsightGroupPrompts {
             Dimension description: {{insight_type_description}}
 
             This means:
-            - The dimension description tells you WHAT kind of information belongs here \
-            and gives example group names as a granularity reference.
-            - Existing groups (listed in the input) are semantic anchors. If a new item \
-            fits an existing group, assign it there. Copy the group name EXACTLY \
-            (case-sensitive).
-            - If a new item does not fit any existing group, create a new one.\
+            - The dimension description defines the semantic scope of this namespace.
+            - Treat existing groups as the default namespace.
+            - Existing groups are reusable semantic anchors, not loose suggestions.
+            - A valid group name is a stable reusable sub-theme under this insight \
+            dimension.
+            - A group name is NOT a session heading, event label, tactic, summary \
+            sentence, or stitched phrase.
             """;
 
     private static final String WORKFLOW =
             """
             # Grouping Principles
 
-            1. Exclusivity: Each item MUST be assigned to EXACTLY ONE group.
-            2. High Cohesion: Items in the same group must share a specific sub-topic. \
-            Never merge conceptually distinct items. Never use vague names like \
-            "Miscellaneous", "Other", or "General Info".
-            3. Granularity: Group size is determined by semantic cohesion, not by count. \
-            A group with 20 items is fine if they genuinely share the same sub-topic. \
-            A single-item group is fine when the topic is genuinely distinct. The key \
-            test: could you describe what ALL items in this group have in common in \
-            one specific phrase? If not, the group is too broad — split it.
-            4. Naming: New group names must be natural, standalone theme labels that a \
-            human can understand without extra context. Prefer concise noun phrases \
-            (roughly 2-6 English words or short Chinese labels), not sentence fragments \
-            or compressed summaries. Use "Morning Coffee Preferences" or "开发工具偏好", \
-            not "Beverages". Do NOT stitch together a broad topic and one specific example \
-            into one title (bad: "自我抚慰与动物园心安"). Do NOT use metadata-like labels \
-            such as dates, session notes, or record headers (bad: "2026-03-27 会话记录"). \
-            Do NOT repeat the dimension name as a group name.
-            5. Language: Group names MUST match the language of the items exactly. \
-            Chinese items → Chinese group names. English items → English group names.
+            1. Exclusivity
+            - Each item MUST be assigned to exactly ONE group.
+
+            2. High Cohesion
+            - Items in the same group must share one clear enduring theme.
+            - Test: Can you describe what ALL items in this group have in common using one specific phrase? If not, the group is too broad.
+
+            3. Granularity
+            - Group size is determined by semantic cohesion, not by count.
+            - A single-item group is acceptable when the theme is genuinely distinct.
+            - Do not merge different sub-themes just to reduce the number of groups.
+
+            4. Theme Over Framing
+            - Group by the enduring topic, not by tone, phrasing, one specific \
+            scenario, or response style.
+            - Prefer stable theme labels like "Incident Communication" over framing \
+            labels like "How to explain outages clearly".
+
+            5. Reuse Before Create
+            - For each item, first try to place it into an existing group.
+            - Reuse an existing group whenever the item reasonably fits its enduring \
+            theme.
+            - Create a new group only if NO existing group accurately captures the \
+            item's enduring sub-theme.
+
+            6. Naming
+            - New group names must be natural, standalone theme labels that can be \
+            reused for future items.
+            - Prefer concise noun phrases, not sentence fragments or compressed \
+            summaries.
+            - Avoid session-heading, tactic, event, or stitched labels.
+            - Do not repeat the insight dimension name as a group name.
+
+            7. Language
+            - Existing group names are fixed identifiers. Copy them EXACTLY as provided.
+            - Do NOT translate reused group names.
+            - New group names must follow the requested output language when one is \
+            provided.
+            - If no output language is provided, new group names should follow the \
+            dominant item language.
 
             # Workflow
 
-            ## Step 1 — Understand Scope
-            - Review the dimension description to understand what belongs here.
-            - Review existing groups as semantic anchors.
+            ## Step 1 - Read the namespace
+            - Review the dimension description.
+            - Review existing groups first.
+            - Ask whether each item can reasonably reuse an existing group.
 
-            ## Step 2 — Assign Each Item
-            For each item:
-            - Does it match an existing group's sub-topic? → Assign to that group \
-            (copy the name exactly).
-            - Does it match another new item's sub-topic? → Group them together \
-            under a new descriptive name.
-            - Is it a distinct topic with no match? → Create a new single-item group.
+            ## Step 2 - Evaluate each item
+            - If an item fits an existing group, assign it there.
+            - If multiple items share a new enduring sub-theme, create one new group \
+            for them.
+            - If an item is genuinely distinct, create a single-item group.
 
-            ## Step 3 — Validate
+            ## Step 3 - Create a new group only when ALL are true
+            - No existing group accurately fits.
+            - The theme is reusable for future similar items.
+            - The theme can be stated as one clear phrase.
+            - The name is a theme label, not a session heading, event label, tactic, \
+            or stitched phrase.
+
+            ## Step 4 - Validate
             - Every item ID appears exactly once.
-            - No group name duplicates the dimension name.
-            - Group names match the item language.
-            - Group names are natural, standalone theme labels, not metadata or stitched titles.\
+            - Every group has one clear enduring theme.
+            - Existing group names are copied exactly.
+            - New group names follow the requested output language.
             """;
 
     private static final String OUTPUT =
@@ -115,165 +147,137 @@ public final class InsightGroupPrompts {
             }
 
             Field descriptions:
-            - `groupName`: Exact existing group name or a new natural, standalone theme label.
+            - `groupName`: Exact existing group name copied as provided, or a new stable reusable sub-theme label.
             - `itemIds`: Array of item ID strings assigned to this group.
-            - `reason`: CRITICAL. Briefly explain the shared sub-topic that binds these items. \
-            This field is for reasoning only and will NOT be stored.\
+            - `reason`: CRITICAL. Brief explanation of the enduring shared theme.
+            - This validates your grouping logic. For reasoning only, will NOT be stored.
             """;
 
     private static final String EXAMPLES =
             """
             # Examples
 
-            ## Example 1 — Mixed assignment (existing + new groups)
+            ## Example 1 - Reuse existing groups before creating new ones
 
             Input:
-            Dimension: identity
-            Existing groups: career_background, education
+            Dimension: collaboration
+            Existing groups: Meeting Coordination, Data Privacy
             Items:
-            - id: "10", content: User has been a backend engineer for 8 years
-            - id: "11", content: User graduated from MIT with a CS degree in 2015
-            - id: "12", content: User is fluent in English and Mandarin
-            - id: "13", content: User holds AWS Solutions Architect certification
-            - id: "14", content: User led a team of 5 engineers at their previous company
+            - id: "10", content: The team needs a concise way to bring recurring planning meetings back to the agenda.
+            - id: "11", content: Review comments often sit unanswered for several days.
+            - id: "12", content: Incident updates should clearly state status, impact, and next checkpoint.
+            - id: "13", content: Customer call recordings should not be shared outside the support team without consent.
+            - id: "14", content: Internal docs should use direct step-by-step wording instead of long narrative paragraphs.
 
             Output:
             {
               "assignments": [
                 {
-                  "groupName": "career_background",
-                  "itemIds": ["10", "14"],
-                  "reason": "Both describe professional career history: years of experience and leadership role."
+                  "groupName": "Meeting Coordination",
+                  "itemIds": ["10"],
+                  "reason": "This item is about steering meetings back to the agenda, which matches the existing coordination theme."
                 },
                 {
-                  "groupName": "education",
+                  "groupName": "Review Turnaround",
                   "itemIds": ["11"],
-                  "reason": "University degree information."
+                  "reason": "This item is about how quickly review responses happen, which is a distinct reusable execution theme."
                 },
                 {
-                  "groupName": "Language Proficiency",
+                  "groupName": "Incident Communication",
                   "itemIds": ["12"],
-                  "reason": "Language skills are a distinct personal trait, not career or education."
+                  "reason": "This item is about how operational status updates are communicated during incidents."
                 },
                 {
-                  "groupName": "Professional Certifications",
+                  "groupName": "Data Privacy",
                   "itemIds": ["13"],
-                  "reason": "Certification is distinct from formal education and career history."
+                  "reason": "This item fits the existing privacy theme because it is about sharing sensitive recordings with proper consent."
+                },
+                {
+                  "groupName": "Documentation Style",
+                  "itemIds": ["14"],
+                  "reason": "This item is about recurring preferences for how documentation should be written."
                 }
               ]
             }
 
-            Note: Items 12 and 13 each got their own group because language skills and \
-            certifications are genuinely different sub-topics. This is correct — do NOT \
-            force them into "career_background" or "education".
+            Why this is correct:
+            - Reused existing groups where they were a real semantic fit.
+            - Created new groups only for distinct enduring sub-themes.
+            - Used reusable theme labels, not one-off summaries.
 
-            ## Bad Example 1: Too coarse (WRONG)
+            ## Example 2 - Requested language applies to new names, not reused names
+
+            Requested output language: Spanish
+            Input:
+            Dimension: collaboration
+            Existing groups: Meeting Coordination
+            Items:
+            - id: "20", content: The team needs a short phrase to move a meeting back to the agenda.
+            - id: "21", content: Review responses are often delayed until the next sprint.
+
+            Output:
+            {
+              "assignments": [
+                {
+                  "groupName": "Meeting Coordination",
+                  "itemIds": ["20"],
+                  "reason": "[same explanation written in Spanish]"
+                },
+                {
+                  "groupName": "[same theme written in Spanish]",
+                  "itemIds": ["21"],
+                  "reason": "[same explanation written in Spanish]"
+                }
+              ]
+            }
+
+            Why this is correct:
+            - The reused existing group stays exactly as provided.
+            - Only the newly created group name follows the requested output language.
+
+            ## Bad Example 1 - Too broad
 
             {
               "assignments": [
                 {
-                  "groupName": "career_background",
+                  "groupName": "Team Communication",
                   "itemIds": ["10", "11", "12", "13", "14"]
                 }
               ]
             }
 
-            -> Wrong: Dumped everything into one group. Education, language skills, and \
-            certifications are distinct sub-topics that deserve their own groups.
+            Wrong because this merges meeting flow, review timing, incident updates, \
+            privacy, and documentation into one loose bucket.
 
-            ## Bad Example 2: Vague naming (WRONG)
+            ## Bad Example 2 - Wrong label type
 
             {
               "assignments": [
                 {
-                  "groupName": "Other Info",
-                  "itemIds": ["12", "13"]
-                }
-              ]
-            }
-
-            -> Wrong: "Other Info" is a junk drawer. Each item has a clear sub-topic \
-            (language proficiency, certifications) — name them specifically.
-
-            ## Example 2 — Chinese items, no existing groups
-
-            Input:
-            Dimension: preferences
-            Existing groups: (none)
-            Items:
-            - id: "20", content: 用户喜欢用 IntelliJ IDEA 而不是 VS Code
-            - id: "21", content: 用户偏好深色主题的编辑器
-            - id: "22", content: 用户喜欢吃川菜，尤其是麻辣火锅
-            - id: "23", content: 用户不喜欢甜食
-            - id: "24", content: 用户喜欢简洁的代码风格，反对过度注释
-
-            Output:
-            {
-              "assignments": [
-                {
-                  "groupName": "开发工具偏好",
-                  "itemIds": ["20", "21"],
-                  "reason": "都是关于开发环境的偏好：IDE 选择和主题风格。"
+                  "groupName": "Weekly Sync Notes",
+                  "itemIds": ["10"]
                 },
                 {
-                  "groupName": "饮食口味",
-                  "itemIds": ["22", "23"],
-                  "reason": "都是关于食物的喜好和厌恶。"
+                  "groupName": "How to explain outages clearly",
+                  "itemIds": ["12"]
                 },
                 {
-                  "groupName": "代码风格偏好",
-                  "itemIds": ["24"],
-                  "reason": "关于代码编写风格的偏好，与开发工具偏好是不同维度。"
+                  "groupName": "Privacy and review delays",
+                  "itemIds": ["11", "13"]
                 }
               ]
             }
 
-            Note: "开发工具偏好" and "代码风格偏好" are separate groups — IDE choice and \
-            coding style are different sub-topics even though both relate to development.
+            Wrong because these are a session heading, a tactic sentence, and a \
+            stitched label instead of stable reusable theme names.
 
-            ## Bad Example 3: Wrong group name language (WRONG)
+            # Final reminders
 
-            {
-              "assignments": [
-                {
-                  "groupName": "Development Preferences",
-                  "itemIds": ["20", "21", "24"]
-                }
-              ]
-            }
-
-            -> Wrong: Items are Chinese but group name is English. Group names must match \
-            the item language. Also merged tool preferences with code style preferences.
-
-            ## Bad Example 4: Stitched title (WRONG)
-
-            {
-              "assignments": [
-                {
-                  "groupName": "自我抚慰与动物园心安",
-                  "itemIds": ["30", "31"]
-                }
-              ]
-            }
-
-            -> Wrong: This stitches together a broad topic ("自我抚慰") and one specific \
-            example/context ("动物园心安"). A valid group name should be one natural, \
-            standalone theme label such as "自我安抚方式" or "动物园带来的安定感", \
-            depending on the actual shared topic.
-
-            ## Bad Example 5: Metadata-like title (WRONG)
-
-            {
-              "assignments": [
-                {
-                  "groupName": "2026-03-27 会话记录",
-                  "itemIds": ["32"]
-                }
-              ]
-            }
-
-            -> Wrong: Dates, session notes, and record headers are metadata, not semantic \
-            group names. Use the actual topic of the item instead.\
+            - Reuse existing groups whenever reasonable.
+            - New groups must be stable long-term sub-themes.
+            - Avoid session-heading, tactic, event, or stitched labels.
+            - Match output language for new groups; copy existing groups exactly.
+            - Every item must appear exactly once.
             """;
 
     // ==================== Public API ====================
@@ -316,7 +320,12 @@ public final class InsightGroupPrompts {
 
         var sb = new StringBuilder();
         if (language != null && !language.isBlank()) {
-            sb.append("Output Language: All groupName values MUST be written in ")
+            sb.append("Requested Output Language for NEW group names: ")
+                    .append(language)
+                    .append("\n")
+                    .append("Existing group names must be copied exactly as provided.\n")
+                    .append("Do NOT translate reused group names.\n")
+                    .append("Any NEW group name that you create MUST be written in ")
                     .append(language)
                     .append(".\n\n");
         }
