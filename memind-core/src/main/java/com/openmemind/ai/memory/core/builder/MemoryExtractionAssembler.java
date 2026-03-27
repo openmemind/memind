@@ -170,6 +170,8 @@ final class MemoryExtractionAssembler {
                 MemoryCategory.PROFILE,
                 MemoryCategory.BEHAVIOR,
                 MemoryCategory.EVENT,
-                MemoryCategory.PROCEDURAL);
+                MemoryCategory.DIRECTIVE,
+                MemoryCategory.PLAYBOOK,
+                MemoryCategory.RESOLUTION);
     }
 }

@@ -69,7 +69,8 @@ public final class InsightLeafPrompts {
 
             This means:
             - The insight dimension defines WHAT aspect of the user to analyze \
-            (e.g., "identity" = who the user is; "procedural" = how things are done).
+            (e.g., "identity" = who the user is; "directives" = durable collaboration rules; \
+            "playbooks" = reusable handling methods; "resolutions" = resolved problem knowledge).
             - The group is a semantic cluster WITHIN that dimension \
             (e.g., under "identity", groups might be "professional_background", \
             "personal_interests").

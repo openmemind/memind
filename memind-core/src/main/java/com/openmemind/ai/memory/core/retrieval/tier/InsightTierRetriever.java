@@ -62,7 +62,9 @@ public class InsightTierRetriever {
                     MemoryCategory.PROFILE, Set.of("identity", "preferences", "relationships"),
                     MemoryCategory.BEHAVIOR, Set.of("behavior"),
                     MemoryCategory.EVENT, Set.of("experiences"),
-                    MemoryCategory.PROCEDURAL, Set.of("procedural"));
+                    MemoryCategory.DIRECTIVE, Set.of("directives"),
+                    MemoryCategory.PLAYBOOK, Set.of("playbooks"),
+                    MemoryCategory.RESOLUTION, Set.of("resolutions"));
 
     private final MemoryStore memoryStore;
     private final MemoryVector memoryVector;

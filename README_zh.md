@@ -235,13 +235,15 @@ mvn -pl memind-examples/memind-example-spring-boot -am spring-boot:run \
 | 运行方式 | 示例 | 主类 | 说明 |
 |---------|------|------|------|
 | Spring Boot | **QuickStart** | `com.openmemind.ai.memory.example.springboot.quickstart.QuickStartExample` | 基础提取 + 检索流程 |
+| Spring Boot | **Agent Scope** | `com.openmemind.ai.memory.example.springboot.agent.AgentScopeMemoryExample` | Agent scope 记忆提取、insight tree 刷新与 directives、playbooks、resolutions 检索 |
 | Spring Boot | **Insight** | `com.openmemind.ai.memory.example.springboot.insight.InsightTreeExample` | Insight Tree 多层级生成（Leaf → Branch → Root） |
 | Spring Boot | **Foresight** | `com.openmemind.ai.memory.example.springboot.foresight.ForesightExample` | 预测性记忆与用户需求预判 |
-| Spring Boot | **Tool** | `com.openmemind.ai.memory.example.springboot.tool.ToolMemoryExample` | 工具调用追踪与程序性记忆 |
+| Spring Boot | **Tool** | `com.openmemind.ai.memory.example.springboot.tool.ToolMemoryExample` | 工具调用追踪与聚合统计 |
 | 纯 Java | **QuickStart** | `com.openmemind.ai.memory.example.java.quickstart.QuickStartExample` | 通过对象直连 `Memory.builder()` 组装运行时 |
+| 纯 Java | **Agent Scope** | `com.openmemind.ai.memory.example.java.agent.AgentScopeMemoryExample` | 通过对象直连 builder 完成 agent scope 记忆提取、insight tree 刷新与定向检索 |
 | 纯 Java | **Insight** | `com.openmemind.ai.memory.example.java.insight.InsightTreeExample` | 通过对象直连 `Memory.builder()` 并自定义 `MemoryBuildOptions` |
 | 纯 Java | **Foresight** | `com.openmemind.ai.memory.example.java.foresight.ForesightExample` | 纯 Java 前瞻记忆提取与检索 |
-| 纯 Java | **Tool** | `com.openmemind.ai.memory.example.java.tool.ToolMemoryExample` | 纯 Java 工具调用统计与程序性记忆 |
+| 纯 Java | **Tool** | `com.openmemind.ai.memory.example.java.tool.ToolMemoryExample` | 纯 Java 工具调用追踪与聚合统计 |
 
 ---
 

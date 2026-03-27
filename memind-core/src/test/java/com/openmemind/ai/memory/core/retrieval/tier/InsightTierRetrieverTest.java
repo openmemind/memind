@@ -632,8 +632,8 @@ class InsightTierRetrieverTest {
             var agentInsight =
                     buildInsight(
                             10L,
-                            "procedural",
-                            "Procedural memory",
+                            "directives",
+                            "Directive memory",
                             InsightTier.BRANCH,
                             null,
                             List.of());
@@ -652,8 +652,8 @@ class InsightTierRetrieverTest {
                     .thenReturn(
                             List.of(
                                     buildType(
-                                            "procedural",
-                                            "Procedural memory",
+                                            "directives",
+                                            "Directive memory",
                                             InsightAnalysisMode.BRANCH,
                                             MemoryScope.AGENT),
                                     buildType(

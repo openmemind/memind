@@ -20,6 +20,7 @@ import com.openmemind.ai.memory.core.prompt.PromptTemplate;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -53,50 +54,50 @@ public final class MemoryItemUnifiedPrompts {
 
     private static final String SYSTEM_PROMPT_TEMPLATE =
             """
-            You are an expert information extraction analyst. Your task is to analyze the \
-            conversation and extract atomic memory facts optimized for retrieval.
+            You are an expert information extraction analyst. Analyze the conversation and \
+            extract atomic memory items optimized for retrieval.
 
-            Extract self-contained facts, events, preferences, and behavioral patterns. \
-            Assign the correct category to each item. Return an empty list if no valid \
-            information exists.
+            Extract only self-contained facts with durable retrieval value. Assign the \
+            correct category to each item. Return an empty list if no valid information exists.
 
             # Core Principles
-            1. Atomicity: Each item must express EXACTLY ONE coherent unit of meaning. \
-            If a message contains multiple distinct ideas, split them into separate items. \
-            Count the distinct factual claims in each message and ensure each one is captured. \
-            Do NOT merge unrelated facts into one item, even if they appear in the same message. \
-            "User is a Java engineer who is building a Spring Boot service" -> split into TWO items: \
-            "User is a Java engineer" (profile) and "User is building a Spring Boot service" (event).
+            1. Atomicity: Each item must express EXACTLY ONE coherent unit of meaning. If a \
+            message contains multiple distinct ideas, split them into separate items. Count \
+            the distinct factual claims and capture each one separately. Do NOT merge \
+            unrelated facts into one item.
             2. Independence: Independently retrievable without context from other items.
-            3. Content Preservation: NEVER drop specific details (names, numbers, parameter names, \
-            version numbers, technical terms, config values, frequencies, places, brands). \
+            3. Content Preservation: NEVER drop specific details such as names, numbers, \
+            parameter names, version numbers, technical terms, config values, frequencies, \
+            places, or brands. \
             Remove ONLY filler words.
             4. Explicit Attribution: Always state WHO said or did what. Resolve pronouns to \
             specific names.
             5. Explicit Only: Extract ONLY facts directly stated/confirmed. No guesses.
 
             # Extraction Scope & What NOT to Extract
-            - Extract from BOTH user AND assistant messages. User messages reveal personal facts, \
-            preferences, and context. Keep assistant content ONLY when it contains reusable \
-            operational knowledge, concrete technical guidance, diagnostic conclusions, or \
-            durable agent directives.
-            - When the user asks a question and the assistant provides a solution, extract the \
-            neutral problem+solution or reusable instruction as a procedural item, NOT just \
-            "user asked about X".
-            - Do NOT extract: Greetings, small talk, praise toward the assistant.
-            - Do NOT extract: Vague platitudes without user context.
+            - Extract from BOTH user AND assistant messages.
+            - User messages mainly reveal profile, behavior, and event memories.
+            - Keep assistant content ONLY when it contains durable agent instructions, \
+            reusable task workflows, resolved problem knowledge, or concrete tool guidance \
+            with future reuse value.
+            - Do NOT extract: greetings, small talk, praise toward the assistant, or vague \
+            platitudes without user-specific context.
             - Do NOT extract assistant emotional support, encouragement, validation, reflective \
             coaching questions, or therapeutic phrasing unless the user explicitly adopts them \
             as a lasting routine, preference, or instruction.
-            - For procedural items, normalize to reusable knowledge or the durable directive \
-            itself. Avoid conversational framing like "Assistant suggested:", "Assistant advised \
-            the user to", or "At 2026-03-27 the assistant said...".
+            - For directive, playbook, and resolution items, normalize to reusable knowledge or \
+            the durable rule itself.
+            - Avoid conversational framing like "Assistant suggested:", "Assistant advised the \
+            user to", or "At 2026-03-27 the assistant said...".
+            - One-off control messages, transient execution commands, and session-management \
+            turns are not durable agent memory.
 
             # Extraction Bias
-            When uncertain whether something is worth extracting, extract it. \
-            The downstream deduplication system handles redundancy for factual and operational \
-            content. \
-            Missing a valuable memory is worse than creating a slightly redundant one.
+            - For profile, behavior, and event, extract clearly stated facts even if they \
+            seem minor.
+            - For directive, playbook, and resolution, use strict precision.
+            - If there is no clear evidence, do not extract.
+            - if uncertain between agent memory and nothing, prefer nothing
 
             {{CATEGORY_CONTEXT}}
             {{IDENTITY_CONTEXT}}
@@ -115,10 +116,10 @@ public final class MemoryItemUnifiedPrompts {
             ## occurredAt
             Temporal Content Embedding rules for time-specific memories:
             - Time-specific memories: embed the resolved absolute date in the content AND \
-            populate `occurredAt` with the ISO-8601 UTC timestamp (e.g., "2025-02-07T00:00:00Z") \
-            only when the text itself states or clearly implies that time.
-            - Profile, behavior, procedural, tool, and skill items should normally set \
-            `occurredAt` to null.
+            populate `occurredAt` with the ISO-8601 UTC timestamp only when the text itself \
+            states or clearly implies that time.
+            - Profile, behavior, directive, playbook, resolution, and tool items should \
+            normally set `occurredAt` to null.
             - Event items should populate `occurredAt` only when the text itself contains \
             explicit temporal evidence such as a date, relative date phrase, or clear \
             start/end marker.
@@ -134,7 +135,7 @@ public final class MemoryItemUnifiedPrompts {
                   "confidence": 0.95,
                   "occurredAt": "2023-10-14T00:00:00Z",
                   "insightTypes": ["Choose ONLY from the Available insightTypes listed under the assigned category"],
-                  "category_reason": "CRITICAL: Briefly explain WHY this category was chosen based on the rules. (Chain of Thought)",
+                  "category_reason": "CRITICAL: Briefly explain WHY this category was chosen based on the rules. This field is for reasoning only and will NOT be stored.",
                   "category": "<matched_category_from_list>"
                 }
               ]
@@ -159,36 +160,52 @@ public final class MemoryItemUnifiedPrompts {
             # Category Classification
 
             ## Decision Logic
-            For each extracted fact, ask yourself — what is this information mainly about?
+            For each extracted fact, ask what kind of memory it is.
 
-            | Ask yourself                              | Answer points to         | Category    |
-            |-------------------------------------------|--------------------------|-------------|
-            | Is the user telling the AGENT how to act? | Behavioral directive     | procedural  |
-            | How was a problem solved?                 | Problem + solution pair  | procedural  |
-            | What steps should be followed?            | Reusable instructions    | procedural  |
-            | How was a specific tool used/configured?  | Tool usage insight       | tool        |
-            | How was a multi-step workflow executed?    | Skill execution strategy | skill       |
-            | Does the user do this repeatedly?         | Recurring pattern        | behavior    |
-            | What is happening / what happened?        | Time-bound situation     | event       |
-            | Who is the user as a person?              | Stable identity/trait    | profile     |
+            | Ask yourself                                                              | Answer points to        | Category   |
+            |---------------------------------------------------------------------------|-------------------------|------------|
+            | Is this about who the user is or an enduring preference or trait?         | Stable identity         | profile    |
+            | Does the user do this repeatedly?                                         | Recurring pattern       | behavior   |
+            | Is this a time-bound situation, current activity, or single occurrence?   | Time-bound situation    | event      |
+            | Is the user setting a durable rule for how the agent should behave later? | Future interaction rule | directive  |
+            | Is this a reusable workflow for handling a class of tasks?                | Repeatable method       | playbook   |
+            | Is a named problem clearly resolved with a usable fix or conclusion?      | Problem plus resolution | resolution |
+            | Does this describe how a specific tool was used or configured?            | Tool usage insight      | tool       |
 
-            Match top-to-bottom. Profile is the LAST resort, not the default.
+            Match the narrowest valid category. Profile is the LAST resort, not the default.
 
             ## Common Confusions
             - "Plan to do X" -> event (time-bound action, not profile)
             - "Project X status: in progress" -> event (project context, not profile)
-            - "Encountered problem A, solved with B" -> procedural (not event)
-            - "General process for handling X" -> procedural (not event)
+            - "Show the plan before substantial edits" -> directive
+            - "Reply in Chinese and keep it concise" -> directive
+            - "continue" -> one-off control messages. Do NOT extract.
+            - "commit this" -> transient execution command. Do NOT extract unless it is \
+            clearly framed as a lasting collaboration rule.
+            - "Encountered problem A, solved with B" -> resolution (not event)
+            - "General process for handling X" -> playbook (not event)
             - "We use Redis/Kafka/X for purpose Y" -> event (current team setup, not profile)
             - "Currently learning/reading/migrating X" -> event (ongoing activity, not profile)
-            - "Bug: parameter X misconfigured caused issue Y" -> procedural (problem + cause)
+            - "Bug: parameter X misconfigured caused issue Y and was fixed by Z" -> resolution
             - "User does X every morning, Y every evening" -> behavior (recurring routine, not event)
             - "Teammate Zhang is responsible for backend services" -> event (team context, not profile)
-            - "Don't add comments to my code" -> procedural (agent directive, not profile)
-            - "User follows a fixed process/SOP for X (e.g., stop bleeding → root cause → postmortem)" -> procedural if it is a reusable method that others could follow; behavior if it is described as the user's personal recurring habit
-            - "Assistant says 'be gentle with yourself', offers reassurance, or asks a reflective coaching question" -> Do NOT extract unless the user later adopts it as their own recurring practice or instruction
-            - "Assistant gives a concrete configuration fix, diagnostic conclusion, or reusable workflow" -> procedural
-            - General industry or technology facts not specific to the user ("Rust has a steep learning curve") -> Do NOT extract unless they directly describe the user's own experience, decision, or outcome
+            - "Don't add comments to my code" -> directive (agent rule, not profile)
+            - "For repository comparisons, first align scope, then compare taxonomy, \
+            extraction flow, and storage path" -> playbook
+            - "User follows a fixed process or SOP for X" -> playbook if it is a reusable \
+            method that can be reused later; behavior if it is only the user's personal \
+            recurring habit
+            - "Assistant says 'be gentle with yourself', offers reassurance, or asks a \
+            reflective coaching question" -> Do NOT extract unless the user later adopts it \
+            as their own recurring practice or instruction
+            - "Assistant gives a concrete configuration fix or diagnostic conclusion" -> \
+            resolution when both the problem and usable fix are clear
+            - "Assistant gives a reusable sequence for handling a class of tasks" -> playbook
+            - "User dislikes verbose code comments" -> profile, unless it is explicitly \
+            framed as a rule for how the agent should respond
+            - General industry or technology facts not specific to the user \
+            ("Rust has a steep learning curve") -> Do NOT extract unless they directly \
+            describe the user's own experience, decision, or outcome
             """;
 
     // ── Category Definition Template ─────────────────────────────────────────
@@ -213,19 +230,11 @@ public final class MemoryItemUnifiedPrompts {
             {
               "items": [
                 {
-                  "content": "User is a backend engineer with 5 years of Python experience, focused on distributed systems",
+                  "content": "User is a backend engineer with 5 years of Python experience",
                   "confidence": 1.0,
                   "occurredAt": null,
                   "insightTypes": ["identity"],
-                  "category_reason": "Stable professional identity, true regardless of current project.",
-                  "category": "profile"
-                },
-                {
-                  "content": "User dislikes type annotations in code, considers them too verbose",
-                  "confidence": 0.95,
-                  "occurredAt": null,
-                  "insightTypes": ["preferences"],
-                  "category_reason": "Enduring code style preference, not tied to any specific project.",
+                  "category_reason": "Stable professional identity that remains true across projects.",
                   "category": "profile"
                 }
               ]
@@ -249,19 +258,11 @@ public final class MemoryItemUnifiedPrompts {
             {
               "items": [
                 {
-                  "content": "User goes for a 5K run every Tuesday and Thursday morning along the Charles River path",
+                  "content": "User reviews pull requests before morning standup every workday",
                   "confidence": 1.0,
                   "occurredAt": null,
                   "insightTypes": ["behavior"],
-                  "category_reason": "Recurring pattern with explicit frequency: every Tuesday and Thursday.",
-                  "category": "behavior"
-                },
-                {
-                  "content": "User always reviews pull requests before morning standup",
-                  "confidence": 0.95,
-                  "occurredAt": null,
-                  "insightTypes": ["behavior"],
-                  "category_reason": "Habitual work routine indicated by 'always'.",
+                  "category_reason": "Recurring routine with explicit frequency evidence.",
                   "category": "behavior"
                 }
               ]
@@ -285,19 +286,11 @@ public final class MemoryItemUnifiedPrompts {
             {
               "items": [
                 {
-                  "content": "User's team uses Redis for caching with 10-minute TTL",
+                  "content": "User's team uses Redis for caching with a 10-minute TTL",
                   "confidence": 0.95,
                   "occurredAt": null,
                   "insightTypes": ["experiences"],
                   "category_reason": "Current team infrastructure setup, no specific time anchor.",
-                  "category": "event"
-                },
-                {
-                  "content": "User started migrating their payment service from Java 17 to Java 21 on 2025-03-10",
-                  "confidence": 0.95,
-                  "occurredAt": "2025-03-10T00:00:00Z",
-                  "insightTypes": ["experiences"],
-                  "category_reason": "Ongoing project activity anchored to a specific start date.",
                   "category": "event"
                 }
               ]
@@ -315,34 +308,18 @@ public final class MemoryItemUnifiedPrompts {
             -> Wrong: this is profile. Stable professional identity, not a time-bound situation.
 
 
-            ## procedural
+            ## directive
 
             Good:
             {
               "items": [
                 {
-                  "content": "Enable virtual threads in Spring Boot 3.2+ by setting spring.threads.virtual.enabled=true; Tomcat and @Async will use virtual threads automatically",
-                  "confidence": 0.90,
-                  "occurredAt": null,
-                  "insightTypes": ["procedural"],
-                  "category_reason": "Reusable configuration recipe, applicable to any Spring Boot 3.2+ project.",
-                  "category": "procedural"
-                },
-                {
-                  "content": "Virtual threads caused HikariCP connection pool exhaustion; solved by setting maximumPoolSize to 10-20",
-                  "confidence": 0.95,
-                  "occurredAt": null,
-                  "insightTypes": ["procedural"],
-                  "category_reason": "Reusable troubleshooting knowledge. Keep occurredAt null because the memory is operational guidance, not a dated event record.",
-                  "category": "procedural"
-                },
-                {
-                  "content": "User wants technical answers kept under 2 paragraphs",
+                  "content": "User requires the agent to show the plan before substantial code changes",
                   "confidence": 1.0,
                   "occurredAt": null,
-                  "insightTypes": ["procedural"],
-                  "category_reason": "Direct directive to the agent about response length.",
-                  "category": "procedural"
+                  "insightTypes": ["directives"],
+                  "category_reason": "Durable collaboration rule for future interactions.",
+                  "category": "directive"
                 }
               ]
             }
@@ -351,45 +328,78 @@ public final class MemoryItemUnifiedPrompts {
             {
               "items": [
                 {
-                  "content": "User enabled virtual threads for their service",
-                  "category": "procedural"
+                  "content": "continue",
+                  "category": "directive"
                 }
               ]
             }
-            -> Wrong: this is event. Describes what the user DID, not HOW to do it.
+            -> Wrong: one-off control messages are not durable instructions.
+
+            ## playbook
+
+            Good:
+            {
+              "items": [
+                {
+                  "content": "For repository comparisons, first align memory scope, then compare taxonomy, extraction flow, and storage path",
+                  "confidence": 0.95,
+                  "occurredAt": null,
+                  "insightTypes": ["playbooks"],
+                  "category_reason": "Reusable workflow for a recurring class of tasks.",
+                  "category": "playbook"
+                }
+              ]
+            }
+
+            Bad:
+            {
+              "items": [
+                {
+                  "content": "User asked to compare two repositories",
+                  "category": "playbook"
+                }
+              ]
+            }
+            -> Wrong: a single request title is not a reusable workflow.
+
+            ## resolution
+
+            Good:
+            {
+              "items": [
+                {
+                  "content": "Virtual threads caused HikariCP connection pool exhaustion because virtual thread count exceeded pool size; solved by setting maximumPoolSize to 10-20",
+                  "confidence": 0.95,
+                  "occurredAt": null,
+                  "insightTypes": ["resolutions"],
+                  "category_reason": "Named problem plus usable fix with future reuse value.",
+                  "category": "resolution"
+                }
+              ]
+            }
 
             Bad:
             {
               "items": [
                 {
                   "content": "User had connection pool issues with HikariCP",
-                  "category": "procedural"
+                  "category": "resolution"
                 }
               ]
             }
-            -> Useless: missing cause (virtual threads) and solution (pool size 10-20). A problem without resolution has no value.
-
-            Bad:
-            {
-              "items": [
-                {
-                  "content": "User dislikes verbose code comments",
-                  "category": "procedural"
-                }
-              ]
-            }
-            -> Wrong: this is profile. Personal code style preference, not a directive to the agent.
+            -> Wrong: a resolution must include both the problem and a usable fix or conclusion.
 
             Bad:
             {
               "items": [
                 {
                   "content": "Assistant suggested that User gently remind themselves 'I am learning to come back, no need to rush'",
-                  "category": "procedural"
+                  "category": "directive"
                 }
               ]
             }
-            -> Wrong: assistant emotional support or reflective guidance is not durable operational knowledge unless the user later adopts it as their own routine or instruction.
+            -> Wrong: assistant emotional support or reflective guidance is not durable agent \
+            memory unless the user later adopts it as their own routine or instruction.
             """;
 
     // ── Constructor ──────────────────────────────────────────────────────────
@@ -421,7 +431,11 @@ public final class MemoryItemUnifiedPrompts {
     static String buildCategoryContext(
             Set<MemoryCategory> categories, List<MemoryInsightType> insightTypes) {
         Set<MemoryCategory> effectiveCategories =
-                categories != null ? categories : Set.of(MemoryCategory.values());
+                categories == null
+                        ? EnumSet.allOf(MemoryCategory.class)
+                        : categories.isEmpty()
+                                ? EnumSet.noneOf(MemoryCategory.class)
+                                : EnumSet.copyOf(categories);
 
         String userDefs =
                 renderCategoryDefinitions(effectiveCategories, MemoryScope.USER, insightTypes);

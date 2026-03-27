@@ -72,13 +72,15 @@ public final class InteractionGuideSynthesisPrompts {
             directives will be embedded directly — they must be self-contained imperative \
             instructions.
 
-            The 6 BRANCH dimensions you may receive:
+            The 8 BRANCH dimensions you may receive:
             - identity: Who the user IS — stable traits, professional background, skills
             - preferences: What the user LIKES/DISLIKES/VALUES — subjective opinions
             - relationships: The user's social network — family, colleagues, dynamics
             - experiences: What is HAPPENING — time-bound projects, goals, situations
             - behavior: What the user DOES REPEATEDLY — habits, routines, patterns
-            - procedural: Reusable HOW-TO knowledge — procedures, recipes, agent directives
+            - directives: Durable agent instructions, boundaries, and collaboration rules
+            - playbooks: Reusable workflows and task-handling patterns
+            - resolutions: Resolved problem knowledge, usable fixes, and durable corrections
 
             Your job is to read ACROSS all these dimensions and derive actionable interaction \
             directives. A single directive often draws evidence from 2-3 BRANCH dimensions.
@@ -113,7 +115,9 @@ public final class InteractionGuideSynthesisPrompts {
               - identity/preferences → communication tone, detail depth, formality
               - behavior → response structure, pacing, format expectations
               - experiences → context-sensitive strategies (current projects, deadlines)
-              - procedural → agent directives the user has explicitly given
+              - directives → explicit rules the user has given for future interactions
+              - playbooks → reusable handling approaches the user prefers
+              - resolutions → proven fixes or conclusions that should shape future help
               - relationships → social context that affects communication
             - Cross-reference signals across dimensions. The strongest directives come from \
             convergent evidence (e.g., preferences says "likes code examples" + behavior \
@@ -155,8 +159,8 @@ public final class InteractionGuideSynthesisPrompts {
             - domain_strategy = differentiated handling for specific topic areas. \
             Examples: "For Go questions, lead with code", "For management discussions, \
             use structured frameworks"
-            - boundary = explicit behavioral rules, especially from user feedback or \
-            procedural directives. \
+            - boundary = explicit behavioral rules, especially from directive BRANCHes or \
+            strong negative feedback. \
             Examples: "Never ask clarifying questions when intent is clear", \
             "Always provide code examples with configuration changes"
             - When a directive could fit multiple dimensions, choose the most specific one. \
@@ -193,7 +197,7 @@ public final class InteractionGuideSynthesisPrompts {
             BRANCHes.
             - `confidence`:
               - 0.85+: Directive supported by convergent evidence from 2+ BRANCHes, or \
-              directly stated by user in procedural BRANCH.
+              directly stated by user in a directives BRANCH.
               - 0.70-0.84: Reasonable inference from clear signals in 1-2 BRANCHes.
               - 0.60-0.69: Speculative but potentially valuable. Include sparingly.
               - boundary DO NOT rules require 0.80+ (higher bar for restrictions).
@@ -221,7 +225,7 @@ public final class InteractionGuideSynthesisPrompts {
             being asked clarifying questions when intent is obvious. Values conciseness.
             3. [type=behavior] Responds in short bursts, rarely writes paragraphs. Gets \
             impatient when responses exceed 3 paragraphs. Sends follow-up questions immediately.
-            4. [type=procedural] User instructed the agent: "stop being so verbose". Praised \
+            4. [type=directives] User instructed the agent: "stop being so verbose". Praised \
             a response that started with a code block.
 
             Output:
@@ -235,7 +239,7 @@ public final class InteractionGuideSynthesisPrompts {
                   "sourceItemIds": [],
                   "metadata": { "dimension": "communication_style" },
                   "point_reason": "preferences BRANCH: prefers code over verbal explanations. \
-            procedural BRANCH: praised code-first response. behavior BRANCH: sends short \
+            directives BRANCH: praised code-first response. behavior BRANCH: sends short \
             bursts, wants quick answers. Three dimensions converge on code-first format. \
             Dimension=communication_style because this is about response structure."
                 },
@@ -247,7 +251,7 @@ public final class InteractionGuideSynthesisPrompts {
                   "sourceItemIds": [],
                   "metadata": { "dimension": "communication_style" },
                   "point_reason": "behavior BRANCH: gets impatient beyond 3 paragraphs. \
-            procedural BRANCH: told agent 'stop being verbose'. preferences BRANCH: values \
+            directives BRANCH: told agent 'stop being verbose'. preferences BRANCH: values \
             conciseness. Strong convergence. Dimension=communication_style because this is \
             about verbosity."
                 },
@@ -330,7 +334,7 @@ public final class InteractionGuideSynthesisPrompts {
             1. [type=identity] 产品经理，负责用户增长方向。经常需要数据分析支持。
             2. [type=behavior] 习惯一次发送长消息，描述多个问题。回复后会逐个确认每个问题。
             3. [type=preferences] 偏好结构化回答，如编号列表。对模糊回答表示不满。
-            4. [type=procedural] 反馈说"回答太笼统了，我需要具体步骤"。
+            4. [type=directives] 反馈说"回答太笼统了，我需要具体步骤"。
 
             Output:
             {
@@ -353,7 +357,7 @@ public final class InteractionGuideSynthesisPrompts {
                   "confidence": 0.82,
                   "sourceItemIds": [],
                   "metadata": { "dimension": "domain_strategy" },
-                  "point_reason": "identity BRANCH: 产品经理，需要数据分析支持。procedural BRANCH: \
+                  "point_reason": "identity BRANCH: 产品经理，需要数据分析支持。directives BRANCH: \
             要求具体步骤而非笼统回答。针对数据分析这个特定领域的策略。Dimension=domain_strategy \
             因为这是领域特定处理。"
                 },
@@ -363,7 +367,7 @@ public final class InteractionGuideSynthesisPrompts {
                   "confidence": 0.90,
                   "sourceItemIds": [],
                   "metadata": { "dimension": "boundary" },
-                  "point_reason": "procedural BRANCH: 明确反馈'回答太笼统'。preferences BRANCH: \
+                  "point_reason": "directives BRANCH: 明确反馈'回答太笼统'。preferences BRANCH: \
             对模糊回答不满。这是一条明确的 DO NOT 规则。Dimension=boundary 因为这是行为限制。"
                 }
               ]

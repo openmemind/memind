@@ -143,17 +143,53 @@ public final class DefaultInsightTypes {
 
     // ── AGENT BRANCH ─────────────────────────────────────────────────────────
 
-    public static MemoryInsightType procedural() {
+    public static MemoryInsightType directives() {
         return new MemoryInsightType(
-                24L,
-                "procedural",
-                "Reusable HOW-TO knowledge: operational procedures, configuration recipes,"
-                        + " problem-solution pairs, and directives the user gave to the agent."
-                        + " Groups might be: spring_boot_config, debugging_patterns,"
-                        + " agent_instructions. NOT what the user did once (→ experiences)"
-                        + " or who the user is (→ identity)",
+                25L,
+                "directives",
+                "Durable agent instructions and collaboration boundaries. Group by stable"
+                        + " rule domain or behavior boundary. NOT one-off commands,"
+                        + " task-specific workflows, or user events.",
                 null,
-                List.of("procedural"),
+                List.of("directive"),
+                DEFAULT_TARGET_TOKENS,
+                null,
+                null,
+                null,
+                null,
+                InsightAnalysisMode.BRANCH,
+                null,
+                MemoryScope.AGENT,
+                List.of(ContentTypes.CONVERSATION));
+    }
+
+    public static MemoryInsightType playbooks() {
+        return new MemoryInsightType(
+                26L,
+                "playbooks",
+                "Reusable task workflows and handling archetypes. Group by recurring task"
+                        + " scenario, not by session title or one-off request wording.",
+                null,
+                List.of("playbook"),
+                DEFAULT_TARGET_TOKENS,
+                null,
+                null,
+                null,
+                null,
+                InsightAnalysisMode.BRANCH,
+                null,
+                MemoryScope.AGENT,
+                List.of(ContentTypes.CONVERSATION));
+    }
+
+    public static MemoryInsightType resolutions() {
+        return new MemoryInsightType(
+                27L,
+                "resolutions",
+                "Resolved problem patterns with usable fixes or conclusions. Group by stable"
+                        + " problem family or failure mode, not by specific response phrasing.",
+                null,
+                List.of("resolution"),
                 DEFAULT_TARGET_TOKENS,
                 null,
                 null,
@@ -216,7 +252,9 @@ public final class DefaultInsightTypes {
                 relationships(),
                 experiences(),
                 behavior(),
-                procedural(),
+                directives(),
+                playbooks(),
+                resolutions(),
                 profile(),
                 interaction());
     }

@@ -19,6 +19,7 @@ import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
+import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
@@ -39,6 +40,7 @@ import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.lang.reflect.Proxy;
+import java.util.EnumSet;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
@@ -144,6 +146,24 @@ class MemoryAssemblersTest {
         assertThat(store).isSameAs(MEMORY_STORE);
     }
 
+    @Test
+    void extractionAssemblerConversationCategoriesUseNewAgentTaxonomy() {
+        MemoryExtractionAssembler assembler = new MemoryExtractionAssembler();
+
+        @SuppressWarnings("unchecked")
+        EnumSet<MemoryCategory> categories =
+                invokeNoArgMethod(assembler, "conversationCategories", EnumSet.class);
+
+        assertThat(categories)
+                .containsExactly(
+                        MemoryCategory.PROFILE,
+                        MemoryCategory.BEHAVIOR,
+                        MemoryCategory.EVENT,
+                        MemoryCategory.DIRECTIVE,
+                        MemoryCategory.PLAYBOOK,
+                        MemoryCategory.RESOLUTION);
+    }
+
     @SuppressWarnings("unchecked")
     private static <T> T proxy(Class<T> type) {
         return (T)
@@ -210,6 +230,18 @@ class MemoryAssemblersTest {
         } catch (ReflectiveOperationException e) {
             throw new AssertionError(
                     "Failed to read field '" + fieldName + "' from " + target.getClass(), e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T invokeNoArgMethod(Object target, String methodName, Class<T> returnType) {
+        try {
+            var method = target.getClass().getDeclaredMethod(methodName);
+            method.setAccessible(true);
+            return (T) returnType.cast(method.invoke(target));
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(
+                    "Failed to invoke method '" + methodName + "' on " + target.getClass(), e);
         }
     }
 }

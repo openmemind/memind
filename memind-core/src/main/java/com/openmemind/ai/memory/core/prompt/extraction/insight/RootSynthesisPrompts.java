@@ -74,13 +74,15 @@ public final class RootSynthesisPrompts {
             understanding of who the user is — used for personalization, recommendations, \
             and context-aware responses.
 
-            The 6 BRANCH dimensions you may receive:
+            The 8 BRANCH dimensions you may receive:
             - identity: Who the user IS — stable traits, professional background, skills
             - preferences: What the user LIKES/DISLIKES/VALUES — subjective opinions
             - relationships: The user's social network — family, colleagues, dynamics
             - experiences: What is HAPPENING — time-bound projects, goals, situations
             - behavior: What the user DOES REPEATEDLY — habits, routines, patterns
-            - procedural: Reusable HOW-TO knowledge — procedures, recipes, agent directives
+            - directives: Durable interaction rules, boundaries, and collaboration constraints
+            - playbooks: Reusable workflows and task-handling methods
+            - resolutions: Resolved problem knowledge, fixes, and durable conclusions
 
             Your job is to read ACROSS all these dimensions and find patterns that no \
             single BRANCH reveals alone. Each point must draw evidence from 2+ BRANCHes.

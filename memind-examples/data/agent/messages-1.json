@@ -1,0 +1,34 @@
+[
+  {
+    "role": "USER",
+    "content": "先记住几个长期协作规则：如果要改生产配置，先给我影响范围和回滚方案；没有这两项先不要动。"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "记住了。以后涉及生产配置变更，我会先给出影响范围和回滚方案，缺少这两项时不会直接执行。"
+  },
+  {
+    "role": "USER",
+    "content": "还有，涉及架构调整或者 prompt 改写时，先把方案给我看，再开始动代码。"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "收到。后续碰到架构调整或 prompt 改写，我会先给出方案草案，等你确认后再执行。"
+  },
+  {
+    "role": "USER",
+    "content": "再记一个常用排查套路：收到 webhook 重试告警时，先看 provider dashboard 的失败原因，再查幂等键日志，最后看 consumer backlog。"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "明白，这个排查流程我记下了：先看 provider dashboard，再查幂等键日志，最后看 consumer backlog。"
+  },
+  {
+    "role": "USER",
+    "content": "如果是缓存命中率突然下降，先确认 key 规则有没有发布变更，再看 TTL 配置，最后抽样检查是否出现异常回源。"
+  },
+  {
+    "role": "ASSISTANT",
+    "content": "收到。以后排查缓存命中率下降时，我会按 key 规则变更、TTL 配置、异常回源这三个步骤依次检查。"
+  }
+]

@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 /**
  * Memory classification enumeration
  *
- * <p>Defines 5 memory classifications for two scopes: USER (3) and AGENT (2).
+ * <p>Defines 7 memory classifications for two scopes: USER (3) and AGENT (4).
  * Optimized with explicit rule-based definitions for small LLM (e.g., gpt-4o-mini) classification.
  */
 public enum MemoryCategory {
@@ -79,16 +79,42 @@ public enum MemoryCategory {
             MemoryScope.AGENT,
             new GroupingStrategy.MetadataField("toolName")),
 
-    PROCEDURAL(
-            "procedural",
-            "Reusable procedures, problem-solution pairs, and agent behavioral directives",
+    DIRECTIVE(
+            "directive",
+            "Durable agent instructions, boundaries, and collaboration rules",
             """
-            Core: Describes durable agent instructions or reusable operational knowledge.
-            Characteristics: Stable user directives, step-by-step instructions, or problem-solution knowledge that remains useful beyond the current conversation.
-            Test: Is this something the agent should reuse in future tasks or interactions without depending on the original conversational moment?
-            Includes: configuration recipes, setup guides, step-by-step workflows, bug fixes with solutions, stable user directives on agent behavior.
-            Excludes: emotional support, encouragement, reflective coaching questions, therapeutic phrasing, and one-off conversational suggestions from the assistant unless the user explicitly adopts them as an ongoing routine, preference, or instruction.
-            Note: "Enable X by setting Y=true" -> procedural; "Virtual threads caused pool exhaustion; solved by setting poolSize=10" -> procedural; "Don't add comments to my code" -> procedural; "User enabled X" -> event.\
+            Core: Describes a durable instruction about how the agent should behave in future interactions.
+            Characteristics: Stable rule, boundary, or collaboration constraint that should be reused later.
+            Test: Would this still be valid in a later conversation with the same user?
+            Includes: planning requirements, response constraints, language handling rules, do/don't boundaries.
+            Excludes: one-off control messages, transient execution commands, emotional support, and project facts.
+            Note: "Show the plan before substantial edits" -> directive; "continue" -> do not extract.\
+            """,
+            MemoryScope.AGENT,
+            new GroupingStrategy.LlmClassify()),
+
+    PLAYBOOK(
+            "playbook",
+            "Reusable task workflows and handling patterns",
+            """
+            Core: Describes a reusable way of handling a class of tasks.
+            Characteristics: Repeatable workflow, reusable workflow, scenario playbook, task archetype, or task-handling strategy.
+            Test: Could the agent reuse this for a future task of the same kind?
+            Includes: comparison workflows, prompt refinement sequences, analysis checklists.
+            Excludes: one-off request titles, loose advice, and unresolved discussion fragments.\
+            """,
+            MemoryScope.AGENT,
+            new GroupingStrategy.LlmClassify()),
+
+    RESOLUTION(
+            "resolution",
+            "Resolved problem knowledge with usable fixes or conclusions",
+            """
+            Core: Describes a resolved problem pattern and the usable resolution.
+            Characteristics: Stable failure mode plus fix, conclusion, or durable correction.
+            Test: Does this include both the problem and a usable resolution?
+            Includes: naming-quality fixes, taxonomy corrections, troubleshooting conclusions.
+            Excludes: unresolved problems, bare actions without a named problem, and brainstorming without closure.\
             """,
             MemoryScope.AGENT,
             new GroupingStrategy.LlmClassify());
@@ -148,6 +174,6 @@ public enum MemoryCategory {
     }
 
     public static Set<MemoryCategory> agentCategories() {
-        return EnumSet.of(TOOL, PROCEDURAL);
+        return EnumSet.of(TOOL, DIRECTIVE, PLAYBOOK, RESOLUTION);
     }
 }

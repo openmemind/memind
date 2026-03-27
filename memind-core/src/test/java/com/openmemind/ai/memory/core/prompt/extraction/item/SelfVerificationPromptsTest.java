@@ -36,7 +36,7 @@ class SelfVerificationPromptsTest {
                 List.of(
                         createInsightType("identity", List.of("profile")),
                         createInsightType("experiences", List.of("event")),
-                        createInsightType("procedural", List.of("procedural")));
+                        createInsightType("directives", List.of("directive")));
         var existingEntries = List.of(createEntry("User is a backend engineer", "profile"));
         var template =
                 SelfVerificationPrompts.build(
@@ -48,7 +48,7 @@ class SelfVerificationPromptsTest {
                         Set.of(
                                 MemoryCategory.PROFILE,
                                 MemoryCategory.EVENT,
-                                MemoryCategory.PROCEDURAL));
+                                MemoryCategory.DIRECTIVE));
         var result = template.render("English");
 
         // System prompt structure
@@ -114,7 +114,7 @@ class SelfVerificationPromptsTest {
 
     @Test
     @DisplayName(
-            "Review prompt should not treat supportive assistant language as missed procedural")
+            "Review prompt should not treat supportive assistant language as missed agent memory")
     void shouldExcludeSupportiveAssistantSuggestionsFromReview() {
         var template =
                 SelfVerificationPrompts.build(
@@ -124,17 +124,44 @@ class SelfVerificationPromptsTest {
                         """,
                         List.of(),
                         Instant.parse("2026-03-27T00:00:00Z"),
-                        List.of(createInsightType("procedural", List.of("procedural"))),
+                        List.of(createInsightType("directives", List.of("directive"))),
                         null,
-                        Set.of(MemoryCategory.PROCEDURAL));
+                        Set.of(MemoryCategory.DIRECTIVE));
         var result = template.render("English");
 
         assertThat(result.systemPrompt())
                 .contains("Do NOT extract assistant emotional support")
                 .contains(
                         "Do NOT treat supportive or therapeutic assistant language as a missed "
-                                + "procedural memory")
+                                + "agent memory")
                 .contains("NOT conversational framing like \"assistant suggested...\"");
+    }
+
+    @Test
+    @DisplayName("Review prompt should describe new agent categories and strict gating")
+    void shouldDescribeNewAgentCategoriesAndStrictGating() {
+        var template =
+                SelfVerificationPrompts.build(
+                        "user: continue",
+                        List.of(),
+                        Instant.parse("2026-03-28T00:00:00Z"),
+                        List.of(
+                                createInsightType("directives", List.of("directive")),
+                                createInsightType("playbooks", List.of("playbook")),
+                                createInsightType("resolutions", List.of("resolution"))),
+                        null,
+                        Set.of(
+                                MemoryCategory.DIRECTIVE,
+                                MemoryCategory.PLAYBOOK,
+                                MemoryCategory.RESOLUTION));
+        var result = template.render("English");
+
+        assertThat(result.systemPrompt())
+                .contains("directive")
+                .contains("playbook")
+                .contains("resolution")
+                .contains("if uncertain between agent memory and nothing, prefer nothing")
+                .contains("one-off control messages");
     }
 
     @Test
@@ -150,18 +177,19 @@ class SelfVerificationPromptsTest {
                         List.of(
                                 createInsightType("profile", List.of("profile")),
                                 createInsightType("behavior", List.of("behavior")),
-                                createInsightType("procedural", List.of("procedural"))),
+                                createInsightType("directives", List.of("directive"))),
                         null,
                         Set.of(
                                 MemoryCategory.PROFILE,
                                 MemoryCategory.BEHAVIOR,
                                 MemoryCategory.EVENT,
-                                MemoryCategory.PROCEDURAL));
+                                MemoryCategory.DIRECTIVE));
         var result = template.render("English");
 
         assertThat(result.systemPrompt())
                 .contains(
-                        "Profile, behavior, procedural, tool, and skill items should normally set")
+                        "Profile, behavior, directive, playbook, resolution, and tool items should"
+                                + " normally set")
                 .contains("Event items should populate `occurredAt` only when the text itself")
                 .contains(
                         "Do NOT use message timestamps or conversation timestamps as `occurredAt`")

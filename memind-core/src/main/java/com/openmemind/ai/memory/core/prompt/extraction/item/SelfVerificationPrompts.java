@@ -36,21 +36,21 @@ public final class SelfVerificationPrompts {
 
     private static final String SYSTEM_PROMPT_TEMPLATE =
             """
-            You are a memory extraction reviewer. Upstream extractors have already made \
-            a first pass over the conversation. Your task is to find atomic facts that \
-            were MISSED — items clearly present in the text but absent from the \
-            already-extracted list. Return ONLY new, non-overlapping items.
+            You are a memory extraction reviewer. Upstream extractors have already made a \
+            first pass over the conversation. Your task is to find atomic facts that were \
+            MISSED — items clearly present in the text but absent from the already-extracted \
+            list. Return ONLY new, non-overlapping items.
 
             Return an empty list if nothing was missed. Do NOT fabricate or hallucinate items.
 
             # Core Principles
-            1. Atomicity: Each item must express EXACTLY ONE coherent unit of meaning. \
-            If a message contains multiple distinct ideas, split them into separate items. \
-            Do NOT merge unrelated facts into one item.
+            1. Atomicity: Each item must express EXACTLY ONE coherent unit of meaning. If a \
+            message contains multiple distinct ideas, split them into separate items. Do NOT \
+            merge unrelated facts into one item.
             2. Independence: Independently retrievable without context from other items.
-            3. Content Preservation: NEVER drop specific details (names, numbers, parameter \
-            names, version numbers, technical terms, config values, frequencies, places, brands). \
-            Remove ONLY filler words.
+            3. Content Preservation: NEVER drop specific details such as names, numbers, \
+            parameter names, version numbers, technical terms, config values, frequencies, \
+            places, or brands. Remove ONLY filler words.
             4. Explicit Attribution: Always state WHO said or did what. Resolve pronouns to \
             specific names.
             5. Explicit Only: Extract ONLY facts directly stated/confirmed. No guesses.
@@ -59,39 +59,46 @@ public final class SelfVerificationPrompts {
             count as a new item.
 
             # Extraction Scope
-            - Extract from BOTH user AND assistant messages. User messages reveal personal \
-            facts, preferences, and context. Keep assistant content ONLY when it contains \
-            reusable operational knowledge, concrete technical guidance, diagnostic \
-            conclusions, or durable agent directives.
-            - When the user asks a question and the assistant provides a solution, extract the \
-            neutral problem+solution as a procedural item, NOT just "user asked about X", and \
-            NOT conversational framing like "assistant suggested...".
-            - Do NOT extract: Greetings, small talk, praise toward the assistant.
+            - Extract from BOTH user AND assistant messages.
+            - Keep assistant content ONLY when it contains durable agent instructions, \
+            reusable task workflows, resolved problem knowledge, or concrete tool guidance \
+            with future reuse value.
+            - When the user asks a question and the assistant provides a stable fix or \
+            reusable workflow, extract the reusable resolution or playbook, NOT just \
+            "user asked about X", and NOT conversational framing like "assistant suggested...".
+            - Do NOT extract: greetings, small talk, praise toward the assistant, or vague \
+            platitudes without user-specific context.
             - Do NOT extract assistant emotional support, encouragement, validation, reflective \
             coaching questions, or therapeutic phrasing unless the user explicitly adopts them \
             as a lasting routine, preference, or instruction.
+            - One-off control messages, transient execution commands, and session-management \
+            turns are not durable agent memory.
 
             # Common Miss Patterns
             Focus on these frequently missed patterns during review:
-            1. **Technical assistant solutions**: Technical solutions, configuration advice, and diagnostic \
-            conclusions from assistant messages are often missed by the first pass.
-            2. **Problem + solution pairs**: The first pass may capture the problem but miss the \
-            cause and solution. Combine them into a procedural item.
-            3. **Specific details swallowed by summarization**: Version numbers, parameter values, \
-            config keys, brand names, and exact numbers that the first pass merged into a generic \
-            description.
-            4. **Agent behavioral directives**: User instructions about how the agent should respond \
-            (procedural category) are often overlooked.
-            5. **Multi-fact messages split failure**: A single message containing 2-3 distinct facts \
-            where the first pass only captured one.
-            6. **Team/project context**: Team member roles, infrastructure details, and project \
-            context that the first pass treated as background noise.
-            Do NOT treat supportive or therapeutic assistant language as a missed procedural memory.
+            1. **Technical assistant solutions**: Technical solutions, configuration advice, and \
+            diagnostic conclusions from assistant messages are often missed by the first pass. \
+            These usually become resolution items.
+            2. **Problem + usable fix pairs**: The first pass may capture the problem but miss \
+            the cause and fix. Combine them into a resolution item.
+            3. **Reusable workflows**: The first pass may capture the request but miss the \
+            reusable method for handling that class of tasks. These become playbook items.
+            4. **Durable agent directives**: User instructions about how the agent should \
+            respond in future interactions are often overlooked. These become directive items.
+            5. **Specific details swallowed by summarization**: Version numbers, parameter \
+            values, config keys, brand names, and exact numbers that the first pass merged \
+            into a generic description.
+            6. **Multi-fact messages split failure**: A single message containing 2-3 distinct \
+            facts where the first pass only captured one.
+            7. **Team or project context**: Team member roles, infrastructure details, and \
+            project context that the first pass treated as background noise.
+            Do NOT treat supportive or therapeutic assistant language as a missed agent memory.
 
             # Extraction Bias
-            When uncertain whether something was missed, extract it. The downstream \
-            deduplication system handles redundancy. Missing a valuable memory is worse \
-            than creating a slightly redundant one.
+            - Add only clearly missed items.
+            - For directive, playbook, and resolution, use strict precision.
+            - If there is no clear evidence, do not add the item.
+            - if uncertain between agent memory and nothing, prefer nothing
 
             {{CATEGORY_CONTEXT}}
 
@@ -105,10 +112,10 @@ public final class SelfVerificationPrompts {
 
             ## occurredAt
             - Time-specific memories: embed the resolved absolute date in the content AND \
-            populate `occurredAt` with the ISO-8601 UTC timestamp (e.g., "2025-02-07T00:00:00Z") \
-            only when the text itself states or clearly implies that time.
-            - Profile, behavior, procedural, tool, and skill items should normally set \
-            `occurredAt` to null.
+            populate `occurredAt` with the ISO-8601 UTC timestamp only when the text itself \
+            states or clearly implies that time.
+            - Profile, behavior, directive, playbook, resolution, and tool items should \
+            normally set `occurredAt` to null.
             - Event items should populate `occurredAt` only when the text itself contains \
             explicit temporal evidence such as a date, relative date phrase, or clear \
             start/end marker.
@@ -123,7 +130,7 @@ public final class SelfVerificationPrompts {
                   "content": "Single, complete, self-contained sentence preserving ALL details",
                   "occurredAt": "2026-03-18T00:00:00Z",
                   "insightTypes": ["Choose ONLY from the Available insightTypes listed under the assigned category"],
-                  "category_reason": "Briefly explain WHY this category was chosen AND why this item was missed by the first pass.",
+                  "category_reason": "CRITICAL: Briefly explain WHY this category was chosen AND why this item was missed by the first pass. This field is for reasoning only and will NOT be stored.",
                   "category": "<matched_category_from_list>"
                 }
               ]
@@ -180,16 +187,16 @@ public final class SelfVerificationPrompts {
                 {
                   "content": "Virtual threads caused HikariCP connection pool exhaustion because virtual thread count far exceeds pool size limit; solved by setting maximumPoolSize to 10-20",
                   "occurredAt": null,
-                  "insightTypes": ["procedural"],
-                  "category_reason": "Problem (pool exhaustion) with root cause (thread count > pool size) and solution (maximumPoolSize 10-20). The first pass only captured the problem but missed the cause and fix from the assistant's response. Keep occurredAt null because this is reusable operational knowledge rather than a dated event memory.",
-                  "category": "procedural"
+                  "insightTypes": ["resolutions"],
+                  "category_reason": "Resolution item: named problem, cause, and usable fix. The first pass only captured the symptom and missed the fix from the assistant response.",
+                  "category": "resolution"
                 }
               ]
             }
 
             Why good: The first pass captured only the symptom. The root cause and solution from the assistant message were missed.
 
-            ## Good Example 3: Agent behavioral directive missed
+            ## Good Example 3: Durable agent directive missed
 
             AlreadyExtracted:
             - [profile] User is a backend engineer with 5 years of Java experience
@@ -204,16 +211,40 @@ public final class SelfVerificationPrompts {
                 {
                   "content": "User instructed the agent to respond in Chinese and keep answers concise",
                   "occurredAt": null,
-                  "insightTypes": ["procedural"],
-                  "category_reason": "Direct behavioral directive to the agent about response language and style. Commonly missed because it appears as a brief aside rather than main content.",
-                  "category": "procedural"
+                  "insightTypes": ["directives"],
+                  "category_reason": "Directive item: durable rule for future interaction behavior. Commonly missed because it appears as a brief aside rather than the main task content.",
+                  "category": "directive"
                 }
               ]
             }
 
             Why good: User directives to the agent are frequently overlooked during first-pass extraction.
 
-            ## Good Example 4: Nothing missed — return empty
+            ## Good Example 4: Reusable workflow missed
+
+            AlreadyExtracted:
+            - [event] User wants a comparison between two repositories
+
+            Conversation:
+            [2026-03-18 10:08] user: Compare the repositories before proposing changes.
+            [2026-03-18 10:09] assistant: First align memory scope, then compare taxonomy, extraction flow, and storage path.
+
+            Output:
+            {
+              "items": [
+                {
+                  "content": "For repository comparisons, first align memory scope, then compare taxonomy, extraction flow, and storage path",
+                  "occurredAt": null,
+                  "insightTypes": ["playbooks"],
+                  "category_reason": "Playbook item: reusable handling workflow for a recurring class of tasks. The first pass captured the request but missed the reusable method.",
+                  "category": "playbook"
+                }
+              ]
+            }
+
+            Why good: The reusable method is the memory, not the one-off request title.
+
+            ## Good Example 5: Nothing missed — return empty
 
             AlreadyExtracted:
             - [profile] User is a backend engineer with 5 years of Java experience
@@ -228,7 +259,7 @@ public final class SelfVerificationPrompts {
 
             Why good: All facts in the conversation are already covered. No duplicates generated.
 
-            ## Bad Example: Supportive assistant language (WRONG)
+            ## Bad Example 1: Supportive assistant language (WRONG)
 
             Conversation:
             [2026-03-18 10:07] assistant: When you feel like you lost, try asking yourself \
@@ -239,15 +270,32 @@ public final class SelfVerificationPrompts {
               "items": [
                 {
                   "content": "Assistant suggested that User ask what else they are feeling without judgment",
-                  "category": "procedural"
+                  "category": "directive"
                 }
               ]
             }
 
-            -> Wrong: Supportive or therapeutic assistant language is not a missed procedural memory \
+            -> Wrong: Supportive or therapeutic assistant language is not a missed agent memory \
             unless the user later adopts it as a lasting routine or instruction.
 
-            ## Bad Example: Rephrasing an existing item (WRONG)
+            ## Bad Example 2: One-off control message (WRONG)
+
+            Conversation:
+            [2026-03-18 10:11] user: continue
+
+            Output (WRONG):
+            {
+              "items": [
+                {
+                  "content": "User told the agent to continue",
+                  "category": "directive"
+                }
+              ]
+            }
+
+            -> Wrong: one-off control messages are not durable agent memory.
+
+            ## Bad Example 3: Rephrasing an existing item (WRONG)
 
             AlreadyExtracted:
             - [profile] User is a backend engineer with 5 years of Java experience

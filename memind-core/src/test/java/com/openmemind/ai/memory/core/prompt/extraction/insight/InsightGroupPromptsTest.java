@@ -149,7 +149,7 @@ class InsightGroupPromptsTest {
                 "Reusable patterns related to teamwork, communication, coordination,"
                         + " documentation, and execution.",
                 null,
-                List.of("procedural"),
+                List.of("directive"),
                 400,
                 null,
                 null,
