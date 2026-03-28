@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.DefaultMemory;
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.InMemoryConversationBuffer;
@@ -24,8 +25,16 @@ import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
+import com.openmemind.ai.memory.core.extraction.item.MemoryItemLayer;
+import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItemExtractor;
+import com.openmemind.ai.memory.core.extraction.item.strategy.LlmItemExtractionStrategy;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
+import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
+import com.openmemind.ai.memory.core.retrieval.strategy.DeepRetrievalStrategy;
+import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
@@ -39,6 +48,7 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -47,7 +57,10 @@ class MemoryAutoConfigurationTest {
 
     private final ApplicationContextRunner contextRunner =
             new ApplicationContextRunner()
-                    .withConfiguration(AutoConfigurations.of(MemoryAutoConfiguration.class));
+                    .withConfiguration(
+                            AutoConfigurations.of(
+                                    MemoryLlmAutoConfiguration.class,
+                                    MemoryAutoConfiguration.class));
 
     @Test
     @DisplayName("Create Memory from builder runtime inputs only")
@@ -104,6 +117,66 @@ class MemoryAutoConfigurationTest {
                         context -> {
                             assertThat(context).hasNotFailed();
                             assertThat(context).doesNotHaveBean(Memory.class);
+                        });
+    }
+
+    @Test
+    @DisplayName("Route slot-specific clients from ChatClientRegistry into built memory")
+    void routesSlotSpecificClientsFromRegistryIntoBuiltMemory() {
+        contextRunner
+                .withUserConfiguration(MultiClientRuntimeConfig.class)
+                .withPropertyValues(
+                        "memind.llm.slots.item-extraction=smartClient",
+                        "memind.llm.slots.query-expander=fastClient")
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+                            DefaultMemory memory = (DefaultMemory) context.getBean(Memory.class);
+                            StructuredChatClient smartClient =
+                                    context.getBean("smartClient", StructuredChatClient.class);
+                            StructuredChatClient fastClient =
+                                    context.getBean("fastClient", StructuredChatClient.class);
+
+                            MemoryExtractor extractor =
+                                    readField(memory, "extractor", MemoryExtractor.class);
+                            MemoryItemLayer memoryItemLayer =
+                                    readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+                            DefaultMemoryItemExtractor itemExtractor =
+                                    readField(
+                                            memoryItemLayer,
+                                            "extractor",
+                                            DefaultMemoryItemExtractor.class);
+                            LlmItemExtractionStrategy itemStrategy =
+                                    readField(
+                                            itemExtractor,
+                                            "defaultStrategy",
+                                            LlmItemExtractionStrategy.class);
+                            DefaultMemoryRetriever retriever =
+                                    readField(memory, "retriever", DefaultMemoryRetriever.class);
+                            @SuppressWarnings("unchecked")
+                            java.util.Map<String, Object> strategies =
+                                    readField(retriever, "strategies", java.util.Map.class);
+                            DeepRetrievalStrategy deepStrategy =
+                                    (DeepRetrievalStrategy)
+                                            strategies.get(RetrievalStrategies.DEEP_RETRIEVAL);
+                            LlmTypedQueryExpander typedQueryExpander =
+                                    readField(
+                                            deepStrategy,
+                                            "typedQueryExpander",
+                                            LlmTypedQueryExpander.class);
+
+                            assertThat(
+                                            readField(
+                                                    itemStrategy,
+                                                    "structuredChatClient",
+                                                    StructuredChatClient.class))
+                                    .isSameAs(smartClient);
+                            assertThat(
+                                            readField(
+                                                    typedQueryExpander,
+                                                    "structuredChatClient",
+                                                    StructuredChatClient.class))
+                                    .isSameAs(fastClient);
                         });
     }
 
@@ -190,6 +263,27 @@ class MemoryAutoConfigurationTest {
         }
     }
 
+    @Configuration(proxyBeanMethods = false)
+    static class MultiClientRuntimeConfig extends RequiredRuntimeConfig {
+
+        @Bean
+        @Primary
+        @Override
+        StructuredChatClient structuredChatClient() {
+            return new NoopStructuredChatClient();
+        }
+
+        @Bean
+        StructuredChatClient smartClient() {
+            return new NoopStructuredChatClient();
+        }
+
+        @Bean
+        StructuredChatClient fastClient() {
+            return new NoopStructuredChatClient();
+        }
+    }
+
     private static final class NoopStructuredChatClient implements StructuredChatClient {
 
         @Override
@@ -245,6 +339,18 @@ class MemoryAutoConfigurationTest {
         @Override
         public Mono<List<List<Float>>> embedAll(List<String> texts) {
             return Mono.just(List.of());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T readField(Object target, String fieldName, Class<T> fieldType) {
+        try {
+            var field = target.getClass().getDeclaredField(fieldName);
+            field.setAccessible(true);
+            return (T) fieldType.cast(field.get(target));
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(
+                    "Failed to read field '" + fieldName + "' from " + target.getClass(), e);
         }
     }
 }

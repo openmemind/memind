@@ -28,11 +28,19 @@ import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
+import com.openmemind.ai.memory.core.extraction.item.MemoryItemLayer;
+import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItemExtractor;
+import com.openmemind.ai.memory.core.extraction.item.strategy.LlmItemExtractionStrategy;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
+import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
+import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
+import com.openmemind.ai.memory.core.retrieval.strategy.DeepRetrievalStrategy;
+import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
@@ -187,6 +195,49 @@ class DefaultMemoryBuilderTest {
     void defaultBuildOptionsExposeBoundaryDetectorDefaults() {
         assertThat(MemoryBuildOptions.defaults().boundaryDetector())
                 .isEqualTo(CommitDetectorConfig.defaults());
+    }
+
+    @Test
+    void buildRoutesSlotSpecificClients() {
+        TrackingChatClient defaultChatClient = new TrackingChatClient();
+        TrackingChatClient itemExtractionClient = new TrackingChatClient();
+        TrackingChatClient queryExpanderClient = new TrackingChatClient();
+
+        DefaultMemory memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(defaultChatClient)
+                                .chatClient(ChatClientSlot.ITEM_EXTRACTION, itemExtractionClient)
+                                .chatClient(ChatClientSlot.QUERY_EXPANDER, queryExpanderClient)
+                                .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .build();
+
+        MemoryExtractor extractor = readField(memory, "extractor", MemoryExtractor.class);
+        MemoryItemLayer memoryItemLayer =
+                readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+        DefaultMemoryItemExtractor itemExtractor =
+                readField(memoryItemLayer, "extractor", DefaultMemoryItemExtractor.class);
+        LlmItemExtractionStrategy itemStrategy =
+                readField(itemExtractor, "defaultStrategy", LlmItemExtractionStrategy.class);
+        DefaultMemoryRetriever retriever =
+                readField(memory, "retriever", DefaultMemoryRetriever.class);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> strategies = readField(retriever, "strategies", Map.class);
+        DeepRetrievalStrategy deepStrategy =
+                (DeepRetrievalStrategy) strategies.get(RetrievalStrategies.DEEP_RETRIEVAL);
+        LlmTypedQueryExpander typedQueryExpander =
+                readField(deepStrategy, "typedQueryExpander", LlmTypedQueryExpander.class);
+
+        assertThat(readField(itemStrategy, "structuredChatClient", StructuredChatClient.class))
+                .isSameAs(itemExtractionClient);
+        assertThat(
+                        readField(
+                                typedQueryExpander,
+                                "structuredChatClient",
+                                StructuredChatClient.class))
+                .isSameAs(queryExpanderClient);
     }
 
     @Test

@@ -18,7 +18,8 @@ import com.openmemind.ai.memory.autoconfigure.retrieval.MemoryRetrievalAutoConfi
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
-import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
+import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.stats.DefaultToolStatsService;
 import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -39,6 +40,7 @@ import org.springframework.context.annotation.Bean;
  */
 @AutoConfiguration
 @AutoConfigureAfter({
+    MemoryLlmAutoConfiguration.class,
     MemoryExtractionAutoConfiguration.class,
     MemoryRetrievalAutoConfiguration.class
 })
@@ -53,20 +55,31 @@ public class MemoryAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(Memory.class)
     @ConditionalOnBean({
-        StructuredChatClient.class,
+        ChatClientRegistry.class,
         MemoryStore.class,
         MemoryBuffer.class,
         MemoryVector.class
     })
     public Memory memind(
-            StructuredChatClient chatClient,
+            ChatClientRegistry chatClientRegistry,
             MemoryStore store,
             MemoryBuffer buffer,
             MemoryVector vector,
             ObjectProvider<MemoryTextSearch> textSearchProvider,
             ObjectProvider<MemoryBuildOptions> buildOptionsProvider) {
         var builder =
-                Memory.builder().chatClient(chatClient).store(store).buffer(buffer).vector(vector);
+                Memory.builder()
+                        .chatClient(chatClientRegistry.defaultClient())
+                        .store(store)
+                        .buffer(buffer)
+                        .vector(vector);
+
+        for (ChatClientSlot slot : ChatClientSlot.values()) {
+            var client = chatClientRegistry.resolve(slot);
+            if (client != chatClientRegistry.defaultClient()) {
+                builder.chatClient(slot, client);
+            }
+        }
 
         MemoryTextSearch textSearch = textSearchProvider.getIfAvailable();
         if (textSearch != null) {
