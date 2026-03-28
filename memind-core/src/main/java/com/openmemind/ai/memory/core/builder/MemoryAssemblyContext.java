@@ -17,7 +17,7 @@ import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
-import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
@@ -25,7 +25,7 @@ import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.util.Objects;
 
 record MemoryAssemblyContext(
-        StructuredChatClient chatClient,
+        ChatClientRegistry chatClientRegistry,
         MemoryStore memoryStore,
         MemoryBuffer memoryBuffer,
         MemoryTextSearch textSearch,
@@ -34,7 +34,7 @@ record MemoryAssemblyContext(
         MemoryBuildOptions options) {
 
     MemoryAssemblyContext {
-        Objects.requireNonNull(chatClient, "chatClient");
+        Objects.requireNonNull(chatClientRegistry, "chatClientRegistry");
         Objects.requireNonNull(memoryStore, "memoryStore");
         Objects.requireNonNull(memoryStore.rawDataOperations(), "memoryStore.rawDataOperations()");
         Objects.requireNonNull(memoryStore.itemOperations(), "memoryStore.itemOperations()");

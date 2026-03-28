@@ -24,15 +24,32 @@ import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
+import com.openmemind.ai.memory.core.extraction.insight.generator.LlmInsightGenerator;
+import com.openmemind.ai.memory.core.extraction.insight.group.LlmInsightGroupClassifier;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
+import com.openmemind.ai.memory.core.extraction.item.MemoryItemLayer;
+import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItemExtractor;
+import com.openmemind.ai.memory.core.extraction.item.strategy.LlmItemExtractionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.strategy.LlmToolCallItemExtractionStrategy;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
+import com.openmemind.ai.memory.core.extraction.rawdata.caption.LlmConversationCaptionGenerator;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
+import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
+import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
+import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
+import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
+import com.openmemind.ai.memory.core.retrieval.strategy.DeepRetrievalStrategy;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
+import com.openmemind.ai.memory.core.retrieval.sufficiency.LlmSufficiencyGate;
+import com.openmemind.ai.memory.core.retrieval.tier.InsightTierRetriever;
+import com.openmemind.ai.memory.core.retrieval.tier.LlmInsightTypeRouter;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
@@ -84,13 +101,8 @@ class MemoryAssemblersTest {
     void extractionAssemblerUsesMemoryBufferAndBoundaryOptions() {
         CommitDetectorConfig boundaryDetector = new CommitDetectorConfig(6, 2048, 4);
         MemoryAssemblyContext context =
-                new MemoryAssemblyContext(
-                        CHAT_CLIENT,
-                        MEMORY_STORE,
-                        MEMORY_BUFFER,
-                        TEXT_SEARCH,
-                        MEMORY_VECTOR,
-                        new NoopReranker(),
+                context(
+                        Map.of(),
                         MemoryBuildOptions.builder().boundaryDetector(boundaryDetector).build());
 
         MemoryExtractionAssembly assembly = new MemoryExtractionAssembler().assemble(context);
@@ -125,15 +137,7 @@ class MemoryAssemblersTest {
 
     @Test
     void retrievalAssemblerRegistersBuiltInStrategiesAndUsesDataStore() {
-        MemoryAssemblyContext context =
-                new MemoryAssemblyContext(
-                        CHAT_CLIENT,
-                        MEMORY_STORE,
-                        MEMORY_BUFFER,
-                        TEXT_SEARCH,
-                        MEMORY_VECTOR,
-                        new NoopReranker(),
-                        MemoryBuildOptions.defaults());
+        MemoryAssemblyContext context = context();
 
         DefaultMemoryRetriever retriever = new MemoryRetrievalAssembler().assemble(context);
 
@@ -162,6 +166,147 @@ class MemoryAssemblersTest {
                         MemoryCategory.DIRECTIVE,
                         MemoryCategory.PLAYBOOK,
                         MemoryCategory.RESOLUTION);
+    }
+
+    @Test
+    void extractionAssemblerRoutesSlotSpecificClients() {
+        StructuredChatClient captionClient = proxy(StructuredChatClient.class);
+        StructuredChatClient chunkerClient = proxy(StructuredChatClient.class);
+        StructuredChatClient toolCallClient = proxy(StructuredChatClient.class);
+        StructuredChatClient itemClient = proxy(StructuredChatClient.class);
+        StructuredChatClient insightClient = proxy(StructuredChatClient.class);
+        StructuredChatClient groupClient = proxy(StructuredChatClient.class);
+        StructuredChatClient boundaryClient = proxy(StructuredChatClient.class);
+
+        MemoryExtractionAssembly assembly =
+                new MemoryExtractionAssembler()
+                        .assemble(
+                                context(
+                                        Map.of(
+                                                ChatClientSlot.CAPTION_GENERATOR, captionClient,
+                                                ChatClientSlot.CONVERSATION_CHUNKER, chunkerClient,
+                                                ChatClientSlot.TOOL_CALL_EXTRACTION, toolCallClient,
+                                                ChatClientSlot.ITEM_EXTRACTION, itemClient,
+                                                ChatClientSlot.INSIGHT_GENERATOR, insightClient,
+                                                ChatClientSlot.INSIGHT_GROUP_CLASSIFIER,
+                                                        groupClient,
+                                                ChatClientSlot.CONTEXT_COMMIT_DETECTOR,
+                                                        boundaryClient),
+                                        MemoryBuildOptions.defaults()));
+
+        MemoryExtractor extractor = (MemoryExtractor) assembly.pipeline();
+        RawDataLayer rawDataLayer = readField(extractor, "rawDataStep", RawDataLayer.class);
+        LlmConversationCaptionGenerator captionGenerator =
+                readField(
+                        rawDataLayer,
+                        "defaultCaptionGenerator",
+                        LlmConversationCaptionGenerator.class);
+        @SuppressWarnings("unchecked")
+        Map<Class<?>, Object> processors = readField(rawDataLayer, "processors", Map.class);
+        ConversationContentProcessor conversationProcessor =
+                (ConversationContentProcessor) processors.get(ConversationContent.class);
+        ToolCallContentProcessor toolCallProcessor =
+                (ToolCallContentProcessor) processors.get(ToolCallContent.class);
+        LlmConversationChunker llmChunker =
+                readField(
+                        conversationProcessor,
+                        "llmConversationChunker",
+                        LlmConversationChunker.class);
+        LlmToolCallItemExtractionStrategy toolCallStrategy =
+                readField(
+                        toolCallProcessor,
+                        "itemExtractionStrategy",
+                        LlmToolCallItemExtractionStrategy.class);
+        MemoryItemLayer memoryItemLayer =
+                readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+        DefaultMemoryItemExtractor itemExtractor =
+                readField(memoryItemLayer, "extractor", DefaultMemoryItemExtractor.class);
+        LlmItemExtractionStrategy itemStrategy =
+                readField(itemExtractor, "defaultStrategy", LlmItemExtractionStrategy.class);
+        InsightBuildScheduler scheduler =
+                readField(assembly.insightLayer(), "scheduler", InsightBuildScheduler.class);
+        LlmInsightGenerator insightGenerator =
+                readField(scheduler, "generator", LlmInsightGenerator.class);
+        LlmInsightGroupClassifier insightGroupClassifier =
+                readField(scheduler, "groupClassifier", LlmInsightGroupClassifier.class);
+        LlmContextCommitDetector boundaryDetector =
+                readField(extractor, "contextCommitDetector", LlmContextCommitDetector.class);
+
+        assertThat(readField(captionGenerator, "structuredChatClient", StructuredChatClient.class))
+                .isSameAs(captionClient);
+        assertThat(readField(llmChunker, "structuredChatClient", StructuredChatClient.class))
+                .isSameAs(chunkerClient);
+        assertThat(readField(toolCallStrategy, "structuredChatClient", StructuredChatClient.class))
+                .isSameAs(toolCallClient);
+        assertThat(readField(itemStrategy, "structuredChatClient", StructuredChatClient.class))
+                .isSameAs(itemClient);
+        assertThat(readField(insightGenerator, "structuredChatClient", StructuredChatClient.class))
+                .isSameAs(insightClient);
+        assertThat(
+                        readField(
+                                insightGroupClassifier,
+                                "structuredChatClient",
+                                StructuredChatClient.class))
+                .isSameAs(groupClient);
+        assertThat(readField(boundaryDetector, "structuredChatClient", StructuredChatClient.class))
+                .isSameAs(boundaryClient);
+    }
+
+    @Test
+    void retrievalAssemblerRoutesSlotSpecificClients() {
+        StructuredChatClient routerClient = proxy(StructuredChatClient.class);
+        StructuredChatClient sufficiencyClient = proxy(StructuredChatClient.class);
+        StructuredChatClient queryExpanderClient = proxy(StructuredChatClient.class);
+
+        DefaultMemoryRetriever retriever =
+                new MemoryRetrievalAssembler()
+                        .assemble(
+                                context(
+                                        Map.of(
+                                                ChatClientSlot.INSIGHT_TYPE_ROUTER, routerClient,
+                                                ChatClientSlot.SUFFICIENCY_GATE, sufficiencyClient,
+                                                ChatClientSlot.QUERY_EXPANDER, queryExpanderClient),
+                                        MemoryBuildOptions.defaults()));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> strategies = readField(retriever, "strategies", Map.class);
+        DeepRetrievalStrategy deepStrategy =
+                (DeepRetrievalStrategy) strategies.get(RetrievalStrategies.DEEP_RETRIEVAL);
+        InsightTierRetriever insightRetriever =
+                readField(deepStrategy, "insightRetriever", InsightTierRetriever.class);
+        LlmInsightTypeRouter insightTypeRouter =
+                readField(insightRetriever, "router", LlmInsightTypeRouter.class);
+        LlmSufficiencyGate sufficiencyGate =
+                readField(deepStrategy, "sufficiencyGate", LlmSufficiencyGate.class);
+        LlmTypedQueryExpander typedQueryExpander =
+                readField(deepStrategy, "typedQueryExpander", LlmTypedQueryExpander.class);
+
+        assertThat(readField(insightTypeRouter, "structuredChatClient", StructuredChatClient.class))
+                .isSameAs(routerClient);
+        assertThat(readField(sufficiencyGate, "structuredChatClient", StructuredChatClient.class))
+                .isSameAs(sufficiencyClient);
+        assertThat(
+                        readField(
+                                typedQueryExpander,
+                                "structuredChatClient",
+                                StructuredChatClient.class))
+                .isSameAs(queryExpanderClient);
+    }
+
+    private static MemoryAssemblyContext context() {
+        return context(Map.of(), MemoryBuildOptions.defaults());
+    }
+
+    private static MemoryAssemblyContext context(
+            Map<ChatClientSlot, StructuredChatClient> slotClients, MemoryBuildOptions options) {
+        return new MemoryAssemblyContext(
+                new ChatClientRegistry(CHAT_CLIENT, slotClients),
+                MEMORY_STORE,
+                MEMORY_BUFFER,
+                TEXT_SEARCH,
+                MEMORY_VECTOR,
+                new NoopReranker(),
+                options);
     }
 
     @SuppressWarnings("unchecked")

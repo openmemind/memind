@@ -53,7 +53,8 @@ import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunki
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
-import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
+import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.utils.IdUtils;
@@ -131,8 +132,12 @@ public class MemoryExtractionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public ContextCommitDetector boundaryDetector(CommitDetectorConfig commitDetectorConfig) {
-        return new LlmContextCommitDetector(commitDetectorConfig);
+    @ConditionalOnBean(ChatClientRegistry.class)
+    public ContextCommitDetector boundaryDetector(
+            CommitDetectorConfig commitDetectorConfig, ChatClientRegistry chatClientRegistry) {
+        return new LlmContextCommitDetector(
+                commitDetectorConfig,
+                chatClientRegistry.resolve(ChatClientSlot.CONTEXT_COMMIT_DETECTOR));
     }
 
     @Bean
@@ -143,23 +148,25 @@ public class MemoryExtractionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean(StructuredChatClient.class)
-    public CaptionGenerator captionGenerator(StructuredChatClient structuredChatClient) {
-        return new LlmConversationCaptionGenerator(structuredChatClient);
+    @ConditionalOnBean(ChatClientRegistry.class)
+    public CaptionGenerator captionGenerator(ChatClientRegistry chatClientRegistry) {
+        return new LlmConversationCaptionGenerator(
+                chatClientRegistry.resolve(ChatClientSlot.CAPTION_GENERATOR));
     }
 
     // ─── Content Processors (individually overridable) ───
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean(StructuredChatClient.class)
+    @ConditionalOnBean(ChatClientRegistry.class)
     @ConditionalOnProperty(
             name = "memind.extraction.chunking.strategy",
             havingValue = "LLM",
             matchIfMissing = true)
-    public LlmConversationChunker llmConversationChunker(
-            ConversationChunkingConfig config, StructuredChatClient structuredChatClient) {
-        return new LlmConversationChunker(structuredChatClient, new ConversationChunker());
+    public LlmConversationChunker llmConversationChunker(ChatClientRegistry chatClientRegistry) {
+        return new LlmConversationChunker(
+                chatClientRegistry.resolve(ChatClientSlot.CONVERSATION_CHUNKER),
+                new ConversationChunker());
     }
 
     @Bean
@@ -179,11 +186,12 @@ public class MemoryExtractionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(name = "toolCallContentProcessor")
-    @ConditionalOnBean(StructuredChatClient.class)
+    @ConditionalOnBean(ChatClientRegistry.class)
     public ToolCallContentProcessor toolCallContentProcessor(
-            StructuredChatClient structuredChatClient) {
+            ChatClientRegistry chatClientRegistry) {
         return new ToolCallContentProcessor(
-                new LlmToolCallItemExtractionStrategy(structuredChatClient));
+                new LlmToolCallItemExtractionStrategy(
+                        chatClientRegistry.resolve(ChatClientSlot.TOOL_CALL_EXTRACTION)));
     }
 
     @Bean
@@ -199,9 +207,9 @@ public class MemoryExtractionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean(StructuredChatClient.class)
+    @ConditionalOnBean(ChatClientRegistry.class)
     public MemoryItemExtractor memoryItemExtractor(
-            StructuredChatClient structuredChatClient, List<RawContentProcessor<?>> processors) {
+            ChatClientRegistry chatClientRegistry, List<RawContentProcessor<?>> processors) {
         // Build strategy map from processors that provide their own extraction strategy
         var strategies = new HashMap<String, ItemExtractionStrategy>();
         for (var p : processors) {
@@ -219,7 +227,9 @@ public class MemoryExtractionAutoConfiguration {
                         MemoryCategory.PLAYBOOK,
                         MemoryCategory.RESOLUTION);
         var defaultStrategy =
-                new LlmItemExtractionStrategy(structuredChatClient, conversationCategories);
+                new LlmItemExtractionStrategy(
+                        chatClientRegistry.resolve(ChatClientSlot.ITEM_EXTRACTION),
+                        conversationCategories);
         return new DefaultMemoryItemExtractor(defaultStrategy, strategies);
     }
 
@@ -261,17 +271,18 @@ public class MemoryExtractionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean(StructuredChatClient.class)
-    public InsightGenerator insightGenerator(StructuredChatClient structuredChatClient) {
-        return new LlmInsightGenerator(structuredChatClient);
+    @ConditionalOnBean(ChatClientRegistry.class)
+    public InsightGenerator insightGenerator(ChatClientRegistry chatClientRegistry) {
+        return new LlmInsightGenerator(
+                chatClientRegistry.resolve(ChatClientSlot.INSIGHT_GENERATOR));
     }
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean(StructuredChatClient.class)
-    public InsightGroupClassifier insightGroupClassifier(
-            StructuredChatClient structuredChatClient) {
-        return new LlmInsightGroupClassifier(structuredChatClient);
+    @ConditionalOnBean(ChatClientRegistry.class)
+    public InsightGroupClassifier insightGroupClassifier(ChatClientRegistry chatClientRegistry) {
+        return new LlmInsightGroupClassifier(
+                chatClientRegistry.resolve(ChatClientSlot.INSIGHT_GROUP_CLASSIFIER));
     }
 
     @Bean

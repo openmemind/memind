@@ -16,6 +16,8 @@ package com.openmemind.ai.memory.core.builder;
 import com.openmemind.ai.memory.core.DefaultMemory;
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
+import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
@@ -25,13 +27,17 @@ import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public final class DefaultMemoryBuilder implements MemoryBuilder {
 
     private StructuredChatClient chatClient;
+    private final Map<ChatClientSlot, StructuredChatClient> slotClients =
+            new EnumMap<>(ChatClientSlot.class);
     private MemoryStore store;
     private MemoryBuffer buffer;
     private MemoryTextSearch textSearch;
@@ -42,6 +48,14 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     @Override
     public MemoryBuilder chatClient(StructuredChatClient chatClient) {
         this.chatClient = Objects.requireNonNull(chatClient, "chatClient");
+        return this;
+    }
+
+    @Override
+    public MemoryBuilder chatClient(ChatClientSlot slot, StructuredChatClient chatClient) {
+        Objects.requireNonNull(slot, "slot");
+        Objects.requireNonNull(chatClient, "chatClient");
+        slotClients.put(slot, chatClient);
         return this;
     }
 
@@ -85,9 +99,10 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     public Memory build() {
         validateRequiredComponents();
 
+        ChatClientRegistry registry = new ChatClientRegistry(chatClient, slotClients);
         MemoryAssemblyContext context =
                 new MemoryAssemblyContext(
-                        chatClient, store, buffer, textSearch, vector, reranker, options);
+                        registry, store, buffer, textSearch, vector, reranker, options);
         MemoryExtractionAssembly extractionAssembly =
                 new MemoryExtractionAssembler().assemble(context);
         var memoryRetriever = new MemoryRetrievalAssembler().assemble(context);
@@ -103,7 +118,7 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
                 lifecycle(
                         context.memoryVector(),
                         context.textSearch(),
-                        context.chatClient(),
+                        context.chatClientRegistry().defaultClient(),
                         context.memoryStore(),
                         context.memoryBuffer(),
                         extractionAssembly.lifecycle()));

@@ -14,7 +14,8 @@
 package com.openmemind.ai.memory.autoconfigure.retrieval;
 
 import com.openmemind.ai.memory.autoconfigure.MemoryRetrievalProperties;
-import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
+import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.rerank.LlmReranker;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
@@ -175,9 +176,10 @@ public class MemoryRetrievalAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean(StructuredChatClient.class)
-    public InsightTypeRouter insightTypeRouter(StructuredChatClient structuredChatClient) {
-        return new LlmInsightTypeRouter(structuredChatClient);
+    @ConditionalOnBean(ChatClientRegistry.class)
+    public InsightTypeRouter insightTypeRouter(ChatClientRegistry chatClientRegistry) {
+        return new LlmInsightTypeRouter(
+                chatClientRegistry.resolve(ChatClientSlot.INSIGHT_TYPE_ROUTER));
     }
 
     @Bean
@@ -210,16 +212,16 @@ public class MemoryRetrievalAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean(StructuredChatClient.class)
-    public SufficiencyGate sufficiencyGate(StructuredChatClient structuredChatClient) {
-        return new LlmSufficiencyGate(structuredChatClient);
+    @ConditionalOnBean(ChatClientRegistry.class)
+    public SufficiencyGate sufficiencyGate(ChatClientRegistry chatClientRegistry) {
+        return new LlmSufficiencyGate(chatClientRegistry.resolve(ChatClientSlot.SUFFICIENCY_GATE));
     }
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean(StructuredChatClient.class)
-    public TypedQueryExpander typedQueryExpander(StructuredChatClient structuredChatClient) {
-        return new LlmTypedQueryExpander(structuredChatClient);
+    @ConditionalOnBean(ChatClientRegistry.class)
+    public TypedQueryExpander typedQueryExpander(ChatClientRegistry chatClientRegistry) {
+        return new LlmTypedQueryExpander(chatClientRegistry.resolve(ChatClientSlot.QUERY_EXPANDER));
     }
 
     @Bean

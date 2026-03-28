@@ -13,7 +13,8 @@
  */
 package com.openmemind.ai.memory.core.builder;
 
-import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
+import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.cache.CaffeineRetrievalCache;
 import com.openmemind.ai.memory.core.retrieval.cache.RetrievalCache;
@@ -31,16 +32,19 @@ import com.openmemind.ai.memory.core.retrieval.tier.LlmInsightTypeRouter;
 final class MemoryRetrievalAssembler {
 
     DefaultMemoryRetriever assemble(MemoryAssemblyContext context) {
-        StructuredChatClient chatClient = context.chatClient();
-        InsightTypeRouter insightTypeRouter = new LlmInsightTypeRouter(chatClient);
+        ChatClientRegistry registry = context.chatClientRegistry();
+        InsightTypeRouter insightTypeRouter =
+                new LlmInsightTypeRouter(registry.resolve(ChatClientSlot.INSIGHT_TYPE_ROUTER));
         InsightTierRetriever insightTierRetriever =
                 new InsightTierRetriever(
                         context.memoryStore(), context.memoryVector(), insightTypeRouter);
         ItemTierRetriever itemTierRetriever =
                 new ItemTierRetriever(
                         context.memoryStore(), context.memoryVector(), context.textSearch());
-        SufficiencyGate sufficiencyGate = new LlmSufficiencyGate(chatClient);
-        TypedQueryExpander typedQueryExpander = new LlmTypedQueryExpander(chatClient);
+        SufficiencyGate sufficiencyGate =
+                new LlmSufficiencyGate(registry.resolve(ChatClientSlot.SUFFICIENCY_GATE));
+        TypedQueryExpander typedQueryExpander =
+                new LlmTypedQueryExpander(registry.resolve(ChatClientSlot.QUERY_EXPANDER));
         DeepRetrievalStrategy deepRetrievalStrategy =
                 new DeepRetrievalStrategy(
                         insightTierRetriever,

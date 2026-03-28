@@ -45,7 +45,8 @@ import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunke
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
-import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
+import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.utils.IdUtils;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -56,10 +57,12 @@ import java.util.stream.Collectors;
 final class MemoryExtractionAssembler {
 
     MemoryExtractionAssembly assemble(MemoryAssemblyContext context) {
-        StructuredChatClient chatClient = context.chatClient();
-        CaptionGenerator captionGenerator = new LlmConversationCaptionGenerator(chatClient);
+        ChatClientRegistry registry = context.chatClientRegistry();
+        CaptionGenerator captionGenerator =
+                new LlmConversationCaptionGenerator(
+                        registry.resolve(ChatClientSlot.CAPTION_GENERATOR));
         List<RawContentProcessor<?>> processors =
-                createProcessors(chatClient, captionGenerator, context.options());
+                createProcessors(registry, captionGenerator, context.options());
         RawDataLayer rawDataLayer =
                 new RawDataLayer(
                         processors,
@@ -67,7 +70,7 @@ final class MemoryExtractionAssembler {
                         context.memoryStore(),
                         context.memoryVector());
 
-        MemoryItemExtractor itemExtractor = createMemoryItemExtractor(chatClient, processors);
+        MemoryItemExtractor itemExtractor = createMemoryItemExtractor(registry, processors);
         MemoryItemDeduplicator deduplicator =
                 new CompositeDeduplicator(
                         List.of(new HashBasedDeduplicator(context.memoryStore())));
@@ -81,8 +84,11 @@ final class MemoryExtractionAssembler {
                         null,
                         conversationCategories());
 
-        InsightGenerator insightGenerator = new LlmInsightGenerator(chatClient);
-        InsightGroupClassifier insightGroupClassifier = new LlmInsightGroupClassifier(chatClient);
+        InsightGenerator insightGenerator =
+                new LlmInsightGenerator(registry.resolve(ChatClientSlot.INSIGHT_GENERATOR));
+        InsightGroupClassifier insightGroupClassifier =
+                new LlmInsightGroupClassifier(
+                        registry.resolve(ChatClientSlot.INSIGHT_GROUP_CLASSIFIER));
         BubbleTrackerStore bubbleTrackerStore = new BubbleTracker();
         InsightTreeReorganizer insightTreeReorganizer =
                 new InsightTreeReorganizer(
@@ -111,7 +117,9 @@ final class MemoryExtractionAssembler {
                         unsupportedInsightTypes(processors));
 
         ContextCommitDetector contextCommitDetector =
-                new LlmContextCommitDetector(context.options().boundaryDetector(), chatClient);
+                new LlmContextCommitDetector(
+                        context.options().boundaryDetector(),
+                        registry.resolve(ChatClientSlot.CONTEXT_COMMIT_DETECTOR));
         MemoryExtractionPipeline pipeline =
                 new MemoryExtractor(
                         rawDataLayer,
@@ -125,12 +133,13 @@ final class MemoryExtractionAssembler {
     }
 
     private List<RawContentProcessor<?>> createProcessors(
-            StructuredChatClient chatClient,
+            ChatClientRegistry registry,
             CaptionGenerator captionGenerator,
             MemoryBuildOptions options) {
         ConversationChunker conversationChunker = new ConversationChunker();
         LlmConversationChunker llmConversationChunker =
-                new LlmConversationChunker(chatClient, conversationChunker);
+                new LlmConversationChunker(
+                        registry.resolve(ChatClientSlot.CONVERSATION_CHUNKER), conversationChunker);
 
         ConversationContentProcessor conversationProcessor =
                 new ConversationContentProcessor(
@@ -140,13 +149,15 @@ final class MemoryExtractionAssembler {
                         captionGenerator,
                         null);
         ToolCallContentProcessor toolCallProcessor =
-                new ToolCallContentProcessor(new LlmToolCallItemExtractionStrategy(chatClient));
+                new ToolCallContentProcessor(
+                        new LlmToolCallItemExtractionStrategy(
+                                registry.resolve(ChatClientSlot.TOOL_CALL_EXTRACTION)));
 
         return List.of(conversationProcessor, toolCallProcessor);
     }
 
     private MemoryItemExtractor createMemoryItemExtractor(
-            StructuredChatClient chatClient, List<RawContentProcessor<?>> processors) {
+            ChatClientRegistry registry, List<RawContentProcessor<?>> processors) {
         var strategies = new HashMap<String, ItemExtractionStrategy>();
         for (var processor : processors) {
             if (processor.itemExtractionStrategy() != null) {
@@ -154,7 +165,9 @@ final class MemoryExtractionAssembler {
             }
         }
 
-        var defaultStrategy = new LlmItemExtractionStrategy(chatClient, conversationCategories());
+        var defaultStrategy =
+                new LlmItemExtractionStrategy(
+                        registry.resolve(ChatClientSlot.ITEM_EXTRACTION), conversationCategories());
         return new DefaultMemoryItemExtractor(defaultStrategy, strategies);
     }
 
