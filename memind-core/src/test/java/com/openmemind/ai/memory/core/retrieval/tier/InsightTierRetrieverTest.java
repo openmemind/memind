@@ -121,7 +121,6 @@ class InsightTierRetrieverTest {
                 null,
                 null,
                 null,
-                null,
                 mode,
                 null,
                 scope,

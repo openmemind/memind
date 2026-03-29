@@ -23,6 +23,7 @@ import com.openmemind.ai.memory.core.extraction.item.support.ToolItemResponse;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.extraction.item.ToolItemPrompts;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,11 +42,19 @@ import reactor.core.scheduler.Schedulers;
 public class LlmToolCallItemExtractionStrategy implements ItemExtractionStrategy {
 
     private final StructuredChatClient structuredChatClient;
+    private final PromptRegistry promptRegistry;
 
     public LlmToolCallItemExtractionStrategy(StructuredChatClient structuredChatClient) {
+        this(structuredChatClient, PromptRegistry.EMPTY);
+    }
+
+    public LlmToolCallItemExtractionStrategy(
+            StructuredChatClient structuredChatClient, PromptRegistry promptRegistry) {
         this.structuredChatClient =
                 Objects.requireNonNull(
                         structuredChatClient, "structuredChatClient must not be null");
+        this.promptRegistry =
+                Objects.requireNonNull(promptRegistry, "promptRegistry must not be null");
     }
 
     @Override
@@ -75,7 +84,8 @@ public class LlmToolCallItemExtractionStrategy implements ItemExtractionStrategy
         String historicalContent = null;
 
         var prompt =
-                ToolItemPrompts.build(toolName, records, statistics, historicalContent)
+                ToolItemPrompts.build(
+                                promptRegistry, toolName, records, statistics, historicalContent)
                         .render(language);
         var messages = ChatMessages.systemUser(prompt.systemPrompt(), prompt.userPrompt());
 

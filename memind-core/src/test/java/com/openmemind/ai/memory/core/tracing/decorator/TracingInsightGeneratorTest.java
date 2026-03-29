@@ -41,20 +41,7 @@ class TracingInsightGeneratorTest {
 
     private static MemoryInsightType insightType() {
         return new MemoryInsightType(
-                null,
-                "test-type",
-                null,
-                null,
-                null,
-                0,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null);
+                null, "test-type", null, null, null, 0, null, null, null, null, null, null, null);
     }
 
     private static MemoryInsight memoryInsight() {

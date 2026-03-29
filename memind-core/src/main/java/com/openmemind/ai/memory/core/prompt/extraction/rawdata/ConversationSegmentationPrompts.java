@@ -14,7 +14,9 @@
 package com.openmemind.ai.memory.core.prompt.extraction.rawdata;
 
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -29,7 +31,7 @@ public final class ConversationSegmentationPrompts {
 
     private static final int MAX_MESSAGES_PER_SEGMENT = 50;
 
-    private static final String SYSTEM_PROMPT_TEMPLATE =
+    private static final String OBJECTIVE =
             """
             You are a conversation segmentation assistant. Your task is to divide a long \
             indexed conversation into coherent topical segments.
@@ -43,7 +45,10 @@ public final class ConversationSegmentationPrompts {
             to produce a useful summary. When unsure where to split, keep messages together.
 
             Return ONLY a JSON object with segment boundaries.
+            """;
 
+    private static final String GUIDELINES =
+            """
             # Workflow
 
             Follow these steps in order:
@@ -102,7 +107,10 @@ public final class ConversationSegmentationPrompts {
             find the best sub-topic boundary within it to split.
             5. **Index definition**: `start` is INCLUSIVE, `end` is EXCLUSIVE. \
             (e.g., start: 0, end: 20 covers messages [0] through [19])
+            """;
 
+    private static final String OUTPUT =
+            """
             # Output Format
 
             Return valid JSON ONLY. No markdown fences, no surrounding text.
@@ -113,7 +121,10 @@ public final class ConversationSegmentationPrompts {
                 { "start": 20, "end": 50 }
               ]
             }
+            """;
 
+    private static final String EXAMPLES =
+            """
             # Examples
 
             ## Good Example: Clean split at topic boundary
@@ -188,6 +199,15 @@ public final class ConversationSegmentationPrompts {
      * @return PromptTemplate ready to be rendered with a language
      */
     public static PromptTemplate build(List<Message> messages, int minMessagesPerSegment) {
+        return build(PromptRegistry.EMPTY, messages, minMessagesPerSegment);
+    }
+
+    public static PromptTemplate buildDefault() {
+        return defaultBuilder().build();
+    }
+
+    public static PromptTemplate build(
+            PromptRegistry registry, List<Message> messages, int minMessagesPerSegment) {
         if (messages == null || messages.isEmpty()) {
             throw new IllegalArgumentException("Message list cannot be null or empty");
         }
@@ -195,15 +215,29 @@ public final class ConversationSegmentationPrompts {
         int totalMessages = messages.size();
         int lastIndex = totalMessages - 1;
 
-        return PromptTemplate.builder("ConversationSegmentation")
-                .section("system", SYSTEM_PROMPT_TEMPLATE)
-                .userPrompt(USER_PROMPT_TEMPLATE)
+        PromptTemplate.Builder builder =
+                registry.hasOverride(PromptType.CONVERSATION_SEGMENTATION)
+                        ? PromptTemplate.builder("ConversationSegmentation")
+                                .section(
+                                        "system",
+                                        registry.getOverride(PromptType.CONVERSATION_SEGMENTATION))
+                        : defaultBuilder();
+
+        return builder.userPrompt(USER_PROMPT_TEMPLATE)
                 .variable("total_messages", String.valueOf(totalMessages))
                 .variable("min_messages_per_segment", String.valueOf(minMessagesPerSegment))
                 .variable("max_messages_per_segment", String.valueOf(MAX_MESSAGES_PER_SEGMENT))
                 .variable("last_index", String.valueOf(lastIndex))
                 .variable("conversation", formatIndexed(messages))
                 .build();
+    }
+
+    private static PromptTemplate.Builder defaultBuilder() {
+        return PromptTemplate.builder("ConversationSegmentation")
+                .section("objective", OBJECTIVE)
+                .section("guidelines", GUIDELINES)
+                .section("output", OUTPUT)
+                .section("examples", EXAMPLES);
     }
 
     /**

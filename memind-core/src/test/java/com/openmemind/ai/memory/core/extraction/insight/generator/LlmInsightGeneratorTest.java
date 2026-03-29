@@ -1,0 +1,116 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.openmemind.ai.memory.core.extraction.insight.generator;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.openmemind.ai.memory.core.data.MemoryInsightType;
+import com.openmemind.ai.memory.core.llm.ChatMessage;
+import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
+import java.util.List;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
+
+@DisplayName("LlmInsightGenerator Unit Test")
+class LlmInsightGeneratorTest {
+
+    @Test
+    @DisplayName("generateRootSynthesis should use root synthesis override instruction")
+    void generateRootSynthesisShouldUseRootSynthesisOverrideInstruction() {
+        var client = new FakeStructuredChatClient(new InsightPointGenerateResponse(List.of()));
+        var registry =
+                InMemoryPromptRegistry.builder()
+                        .override(PromptType.ROOT_SYNTHESIS, "Custom root synthesis instruction")
+                        .build();
+        var generator = new LlmInsightGenerator(client, registry);
+
+        StepVerifier.create(
+                        generator.generateRootSynthesis(
+                                rootInsightType("profile"), "", List.of(), 300, "English"))
+                .expectNextMatches(response -> response.points().isEmpty())
+                .verifyComplete();
+
+        assertThat(client.lastMessages().getFirst().content())
+                .contains("Custom root synthesis instruction");
+    }
+
+    @Test
+    @DisplayName("generateRootSynthesis should use interaction guide override instruction")
+    void generateRootSynthesisShouldUseInteractionGuideOverrideInstruction() {
+        var client = new FakeStructuredChatClient(new InsightPointGenerateResponse(List.of()));
+        var registry =
+                InMemoryPromptRegistry.builder()
+                        .override(
+                                PromptType.INTERACTION_GUIDE_SYNTHESIS,
+                                "Custom interaction guide instruction")
+                        .build();
+        var generator = new LlmInsightGenerator(client, registry);
+
+        StepVerifier.create(
+                        generator.generateRootSynthesis(
+                                rootInsightType("interaction"), "", List.of(), 300, "English"))
+                .expectNextMatches(response -> response.points().isEmpty())
+                .verifyComplete();
+
+        assertThat(client.lastMessages().getFirst().content())
+                .contains("Custom interaction guide instruction");
+    }
+
+    private static MemoryInsightType rootInsightType(String name) {
+        return new MemoryInsightType(
+                1L,
+                name,
+                "Root synthesis",
+                null,
+                List.of("directive"),
+                300,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+    }
+
+    private static final class FakeStructuredChatClient implements StructuredChatClient {
+
+        private final Object response;
+        private List<ChatMessage> lastMessages = List.of();
+
+        private FakeStructuredChatClient(Object response) {
+            this.response = response;
+        }
+
+        @Override
+        public Mono<String> call(List<ChatMessage> messages) {
+            return Mono.error(new UnsupportedOperationException("Not used in this test"));
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> Mono<T> call(List<ChatMessage> messages, Class<T> responseType) {
+            lastMessages = List.copyOf(messages);
+            return Mono.justOrEmpty((T) response);
+        }
+
+        private List<ChatMessage> lastMessages() {
+            return lastMessages;
+        }
+    }
+}

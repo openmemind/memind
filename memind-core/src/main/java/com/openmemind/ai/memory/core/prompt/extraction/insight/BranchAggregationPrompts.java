@@ -13,10 +13,14 @@
  */
 package com.openmemind.ai.memory.core.prompt.extraction.insight;
 
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
+import com.openmemind.ai.memory.core.prompt.PromptBuilderSupport;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.util.List;
 
 /**
@@ -30,17 +34,7 @@ public final class BranchAggregationPrompts {
 
     private BranchAggregationPrompts() {}
 
-    // ===== Section name constants =====
-
-    public static final String NAME_OBJECTIVE = "objective";
-    public static final String NAME_CONTEXT = "context";
-    public static final String NAME_WORKFLOW = "workflow";
-    public static final String NAME_OUTPUT = "output";
-    public static final String NAME_EXAMPLES = "examples";
-
-    // ===== OBJECTIVE =====
-
-    private static final String OBJECTIVE =
+    private static final String SYSTEM_OBJECTIVE =
             """
             You are a BRANCH aggregation engine. Your task is to synthesize all LEAF-level \
             insight points under a single insight dimension into a comprehensive BRANCH-level \
@@ -49,9 +43,7 @@ public final class BranchAggregationPrompts {
             contradictions, and produce a unified higher-level view.\
             """;
 
-    // ===== CONTEXT =====
-
-    private static final String CONTEXT =
+    private static final String SYSTEM_CONTEXT =
             """
             # Context
 
@@ -73,9 +65,7 @@ public final class BranchAggregationPrompts {
             - Do NOT attempt a full user portrait — that is the ROOT layer's job.\
             """;
 
-    // ===== WORKFLOW (includes Core Principles, Steps, Type Decision Logic) =====
-
-    private static final String WORKFLOW =
+    private static final String SYSTEM_WORKFLOW =
             """
             # Core Principles
             1. Full Replacement: Output the COMPLETE current-state list. Not delta patches. \
@@ -138,9 +128,7 @@ public final class BranchAggregationPrompts {
             more valuable at the BRANCH level.\
             """;
 
-    // ===== OUTPUT FORMAT =====
-
-    private static final String OUTPUT =
+    private static final String SYSTEM_OUTPUT =
             """
             # Output Format
 
@@ -183,9 +171,7 @@ public final class BranchAggregationPrompts {
             This field is for reasoning only and will NOT be stored.\
             """;
 
-    // ===== EXAMPLES =====
-
-    private static final String EXAMPLES =
+    private static final String SYSTEM_EXAMPLES =
             """
             # Examples
 
@@ -338,33 +324,61 @@ public final class BranchAggregationPrompts {
             points reflect the temporal evolution rather than silently dropping the history.\
             """;
 
-    // ==================== Public API ====================
-
     public static PromptTemplate build(
             MemoryInsightType insightType,
             List<InsightPoint> existingPoints,
             List<MemoryInsight> leafInsights,
             int targetTokens) {
+        return build(PromptRegistry.EMPTY, insightType, existingPoints, leafInsights, targetTokens);
+    }
 
-        var description =
-                insightType.description() != null ? insightType.description() : insightType.name();
+    public static PromptTemplate buildDefault() {
+        return defaultBuilder().build();
+    }
 
+    public static PromptTemplate buildPreview() {
+        var insightType = DefaultInsightTypes.identity();
+        return defaultBuilder()
+                .variable("insight_type_name", insightType.name())
+                .variable(
+                        "insight_type_description",
+                        PromptBuilderSupport.descriptionOrName(insightType))
+                .build();
+    }
+
+    public static PromptTemplate build(
+            PromptRegistry registry,
+            MemoryInsightType insightType,
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> leafInsights,
+            int targetTokens) {
         var userPromptContent =
                 buildUserPrompt(insightType, existingPoints, leafInsights, targetTokens);
+        var builder =
+                registry.hasOverride(PromptType.BRANCH_AGGREGATION)
+                        ? PromptTemplate.builder("branch-aggregation")
+                                .section(
+                                        "system",
+                                        registry.getOverride(PromptType.BRANCH_AGGREGATION))
+                        : defaultBuilder();
 
-        return PromptTemplate.builder("branch-aggregation")
-                .section(NAME_OBJECTIVE, OBJECTIVE)
-                .section(NAME_CONTEXT, CONTEXT)
-                .section(NAME_WORKFLOW, WORKFLOW)
-                .section(NAME_OUTPUT, OUTPUT)
-                .section(NAME_EXAMPLES, EXAMPLES)
-                .variable("insight_type_name", insightType.name())
-                .variable("insight_type_description", description)
+        return builder.variable("insight_type_name", insightType.name())
+                .variable(
+                        "insight_type_description",
+                        PromptBuilderSupport.descriptionOrName(insightType))
                 .userPrompt(userPromptContent)
                 .build();
     }
 
-    // ==================== Internal Helpers ====================
+    private static PromptTemplate.Builder defaultBuilder() {
+        return PromptBuilderSupport.coreSections(
+                "branch-aggregation",
+                SYSTEM_OBJECTIVE,
+                SYSTEM_CONTEXT,
+                SYSTEM_WORKFLOW,
+                SYSTEM_OUTPUT,
+                SYSTEM_EXAMPLES);
+    }
 
     private static String buildUserPrompt(
             MemoryInsightType insightType,

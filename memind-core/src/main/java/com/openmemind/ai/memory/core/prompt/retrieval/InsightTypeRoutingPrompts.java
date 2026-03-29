@@ -13,7 +13,10 @@
  */
 package com.openmemind.ai.memory.core.prompt.retrieval;
 
+import com.openmemind.ai.memory.core.prompt.PromptBuilderSupport;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -27,7 +30,7 @@ import java.util.stream.Collectors;
  */
 public final class InsightTypeRoutingPrompts {
 
-    private static final String TASK =
+    private static final String SYSTEM_PROMPT =
             """
             You are an insight type router. Given a user query, select which insight
             types are likely to contain relevant information. You may select multiple
@@ -76,24 +79,29 @@ public final class InsightTypeRoutingPrompts {
             - "Compare repositories by scope → taxonomy → storage" → playbooks, NOT experiences
             - "Virtual threads exhausted HikariCP; fix by setting maximumPoolSize" → resolutions, NOT playbooks
 
-            {{conversation_section}}
-
-            # Available Insight Types
-            {{available_types}}
-
-            # Query
-            {{query}}
-
             # Output
             Return a JSON array of selected type names. Empty array if none are relevant.
             Example: ["identity", "experiences"]
             """;
 
+    private static final String USER_TEMPLATE =
+            """
+            {{conversation_section}}{{available_types_section}}# Query
+            {{query}}
+            """;
+
     private InsightTypeRoutingPrompts() {}
+
+    public static PromptTemplate buildDefault() {
+        return PromptBuilderSupport.builder(
+                        "insight-type-routing",
+                        PromptBuilderSupport.section("system", SYSTEM_PROMPT))
+                .build();
+    }
 
     public static PromptTemplate build(
             String query, List<String> insightTypeNames, Map<String, String> typeDescriptions) {
-        return build(query, insightTypeNames, typeDescriptions, List.of());
+        return build(PromptRegistry.EMPTY, query, insightTypeNames, typeDescriptions, List.of());
     }
 
     public static PromptTemplate build(
@@ -101,6 +109,24 @@ public final class InsightTypeRoutingPrompts {
             List<String> insightTypeNames,
             Map<String, String> typeDescriptions,
             List<String> conversationHistory) {
+        return build(
+                PromptRegistry.EMPTY,
+                query,
+                insightTypeNames,
+                typeDescriptions,
+                conversationHistory);
+    }
+
+    public static PromptTemplate build(
+            PromptRegistry registry,
+            String query,
+            List<String> insightTypeNames,
+            Map<String, String> typeDescriptions,
+            List<String> conversationHistory) {
+        String instruction =
+                registry.hasOverride(PromptType.INSIGHT_TYPE_ROUTING)
+                        ? registry.getOverride(PromptType.INSIGHT_TYPE_ROUTING)
+                        : SYSTEM_PROMPT;
 
         String availableTypes =
                 insightTypeNames.stream()
@@ -118,13 +144,15 @@ public final class InsightTypeRoutingPrompts {
                             + conversationHistory.stream()
                                     .map(msg -> "- " + msg)
                                     .collect(Collectors.joining("\n"))
-                            + "\n";
+                            + "\n\n";
         }
+        String availableTypesSection = "# Available Insight Types\n" + availableTypes + "\n\n";
 
-        return PromptTemplate.builder("insight-type-routing")
-                .userPrompt(TASK)
+        return PromptBuilderSupport.builder(
+                        "insight-type-routing", PromptBuilderSupport.section("system", instruction))
+                .userPrompt(USER_TEMPLATE)
                 .variable("query", query)
-                .variable("available_types", availableTypes)
+                .variable("available_types_section", availableTypesSection)
                 .variable("conversation_section", conversationSection)
                 .build();
     }

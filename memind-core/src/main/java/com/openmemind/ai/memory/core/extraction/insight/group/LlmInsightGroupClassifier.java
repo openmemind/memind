@@ -17,6 +17,7 @@ import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.extraction.insight.InsightGroupPrompts;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -79,11 +80,19 @@ public class LlmInsightGroupClassifier implements InsightGroupClassifier {
                     "聊天记录");
 
     private final StructuredChatClient structuredChatClient;
+    private final PromptRegistry promptRegistry;
 
     public LlmInsightGroupClassifier(StructuredChatClient structuredChatClient) {
+        this(structuredChatClient, PromptRegistry.EMPTY);
+    }
+
+    public LlmInsightGroupClassifier(
+            StructuredChatClient structuredChatClient, PromptRegistry promptRegistry) {
         this.structuredChatClient =
                 Objects.requireNonNull(
                         structuredChatClient, "structuredChatClient must not be null");
+        this.promptRegistry =
+                Objects.requireNonNull(promptRegistry, "promptRegistry must not be null");
     }
 
     @Override
@@ -106,7 +115,8 @@ public class LlmInsightGroupClassifier implements InsightGroupClassifier {
         }
 
         var promptResult =
-                InsightGroupPrompts.build(insightType, items, existingGroupNames, language)
+                InsightGroupPrompts.build(
+                                promptRegistry, insightType, items, existingGroupNames, language)
                         .render(language);
         var messages =
                 ChatMessages.systemUser(promptResult.systemPrompt(), promptResult.userPrompt());

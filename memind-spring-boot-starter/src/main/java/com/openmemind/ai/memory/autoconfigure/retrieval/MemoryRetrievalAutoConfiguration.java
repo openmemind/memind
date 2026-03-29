@@ -18,6 +18,7 @@ import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.rerank.LlmReranker;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
@@ -177,9 +178,10 @@ public class MemoryRetrievalAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBean(ChatClientRegistry.class)
-    public InsightTypeRouter insightTypeRouter(ChatClientRegistry chatClientRegistry) {
+    public InsightTypeRouter insightTypeRouter(
+            ChatClientRegistry chatClientRegistry, PromptRegistry promptRegistry) {
         return new LlmInsightTypeRouter(
-                chatClientRegistry.resolve(ChatClientSlot.INSIGHT_TYPE_ROUTER));
+                chatClientRegistry.resolve(ChatClientSlot.INSIGHT_TYPE_ROUTER), promptRegistry);
     }
 
     @Bean
@@ -213,15 +215,19 @@ public class MemoryRetrievalAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBean(ChatClientRegistry.class)
-    public SufficiencyGate sufficiencyGate(ChatClientRegistry chatClientRegistry) {
-        return new LlmSufficiencyGate(chatClientRegistry.resolve(ChatClientSlot.SUFFICIENCY_GATE));
+    public SufficiencyGate sufficiencyGate(
+            ChatClientRegistry chatClientRegistry, PromptRegistry promptRegistry) {
+        return new LlmSufficiencyGate(
+                chatClientRegistry.resolve(ChatClientSlot.SUFFICIENCY_GATE), promptRegistry);
     }
 
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBean(ChatClientRegistry.class)
-    public TypedQueryExpander typedQueryExpander(ChatClientRegistry chatClientRegistry) {
-        return new LlmTypedQueryExpander(chatClientRegistry.resolve(ChatClientSlot.QUERY_EXPANDER));
+    public TypedQueryExpander typedQueryExpander(
+            ChatClientRegistry chatClientRegistry, PromptRegistry promptRegistry) {
+        return new LlmTypedQueryExpander(
+                chatClientRegistry.resolve(ChatClientSlot.QUERY_EXPANDER), promptRegistry);
     }
 
     @Bean

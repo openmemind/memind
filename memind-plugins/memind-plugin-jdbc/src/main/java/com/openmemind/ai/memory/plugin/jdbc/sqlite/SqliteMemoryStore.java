@@ -65,8 +65,6 @@ public class SqliteMemoryStore implements RawDataOperations, ItemOperations, Ins
 
     private static final TypeReference<Map<String, Object>> OBJECT_MAP_TYPE =
             new TypeReference<>() {};
-    private static final TypeReference<Map<String, String>> STRING_MAP_TYPE =
-            new TypeReference<>() {};
     private static final TypeReference<List<String>> STRING_LIST_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Long>> LONG_LIST_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<Float>> FLOAT_LIST_TYPE = new TypeReference<>() {};
@@ -378,16 +376,15 @@ public class SqliteMemoryStore implements RawDataOperations, ItemOperations, Ins
                                     """
                                     INSERT INTO memory_insight_type
                                         (biz_id, name, description, description_vector_id, categories,
-                                         target_tokens, summary_prompt, analysis_mode, scope, tree_config,
+                                         target_tokens, analysis_mode, scope, tree_config,
                                          last_updated_at, created_at, updated_at, deleted)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                                     ON CONFLICT(name) DO UPDATE SET
                                         biz_id = excluded.biz_id,
                                         description = excluded.description,
                                         description_vector_id = excluded.description_vector_id,
                                         categories = excluded.categories,
                                         target_tokens = excluded.target_tokens,
-                                        summary_prompt = excluded.summary_prompt,
                                         analysis_mode = excluded.analysis_mode,
                                         scope = excluded.scope,
                                         tree_config = excluded.tree_config,
@@ -728,18 +725,17 @@ public class SqliteMemoryStore implements RawDataOperations, ItemOperations, Ins
         statement.setString(4, insightType.descriptionVectorId());
         statement.setString(5, jsonHelper.toJson(insightType.categories()));
         statement.setInt(6, insightType.targetTokens());
-        statement.setString(7, jsonHelper.toJson(insightType.summaryPrompt()));
         statement.setString(
-                8,
+                7,
                 insightType.insightAnalysisMode() != null
                         ? insightType.insightAnalysisMode().name()
                         : null);
-        statement.setString(9, insightType.scope() != null ? insightType.scope().name() : null);
-        statement.setString(10, jsonHelper.toJson(insightType.treeConfig()));
-        statement.setString(11, writeInstant(insightType.lastUpdatedAt()));
+        statement.setString(8, insightType.scope() != null ? insightType.scope().name() : null);
+        statement.setString(9, jsonHelper.toJson(insightType.treeConfig()));
+        statement.setString(10, writeInstant(insightType.lastUpdatedAt()));
         statement.setString(
-                12, writeInstant(insightType.createdAt() != null ? insightType.createdAt() : now));
-        statement.setString(13, writeInstant(now));
+                11, writeInstant(insightType.createdAt() != null ? insightType.createdAt() : now));
+        statement.setString(12, writeInstant(now));
     }
 
     private void bindInsightUpsert(
@@ -802,8 +798,6 @@ public class SqliteMemoryStore implements RawDataOperations, ItemOperations, Ins
     }
 
     private MemoryInsightType mapInsightType(ResultSet resultSet) throws SQLException {
-        Map<String, String> summaryPrompt =
-                parseSummaryPrompt(resultSet.getString("summary_prompt"));
         return new MemoryInsightType(
                 nullableLong(resultSet, "biz_id"),
                 resultSet.getString("name"),
@@ -811,7 +805,6 @@ public class SqliteMemoryStore implements RawDataOperations, ItemOperations, Ins
                 resultSet.getString("description_vector_id"),
                 jsonHelper.fromJson(resultSet.getString("categories"), STRING_LIST_TYPE),
                 resultSet.getInt("target_tokens"),
-                summaryPrompt,
                 parseInstant(resultSet.getString("last_updated_at")),
                 parseInstant(resultSet.getString("created_at")),
                 parseInstant(resultSet.getString("updated_at")),
@@ -916,26 +909,6 @@ public class SqliteMemoryStore implements RawDataOperations, ItemOperations, Ins
                     };
         }
         return new Segment(content, caption, boundary, metadata);
-    }
-
-    private Map<String, String> parseSummaryPrompt(String json) {
-        Map<String, Object> rawPrompt = jsonHelper.fromJson(json, OBJECT_MAP_TYPE);
-        if (rawPrompt == null) {
-            return null;
-        }
-        Map<String, String> summaryPrompt = new LinkedHashMap<>();
-        rawPrompt.forEach(
-                (key, value) -> {
-                    if (value instanceof String promptText) {
-                        summaryPrompt.put(key, promptText);
-                    } else if (value instanceof Map<?, ?> sectionMap) {
-                        Object content = sectionMap.get("content");
-                        if (content instanceof String promptText) {
-                            summaryPrompt.put(key, promptText);
-                        }
-                    }
-                });
-        return summaryPrompt;
     }
 
     private MemoryScope parseScope(String value) {

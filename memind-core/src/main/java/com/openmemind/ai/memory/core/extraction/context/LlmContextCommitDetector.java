@@ -18,6 +18,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.extraction.rawdata.BoundaryDetectionPrompts;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import java.time.Duration;
@@ -38,15 +39,25 @@ public class LlmContextCommitDetector implements ContextCommitDetector {
 
     private final CommitDetectorConfig config;
     private final StructuredChatClient structuredChatClient;
+    private final PromptRegistry promptRegistry;
 
     public LlmContextCommitDetector(CommitDetectorConfig config) {
-        this(config, null);
+        this(config, null, PromptRegistry.EMPTY);
     }
 
     public LlmContextCommitDetector(
             CommitDetectorConfig config, StructuredChatClient structuredChatClient) {
+        this(config, structuredChatClient, PromptRegistry.EMPTY);
+    }
+
+    public LlmContextCommitDetector(
+            CommitDetectorConfig config,
+            StructuredChatClient structuredChatClient,
+            PromptRegistry promptRegistry) {
         this.config = Objects.requireNonNull(config, "config is required");
         this.structuredChatClient = structuredChatClient;
+        this.promptRegistry =
+                Objects.requireNonNull(promptRegistry, "promptRegistry must not be null");
     }
 
     @Override
@@ -117,7 +128,8 @@ public class LlmContextCommitDetector implements ContextCommitDetector {
     protected Mono<CommitDecision> callLlm(
             CommitDetectionInput input, CommitDetectionContext context) {
         var prompt =
-                BoundaryDetectionPrompts.build(input.history(), input.incomingMessages(), context)
+                BoundaryDetectionPrompts.build(
+                                promptRegistry, input.history(), input.incomingMessages(), context)
                         .render(null);
         var messages = ChatMessages.systemUser(prompt.systemPrompt(), prompt.userPrompt());
         return structuredChatClient

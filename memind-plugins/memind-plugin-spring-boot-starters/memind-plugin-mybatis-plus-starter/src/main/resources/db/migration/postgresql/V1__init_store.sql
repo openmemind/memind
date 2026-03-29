@@ -71,7 +71,6 @@ CREATE TABLE IF NOT EXISTS memory_insight_type (
     description_vector_id VARCHAR(200),
     categories            JSONB,
     target_tokens         INT                      NOT NULL DEFAULT 0,
-    summary_prompt        JSONB,
     analysis_mode         VARCHAR(32)              DEFAULT 'BRANCH',
     scope                 VARCHAR(32),
     tree_config           JSONB,

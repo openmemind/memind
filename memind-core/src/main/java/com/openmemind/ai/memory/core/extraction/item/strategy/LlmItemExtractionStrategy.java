@@ -25,6 +25,7 @@ import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptResult;
 import com.openmemind.ai.memory.core.prompt.extraction.item.ForesightPrompts;
 import com.openmemind.ai.memory.core.prompt.extraction.item.MemoryItemPrompts;
@@ -51,13 +52,23 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
 
     private final StructuredChatClient structuredChatClient;
     private final Set<MemoryCategory> categories;
+    private final PromptRegistry promptRegistry;
 
     public LlmItemExtractionStrategy(
             StructuredChatClient structuredChatClient, Set<MemoryCategory> categories) {
+        this(structuredChatClient, categories, PromptRegistry.EMPTY);
+    }
+
+    public LlmItemExtractionStrategy(
+            StructuredChatClient structuredChatClient,
+            Set<MemoryCategory> categories,
+            PromptRegistry promptRegistry) {
         this.structuredChatClient =
                 Objects.requireNonNull(
                         structuredChatClient, "structuredChatClient must not be null");
         this.categories = categories;
+        this.promptRegistry =
+                Objects.requireNonNull(promptRegistry, "promptRegistry must not be null");
     }
 
     @Override
@@ -101,6 +112,7 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
                         () -> {
                             var userName = resolveUserName(segment);
                             return MemoryItemPrompts.buildUnified(
+                                            promptRegistry,
                                             insightTypes,
                                             segment.text(),
                                             referenceTime,
@@ -157,7 +169,9 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
         return Mono.fromCallable(
                         () ->
                                 ForesightPrompts.build(
-                                                segment.text(), resolveReferenceTime(segment))
+                                                promptRegistry,
+                                                segment.text(),
+                                                resolveReferenceTime(segment))
                                         .render(language))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(

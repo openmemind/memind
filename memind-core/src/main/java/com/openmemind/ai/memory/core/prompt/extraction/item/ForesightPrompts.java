@@ -13,7 +13,9 @@
  */
 package com.openmemind.ai.memory.core.prompt.extraction.item;
 
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -34,7 +36,7 @@ public final class ForesightPrompts {
     private static final Pattern MESSAGE_TIMESTAMP_PATTERN =
             Pattern.compile("\\[\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}]");
 
-    private static final String SYSTEM_PROMPT_TEMPLATE =
+    private static final String OBJECTIVE =
             """
             You are a predictive analyst. Your task is to analyze a conversation and generate \
             forward-looking predictions about the user's future behaviors, needs, and likely \
@@ -45,9 +47,10 @@ public final class ForesightPrompts {
             what FOLLOWS from those facts. Generate associative predictions about behavioral \
             changes, emerging needs, and likely next actions that the user did NOT explicitly \
             state.
+            """;
 
-            Return ONLY a JSON object. No extra text, no markdown fences.
-
+    private static final String GUIDELINES =
+            """
             # Core Principles
 
             1. **Predict, don't restate**: Every prediction must go BEYOND what the user \
@@ -104,9 +107,13 @@ public final class ForesightPrompts {
 
             Prefer extracting explicit time references from the conversation. Only estimate \
             when no time reference is available.
+            """;
 
+    private static final String OUTPUT =
+            """
             # Output Format
 
+            Return ONLY a JSON object. No extra text, no markdown fences.
             Return valid JSON ONLY. No markdown fences, no surrounding text.
             Generate 2-6 predictions. Return empty list if no predictable signals exist.
 
@@ -122,7 +129,10 @@ public final class ForesightPrompts {
             }
 
             (Return `{"items": []}` if nothing qualifies)
+            """;
 
+    private static final String EXAMPLES =
+            """
             # Examples
 
             ## Good Example 1: Life scenario (medical)
@@ -297,14 +307,35 @@ public final class ForesightPrompts {
      * @return prompt template; call {@code render(language)} to produce the final result
      */
     public static PromptTemplate build(String segmentText, Instant referenceTime) {
+        return build(PromptRegistry.EMPTY, segmentText, referenceTime);
+    }
+
+    public static PromptTemplate buildDefault() {
+        return defaultBuilder(buildTimeContext(null, null)).build();
+    }
+
+    public static PromptTemplate build(
+            PromptRegistry registry, String segmentText, Instant referenceTime) {
         String timeCtx = buildTimeContext(segmentText, referenceTime);
 
-        return PromptTemplate.builder("foresight-extraction")
-                .section("system", SYSTEM_PROMPT_TEMPLATE)
-                .section("timeContext", timeCtx)
-                .userPrompt(USER_PROMPT_TEMPLATE)
+        PromptTemplate.Builder builder =
+                registry.hasOverride(PromptType.FORESIGHT)
+                        ? PromptTemplate.builder("foresight-extraction")
+                                .section("system", registry.getOverride(PromptType.FORESIGHT))
+                        : defaultBuilder(timeCtx);
+
+        return builder.userPrompt(USER_PROMPT_TEMPLATE)
                 .variable("segment_text", segmentText != null ? segmentText : "")
                 .build();
+    }
+
+    private static PromptTemplate.Builder defaultBuilder(String timeContext) {
+        return PromptTemplate.builder("foresight-extraction")
+                .section("objective", OBJECTIVE)
+                .section("guidelines", GUIDELINES)
+                .section("output", OUTPUT)
+                .section("examples", EXAMPLES)
+                .section("timeContext", timeContext);
     }
 
     private static String buildTimeContext(String segmentText, Instant referenceTime) {

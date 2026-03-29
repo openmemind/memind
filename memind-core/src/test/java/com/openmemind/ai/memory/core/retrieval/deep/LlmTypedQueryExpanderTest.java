@@ -19,6 +19,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import com.openmemind.ai.memory.core.prompt.retrieval.TypedQueryExpandPrompts;
 import com.openmemind.ai.memory.core.retrieval.deep.ExpandedQuery.QueryType;
 import java.util.List;
@@ -91,6 +93,33 @@ class LlmTypedQueryExpanderTest {
                             .render("English");
             assertThat(structuredLlmClient.lastMessages())
                     .isEqualTo(ChatMessages.systemUser(prompt.systemPrompt(), prompt.userPrompt()));
+        }
+
+        @Test
+        @DisplayName("constructor with prompt registry should use override instruction")
+        void constructorWithPromptRegistryUsesOverrideInstruction() {
+            var structuredLlmClient =
+                    fakeStructuredLlmClientReturning(
+                            List.of(new TypedQueryEntry("lex", "User prefers Java")));
+            var registry =
+                    InMemoryPromptRegistry.builder()
+                            .override(
+                                    PromptType.TYPED_QUERY_EXPAND,
+                                    "Custom typed query expansion instruction")
+                            .build();
+            var expander = new LlmTypedQueryExpander(structuredLlmClient, registry);
+
+            StepVerifier.create(expander.expand("test", List.of("gap"), List.of(), List.of(), 1))
+                    .assertNext(
+                            queries -> {
+                                assertThat(queries).hasSize(1);
+                                assertThat(queries.getFirst().text())
+                                        .isEqualTo("User prefers Java");
+                            })
+                    .verifyComplete();
+
+            assertThat(structuredLlmClient.lastMessages().getFirst().content())
+                    .contains("Custom typed query expansion instruction");
         }
 
         @Test

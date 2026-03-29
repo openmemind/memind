@@ -21,6 +21,7 @@ import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.extraction.rawdata.ConversationSegmentationPrompts;
 import java.util.ArrayList;
 import java.util.List;
@@ -45,13 +46,23 @@ public class LlmConversationChunker {
 
     private final StructuredChatClient structuredChatClient;
     private final ConversationChunker fallback;
+    private final PromptRegistry promptRegistry;
 
     public LlmConversationChunker(
             StructuredChatClient structuredChatClient, ConversationChunker fallback) {
+        this(structuredChatClient, fallback, PromptRegistry.EMPTY);
+    }
+
+    public LlmConversationChunker(
+            StructuredChatClient structuredChatClient,
+            ConversationChunker fallback,
+            PromptRegistry promptRegistry) {
         this.structuredChatClient =
                 Objects.requireNonNull(
                         structuredChatClient, "structuredChatClient must not be null");
         this.fallback = Objects.requireNonNull(fallback, "fallback must not be null");
+        this.promptRegistry =
+                Objects.requireNonNull(promptRegistry, "promptRegistry must not be null");
     }
 
     /**
@@ -67,7 +78,8 @@ public class LlmConversationChunker {
         }
 
         var prompt =
-                ConversationSegmentationPrompts.build(messages, config.minMessagesPerSegment())
+                ConversationSegmentationPrompts.build(
+                                promptRegistry, messages, config.minMessagesPerSegment())
                         .render(null);
         var llmMessages = ChatMessages.systemUser(prompt.systemPrompt(), prompt.userPrompt());
 

@@ -18,6 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,6 +46,27 @@ class InsightLeafPromptsTest {
                 .doesNotContain("\"proc" + "edural\" = how things are done");
     }
 
+    @Test
+    @DisplayName("build with registry should collapse leaf synthesis prompt to a system section")
+    void buildWithRegistryUsesOverrideInstruction() {
+        var registry =
+                InMemoryPromptRegistry.builder()
+                        .override(PromptType.INSIGHT_LEAF, "Custom insight leaf instruction")
+                        .build();
+        var template =
+                InsightLeafPrompts.build(
+                        registry,
+                        createBranchType("directives"),
+                        "response rules",
+                        List.of(),
+                        List.of(),
+                        200);
+
+        assertThat(template.describeStructure()).contains("Sections: system");
+        assertThat(template.render("English").systemPrompt())
+                .contains("Custom insight leaf instruction");
+    }
+
     private static MemoryInsightType createBranchType(String name) {
         return new MemoryInsightType(
                 1L,
@@ -52,7 +75,6 @@ class InsightLeafPromptsTest {
                 null,
                 List.of("directive"),
                 200,
-                null,
                 null,
                 null,
                 null,

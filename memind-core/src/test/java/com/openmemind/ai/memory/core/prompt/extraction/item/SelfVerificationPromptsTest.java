@@ -19,6 +19,8 @@ import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -26,6 +28,15 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class SelfVerificationPromptsTest {
+
+    @Test
+    @DisplayName("build default should keep runtime placeholders raw")
+    void selfVerificationBuildDefaultKeepsRuntimePlaceholdersRaw() {
+        String preview = SelfVerificationPrompts.buildDefault().previewSystemPrompt("English");
+
+        assertThat(preview).contains("{{CATEGORY_CONTEXT}}");
+        assertThat(preview).contains("{{IDENTITY_CONTEXT}}");
+    }
 
     @Test
     @DisplayName(
@@ -50,6 +61,11 @@ class SelfVerificationPromptsTest {
                                 MemoryCategory.EVENT,
                                 MemoryCategory.DIRECTIVE));
         var result = template.render("English");
+        assertThat(template.describeStructure())
+                .contains(
+                        "Sections: objective, principles, extractionScope, missPatterns,"
+                                + " extractionBias, categoryContext, identityContext,"
+                                + " subjectContext, temporalContext, scoring, output, examples");
 
         // System prompt structure
         assertThat(result.systemPrompt()).contains("memory extraction reviewer");
@@ -72,6 +88,9 @@ class SelfVerificationPromptsTest {
         assertThat(result.userPrompt()).contains("# AlreadyExtracted");
         assertThat(result.userPrompt()).contains("[profile] User is a backend engineer");
         assertThat(result.userPrompt()).contains("# Conversation");
+        assertThat(result.userPrompt())
+                .doesNotContain("# Common Miss Patterns")
+                .doesNotContain("## Decision Logic");
     }
 
     @Test
@@ -218,22 +237,34 @@ class SelfVerificationPromptsTest {
                 .contains("Reject any item if a reader cannot identify who each pronoun refers to");
     }
 
+    @Test
+    @DisplayName("build with registry should collapse review prompt to a single system section")
+    void buildWithRegistryUsesOverrideInstruction() {
+        var registry =
+                InMemoryPromptRegistry.builder()
+                        .override(
+                                PromptType.SELF_VERIFICATION,
+                                "Custom self verification instruction")
+                        .build();
+
+        var template =
+                SelfVerificationPrompts.build(
+                        registry,
+                        "conversation text",
+                        List.of(),
+                        Instant.parse("2026-03-29T00:00:00Z"),
+                        List.of(),
+                        null,
+                        Set.of());
+
+        assertThat(template.describeStructure()).contains("Sections: system");
+        assertThat(template.render("English").systemPrompt())
+                .contains("Custom self verification instruction");
+    }
+
     private static MemoryInsightType createInsightType(String name, List<String> categories) {
         return new MemoryInsightType(
-                null,
-                name,
-                null,
-                null,
-                categories,
-                100,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null);
+                null, name, null, null, categories, 100, null, null, null, null, null, null, null);
     }
 
     private static ExtractedMemoryEntry createEntry(String content, String category) {

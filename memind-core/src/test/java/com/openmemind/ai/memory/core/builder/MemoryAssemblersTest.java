@@ -43,6 +43,7 @@ import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepRetrievalStrategy;
@@ -306,6 +307,7 @@ class MemoryAssemblersTest {
                 TEXT_SEARCH,
                 MEMORY_VECTOR,
                 new NoopReranker(),
+                PromptRegistry.EMPTY,
                 options);
     }
 

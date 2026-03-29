@@ -19,6 +19,7 @@ import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.extraction.insight.BranchAggregationPrompts;
 import com.openmemind.ai.memory.core.prompt.extraction.insight.InsightLeafPrompts;
 import com.openmemind.ai.memory.core.prompt.extraction.insight.InteractionGuideSynthesisPrompts;
@@ -43,11 +44,19 @@ public class LlmInsightGenerator implements InsightGenerator {
     private static final Logger log = LoggerFactory.getLogger(LlmInsightGenerator.class);
 
     private final StructuredChatClient structuredChatClient;
+    private final PromptRegistry promptRegistry;
 
     public LlmInsightGenerator(StructuredChatClient structuredChatClient) {
+        this(structuredChatClient, PromptRegistry.EMPTY);
+    }
+
+    public LlmInsightGenerator(
+            StructuredChatClient structuredChatClient, PromptRegistry promptRegistry) {
         this.structuredChatClient =
                 Objects.requireNonNull(
                         structuredChatClient, "structuredChatClient must not be null");
+        this.promptRegistry =
+                Objects.requireNonNull(promptRegistry, "promptRegistry must not be null");
     }
 
     @Override
@@ -62,7 +71,12 @@ public class LlmInsightGenerator implements InsightGenerator {
 
         var template =
                 InsightLeafPrompts.build(
-                        insightType, groupName, existingPoints, newItems, targetTokens);
+                        promptRegistry,
+                        insightType,
+                        groupName,
+                        existingPoints,
+                        newItems,
+                        targetTokens);
         var promptResult = template.render(language);
         var userPrompt =
                 additionalContext != null && !additionalContext.isBlank()
@@ -102,7 +116,11 @@ public class LlmInsightGenerator implements InsightGenerator {
 
         var promptResult =
                 BranchAggregationPrompts.build(
-                                insightType, existingPoints, leafInsights, targetTokens)
+                                promptRegistry,
+                                insightType,
+                                existingPoints,
+                                leafInsights,
+                                targetTokens)
                         .render(language);
         var messages =
                 ChatMessages.systemUser(promptResult.systemPrompt(), promptResult.userPrompt());
@@ -137,10 +155,18 @@ public class LlmInsightGenerator implements InsightGenerator {
                 switch (rootInsightType.name()) {
                     case "interaction" ->
                             InteractionGuideSynthesisPrompts.build(
-                                    rootInsightType, existingSummary, branchInsights, targetTokens);
+                                    promptRegistry,
+                                    rootInsightType,
+                                    existingSummary,
+                                    branchInsights,
+                                    targetTokens);
                     default ->
                             RootSynthesisPrompts.build(
-                                    rootInsightType, existingSummary, branchInsights, targetTokens);
+                                    promptRegistry,
+                                    rootInsightType,
+                                    existingSummary,
+                                    branchInsights,
+                                    targetTokens);
                 };
         var promptResult = template.render(language);
         var messages =

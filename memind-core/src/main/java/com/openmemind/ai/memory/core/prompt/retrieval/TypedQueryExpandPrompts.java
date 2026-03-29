@@ -13,7 +13,9 @@
  */
 package com.openmemind.ai.memory.core.prompt.retrieval;
 
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -159,12 +161,8 @@ public final class TypedQueryExpandPrompts {
             Maximum {{max_expansions}} queries. No duplicates. No explanations outside JSON.
             """;
 
-    private static final String TEMPLATE =
+    private static final String USER_TEMPLATE =
             """
-            {{task_section}}
-
-            {{output_format}}
-
             # Original Query
             {{query}}
 
@@ -177,13 +175,40 @@ public final class TypedQueryExpandPrompts {
 
     private TypedQueryExpandPrompts() {}
 
+    public static PromptTemplate buildDefault() {
+        String fullSystem = TASK_WITH_GAPS.replace("{{temporal_strategy}}", TEMPORAL_STRATEGY);
+        return PromptTemplate.builder("typed-query-expand")
+                .section("system", fullSystem)
+                .section("output", OUTPUT_FORMAT)
+                .build();
+    }
+
+    public static PromptTemplate buildPreview() {
+        return buildDefault().withVariable("max_expansions", "5");
+    }
+
     public static PromptTemplate build(
             String query,
             List<String> gaps,
             List<String> keyInformation,
             List<String> conversationHistory,
             int maxExpansions) {
+        return build(
+                PromptRegistry.EMPTY,
+                query,
+                gaps,
+                keyInformation,
+                conversationHistory,
+                maxExpansions);
+    }
 
+    public static PromptTemplate build(
+            PromptRegistry registry,
+            String query,
+            List<String> gaps,
+            List<String> keyInformation,
+            List<String> conversationHistory,
+            int maxExpansions) {
         boolean hasGaps = gaps != null && !gaps.isEmpty();
         String taskSection = hasGaps ? TASK_WITH_GAPS : TASK_GENERIC;
 
@@ -215,24 +240,27 @@ public final class TypedQueryExpandPrompts {
                         "(?i).*\\b(when|how"
                             + " long|before|after|recently|last|ago|since|date|time|year|month)\\b.*");
         String temporalStrategy = hasTemporalHint ? TEMPORAL_STRATEGY : "";
+        String systemPrompt = taskSection.replace("{{temporal_strategy}}", temporalStrategy);
+        String instruction =
+                registry.hasOverride(PromptType.TYPED_QUERY_EXPAND)
+                        ? registry.getOverride(PromptType.TYPED_QUERY_EXPAND)
+                        : systemPrompt;
 
         return PromptTemplate.builder("typed-query-expand")
-                .userPrompt(TEMPLATE)
-                .variable(
-                        "task_section",
-                        taskSection.replace("{{temporal_strategy}}", temporalStrategy))
+                .section("system", instruction)
+                .section("output", OUTPUT_FORMAT)
+                .userPrompt(USER_TEMPLATE)
                 .variable("query", query)
                 .variable("gaps_section", gapsSection)
                 .variable("key_info_section", keyInfoSection)
                 .variable("conversation_section", conversationSection)
                 .variable("max_expansions", String.valueOf(maxExpansions))
-                .variable("output_format", OUTPUT_FORMAT)
                 .build();
     }
 
     private static String buildConversationSection(List<String> history) {
         return "# Recent Conversation\n"
                 + history.stream().map(msg -> "- " + msg).collect(Collectors.joining("\n"))
-                + "\n";
+                + "\n\n";
     }
 }

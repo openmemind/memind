@@ -19,6 +19,8 @@ import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -62,6 +64,45 @@ class LlmInsightGroupClassifierTest {
                 .verifyComplete();
     }
 
+    @Test
+    @DisplayName("Should use insight group override instruction")
+    void shouldUseInsightGroupOverrideInstruction() {
+        var item =
+                new MemoryItem(
+                        1L,
+                        "m1",
+                        "The team needs a concise way to redirect a meeting back to the agenda.",
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null);
+        var response =
+                new InsightGroupClassifyResponse(
+                        List.of(
+                                new InsightGroupClassifyResponse.GroupAssignment(
+                                        "Meeting Coordination", List.of("1"))));
+        var registry =
+                InMemoryPromptRegistry.builder()
+                        .override(PromptType.INSIGHT_GROUP, "Custom insight group instruction")
+                        .build();
+        var client = new FakeStructuredChatClient(response);
+        var classifier = new LlmInsightGroupClassifier(client, registry);
+
+        StepVerifier.create(classifier.classify(createInsightType(), List.of(item), List.of()))
+                .assertNext(groups -> assertThat(groups).containsKey("Meeting Coordination"))
+                .verifyComplete();
+
+        assertThat(client.lastMessages().getFirst().content())
+                .contains("Custom insight group instruction");
+    }
+
     private static MemoryInsightType createInsightType() {
         return new MemoryInsightType(
                 1L,
@@ -76,13 +117,13 @@ class LlmInsightGroupClassifierTest {
                 null,
                 null,
                 null,
-                null,
                 null);
     }
 
     private static final class FakeStructuredChatClient implements StructuredChatClient {
 
         private final Object response;
+        private List<ChatMessage> lastMessages = List.of();
 
         private FakeStructuredChatClient(Object response) {
             this.response = response;
@@ -96,7 +137,12 @@ class LlmInsightGroupClassifierTest {
         @Override
         @SuppressWarnings("unchecked")
         public <T> Mono<T> call(List<ChatMessage> messages, Class<T> responseType) {
+            lastMessages = List.copyOf(messages);
             return Mono.just((T) response);
+        }
+
+        private List<ChatMessage> lastMessages() {
+            return lastMessages;
         }
     }
 }

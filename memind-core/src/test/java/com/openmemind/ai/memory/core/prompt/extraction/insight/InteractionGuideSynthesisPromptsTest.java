@@ -17,6 +17,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,11 +29,13 @@ class InteractionGuideSynthesisPromptsTest {
     @Test
     @DisplayName("system prompt should describe new agent branch taxonomy")
     void shouldDescribeNewAgentBranchTaxonomy() {
-        var prompt =
+        var template =
                 InteractionGuideSynthesisPrompts.build(
-                                createRootType("interaction"), null, List.of(), 300)
-                        .render("English");
+                        createRootType("interaction"), "Keep replies concise", List.of(), 300);
+        var prompt = template.render("English");
 
+        assertThat(template.describeStructure())
+                .contains("Sections: objective, context, workflow, output, examples");
         assertThat(prompt.systemPrompt())
                 .contains("The 8 BRANCH dimensions you may receive:")
                 .contains("directives")
@@ -39,6 +43,33 @@ class InteractionGuideSynthesisPromptsTest {
                 .contains("resolutions")
                 .contains("directly stated by user in a directives BRANCH")
                 .doesNotContain("proc" + "edural BRANCH");
+        assertThat(prompt.userPrompt())
+                .contains("# Existing Directives")
+                .contains("Keep replies concise")
+                .doesNotContain("# Dimension Decision Logic");
+    }
+
+    @Test
+    @DisplayName(
+            "build with registry should collapse interaction guide synthesis to a system section")
+    void buildWithRegistryUsesOverrideInstruction() {
+        var registry =
+                InMemoryPromptRegistry.builder()
+                        .override(
+                                PromptType.INTERACTION_GUIDE_SYNTHESIS,
+                                "Custom interaction guide instruction")
+                        .build();
+        var template =
+                InteractionGuideSynthesisPrompts.build(
+                        registry,
+                        createRootType("interaction"),
+                        "Keep replies concise",
+                        List.of(),
+                        300);
+
+        assertThat(template.describeStructure()).contains("Sections: system");
+        assertThat(template.render("English").systemPrompt())
+                .contains("Custom interaction guide instruction");
     }
 
     private static MemoryInsightType createRootType(String name) {
@@ -49,7 +80,6 @@ class InteractionGuideSynthesisPromptsTest {
                 null,
                 List.of(),
                 300,
-                null,
                 null,
                 null,
                 null,

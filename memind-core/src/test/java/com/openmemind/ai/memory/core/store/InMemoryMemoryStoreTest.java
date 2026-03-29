@@ -138,7 +138,6 @@ class InMemoryMemoryStoreTest {
                 null,
                 List.of("profile"),
                 600,
-                Map.of("summary", "prompt"),
                 BASE_TIME,
                 BASE_TIME,
                 BASE_TIME,

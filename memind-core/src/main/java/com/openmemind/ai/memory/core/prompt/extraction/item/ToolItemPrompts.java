@@ -13,7 +13,9 @@
  */
 package com.openmemind.ai.memory.core.prompt.extraction.item;
 
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 
 /**
  * Tool usage insight extraction prompt builder.
@@ -29,7 +31,7 @@ public final class ToolItemPrompts {
 
     private static final int MAX_IO_LENGTH = 2000;
 
-    private static final String SYSTEM_PROMPT =
+    private static final String OBJECTIVE =
             """
             You are a tool execution analyst. Your task is to analyze tool call records for \
             a specific tool and produce a concise usage insight.
@@ -37,9 +39,10 @@ public final class ToolItemPrompts {
             This insight will be stored as a memory item for future retrieval. When an agent \
             needs to use this tool again, it can retrieve this insight to understand effective \
             parameter patterns, common pitfalls, and practical recommendations.
+            """;
 
-            Return ONLY a JSON object. No extra text, no markdown fences.
-
+    private static final String GUIDELINES =
+            """
             # What to Extract
 
             ## From Input Parameters: Intent & Patterns
@@ -75,9 +78,13 @@ public final class ToolItemPrompts {
             Confirm patterns that still hold, revise observations that new data contradicts, \
             and add newly discovered patterns. Do NOT simply append — produce a unified, \
             coherent insight.
+            """;
 
+    private static final String OUTPUT =
+            """
             # Output Format
 
+            Return ONLY a JSON object. No extra text, no markdown fences.
             Return valid JSON ONLY. No markdown fences, no surrounding text.
 
             {
@@ -87,7 +94,10 @@ public final class ToolItemPrompts {
 
             score: 1.0 if overall the tool calls produced useful results, 0.0 if mostly \
             poor/failed results.
+            """;
 
+    private static final String EXAMPLES =
+            """
             # Examples
 
             ## Good Example 1: Effective tool usage
@@ -172,7 +182,19 @@ public final class ToolItemPrompts {
      */
     public static PromptTemplate build(
             String toolName, String records, String statistics, String historicalContent) {
+        return build(PromptRegistry.EMPTY, toolName, records, statistics, historicalContent);
+    }
 
+    public static PromptTemplate buildDefault() {
+        return defaultBuilder().build();
+    }
+
+    public static PromptTemplate build(
+            PromptRegistry registry,
+            String toolName,
+            String records,
+            String statistics,
+            String historicalContent) {
         String historicalSection = "";
         if (historicalContent != null && !historicalContent.isBlank()) {
             historicalSection =
@@ -185,14 +207,26 @@ public final class ToolItemPrompts {
                             .formatted(historicalContent);
         }
 
-        return PromptTemplate.builder("tool-item")
-                .section("system", SYSTEM_PROMPT)
-                .userPrompt(USER_PROMPT_TEMPLATE)
+        PromptTemplate.Builder builder =
+                registry.hasOverride(PromptType.TOOL_ITEM)
+                        ? PromptTemplate.builder("tool-item")
+                                .section("system", registry.getOverride(PromptType.TOOL_ITEM))
+                        : defaultBuilder();
+
+        return builder.userPrompt(USER_PROMPT_TEMPLATE)
                 .variable("tool_name", toolName != null ? toolName : "unknown")
                 .variable("historical_section", historicalSection)
                 .variable("statistics", statistics != null ? statistics : "(no statistics)")
                 .variable("records", records != null ? records : "(no records)")
                 .build();
+    }
+
+    private static PromptTemplate.Builder defaultBuilder() {
+        return PromptTemplate.builder("tool-item")
+                .section("objective", OBJECTIVE)
+                .section("guidelines", GUIDELINES)
+                .section("output", OUTPUT)
+                .section("examples", EXAMPLES);
     }
 
     /** Truncate overly long text */

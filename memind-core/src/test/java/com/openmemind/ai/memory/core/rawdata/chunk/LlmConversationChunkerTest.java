@@ -26,6 +26,8 @@ import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import com.openmemind.ai.memory.core.prompt.extraction.rawdata.ConversationSegmentationPrompts;
 import java.util.List;
 import java.util.Map;
@@ -108,6 +110,37 @@ class LlmConversationChunkerTest {
                             .render(null);
             assertThat(structuredLlmClient.lastMessages())
                     .isEqualTo(ChatMessages.systemUser(prompt.systemPrompt(), prompt.userPrompt()));
+        }
+
+        @Test
+        @DisplayName("Should use conversation segmentation override instruction")
+        void shouldUseConversationSegmentationOverrideInstruction() {
+            var messages =
+                    List.of(
+                            Message.user("Hello"),
+                            Message.assistant("Hello!"),
+                            Message.user("How's the weather?"),
+                            Message.assistant("It's sunny today"),
+                            Message.user("Recommend a book"),
+                            Message.assistant("I recommend The Three-Body Problem"));
+            var llmResponse = "{\"segments\": [{\"start\": 0, \"end\": 6}]}";
+            var structuredLlmClient = new FakeStructuredChatClient(llmResponse);
+            var registry =
+                    InMemoryPromptRegistry.builder()
+                            .override(
+                                    PromptType.CONVERSATION_SEGMENTATION,
+                                    "Custom conversation segmentation instruction")
+                            .build();
+            var chunker =
+                    new LlmConversationChunker(
+                            structuredLlmClient, new ConversationChunker(), registry);
+
+            StepVerifier.create(chunker.chunk(messages, CONFIG))
+                    .assertNext(segments -> assertThat(segments).hasSize(1))
+                    .verifyComplete();
+
+            assertThat(structuredLlmClient.lastMessages().getFirst().content())
+                    .contains("Custom conversation segmentation instruction");
         }
 
         @Test

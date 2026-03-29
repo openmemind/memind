@@ -13,7 +13,10 @@
  */
 package com.openmemind.ai.memory.core.prompt.retrieval;
 
+import com.openmemind.ai.memory.core.prompt.PromptBuilderSupport;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.util.List;
 
 /**
@@ -24,7 +27,7 @@ import java.util.List;
  */
 public final class IntentRoutingPrompts {
 
-    private static final String TASK =
+    private static final String SYSTEM_PROMPT =
             """
             You are a memory retrieval intent router. Determine whether the user's query \
             requires searching their personal memory.
@@ -57,34 +60,46 @@ public final class IntentRoutingPrompts {
             ```
             """;
 
-    private static final String TEMPLATE =
+    private static final String USER_TEMPLATE =
             """
-            {{task_section}}
-
-            {{conversation_section}}
-
-            Query: {{query}}
+            {{conversation_section}}# Query
+            {{query}}
             """;
 
     private IntentRoutingPrompts() {}
 
-    public static PromptTemplate build(String query, List<String> conversationHistory) {
-        String conversationSection =
-                (conversationHistory == null || conversationHistory.isEmpty())
-                        ? ""
-                        : buildConversationSection(conversationHistory);
+    public static PromptTemplate buildDefault() {
+        return PromptBuilderSupport.builder(
+                        "intent-routing", PromptBuilderSupport.section("system", SYSTEM_PROMPT))
+                .build();
+    }
 
-        return PromptTemplate.builder("intent-routing")
-                .userPrompt(TEMPLATE)
-                .variable("task_section", TASK)
+    public static PromptTemplate build(String query, List<String> conversationHistory) {
+        return build(PromptRegistry.EMPTY, query, conversationHistory);
+    }
+
+    public static PromptTemplate build(
+            PromptRegistry registry, String query, List<String> conversationHistory) {
+        String instruction =
+                registry.hasOverride(PromptType.INTENT_ROUTING)
+                        ? registry.getOverride(PromptType.INTENT_ROUTING)
+                        : SYSTEM_PROMPT;
+
+        return PromptBuilderSupport.builder(
+                        "intent-routing", PromptBuilderSupport.section("system", instruction))
+                .userPrompt(USER_TEMPLATE)
                 .variable("query", query)
-                .variable("conversation_section", conversationSection)
+                .variable("conversation_section", buildConversationSection(conversationHistory))
                 .build();
     }
 
     private static String buildConversationSection(List<String> history) {
+        if (history == null || history.isEmpty()) {
+            return "";
+        }
         var sb = new StringBuilder("# Recent Conversation\n");
         history.forEach(msg -> sb.append("- ").append(msg).append("\n"));
+        sb.append("\n");
         return sb.toString();
     }
 }

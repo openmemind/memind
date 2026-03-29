@@ -17,6 +17,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -24,6 +26,16 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class MemoryItemUnifiedPromptsTest {
+
+    @Test
+    @DisplayName("build default should keep runtime category placeholders raw")
+    void buildDefaultKeepsDynamicCategoryPlaceholdersRaw() {
+        String preview = MemoryItemUnifiedPrompts.buildDefault().previewSystemPrompt("English");
+
+        assertThat(preview).contains("{{CATEGORY_CONTEXT}}");
+        assertThat(preview).contains("{{IDENTITY_CONTEXT}}");
+        assertThat(preview).contains("{{TEMPORAL_CONTEXT}}");
+    }
 
     @Test
     @DisplayName("Rendered prompt should contain Decision Logic and Category Definitions")
@@ -43,6 +55,11 @@ class MemoryItemUnifiedPromptsTest {
                         "Alice",
                         Set.of(MemoryCategory.PROFILE, MemoryCategory.EVENT));
         var result = template.render("English");
+        assertThat(template.describeStructure())
+                .contains(
+                        "Sections: objective, principles, extractionScope, extractionBias,"
+                                + " categoryContext, identityContext, subjectContext,"
+                                + " temporalContext, scoring, output, examples");
         assertThat(result.systemPrompt()).contains("## Decision Logic");
         assertThat(result.systemPrompt()).contains("## Category Definitions");
         assertThat(result.systemPrompt()).contains("**profile**");
@@ -160,23 +177,37 @@ class MemoryItemUnifiedPromptsTest {
                 .contains("explicitly name that subject with a stable role phrase")
                 .contains("Do NOT use bare pronouns like \"他\", \"她\", \"他们\", or \"自己\"")
                 .contains("If the subject cannot be made explicit from the source text");
+        assertThat(result.userPrompt())
+                .contains("<Conversation>")
+                .doesNotContain("## Decision Logic")
+                .doesNotContain("# Extraction Scope");
+    }
+
+    @Test
+    @DisplayName("build with registry should replace unified extraction instructions")
+    void buildWithRegistryUsesOverrideInstruction() {
+        var registry =
+                InMemoryPromptRegistry.builder()
+                        .override(
+                                PromptType.MEMORY_ITEM_UNIFIED,
+                                "Custom unified extraction instruction")
+                        .build();
+        var template =
+                MemoryItemUnifiedPrompts.build(
+                        registry,
+                        List.of(),
+                        "user: hello",
+                        Instant.parse("2026-03-29T00:00:00Z"),
+                        null,
+                        Set.of());
+        var result = template.render("English");
+
+        assertThat(result.systemPrompt()).contains("Custom unified extraction instruction");
+        assertThat(result.systemPrompt()).doesNotContain("# Core Principles");
     }
 
     private static MemoryInsightType createInsightType(String name, List<String> categories) {
         return new MemoryInsightType(
-                null,
-                name,
-                null,
-                null,
-                categories,
-                100,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null);
+                null, name, null, null, categories, 100, null, null, null, null, null, null, null);
     }
 }

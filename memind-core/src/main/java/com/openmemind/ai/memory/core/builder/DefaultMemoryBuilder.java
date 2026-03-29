@@ -21,6 +21,7 @@ import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.stats.DefaultToolStatsService;
 import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -43,6 +44,7 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     private MemoryTextSearch textSearch;
     private MemoryVector vector;
     private Reranker reranker = new NoopReranker();
+    private PromptRegistry promptRegistry = PromptRegistry.EMPTY;
     private MemoryBuildOptions options = MemoryBuildOptions.defaults();
 
     @Override
@@ -90,6 +92,12 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     }
 
     @Override
+    public MemoryBuilder promptRegistry(PromptRegistry promptRegistry) {
+        this.promptRegistry = Objects.requireNonNull(promptRegistry, "promptRegistry");
+        return this;
+    }
+
+    @Override
     public MemoryBuilder options(MemoryBuildOptions options) {
         this.options = Objects.requireNonNull(options, "options");
         return this;
@@ -102,7 +110,14 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
         ChatClientRegistry registry = new ChatClientRegistry(chatClient, slotClients);
         MemoryAssemblyContext context =
                 new MemoryAssemblyContext(
-                        registry, store, buffer, textSearch, vector, reranker, options);
+                        registry,
+                        store,
+                        buffer,
+                        textSearch,
+                        vector,
+                        reranker,
+                        promptRegistry,
+                        options);
         MemoryExtractionAssembly extractionAssembly =
                 new MemoryExtractionAssembler().assemble(context);
         var memoryRetriever = new MemoryRetrievalAssembler().assemble(context);

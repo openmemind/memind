@@ -34,7 +34,9 @@ final class MemoryRetrievalAssembler {
     DefaultMemoryRetriever assemble(MemoryAssemblyContext context) {
         ChatClientRegistry registry = context.chatClientRegistry();
         InsightTypeRouter insightTypeRouter =
-                new LlmInsightTypeRouter(registry.resolve(ChatClientSlot.INSIGHT_TYPE_ROUTER));
+                new LlmInsightTypeRouter(
+                        registry.resolve(ChatClientSlot.INSIGHT_TYPE_ROUTER),
+                        context.promptRegistry());
         InsightTierRetriever insightTierRetriever =
                 new InsightTierRetriever(
                         context.memoryStore(), context.memoryVector(), insightTypeRouter);
@@ -42,9 +44,12 @@ final class MemoryRetrievalAssembler {
                 new ItemTierRetriever(
                         context.memoryStore(), context.memoryVector(), context.textSearch());
         SufficiencyGate sufficiencyGate =
-                new LlmSufficiencyGate(registry.resolve(ChatClientSlot.SUFFICIENCY_GATE));
+                new LlmSufficiencyGate(
+                        registry.resolve(ChatClientSlot.SUFFICIENCY_GATE),
+                        context.promptRegistry());
         TypedQueryExpander typedQueryExpander =
-                new LlmTypedQueryExpander(registry.resolve(ChatClientSlot.QUERY_EXPANDER));
+                new LlmTypedQueryExpander(
+                        registry.resolve(ChatClientSlot.QUERY_EXPANDER), context.promptRegistry());
         DeepRetrievalStrategy deepRetrievalStrategy =
                 new DeepRetrievalStrategy(
                         insightTierRetriever,

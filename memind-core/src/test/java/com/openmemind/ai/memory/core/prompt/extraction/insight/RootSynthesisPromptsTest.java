@@ -17,6 +17,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -39,6 +41,23 @@ class RootSynthesisPromptsTest {
                 .doesNotContain("proc" + "edural: Reusable HOW-TO knowledge");
     }
 
+    @Test
+    @DisplayName("root synthesis override should use a single system section")
+    void rootSynthesisOverrideUsesSingleSystemSection() {
+        var registry =
+                InMemoryPromptRegistry.builder()
+                        .override(PromptType.ROOT_SYNTHESIS, "Custom root synthesis instruction")
+                        .build();
+
+        var template =
+                RootSynthesisPrompts.build(
+                        registry, createRootType("interaction"), "existing", List.of(), 300);
+
+        assertThat(template.describeStructure()).contains("Sections: system");
+        assertThat(template.render("English").systemPrompt())
+                .contains("Custom root synthesis instruction");
+    }
+
     private static MemoryInsightType createRootType(String name) {
         return new MemoryInsightType(
                 1L,
@@ -47,7 +66,6 @@ class RootSynthesisPromptsTest {
                 null,
                 List.of(),
                 300,
-                null,
                 null,
                 null,
                 null,

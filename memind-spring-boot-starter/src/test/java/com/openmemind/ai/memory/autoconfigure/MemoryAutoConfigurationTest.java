@@ -26,15 +26,29 @@ import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
+import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
+import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
+import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
+import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassifier;
 import com.openmemind.ai.memory.core.extraction.item.MemoryItemLayer;
 import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItemExtractor;
 import com.openmemind.ai.memory.core.extraction.item.strategy.LlmItemExtractionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.strategy.LlmToolCallItemExtractionStrategy;
+import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChunker;
+import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
+import com.openmemind.ai.memory.core.retrieval.deep.TypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepRetrievalStrategy;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
+import com.openmemind.ai.memory.core.retrieval.sufficiency.SufficiencyGate;
+import com.openmemind.ai.memory.core.retrieval.tier.InsightTypeRouter;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
@@ -61,6 +75,18 @@ class MemoryAutoConfigurationTest {
                             AutoConfigurations.of(
                                     MemoryLlmAutoConfiguration.class,
                                     MemoryAutoConfiguration.class));
+
+    private final ApplicationContextRunner fullContextRunner =
+            new ApplicationContextRunner()
+                    .withConfiguration(
+                            AutoConfigurations.of(
+                                    MemoryLlmAutoConfiguration.class,
+                                    com.openmemind.ai.memory.autoconfigure.extraction
+                                            .MemoryExtractionAutoConfiguration.class,
+                                    com.openmemind.ai.memory.autoconfigure.retrieval
+                                            .MemoryRetrievalAutoConfiguration.class,
+                                    MemoryAutoConfiguration.class))
+                    .withPropertyValues("memind.retrieval.rerank.enabled=false");
 
     @Test
     @DisplayName("Create Memory from builder runtime inputs only")
@@ -93,6 +119,73 @@ class MemoryAutoConfigurationTest {
                         context -> {
                             assertThat(context).hasNotFailed();
                             assertThat(context).hasSingleBean(Memory.class);
+                        });
+    }
+
+    @Test
+    @DisplayName("Create default PromptRegistry bean and wire it into top-level Memory")
+    void createsDefaultPromptRegistryBeanAndUsesItForTopLevelMemory() {
+        contextRunner
+                .withUserConfiguration(RequiredRuntimeConfig.class)
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+                            assertThat(context).hasSingleBean(PromptRegistry.class);
+
+                            PromptRegistry promptRegistry = context.getBean(PromptRegistry.class);
+                            DefaultMemory memory = (DefaultMemory) context.getBean(Memory.class);
+                            MemoryExtractor extractor =
+                                    readField(memory, "extractor", MemoryExtractor.class);
+                            LlmContextCommitDetector boundaryDetector =
+                                    readField(
+                                            extractor,
+                                            "contextCommitDetector",
+                                            LlmContextCommitDetector.class);
+
+                            assertThat(
+                                            readField(
+                                                    boundaryDetector,
+                                                    "promptRegistry",
+                                                    PromptRegistry.class))
+                                    .isSameAs(promptRegistry);
+                        });
+    }
+
+    @Test
+    @DisplayName("Back off to user-provided PromptRegistry bean")
+    void backsOffToUserProvidedPromptRegistryBean() {
+        contextRunner
+                .withUserConfiguration(
+                        RequiredRuntimeConfig.class, CustomPromptRegistryConfig.class)
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+
+                            PromptRegistry custom =
+                                    context.getBean("customPromptRegistry", PromptRegistry.class);
+                            assertThat(context.getBean(PromptRegistry.class)).isSameAs(custom);
+
+                            DefaultMemory memory = (DefaultMemory) context.getBean(Memory.class);
+                            DefaultMemoryRetriever retriever =
+                                    readField(memory, "retriever", DefaultMemoryRetriever.class);
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> strategies =
+                                    readField(retriever, "strategies", Map.class);
+                            DeepRetrievalStrategy deepStrategy =
+                                    (DeepRetrievalStrategy)
+                                            strategies.get(RetrievalStrategies.DEEP_RETRIEVAL);
+                            LlmTypedQueryExpander typedQueryExpander =
+                                    readField(
+                                            deepStrategy,
+                                            "typedQueryExpander",
+                                            LlmTypedQueryExpander.class);
+
+                            assertThat(
+                                            readField(
+                                                    typedQueryExpander,
+                                                    "promptRegistry",
+                                                    PromptRegistry.class))
+                                    .isSameAs(custom);
                         });
     }
 
@@ -177,6 +270,101 @@ class MemoryAutoConfigurationTest {
                                                     "structuredChatClient",
                                                     StructuredChatClient.class))
                                     .isSameAs(fastClient);
+                        });
+    }
+
+    @Test
+    @DisplayName("Wire custom PromptRegistry into auto-configured prompt-aware beans")
+    void wiresPromptRegistryIntoAutoConfiguredPromptAwareBeans() {
+        fullContextRunner
+                .withUserConfiguration(
+                        RequiredRuntimeConfig.class, CustomPromptRegistryConfig.class)
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+
+                            PromptRegistry custom =
+                                    context.getBean("customPromptRegistry", PromptRegistry.class);
+
+                            assertThat(
+                                            readField(
+                                                    context.getBean(InsightTypeRouter.class),
+                                                    "promptRegistry",
+                                                    PromptRegistry.class))
+                                    .isSameAs(custom);
+                            assertThat(
+                                            readField(
+                                                    context.getBean(SufficiencyGate.class),
+                                                    "promptRegistry",
+                                                    PromptRegistry.class))
+                                    .isSameAs(custom);
+                            assertThat(
+                                            readField(
+                                                    context.getBean(TypedQueryExpander.class),
+                                                    "promptRegistry",
+                                                    PromptRegistry.class))
+                                    .isSameAs(custom);
+                            assertThat(
+                                            readField(
+                                                    context.getBean(ContextCommitDetector.class),
+                                                    "promptRegistry",
+                                                    PromptRegistry.class))
+                                    .isSameAs(custom);
+                            assertThat(
+                                            readField(
+                                                    context.getBean(CaptionGenerator.class),
+                                                    "promptRegistry",
+                                                    PromptRegistry.class))
+                                    .isSameAs(custom);
+                            assertThat(
+                                            readField(
+                                                    context.getBean(LlmConversationChunker.class),
+                                                    "promptRegistry",
+                                                    PromptRegistry.class))
+                                    .isSameAs(custom);
+
+                            ToolCallContentProcessor toolCallProcessor =
+                                    context.getBean(ToolCallContentProcessor.class);
+                            LlmToolCallItemExtractionStrategy toolCallStrategy =
+                                    readField(
+                                            toolCallProcessor,
+                                            "itemExtractionStrategy",
+                                            LlmToolCallItemExtractionStrategy.class);
+                            assertThat(
+                                            readField(
+                                                    toolCallStrategy,
+                                                    "promptRegistry",
+                                                    PromptRegistry.class))
+                                    .isSameAs(custom);
+
+                            DefaultMemoryItemExtractor itemExtractor =
+                                    (DefaultMemoryItemExtractor)
+                                            context.getBean(
+                                                    com.openmemind.ai.memory.core.extraction.item
+                                                            .extractor.MemoryItemExtractor.class);
+                            LlmItemExtractionStrategy defaultStrategy =
+                                    readField(
+                                            itemExtractor,
+                                            "defaultStrategy",
+                                            LlmItemExtractionStrategy.class);
+                            assertThat(
+                                            readField(
+                                                    defaultStrategy,
+                                                    "promptRegistry",
+                                                    PromptRegistry.class))
+                                    .isSameAs(custom);
+                            assertThat(
+                                            readField(
+                                                    context.getBean(InsightGenerator.class),
+                                                    "promptRegistry",
+                                                    PromptRegistry.class))
+                                    .isSameAs(custom);
+                            assertThat(
+                                            readField(
+                                                    context.getBean(InsightGroupClassifier.class),
+                                                    "promptRegistry",
+                                                    PromptRegistry.class))
+                                    .isSameAs(custom);
                         });
     }
 
@@ -281,6 +469,17 @@ class MemoryAutoConfigurationTest {
         @Bean
         StructuredChatClient fastClient() {
             return new NoopStructuredChatClient();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class CustomPromptRegistryConfig {
+
+        @Bean
+        PromptRegistry customPromptRegistry() {
+            return InMemoryPromptRegistry.builder()
+                    .override(PromptType.TYPED_QUERY_EXPAND, "custom query expand")
+                    .build();
         }
     }
 

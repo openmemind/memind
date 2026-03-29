@@ -51,7 +51,7 @@ class TracingInsightGroupClassifierTest {
             var insightType =
                     new MemoryInsightType(
                             1L, "PROFILE", "desc", null, List.of(), 400, null, null, null, null,
-                            null, null, null, null);
+                            null, null, null);
             var result = Map.of("group1", List.of(item));
             var items = List.of(item);
             var existingGroupNames = List.of("group1");

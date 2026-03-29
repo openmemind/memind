@@ -13,36 +13,25 @@
  */
 package com.openmemind.ai.memory.core.prompt.extraction.insight;
 
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
+import com.openmemind.ai.memory.core.prompt.PromptBuilderSupport;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.util.List;
-import java.util.Map;
 
 /**
- * ROOT synthesis prompt builder with 4-dimension analysis framework and section override.
+ * ROOT synthesis prompt builder with 4-dimension analysis framework.
  *
  * <p>Receives multiple BRANCH summaries (each representing a different insight dimension), and
  * generates a ROOT-level deep synthesis using convergence / tension / trajectory / causation
  * dimensions.
- *
- * <p>Supports {@code summaryPrompt} section override: custom ROOT InsightTypes can override any
- * named section via {@link MemoryInsightType#summaryPrompt()}. Setting a section value to empty
- * string removes it from the final prompt.
  */
 public final class RootSynthesisPrompts {
 
     private RootSynthesisPrompts() {}
-
-    // ===== Section name constants =====
-
-    public static final String NAME_OBJECTIVE = "objective";
-    public static final String NAME_CONTEXT = "context";
-    public static final String NAME_WORKFLOW = "workflow";
-    public static final String NAME_OUTPUT = "output";
-    public static final String NAME_EXAMPLES = "examples";
-
-    // ===== OBJECTIVE =====
 
     static final String OBJECTIVE =
             """
@@ -363,49 +352,51 @@ public final class RootSynthesisPrompts {
             String existingSummary,
             List<MemoryInsight> branchInsights,
             int targetTokens) {
-
-        var userPromptContent = buildUserPrompt(existingSummary, branchInsights, targetTokens);
-
-        var builder =
-                PromptTemplate.builder("root-synthesis")
-                        .section(NAME_OBJECTIVE, OBJECTIVE)
-                        .section(NAME_CONTEXT, CONTEXT)
-                        .section(NAME_WORKFLOW, WORKFLOW)
-                        .section(NAME_OUTPUT, OUTPUT)
-                        .section(NAME_EXAMPLES, EXAMPLES)
-                        .variable("root_type_name", rootInsightType.name())
-                        .variable(
-                                "root_description",
-                                rootInsightType.description() != null
-                                        ? rootInsightType.description()
-                                        : rootInsightType.name())
-                        .userPrompt(userPromptContent);
-
-        var template = builder.build();
-        return applyOverrides(template, rootInsightType.summaryPrompt());
+        return build(
+                PromptRegistry.EMPTY,
+                rootInsightType,
+                existingSummary,
+                branchInsights,
+                targetTokens);
     }
 
-    // ==================== Internal Helpers ====================
+    public static PromptTemplate buildDefault() {
+        return defaultBuilder().build();
+    }
 
-    /**
-     * Apply summaryPrompt section overrides from the InsightType.
-     *
-     * <p>If a key maps to null or empty, the section is removed. Otherwise, it is replaced.
-     */
-    private static PromptTemplate applyOverrides(
-            PromptTemplate template, Map<String, String> summaryPrompt) {
-        if (summaryPrompt == null) {
-            return template;
-        }
-        var result = template;
-        for (var entry : summaryPrompt.entrySet()) {
-            if (entry.getValue() == null || entry.getValue().isEmpty()) {
-                result = result.withoutSection(entry.getKey());
-            } else {
-                result = result.withSection(entry.getKey(), entry.getValue());
-            }
-        }
-        return result;
+    public static PromptTemplate buildPreview() {
+        var rootInsightType = DefaultInsightTypes.profile();
+        return defaultBuilder()
+                .variable("root_type_name", rootInsightType.name())
+                .variable(
+                        "root_description", PromptBuilderSupport.descriptionOrName(rootInsightType))
+                .build();
+    }
+
+    public static PromptTemplate build(
+            PromptRegistry registry,
+            MemoryInsightType rootInsightType,
+            String existingSummary,
+            List<MemoryInsight> branchInsights,
+            int targetTokens) {
+
+        var userPromptContent = buildUserPrompt(existingSummary, branchInsights, targetTokens);
+        var builder =
+                registry.hasOverride(PromptType.ROOT_SYNTHESIS)
+                        ? PromptTemplate.builder("root-synthesis")
+                                .section("system", registry.getOverride(PromptType.ROOT_SYNTHESIS))
+                        : defaultBuilder();
+
+        return builder.variable("root_type_name", rootInsightType.name())
+                .variable(
+                        "root_description", PromptBuilderSupport.descriptionOrName(rootInsightType))
+                .userPrompt(userPromptContent)
+                .build();
+    }
+
+    private static PromptTemplate.Builder defaultBuilder() {
+        return PromptBuilderSupport.coreSections(
+                "root-synthesis", OBJECTIVE, CONTEXT, WORKFLOW, OUTPUT, EXAMPLES);
     }
 
     private static String buildUserPrompt(

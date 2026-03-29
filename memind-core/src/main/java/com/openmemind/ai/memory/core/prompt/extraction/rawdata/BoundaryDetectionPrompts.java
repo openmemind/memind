@@ -15,7 +15,9 @@ package com.openmemind.ai.memory.core.prompt.extraction.rawdata;
 
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectionContext;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -33,7 +35,7 @@ public final class BoundaryDetectionPrompts {
     private static final DateTimeFormatter TIMESTAMP_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
 
-    private static final String SYSTEM_PROMPT =
+    private static final String OBJECTIVE =
             """
             You are a conversation boundary detector. Your task is to determine whether the \
             newest message starts a new topic or continues the existing conversation.
@@ -45,7 +47,10 @@ public final class BoundaryDetectionPrompts {
             Core principle: **Default to NOT sealing.** Over-segmentation breaks coherent \
             topics into fragments, which is worse than under-segmentation. Only seal when \
             you see a clear boundary signal.
+            """;
 
+    private static final String GUIDELINES =
+            """
             # Decision Procedure
 
             Follow these steps IN ORDER. Stop at the first step that gives a clear answer.
@@ -108,7 +113,10 @@ public final class BoundaryDetectionPrompts {
 
             Time gap alone is never sufficient to seal (except cross-day). Always combine \
             with content analysis.
+            """;
 
+    private static final String OUTPUT =
+            """
             # Output Format
 
             Return valid JSON ONLY. No markdown fences, no surrounding text.
@@ -118,7 +126,10 @@ public final class BoundaryDetectionPrompts {
               "should_seal": boolean,
               "confidence": 0.0-1.0
             }
+            """;
 
+    private static final String EXAMPLES =
+            """
             # Examples
 
             ## Good Example 1: Closing statement → do NOT seal
@@ -214,6 +225,18 @@ public final class BoundaryDetectionPrompts {
      */
     public static PromptTemplate build(
             List<Message> history, List<Message> newMessages, CommitDetectionContext context) {
+        return build(PromptRegistry.EMPTY, history, newMessages, context);
+    }
+
+    public static PromptTemplate buildDefault() {
+        return defaultBuilder().build();
+    }
+
+    public static PromptTemplate build(
+            PromptRegistry registry,
+            List<Message> history,
+            List<Message> newMessages,
+            CommitDetectionContext context) {
         if (history == null) {
             throw new IllegalArgumentException("History cannot be null");
         }
@@ -230,13 +253,27 @@ public final class BoundaryDetectionPrompts {
                                 .formatted(formatDuration(context.lastTimeGap()))
                         : "";
 
-        return PromptTemplate.builder("BoundaryDetection")
-                .section("system", SYSTEM_PROMPT)
-                .userPrompt(USER_PROMPT_TEMPLATE)
+        PromptTemplate.Builder builder =
+                registry.hasOverride(PromptType.BOUNDARY_DETECTION)
+                        ? PromptTemplate.builder("BoundaryDetection")
+                                .section(
+                                        "system",
+                                        registry.getOverride(PromptType.BOUNDARY_DETECTION))
+                        : defaultBuilder();
+
+        return builder.userPrompt(USER_PROMPT_TEMPLATE)
                 .variable("time_gap_section", timeGapSection)
                 .variable("conversation_history", formatMessages(history))
                 .variable("new_messages", formatMessages(newMessages))
                 .build();
+    }
+
+    private static PromptTemplate.Builder defaultBuilder() {
+        return PromptTemplate.builder("BoundaryDetection")
+                .section("objective", OBJECTIVE)
+                .section("guidelines", GUIDELINES)
+                .section("output", OUTPUT)
+                .section("examples", EXAMPLES);
     }
 
     /** Format the message list into text with timestamps and userName */
