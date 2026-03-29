@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core.retrieval.query;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.retrieval.QueryRewritePrompts;
 import java.util.List;
 import java.util.Objects;
@@ -31,11 +32,19 @@ import reactor.core.scheduler.Schedulers;
 public class LlmQueryRewriter implements QueryRewriter {
 
     private final StructuredChatClient structuredChatClient;
+    private final PromptRegistry promptRegistry;
 
     public LlmQueryRewriter(StructuredChatClient structuredChatClient) {
+        this(structuredChatClient, PromptRegistry.EMPTY);
+    }
+
+    public LlmQueryRewriter(
+            StructuredChatClient structuredChatClient, PromptRegistry promptRegistry) {
         this.structuredChatClient =
                 Objects.requireNonNull(
                         structuredChatClient, "structuredChatClient must not be null");
+        this.promptRegistry =
+                Objects.requireNonNull(promptRegistry, "promptRegistry must not be null");
     }
 
     @Override
@@ -45,7 +54,9 @@ public class LlmQueryRewriter implements QueryRewriter {
             return Mono.just(query);
         }
 
-        var result = QueryRewritePrompts.build(query, conversationHistory).render("English");
+        var result =
+                QueryRewritePrompts.build(promptRegistry, query, conversationHistory)
+                        .render("English");
         var messages = ChatMessages.systemUser(result.systemPrompt(), result.userPrompt());
 
         return structuredChatClient

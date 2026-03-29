@@ -21,6 +21,8 @@ import com.openmemind.ai.memory.core.extraction.rawdata.caption.LlmConversationC
 import com.openmemind.ai.memory.core.llm.ChatMessage;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import com.openmemind.ai.memory.core.prompt.extraction.rawdata.CaptionPrompts;
 import java.util.List;
 import java.util.Map;
@@ -75,6 +77,25 @@ class LlmConversationCaptionGeneratorTest {
             var prompt = CaptionPrompts.build(content, metadata).render(null);
             assertThat(structuredLlmClient.lastMessages())
                     .isEqualTo(ChatMessages.systemUser(prompt.systemPrompt(), prompt.userPrompt()));
+        }
+
+        @Test
+        @DisplayName("Should use caption override instruction when prompt registry is provided")
+        void shouldUseCaptionOverrideInstructionWhenPromptRegistryIsProvided() {
+            var response = new CaptionResponse("Title", "Body");
+            var structuredLlmClient = new FakeStructuredChatClient(response);
+            var registry =
+                    InMemoryPromptRegistry.builder()
+                            .override(PromptType.CAPTION, "Custom caption instruction")
+                            .build();
+            var generator = new LlmConversationCaptionGenerator(structuredLlmClient, registry);
+
+            StepVerifier.create(generator.generate("content", Map.of()))
+                    .expectNext("Title\n\nBody")
+                    .verifyComplete();
+
+            assertThat(structuredLlmClient.lastMessages().getFirst().content())
+                    .contains("Custom caption instruction");
         }
 
         @Test

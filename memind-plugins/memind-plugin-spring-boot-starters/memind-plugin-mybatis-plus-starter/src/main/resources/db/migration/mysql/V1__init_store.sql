@@ -73,7 +73,6 @@ CREATE TABLE IF NOT EXISTS memory_insight_type (
     description_vector_id VARCHAR(200),
     categories            JSON,
     target_tokens         INT          NOT NULL DEFAULT 0,
-    summary_prompt        JSON,
     analysis_mode         VARCHAR(32) DEFAULT 'BRANCH',
     scope                 VARCHAR(32),
     tree_config           JSON,

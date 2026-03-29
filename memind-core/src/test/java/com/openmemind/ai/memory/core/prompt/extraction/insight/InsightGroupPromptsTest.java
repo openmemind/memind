@@ -17,11 +17,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class InsightGroupPromptsTest {
+
+    @Test
+    @DisplayName("default insight group template should keep named sections")
+    void defaultInsightGroupTemplateStillKeepsNamedSections() {
+        var template = InsightGroupPrompts.buildDefault();
+
+        assertThat(template.describeStructure()).contains("objective");
+        assertThat(template.describeStructure()).contains("context");
+        assertThat(template.describeStructure()).contains("workflow");
+    }
 
     @Test
     @DisplayName("Rendered prompt should prioritize stable namespace reuse and explicit validation")
@@ -50,7 +62,12 @@ class InsightGroupPromptsTest {
                 InsightGroupPrompts.build(
                                 insightType, items, List.of("Meeting Coordination"), "English")
                         .render("English");
+        var template =
+                InsightGroupPrompts.build(
+                        insightType, items, List.of("Meeting Coordination"), "English");
 
+        assertThat(template.describeStructure())
+                .contains("Sections: objective, context, workflow, output, examples");
         assertThat(result.systemPrompt())
                 .contains("namespace stability, not novelty")
                 .contains("Treat existing groups as the default namespace.")
@@ -62,6 +79,10 @@ class InsightGroupPromptsTest {
                 .contains(
                         "This validates your grouping logic. For reasoning only, will NOT be"
                                 + " stored.");
+        assertThat(result.userPrompt())
+                .contains("# Existing Groups")
+                .contains("Meeting Coordination")
+                .doesNotContain("# Grouping Principles");
     }
 
     @Test
@@ -142,6 +163,42 @@ class InsightGroupPromptsTest {
                 .contains("Do NOT translate reused group names.");
     }
 
+    @Test
+    @DisplayName("build with registry should collapse insight group prompt to a system section")
+    void buildWithRegistryUsesOverrideInstruction() {
+        var registry =
+                InMemoryPromptRegistry.builder()
+                        .override(PromptType.INSIGHT_GROUP, "Custom insight grouping instruction")
+                        .build();
+        var template =
+                InsightGroupPrompts.build(
+                        registry,
+                        createInsightType(),
+                        List.of(
+                                new MemoryItem(
+                                        1L,
+                                        "m1",
+                                        "The team wants a concise way to redirect a meeting back"
+                                                + " to the agenda.",
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null)),
+                        List.of("Meeting Coordination"),
+                        "English");
+
+        assertThat(template.describeStructure()).contains("Sections: system");
+        assertThat(template.render("English").systemPrompt())
+                .contains("Custom insight grouping instruction");
+    }
+
     private static MemoryInsightType createInsightType() {
         return new MemoryInsightType(
                 1L,
@@ -151,7 +208,6 @@ class InsightGroupPromptsTest {
                 null,
                 List.of("directive"),
                 400,
-                null,
                 null,
                 null,
                 null,

@@ -13,7 +13,10 @@
  */
 package com.openmemind.ai.memory.core.prompt.retrieval;
 
+import com.openmemind.ai.memory.core.prompt.PromptBuilderSupport;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import java.util.List;
@@ -28,7 +31,7 @@ import java.util.stream.IntStream;
  */
 public final class SufficiencyGatePrompts {
 
-    private static final String SYSTEM =
+    private static final String OBJECTIVE =
             """
             You are a retrieval sufficiency evaluator. Judge whether the retrieved
             content fully answers the user's query. Your judgment directly controls
@@ -38,7 +41,10 @@ public final class SufficiencyGatePrompts {
             Core principle: It is BETTER to judge "insufficient" (triggering a
             cheap retry) than to judge "sufficient" when key information is missing
             (returning an incomplete answer to the user).
+            """;
 
+    private static final String CONTENT_TYPES =
+            """
             # Content Types
 
             Retrieved results come in three types:
@@ -52,7 +58,10 @@ public final class SufficiencyGatePrompts {
             When evaluating, consider that INSIGHT alone may "mention" a topic
             without providing the specific detail the query asks for. Always check
             whether the ACTUAL answer (not just the topic) is present.
+            """;
 
+    private static final String WORKFLOW =
+            """
             # Workflow
 
             ## Step 1 — Decompose the Query
@@ -86,7 +95,10 @@ public final class SufficiencyGatePrompts {
               avoid redundant results.
             - evidences: Copy the exact sentences from results that support your
               judgment. Include result index.
+            """;
 
+    private static final String OUTPUT =
+            """
             # Output Format
 
             Return a JSON object:
@@ -100,7 +112,10 @@ public final class SufficiencyGatePrompts {
               "evidences": ["[#1] exact sentence from result"]
             }
             ```
+            """;
 
+    private static final String EXAMPLES =
+            """
             # Examples
 
             ## Example 1 — Sufficient
@@ -172,7 +187,18 @@ public final class SufficiencyGatePrompts {
 
     private SufficiencyGatePrompts() {}
 
+    public static PromptTemplate buildDefault() {
+        return PromptBuilderSupport.coreSections(
+                        "sufficiency-gate", OBJECTIVE, CONTENT_TYPES, WORKFLOW, OUTPUT, EXAMPLES)
+                .build();
+    }
+
     public static PromptTemplate build(QueryContext context, List<ScoredResult> results) {
+        return build(PromptRegistry.EMPTY, context, results);
+    }
+
+    public static PromptTemplate build(
+            PromptRegistry registry, QueryContext context, List<ScoredResult> results) {
         String formattedResults =
                 IntStream.range(0, results.size())
                         .mapToObj(
@@ -189,21 +215,37 @@ public final class SufficiencyGatePrompts {
                                 })
                         .collect(Collectors.joining("\n"));
 
-        String conversationSection = "";
-        if (context.conversationHistory() != null && !context.conversationHistory().isEmpty()) {
-            conversationSection = buildConversationSection(context.conversationHistory());
+        PromptTemplate.Builder builder;
+        if (registry.hasOverride(PromptType.SUFFICIENCY_GATE)) {
+            builder =
+                    PromptBuilderSupport.builder(
+                            "sufficiency-gate",
+                            PromptBuilderSupport.section(
+                                    "system", registry.getOverride(PromptType.SUFFICIENCY_GATE)));
+        } else {
+            builder =
+                    PromptBuilderSupport.coreSections(
+                            "sufficiency-gate",
+                            OBJECTIVE,
+                            CONTENT_TYPES,
+                            WORKFLOW,
+                            OUTPUT,
+                            EXAMPLES);
         }
 
-        return PromptTemplate.builder("sufficiency-gate")
-                .section("system", SYSTEM)
-                .userPrompt(USER_TEMPLATE)
-                .variable("conversation_section", conversationSection)
+        return builder.userPrompt(USER_TEMPLATE)
+                .variable(
+                        "conversation_section",
+                        buildConversationSection(context.conversationHistory()))
                 .variable("query", context.searchQuery())
                 .variable("results", formattedResults)
                 .build();
     }
 
     private static String buildConversationSection(List<String> history) {
+        if (history == null || history.isEmpty()) {
+            return "";
+        }
         return "# Recent Conversation\n"
                 + history.stream().map(msg -> "- " + msg).collect(Collectors.joining("\n"))
                 + "\n";

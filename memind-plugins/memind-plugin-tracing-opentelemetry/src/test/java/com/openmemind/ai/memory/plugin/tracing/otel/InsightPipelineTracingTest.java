@@ -129,7 +129,6 @@ class InsightPipelineTracingTest {
                 null,
                 List.of(),
                 500,
-                null,
                 Instant.now(),
                 Instant.now(),
                 Instant.now(),

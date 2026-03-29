@@ -71,7 +71,6 @@ CREATE TABLE IF NOT EXISTS memory_insight_type (
     description_vector_id TEXT,
     categories            TEXT,
     target_tokens         INTEGER      NOT NULL DEFAULT 0,
-    summary_prompt        TEXT,
     analysis_mode         TEXT         DEFAULT 'BRANCH',
     scope                 TEXT,
     tree_config           TEXT,

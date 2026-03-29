@@ -20,6 +20,7 @@ import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntr
 import com.openmemind.ai.memory.core.extraction.item.support.MemoryItemExtractionResponse;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.extraction.item.SelfVerificationPrompts;
 import java.time.Instant;
 import java.util.List;
@@ -38,11 +39,19 @@ public class LlmSelfVerificationStep {
     private static final Logger log = LoggerFactory.getLogger(LlmSelfVerificationStep.class);
 
     private final StructuredChatClient structuredChatClient;
+    private final PromptRegistry promptRegistry;
 
     public LlmSelfVerificationStep(StructuredChatClient structuredChatClient) {
+        this(structuredChatClient, PromptRegistry.EMPTY);
+    }
+
+    public LlmSelfVerificationStep(
+            StructuredChatClient structuredChatClient, PromptRegistry promptRegistry) {
         this.structuredChatClient =
                 Objects.requireNonNull(
                         structuredChatClient, "structuredChatClient must not be null");
+        this.promptRegistry =
+                Objects.requireNonNull(promptRegistry, "promptRegistry must not be null");
     }
 
     public Mono<List<ExtractedMemoryEntry>> verify(
@@ -148,6 +157,7 @@ public class LlmSelfVerificationStep {
 
         var promptResult =
                 SelfVerificationPrompts.build(
+                                promptRegistry,
                                 originalText,
                                 existingEntries,
                                 referenceTime,

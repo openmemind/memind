@@ -21,6 +21,8 @@ import com.openmemind.ai.memory.core.extraction.item.support.MemoryItemExtractio
 import com.openmemind.ai.memory.core.llm.ChatMessage;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import com.openmemind.ai.memory.core.prompt.extraction.item.SelfVerificationPrompts;
 import java.time.Instant;
 import java.util.List;
@@ -115,6 +117,27 @@ class LlmSelfVerificationStepTest {
                             .render(null);
             assertThat(structuredLlmClient.lastMessages())
                     .isEqualTo(ChatMessages.systemUser(prompt.systemPrompt(), prompt.userPrompt()));
+        }
+
+        @Test
+        @DisplayName("Should use self verification override instruction")
+        void shouldUseSelfVerificationOverrideInstruction() {
+            var structuredLlmClient =
+                    new FakeStructuredChatClient(new MemoryItemExtractionResponse(List.of()));
+            var registry =
+                    InMemoryPromptRegistry.builder()
+                            .override(
+                                    PromptType.SELF_VERIFICATION,
+                                    "Custom self verification instruction")
+                            .build();
+            var step = new LlmSelfVerificationStep(structuredLlmClient, registry);
+
+            StepVerifier.create(step.verify(ORIGINAL_TEXT, List.of(), RAW_DATA_ID))
+                    .expectNext(List.of())
+                    .verifyComplete();
+
+            assertThat(structuredLlmClient.lastMessages().getFirst().content())
+                    .contains("Custom self verification instruction");
         }
 
         @Test

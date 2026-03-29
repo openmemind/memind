@@ -261,7 +261,6 @@ class SqliteMemoryStoreTest {
                         "profile-vec",
                         List.of("profile"),
                         512,
-                        Map.of("summary", "prompt-a"),
                         BASE_TIME.minusSeconds(30),
                         BASE_TIME.minusSeconds(60),
                         BASE_TIME.minusSeconds(10),
@@ -278,7 +277,6 @@ class SqliteMemoryStoreTest {
                         "profile-vec-2",
                         List.of("profile", "behavior"),
                         640,
-                        Map.of("summary", "prompt-b"),
                         BASE_TIME,
                         BASE_TIME.minusSeconds(60),
                         BASE_TIME,
@@ -295,7 +293,6 @@ class SqliteMemoryStoreTest {
         assertThat(fetched.descriptionVectorId()).isEqualTo("profile-vec-2");
         assertThat(fetched.targetTokens()).isEqualTo(640);
         assertThat(fetched.categories()).containsExactly("profile", "behavior");
-        assertThat(fetched.summaryPrompt()).containsEntry("summary", "prompt-b");
         assertThat(fetched.insightAnalysisMode()).isEqualTo(InsightAnalysisMode.ROOT);
         assertThat(fetched.treeConfig()).isEqualTo(new InsightTreeConfig(4, 3, 2, 900));
         assertThat(fetched.scope()).isEqualTo(MemoryScope.USER);

@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.retrieval.sufficiency;
 
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.retrieval.SufficiencyGatePrompts;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
@@ -36,11 +37,19 @@ public class LlmSufficiencyGate implements SufficiencyGate {
     private static final Logger log = LoggerFactory.getLogger(LlmSufficiencyGate.class);
 
     private final StructuredChatClient structuredChatClient;
+    private final PromptRegistry promptRegistry;
 
     public LlmSufficiencyGate(StructuredChatClient structuredChatClient) {
+        this(structuredChatClient, PromptRegistry.EMPTY);
+    }
+
+    public LlmSufficiencyGate(
+            StructuredChatClient structuredChatClient, PromptRegistry promptRegistry) {
         this.structuredChatClient =
                 Objects.requireNonNull(
                         structuredChatClient, "structuredChatClient must not be null");
+        this.promptRegistry =
+                Objects.requireNonNull(promptRegistry, "promptRegistry must not be null");
     }
 
     @Override
@@ -49,7 +58,8 @@ public class LlmSufficiencyGate implements SufficiencyGate {
             return Mono.just(SufficiencyResult.fallbackInsufficient());
         }
 
-        var promptResult = SufficiencyGatePrompts.build(context, results).render("English");
+        var promptResult =
+                SufficiencyGatePrompts.build(promptRegistry, context, results).render("English");
         var messages =
                 ChatMessages.systemUser(promptResult.systemPrompt(), promptResult.userPrompt());
 

@@ -115,6 +115,33 @@ public final class PromptTemplate {
                 + result.userPrompt();
     }
 
+    /**
+     * Preview the full system prompt without resolving or validating placeholders.
+     *
+     * @param language target output language
+     * @return system prompt preview including the language rule
+     */
+    public String previewSystemPrompt(String language) {
+        String system = renderSections();
+        var lang =
+                (language == null || language.isBlank()) ? PromptResult.DEFAULT_LANGUAGE : language;
+        return PromptResult.languageRule(lang) + "\n\n" + system;
+    }
+
+    /**
+     * Preview the full system prompt while resolving known variables but keeping unresolved
+     * placeholders visible.
+     *
+     * @param language target output language
+     * @return partially resolved system prompt preview including the language rule
+     */
+    public String previewResolvedSystemPrompt(String language) {
+        String system = resolveVariables(renderSections());
+        var lang =
+                (language == null || language.isBlank()) ? PromptResult.DEFAULT_LANGUAGE : language;
+        return PromptResult.languageRule(lang) + "\n\n" + system;
+    }
+
     // ==================== Internal ====================
 
     private String renderSections() {

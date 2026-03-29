@@ -363,16 +363,15 @@ public class PostgresqlMemoryStore implements RawDataOperations, ItemOperations,
                                     """
                                     INSERT INTO memory_insight_type
                                         (biz_id, name, description, description_vector_id, categories,
-                                         target_tokens, summary_prompt, analysis_mode, scope, tree_config,
+                                         target_tokens, analysis_mode, scope, tree_config,
                                          last_updated_at, created_at, updated_at, deleted)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)
                                     ON CONFLICT (name) DO UPDATE SET
                                         biz_id = EXCLUDED.biz_id,
                                         description = EXCLUDED.description,
                                         description_vector_id = EXCLUDED.description_vector_id,
                                         categories = EXCLUDED.categories,
                                         target_tokens = EXCLUDED.target_tokens,
-                                        summary_prompt = EXCLUDED.summary_prompt,
                                         analysis_mode = EXCLUDED.analysis_mode,
                                         scope = EXCLUDED.scope,
                                         tree_config = EXCLUDED.tree_config,
@@ -712,18 +711,17 @@ public class PostgresqlMemoryStore implements RawDataOperations, ItemOperations,
         statement.setString(4, insightType.descriptionVectorId());
         setJsonb(statement, 5, jsonHelper.toJson(insightType.categories()));
         statement.setInt(6, insightType.targetTokens());
-        setJsonb(statement, 7, jsonHelper.toJson(insightType.summaryPrompt()));
         statement.setString(
-                8,
+                7,
                 insightType.insightAnalysisMode() != null
                         ? insightType.insightAnalysisMode().name()
                         : null);
-        statement.setString(9, insightType.scope() != null ? insightType.scope().name() : null);
-        setJsonb(statement, 10, jsonHelper.toJson(insightType.treeConfig()));
-        setTimestamp(statement, 11, insightType.lastUpdatedAt());
+        statement.setString(8, insightType.scope() != null ? insightType.scope().name() : null);
+        setJsonb(statement, 9, jsonHelper.toJson(insightType.treeConfig()));
+        setTimestamp(statement, 10, insightType.lastUpdatedAt());
         setTimestamp(
-                statement, 12, insightType.createdAt() != null ? insightType.createdAt() : now);
-        setTimestamp(statement, 13, now);
+                statement, 11, insightType.createdAt() != null ? insightType.createdAt() : now);
+        setTimestamp(statement, 12, now);
     }
 
     private void bindInsightUpsert(
@@ -785,8 +783,6 @@ public class PostgresqlMemoryStore implements RawDataOperations, ItemOperations,
     }
 
     private MemoryInsightType mapInsightType(ResultSet resultSet) throws SQLException {
-        Map<String, String> summaryPrompt =
-                parseSummaryPrompt(resultSet.getString("summary_prompt"));
         return new MemoryInsightType(
                 nullableLong(resultSet, "biz_id"),
                 resultSet.getString("name"),
@@ -794,7 +790,6 @@ public class PostgresqlMemoryStore implements RawDataOperations, ItemOperations,
                 resultSet.getString("description_vector_id"),
                 jsonHelper.fromJson(resultSet.getString("categories"), STRING_LIST_TYPE),
                 resultSet.getInt("target_tokens"),
-                summaryPrompt,
                 parseInstant(resultSet.getTimestamp("last_updated_at")),
                 parseInstant(resultSet.getTimestamp("created_at")),
                 parseInstant(resultSet.getTimestamp("updated_at")),
@@ -899,26 +894,6 @@ public class PostgresqlMemoryStore implements RawDataOperations, ItemOperations,
                     };
         }
         return new Segment(content, caption, boundary, metadata);
-    }
-
-    private Map<String, String> parseSummaryPrompt(String json) {
-        Map<String, Object> rawPrompt = jsonHelper.fromJson(json, OBJECT_MAP_TYPE);
-        if (rawPrompt == null) {
-            return null;
-        }
-        Map<String, String> summaryPrompt = new LinkedHashMap<>();
-        rawPrompt.forEach(
-                (key, value) -> {
-                    if (value instanceof String promptText) {
-                        summaryPrompt.put(key, promptText);
-                    } else if (value instanceof Map<?, ?> sectionMap) {
-                        Object content = sectionMap.get("content");
-                        if (content instanceof String promptText) {
-                            summaryPrompt.put(key, promptText);
-                        }
-                    }
-                });
-        return summaryPrompt;
     }
 
     private MemoryScope parseScope(String value) {

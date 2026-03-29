@@ -13,9 +13,13 @@
  */
 package com.openmemind.ai.memory.core.prompt.extraction.insight;
 
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
+import com.openmemind.ai.memory.core.prompt.PromptBuilderSupport;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.util.List;
 
 /**
@@ -29,9 +33,7 @@ public final class InsightGroupPrompts {
 
     private InsightGroupPrompts() {}
 
-    // ===== Section definitions =====
-
-    private static final String OBJECTIVE =
+    private static final String SYSTEM_OBJECTIVE =
             """
             You are a semantic grouping engine. Assign memory items into thematic groups \
             under a given insight dimension.
@@ -42,7 +44,7 @@ public final class InsightGroupPrompts {
             sub-theme that is not already represented.
             """;
 
-    private static final String CONTEXT =
+    private static final String SYSTEM_CONTEXT =
             """
             # Context
 
@@ -59,7 +61,7 @@ public final class InsightGroupPrompts {
             sentence, or stitched phrase.
             """;
 
-    private static final String WORKFLOW =
+    private static final String SYSTEM_WORKFLOW =
             """
             # Grouping Principles
 
@@ -131,7 +133,7 @@ public final class InsightGroupPrompts {
             - New group names follow the requested output language.
             """;
 
-    private static final String OUTPUT =
+    private static final String SYSTEM_OUTPUT =
             """
             # Output Format
 
@@ -153,7 +155,7 @@ public final class InsightGroupPrompts {
             - This validates your grouping logic. For reasoning only, will NOT be stored.
             """;
 
-    private static final String EXAMPLES =
+    private static final String SYSTEM_EXAMPLES =
             """
             # Examples
 
@@ -280,13 +282,33 @@ public final class InsightGroupPrompts {
             - Every item must appear exactly once.
             """;
 
-    // ==================== Public API ====================
-
     public static PromptTemplate build(
             MemoryInsightType insightType,
             List<MemoryItem> items,
             List<String> existingGroupNames) {
-        return build(insightType, items, existingGroupNames, null);
+        return build(PromptRegistry.EMPTY, insightType, items, existingGroupNames, null);
+    }
+
+    public static PromptTemplate buildDefault() {
+        return defaultBuilder().build();
+    }
+
+    public static PromptTemplate buildPreview() {
+        var insightType = DefaultInsightTypes.identity();
+        return defaultBuilder()
+                .variable("insight_type_name", insightType.name())
+                .variable(
+                        "insight_type_description",
+                        PromptBuilderSupport.descriptionOrName(insightType))
+                .build();
+    }
+
+    public static PromptTemplate build(
+            PromptRegistry registry,
+            MemoryInsightType insightType,
+            List<MemoryItem> items,
+            List<String> existingGroupNames) {
+        return build(registry, insightType, items, existingGroupNames, null);
     }
 
     public static PromptTemplate build(
@@ -294,22 +316,39 @@ public final class InsightGroupPrompts {
             List<MemoryItem> items,
             List<String> existingGroupNames,
             String language) {
+        return build(PromptRegistry.EMPTY, insightType, items, existingGroupNames, language);
+    }
+
+    public static PromptTemplate build(
+            PromptRegistry registry,
+            MemoryInsightType insightType,
+            List<MemoryItem> items,
+            List<String> existingGroupNames,
+            String language) {
 
         var userPromptContent = buildUserPrompt(insightType, items, existingGroupNames, language);
+        var builder =
+                registry.hasOverride(PromptType.INSIGHT_GROUP)
+                        ? PromptTemplate.builder("insight-group")
+                                .section("system", registry.getOverride(PromptType.INSIGHT_GROUP))
+                        : defaultBuilder();
 
-        var description =
-                insightType.description() != null ? insightType.description() : insightType.name();
-
-        return PromptTemplate.builder("insight-group")
-                .section("objective", OBJECTIVE)
-                .section("context", CONTEXT)
-                .section("workflow", WORKFLOW)
-                .section("output", OUTPUT)
-                .section("examples", EXAMPLES)
-                .variable("insight_type_name", insightType.name())
-                .variable("insight_type_description", description)
+        return builder.variable("insight_type_name", insightType.name())
+                .variable(
+                        "insight_type_description",
+                        PromptBuilderSupport.descriptionOrName(insightType))
                 .userPrompt(userPromptContent)
                 .build();
+    }
+
+    private static PromptTemplate.Builder defaultBuilder() {
+        return PromptBuilderSupport.coreSections(
+                "insight-group",
+                SYSTEM_OBJECTIVE,
+                SYSTEM_CONTEXT,
+                SYSTEM_WORKFLOW,
+                SYSTEM_OUTPUT,
+                SYSTEM_EXAMPLES);
     }
 
     private static String buildUserPrompt(

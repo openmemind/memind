@@ -22,7 +22,6 @@ import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeConfig;
 import com.openmemind.ai.memory.plugin.store.mybatis.handler.InstantTypeHandler;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 
 @TableName(value = "memory_insight_type", autoResultMap = true)
 public class MemoryInsightTypeDO extends BaseDO {
@@ -39,9 +38,6 @@ public class MemoryInsightTypeDO extends BaseDO {
 
     @TableField(typeHandler = JacksonTypeHandler.class)
     private List<String> categories;
-
-    @TableField(typeHandler = JacksonTypeHandler.class)
-    private Map<String, Object> summaryPrompt;
 
     @TableField(typeHandler = InstantTypeHandler.class)
     private Instant lastUpdatedAt;
@@ -107,14 +103,6 @@ public class MemoryInsightTypeDO extends BaseDO {
 
     public void setCategories(List<String> categories) {
         this.categories = categories;
-    }
-
-    public Map<String, Object> getSummaryPrompt() {
-        return summaryPrompt;
-    }
-
-    public void setSummaryPrompt(Map<String, Object> summaryPrompt) {
-        this.summaryPrompt = summaryPrompt;
     }
 
     public Instant getLastUpdatedAt() {

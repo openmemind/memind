@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.retrieval.tier;
 
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.retrieval.InsightTypeRoutingPrompts;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,11 +37,19 @@ public class LlmInsightTypeRouter implements InsightTypeRouter {
     private static final Logger log = LoggerFactory.getLogger(LlmInsightTypeRouter.class);
 
     private final StructuredChatClient structuredChatClient;
+    private final PromptRegistry promptRegistry;
 
     public LlmInsightTypeRouter(StructuredChatClient structuredChatClient) {
+        this(structuredChatClient, PromptRegistry.EMPTY);
+    }
+
+    public LlmInsightTypeRouter(
+            StructuredChatClient structuredChatClient, PromptRegistry promptRegistry) {
         this.structuredChatClient =
                 Objects.requireNonNull(
                         structuredChatClient, "structuredChatClient must not be null");
+        this.promptRegistry =
+                Objects.requireNonNull(promptRegistry, "promptRegistry must not be null");
     }
 
     @Override
@@ -51,7 +60,11 @@ public class LlmInsightTypeRouter implements InsightTypeRouter {
                         () -> {
                             var promptResult =
                                     InsightTypeRoutingPrompts.build(
-                                                    query, conversationHistory, availableTypes)
+                                                    promptRegistry,
+                                                    query,
+                                                    typeNames,
+                                                    availableTypes,
+                                                    conversationHistory)
                                             .render("English");
                             var messages =
                                     ChatMessages.systemUser(

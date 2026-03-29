@@ -24,6 +24,19 @@ import org.junit.jupiter.api.Test;
 @DisplayName("CaptionPrompts Unit Test")
 class CaptionPromptsTest {
 
+    @Test
+    @DisplayName("Should expose named sections and keep content in user payload")
+    void shouldExposeNamedSections() {
+        var template = CaptionPrompts.build("Discussed HikariCP sizing and connection pool limits");
+        var prompt = template.render("English");
+
+        assertThat(template.describeStructure())
+                .contains("Sections: objective, guidelines, output, examples");
+        assertThat(prompt.userPrompt())
+                .contains("Discussed HikariCP sizing and connection pool limits")
+                .doesNotContain("Narrative Structure");
+    }
+
     @Nested
     @DisplayName("Basic Build")
     class BasicBuildTests {

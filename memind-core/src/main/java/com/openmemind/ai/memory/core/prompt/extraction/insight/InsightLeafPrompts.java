@@ -13,12 +13,15 @@
  */
 package com.openmemind.ai.memory.core.prompt.extraction.insight;
 
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
+import com.openmemind.ai.memory.core.prompt.PromptBuilderSupport;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.util.List;
-import java.util.Map;
 
 /**
  * InsightPoint generation prompt builder (LEAF level).
@@ -26,22 +29,10 @@ import java.util.Map;
  * <p>Assembles section constants in fixed order, replaces placeholders, and appends the Input
  * block. User input (existingPoints, newItems) is injected via string concatenation (not
  * placeholder replacement) to prevent prompt injection.
- *
- * <p>Supports section overrides via {@link MemoryInsightType#summaryPrompt()}.
  */
 public final class InsightLeafPrompts {
 
     private InsightLeafPrompts() {}
-
-    // ===== Public section name constants (for use by external callers) =====
-
-    public static final String NAME_OBJECTIVE = "objective";
-    public static final String NAME_CONTEXT = "context";
-    public static final String NAME_WORKFLOW = "workflow";
-    public static final String NAME_OUTPUT = "output";
-    public static final String NAME_EXAMPLES = "examples";
-
-    // ===== OBJECTIVE =====
 
     private static final String DEFAULT_OBJECTIVE =
             """
@@ -401,53 +392,63 @@ public final class InsightLeafPrompts {
             List<InsightPoint> existingPoints,
             List<MemoryItem> newItems,
             int targetTokens) {
+        return build(
+                PromptRegistry.EMPTY,
+                insightType,
+                groupName,
+                existingPoints,
+                newItems,
+                targetTokens);
+    }
+
+    public static PromptTemplate buildDefault() {
+        return defaultBuilder().build();
+    }
+
+    public static PromptTemplate buildPreview() {
+        var insightType = DefaultInsightTypes.identity();
+        return defaultBuilder()
+                .variable("insight_type", insightType.name())
+                .variable(
+                        "insight_description", PromptBuilderSupport.descriptionOrName(insightType))
+                .variable("group_name", "professional_background")
+                .variable("target_length", String.valueOf(insightType.targetTokens()))
+                .build();
+    }
+
+    public static PromptTemplate build(
+            PromptRegistry registry,
+            MemoryInsightType insightType,
+            String groupName,
+            List<InsightPoint> existingPoints,
+            List<MemoryItem> newItems,
+            int targetTokens) {
 
         var userPromptContent =
                 buildInputBlock(insightType, groupName, existingPoints, newItems, targetTokens);
-
-        var description =
-                insightType.description() != null ? insightType.description() : insightType.name();
-
         var builder =
-                PromptTemplate.builder("insight-point")
-                        .section(NAME_OBJECTIVE, DEFAULT_OBJECTIVE)
-                        .section(NAME_CONTEXT, DEFAULT_CONTEXT)
-                        .section(NAME_WORKFLOW, DEFAULT_WORKFLOW)
-                        .section(NAME_OUTPUT, OUTPUT)
-                        .section(NAME_EXAMPLES, DEFAULT_EXAMPLES)
-                        .variable("insight_type", insightType.name())
-                        .variable("insight_description", description)
-                        .variable("group_name", groupName)
-                        .variable("target_length", String.valueOf(targetTokens))
-                        .userPrompt(userPromptContent);
+                registry.hasOverride(PromptType.INSIGHT_LEAF)
+                        ? PromptTemplate.builder("insight-point")
+                                .section("system", registry.getOverride(PromptType.INSIGHT_LEAF))
+                        : defaultBuilder();
 
-        var template = builder.build();
-
-        // Apply summaryPrompt overrides from InsightType
-        return applyOverrides(template, insightType.summaryPrompt());
+        return builder.variable("insight_type", insightType.name())
+                .variable(
+                        "insight_description", PromptBuilderSupport.descriptionOrName(insightType))
+                .variable("group_name", groupName)
+                .variable("target_length", String.valueOf(targetTokens))
+                .userPrompt(userPromptContent)
+                .build();
     }
 
-    // ==================== Internal Helpers ====================
-
-    /**
-     * Apply summaryPrompt section overrides from the InsightType.
-     *
-     * <p>If a key maps to null or empty, the section is removed. Otherwise, it is replaced.
-     */
-    private static PromptTemplate applyOverrides(
-            PromptTemplate template, Map<String, String> summaryPrompt) {
-        if (summaryPrompt == null) {
-            return template;
-        }
-        var result = template;
-        for (var entry : summaryPrompt.entrySet()) {
-            if (entry.getValue() == null || entry.getValue().isEmpty()) {
-                result = result.withoutSection(entry.getKey());
-            } else {
-                result = result.withSection(entry.getKey(), entry.getValue());
-            }
-        }
-        return result;
+    private static PromptTemplate.Builder defaultBuilder() {
+        return PromptBuilderSupport.coreSections(
+                "insight-point",
+                DEFAULT_OBJECTIVE,
+                DEFAULT_CONTEXT,
+                DEFAULT_WORKFLOW,
+                OUTPUT,
+                DEFAULT_EXAMPLES);
     }
 
     private static String buildInputBlock(

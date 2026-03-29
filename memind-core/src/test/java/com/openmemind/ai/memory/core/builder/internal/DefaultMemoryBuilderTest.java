@@ -37,6 +37,9 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationCont
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepRetrievalStrategy;
@@ -238,6 +241,43 @@ class DefaultMemoryBuilderTest {
                                 "structuredChatClient",
                                 StructuredChatClient.class))
                 .isSameAs(queryExpanderClient);
+    }
+
+    @Test
+    void buildPropagatesPromptRegistryAcrossExtractionAndRetrievalAssemblies() {
+        PromptRegistry promptRegistry =
+                InMemoryPromptRegistry.builder()
+                        .override(PromptType.TYPED_QUERY_EXPAND, "custom query expand")
+                        .build();
+
+        DefaultMemory memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(CHAT_CLIENT)
+                                .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .promptRegistry(promptRegistry)
+                                .build();
+
+        MemoryExtractor extractor = readField(memory, "extractor", MemoryExtractor.class);
+        LlmContextCommitDetector contextCommitDetector =
+                readField(extractor, "contextCommitDetector", LlmContextCommitDetector.class);
+        PromptRegistry extractionPromptRegistry =
+                readField(contextCommitDetector, "promptRegistry", PromptRegistry.class);
+        DefaultMemoryRetriever retriever =
+                readField(memory, "retriever", DefaultMemoryRetriever.class);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> strategies = readField(retriever, "strategies", Map.class);
+        DeepRetrievalStrategy deepStrategy =
+                (DeepRetrievalStrategy) strategies.get(RetrievalStrategies.DEEP_RETRIEVAL);
+        LlmTypedQueryExpander typedQueryExpander =
+                readField(deepStrategy, "typedQueryExpander", LlmTypedQueryExpander.class);
+        PromptRegistry retrievalPromptRegistry =
+                readField(typedQueryExpander, "promptRegistry", PromptRegistry.class);
+
+        assertThat(extractionPromptRegistry).isSameAs(promptRegistry);
+        assertThat(retrievalPromptRegistry).isSameAs(promptRegistry);
     }
 
     @Test

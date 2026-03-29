@@ -22,7 +22,6 @@ import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeConfig;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryInsightTypeDO;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -41,7 +40,6 @@ class InsightTypeConverterTest {
         dataObject.setDescriptionVectorId("vec-1");
         dataObject.setTargetTokens(512);
         dataObject.setCategories(List.of("profile"));
-        dataObject.setSummaryPrompt(Map.of("summary", "prompt"));
         dataObject.setLastUpdatedAt(BASE_TIME);
         dataObject.setCreatedAt(BASE_TIME);
         dataObject.setUpdatedAt(BASE_TIME.plusSeconds(30));
@@ -66,7 +64,6 @@ class InsightTypeConverterTest {
                         "vec-9",
                         List.of("profile"),
                         640,
-                        Map.of("summary", "prompt"),
                         BASE_TIME,
                         BASE_TIME,
                         BASE_TIME.plusSeconds(60),
@@ -78,7 +75,6 @@ class InsightTypeConverterTest {
         var dataObject = InsightTypeConverter.toDO(record);
 
         assertThat(dataObject.getBizId()).isEqualTo(9L);
-        assertThat(dataObject.getSummaryPrompt()).containsEntry("summary", "prompt");
         assertThat(dataObject.getAnalysisMode()).isEqualTo(InsightAnalysisMode.ROOT.name());
         assertThat(dataObject.getScope()).isEqualTo(MemoryScope.USER.name());
     }

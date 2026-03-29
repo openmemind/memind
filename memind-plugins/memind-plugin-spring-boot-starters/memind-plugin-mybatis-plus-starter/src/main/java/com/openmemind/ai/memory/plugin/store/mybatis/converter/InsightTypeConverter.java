@@ -18,8 +18,6 @@ import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryInsightTypeDO;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
 
 public final class InsightTypeConverter {
 
@@ -35,9 +33,6 @@ public final class InsightTypeConverter {
         dataObject.setCategories(record.categories());
         dataObject.setCreatedAt(record.createdAt() != null ? record.createdAt() : Instant.now());
         dataObject.setUpdatedAt(Instant.now());
-        if (record.summaryPrompt() != null) {
-            dataObject.setSummaryPrompt(new HashMap<>(record.summaryPrompt()));
-        }
         dataObject.setLastUpdatedAt(record.lastUpdatedAt());
         dataObject.setAnalysisMode(
                 record.insightAnalysisMode() != null ? record.insightAnalysisMode().name() : null);
@@ -47,10 +42,6 @@ public final class InsightTypeConverter {
     }
 
     public static MemoryInsightType toRecord(MemoryInsightTypeDO dataObject) {
-        Map<String, String> summaryPrompt = null;
-        if (dataObject.getSummaryPrompt() != null) {
-            summaryPrompt = mapToSummaryPrompt(dataObject.getSummaryPrompt());
-        }
         return new MemoryInsightType(
                 dataObject.getBizId(),
                 dataObject.getName(),
@@ -58,7 +49,6 @@ public final class InsightTypeConverter {
                 dataObject.getDescriptionVectorId(),
                 dataObject.getCategories(),
                 dataObject.getTargetTokens() != null ? dataObject.getTargetTokens() : 0,
-                summaryPrompt,
                 dataObject.getLastUpdatedAt(),
                 dataObject.getCreatedAt(),
                 dataObject.getUpdatedAt(),
@@ -68,22 +58,5 @@ public final class InsightTypeConverter {
                 dataObject.getTreeConfig(),
                 dataObject.getScope() != null ? MemoryScope.valueOf(dataObject.getScope()) : null,
                 null);
-    }
-
-    private static Map<String, String> mapToSummaryPrompt(Map<String, Object> map) {
-        Map<String, String> result = new HashMap<>();
-        map.forEach(
-                (key, value) -> {
-                    if (value instanceof String s) {
-                        result.put(key, s);
-                    } else if (value instanceof Map<?, ?> sectionMap) {
-                        // backward-compatible: old format stored as {name, ordinal, content, raw}
-                        var content = sectionMap.get("content");
-                        if (content instanceof String s) {
-                            result.put(key, s);
-                        }
-                    }
-                });
-        return result;
     }
 }

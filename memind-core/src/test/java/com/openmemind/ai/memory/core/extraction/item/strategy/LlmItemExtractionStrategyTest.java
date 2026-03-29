@@ -15,16 +15,95 @@ package com.openmemind.ai.memory.core.extraction.item.strategy;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
+import com.openmemind.ai.memory.core.extraction.item.support.ForesightExtractionResponse;
+import com.openmemind.ai.memory.core.extraction.item.support.MemoryItemExtractionResponse;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import com.openmemind.ai.memory.core.llm.ChatMessage;
+import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 @DisplayName("LlmItemExtractionStrategy")
 class LlmItemExtractionStrategyTest {
+
+    @Test
+    @DisplayName("extract should use unified prompt override instruction")
+    void extractShouldUseUnifiedPromptOverrideInstruction() {
+        var client =
+                new FakeStructuredChatClient(
+                        new MemoryItemExtractionResponse(List.of()),
+                        new ForesightExtractionResponse(List.of()));
+        var registry =
+                InMemoryPromptRegistry.builder()
+                        .override(
+                                PromptType.MEMORY_ITEM_UNIFIED,
+                                "Custom unified extraction instruction")
+                        .build();
+        var strategy = new LlmItemExtractionStrategy(client, Set.of(), registry);
+
+        StepVerifier.create(
+                        strategy.extract(
+                                List.of(sampleSegment()),
+                                List.of(),
+                                ItemExtractionConfig.defaults()))
+                .expectNext(List.of())
+                .verifyComplete();
+
+        assertThat(
+                        client.allMessages().stream()
+                                .anyMatch(
+                                        messages ->
+                                                messages.getFirst()
+                                                        .content()
+                                                        .contains(
+                                                                "Custom unified extraction"
+                                                                        + " instruction")))
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("extract should use foresight prompt override instruction")
+    void extractShouldUseForesightPromptOverrideInstruction() {
+        var client =
+                new FakeStructuredChatClient(
+                        new MemoryItemExtractionResponse(List.of()),
+                        new ForesightExtractionResponse(List.of()));
+        var registry =
+                InMemoryPromptRegistry.builder()
+                        .override(PromptType.FORESIGHT, "Custom foresight instruction")
+                        .build();
+        var strategy = new LlmItemExtractionStrategy(client, Set.of(), registry);
+        var config =
+                new ItemExtractionConfig(
+                        MemoryScope.USER, ContentTypes.CONVERSATION, true, "English");
+
+        StepVerifier.create(strategy.extract(List.of(sampleSegment()), List.of(), config))
+                .expectNext(List.of())
+                .verifyComplete();
+
+        assertThat(
+                        client.allMessages().stream()
+                                .anyMatch(
+                                        messages ->
+                                                messages.getFirst()
+                                                        .content()
+                                                        .contains("Custom foresight instruction")))
+                .isTrue();
+    }
 
     @Test
     @DisplayName("resolveOccurredAt should return null when LLM omits the time")
@@ -100,5 +179,55 @@ class LlmItemExtractionStrategyTest {
                                                 "RealUser"))));
 
         assertThat(LlmItemExtractionStrategy.resolveUserName(segment)).isEqualTo("RealUser");
+    }
+
+    private static ParsedSegment sampleSegment() {
+        return new ParsedSegment(
+                "user: I work on Spring Boot services.",
+                null,
+                0,
+                1,
+                "raw-1",
+                Map.of(
+                        "messages",
+                        List.of(
+                                Message.user(
+                                        "I work on Spring Boot services.",
+                                        Instant.parse("2024-03-15T10:00:00Z"),
+                                        "Alice"))));
+    }
+
+    private static final class FakeStructuredChatClient implements StructuredChatClient {
+
+        private final Object factResponse;
+        private final Object foresightResponse;
+        private final List<List<ChatMessage>> allMessages = new CopyOnWriteArrayList<>();
+
+        private FakeStructuredChatClient(Object factResponse, Object foresightResponse) {
+            this.factResponse = factResponse;
+            this.foresightResponse = foresightResponse;
+        }
+
+        @Override
+        public Mono<String> call(List<ChatMessage> messages) {
+            return Mono.error(new UnsupportedOperationException("Not used in this test"));
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> Mono<T> call(List<ChatMessage> messages, Class<T> responseType) {
+            allMessages.add(new ArrayList<>(messages));
+            if (responseType == MemoryItemExtractionResponse.class) {
+                return Mono.justOrEmpty((T) factResponse);
+            }
+            if (responseType == ForesightExtractionResponse.class) {
+                return Mono.justOrEmpty((T) foresightResponse);
+            }
+            return Mono.empty();
+        }
+
+        private List<List<ChatMessage>> allMessages() {
+            return allMessages;
+        }
     }
 }

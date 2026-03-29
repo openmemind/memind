@@ -18,7 +18,6 @@ import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeConfig;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 
 public record MemoryInsightType(
         Long id,
@@ -37,9 +36,6 @@ public record MemoryInsightType(
 
         /* summary token budget */
         int targetTokens,
-
-        /* Custom summary prompt sections, key is section name, value is content text, use default when null */
-        Map<String, String> summaryPrompt,
 
         /* Last updated time */
         Instant lastUpdatedAt,
@@ -76,7 +72,6 @@ public record MemoryInsightType(
                 descriptionVectorId,
                 categories,
                 targetTokens,
-                summaryPrompt,
                 lastUpdatedAt,
                 createdAt,
                 updatedAt,
@@ -95,7 +90,6 @@ public record MemoryInsightType(
                 descriptionVectorId,
                 categories,
                 targetTokens,
-                summaryPrompt,
                 lastUpdatedAt,
                 createdAt,
                 updatedAt,

@@ -13,7 +13,9 @@
  */
 package com.openmemind.ai.memory.core.prompt.extraction.rawdata;
 
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.util.Map;
 
 /**
@@ -25,7 +27,7 @@ import java.util.Map;
  */
 public final class CaptionPrompts {
 
-    private static final String SYSTEM =
+    private static final String OBJECTIVE =
             """
             You are an expert in event recording and knowledge distillation. Your task is to \
             analyze a conversation chunk and produce a structured narrative summary.
@@ -34,9 +36,10 @@ public final class CaptionPrompts {
             chunk. When a retrieval system finds a related item, it returns this summary to \
             provide full context. Therefore the summary must be self-contained — a reader \
             should fully understand what happened without seeing the original conversation.
+            """;
 
-            Return ONLY a JSON object with "title" and "content".
-
+    private static final String GUIDELINES =
+            """
             # Guidelines
 
             ## 1. Narrative Structure
@@ -81,15 +84,22 @@ public final class CaptionPrompts {
             - Do NOT use phrases like "this shows that...", "this demonstrates...", \
             "this reflects the user's...".
             - Do NOT add information not present in the original conversation.
+            """;
 
+    private static final String OUTPUT =
+            """
             # Output Format
 
+            Return ONLY a JSON object with "title" and "content".
             Return valid JSON ONLY. No markdown fences, no surrounding text.
             {
               "title": "Concise topic summary (include date YYYY-MM-DD if available)",
               "content": "A coherent narrative paragraph distilling the conversation. Keep it concise and under 200 words."
             }
+            """;
 
+    private static final String EXAMPLES =
+            """
             # Examples
 
             ## Good Example
@@ -195,7 +205,7 @@ public final class CaptionPrompts {
      * @return PromptTemplate ready for .render(language)
      */
     public static PromptTemplate build(String content) {
-        return build(content, Map.of());
+        return build(PromptRegistry.EMPTY, content, Map.of());
     }
 
     /**
@@ -206,17 +216,38 @@ public final class CaptionPrompts {
      * @return PromptTemplate ready for .render(language)
      */
     public static PromptTemplate build(String content, Map<String, Object> metadata) {
+        return build(PromptRegistry.EMPTY, content, metadata);
+    }
+
+    public static PromptTemplate buildDefault() {
+        return defaultBuilder().build();
+    }
+
+    public static PromptTemplate build(
+            PromptRegistry registry, String content, Map<String, Object> metadata) {
         String timePrefix = "";
         if (metadata != null
                 && metadata.get("content_start_time") instanceof String time
                 && !time.isBlank()) {
             timePrefix = "The content starts at: " + time + "\n\n";
         }
-        return PromptTemplate.builder("caption")
-                .section("system", SYSTEM)
-                .userPrompt(USER_PROMPT_TEMPLATE)
+        PromptTemplate.Builder builder =
+                registry.hasOverride(PromptType.CAPTION)
+                        ? PromptTemplate.builder("caption")
+                                .section("system", registry.getOverride(PromptType.CAPTION))
+                        : defaultBuilder();
+
+        return builder.userPrompt(USER_PROMPT_TEMPLATE)
                 .variable("time_prefix", timePrefix)
                 .variable("content", content)
                 .build();
+    }
+
+    private static PromptTemplate.Builder defaultBuilder() {
+        return PromptTemplate.builder("caption")
+                .section("objective", OBJECTIVE)
+                .section("guidelines", GUIDELINES)
+                .section("output", OUTPUT)
+                .section("examples", EXAMPLES);
     }
 }

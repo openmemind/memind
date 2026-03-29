@@ -13,10 +13,13 @@
  */
 package com.openmemind.ai.memory.core.prompt.extraction.item;
 
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -52,14 +55,17 @@ public final class MemoryItemUnifiedPrompts {
 
     // ── System & User Prompt Templates ───────────────────────────────────────
 
-    private static final String SYSTEM_PROMPT_TEMPLATE =
+    private static final String OBJECTIVE =
             """
             You are an expert information extraction analyst. Analyze the conversation and \
             extract atomic memory items optimized for retrieval.
 
             Extract only self-contained facts with durable retrieval value. Assign the \
             correct category to each item. Return an empty list if no valid information exists.
+            """;
 
+    private static final String PRINCIPLES =
+            """
             # Core Principles
             1. Atomicity: Each item must express EXACTLY ONE coherent unit of meaning. If a \
             message contains multiple distinct ideas, split them into separate items. Count \
@@ -68,12 +74,14 @@ public final class MemoryItemUnifiedPrompts {
             2. Independence: Independently retrievable without context from other items.
             3. Content Preservation: NEVER drop specific details such as names, numbers, \
             parameter names, version numbers, technical terms, config values, frequencies, \
-            places, or brands. \
-            Remove ONLY filler words.
+            places, or brands. Remove ONLY filler words.
             4. Explicit Attribution: Always state WHO said or did what. Resolve pronouns to \
             specific names.
             5. Explicit Only: Extract ONLY facts directly stated/confirmed. No guesses.
+            """;
 
+    private static final String EXTRACTION_SCOPE =
+            """
             # Extraction Scope & What NOT to Extract
             - Extract from BOTH user AND assistant messages.
             - User messages mainly reveal profile, behavior, and event memories.
@@ -91,19 +99,28 @@ public final class MemoryItemUnifiedPrompts {
             user to", or "At 2026-03-27 the assistant said...".
             - One-off control messages, transient execution commands, and session-management \
             turns are not durable agent memory.
+            """;
 
+    private static final String EXTRACTION_BIAS =
+            """
             # Extraction Bias
             - For profile, behavior, and event, extract clearly stated facts even if they \
             seem minor.
             - For directive, playbook, and resolution, use strict precision.
             - If there is no clear evidence, do not extract.
             - if uncertain between agent memory and nothing, prefer nothing
+            """;
 
-            {{CATEGORY_CONTEXT}}
-            {{IDENTITY_CONTEXT}}
-            {{SUBJECT_CONTEXT}}
-            {{TEMPORAL_CONTEXT}}
+    private static final String CATEGORY_CONTEXT_SECTION = "{{CATEGORY_CONTEXT}}";
 
+    private static final String IDENTITY_CONTEXT_SECTION = "{{IDENTITY_CONTEXT}}";
+
+    private static final String SUBJECT_CONTEXT_SECTION = "{{SUBJECT_CONTEXT}}";
+
+    private static final String TEMPORAL_CONTEXT_SECTION = "{{TEMPORAL_CONTEXT}}";
+
+    private static final String SCORING =
+            """
             # Scoring Guidelines
 
             ## confidence
@@ -125,7 +142,10 @@ public final class MemoryItemUnifiedPrompts {
             start/end marker.
             - Do NOT use message timestamps or conversation timestamps as `occurredAt` by \
             default. They are for resolving relative expressions, not for persistence defaults.
+            """;
 
+    private static final String OUTPUT =
+            """
             <OutputFormat>
             Return a JSON object ONLY. No extra text.
             {
@@ -414,16 +434,68 @@ public final class MemoryItemUnifiedPrompts {
             Instant referenceTime,
             String userName,
             Set<MemoryCategory> categories) {
+        return build(
+                PromptRegistry.EMPTY,
+                insightTypes,
+                segmentText,
+                referenceTime,
+                userName,
+                categories);
+    }
 
-        return PromptTemplate.builder("memory-item-unified")
-                .section("system", SYSTEM_PROMPT_TEMPLATE)
-                .userPrompt(USER_PROMPT_TEMPLATE)
+    public static PromptTemplate buildDefault() {
+        return defaultBuilder().build();
+    }
+
+    public static PromptTemplate buildPreview() {
+        return defaultBuilder()
+                .variable("CATEGORY_CONTEXT", buildCategoryContext(null, DefaultInsightTypes.all()))
+                .variable("IDENTITY_CONTEXT", buildIdentityContext("Ada"))
+                .variable("SUBJECT_CONTEXT", buildSubjectClarityContext("Ada"))
+                .variable(
+                        "TEMPORAL_CONTEXT",
+                        buildTimeContext(null, Instant.parse("2026-03-29T00:00:00Z")))
+                .build();
+    }
+
+    public static PromptTemplate build(
+            PromptRegistry registry,
+            List<MemoryInsightType> insightTypes,
+            String segmentText,
+            Instant referenceTime,
+            String userName,
+            Set<MemoryCategory> categories) {
+
+        PromptTemplate.Builder builder =
+                registry.hasOverride(PromptType.MEMORY_ITEM_UNIFIED)
+                        ? PromptTemplate.builder("memory-item-unified")
+                                .section(
+                                        "system",
+                                        registry.getOverride(PromptType.MEMORY_ITEM_UNIFIED))
+                        : defaultBuilder();
+
+        return builder.userPrompt(USER_PROMPT_TEMPLATE)
                 .variable("CATEGORY_CONTEXT", buildCategoryContext(categories, insightTypes))
                 .variable("IDENTITY_CONTEXT", buildIdentityContext(userName))
                 .variable("SUBJECT_CONTEXT", buildSubjectClarityContext(userName))
                 .variable("TEMPORAL_CONTEXT", buildTimeContext(segmentText, referenceTime))
                 .variable("CONVERSATION", segmentText != null ? segmentText : "")
                 .build();
+    }
+
+    private static PromptTemplate.Builder defaultBuilder() {
+        return PromptTemplate.builder("memory-item-unified")
+                .section("objective", OBJECTIVE)
+                .section("principles", PRINCIPLES)
+                .section("extractionScope", EXTRACTION_SCOPE)
+                .section("extractionBias", EXTRACTION_BIAS)
+                .section("categoryContext", CATEGORY_CONTEXT_SECTION)
+                .section("identityContext", IDENTITY_CONTEXT_SECTION)
+                .section("subjectContext", SUBJECT_CONTEXT_SECTION)
+                .section("temporalContext", TEMPORAL_CONTEXT_SECTION)
+                .section("scoring", SCORING)
+                .section("output", OUTPUT)
+                .section("examples", CATEGORY_EXAMPLES);
     }
 
     // ── Category Context ─────────────────────────────────────────────────────
@@ -446,7 +518,7 @@ public final class MemoryItemUnifiedPrompts {
                 (userDefs.isEmpty() ? "" : "### [USER Scope]\n\n" + userDefs)
                         + (agentDefs.isEmpty() ? "" : "### [AGENT Scope]\n\n" + agentDefs);
 
-        return DECISION_LOGIC + "\n## Category Definitions\n\n" + defs + CATEGORY_EXAMPLES;
+        return DECISION_LOGIC + "\n## Category Definitions\n\n" + defs;
     }
 
     private static String renderCategoryDefinitions(

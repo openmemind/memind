@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.prompt.extraction.item;
 
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
 import java.time.Instant;
 import java.util.List;
@@ -34,7 +35,13 @@ public final class MemoryItemPrompts {
      */
     public static PromptTemplate buildUnified(
             List<MemoryInsightType> insightTypes, String segmentText) {
-        return MemoryItemUnifiedPrompts.build(insightTypes, segmentText, null, null, null);
+        return buildUnified(PromptRegistry.EMPTY, insightTypes, segmentText);
+    }
+
+    public static PromptTemplate buildUnified(
+            PromptRegistry registry, List<MemoryInsightType> insightTypes, String segmentText) {
+        return MemoryItemUnifiedPrompts.build(
+                registry, insightTypes, segmentText, null, null, null);
     }
 
     /**
@@ -42,7 +49,16 @@ public final class MemoryItemPrompts {
      */
     public static PromptTemplate buildUnified(
             List<MemoryInsightType> insightTypes, String segmentText, Instant referenceTime) {
-        return MemoryItemUnifiedPrompts.build(insightTypes, segmentText, referenceTime, null, null);
+        return buildUnified(PromptRegistry.EMPTY, insightTypes, segmentText, referenceTime);
+    }
+
+    public static PromptTemplate buildUnified(
+            PromptRegistry registry,
+            List<MemoryInsightType> insightTypes,
+            String segmentText,
+            Instant referenceTime) {
+        return MemoryItemUnifiedPrompts.build(
+                registry, insightTypes, segmentText, referenceTime, null, null);
     }
 
     /**
@@ -59,8 +75,18 @@ public final class MemoryItemPrompts {
             String segmentText,
             Instant referenceTime,
             String userName) {
+        return buildUnified(
+                PromptRegistry.EMPTY, insightTypes, segmentText, referenceTime, userName);
+    }
+
+    public static PromptTemplate buildUnified(
+            PromptRegistry registry,
+            List<MemoryInsightType> insightTypes,
+            String segmentText,
+            Instant referenceTime,
+            String userName) {
         return MemoryItemUnifiedPrompts.build(
-                insightTypes, segmentText, referenceTime, userName, null);
+                registry, insightTypes, segmentText, referenceTime, userName, null);
     }
 
     /**
@@ -79,7 +105,23 @@ public final class MemoryItemPrompts {
             Instant referenceTime,
             String userName,
             Set<MemoryCategory> categories) {
+        return buildUnified(
+                PromptRegistry.EMPTY,
+                insightTypes,
+                segmentText,
+                referenceTime,
+                userName,
+                categories);
+    }
+
+    public static PromptTemplate buildUnified(
+            PromptRegistry registry,
+            List<MemoryInsightType> insightTypes,
+            String segmentText,
+            Instant referenceTime,
+            String userName,
+            Set<MemoryCategory> categories) {
         return MemoryItemUnifiedPrompts.build(
-                insightTypes, segmentText, referenceTime, userName, categories);
+                registry, insightTypes, segmentText, referenceTime, userName, categories);
     }
 }

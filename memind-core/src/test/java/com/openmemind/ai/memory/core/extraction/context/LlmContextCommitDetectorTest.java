@@ -18,6 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -102,6 +104,35 @@ class LlmContextCommitDetectorTest {
         }
 
         @Test
+        @DisplayName("Should use boundary detection override instruction")
+        void shouldUseBoundaryDetectionOverrideInstruction() {
+            var client =
+                    new CapturingStructuredChatClient(
+                            new LlmContextCommitDetector.LlmResponse(true, 0.9, "topic_change"));
+            var registry =
+                    InMemoryPromptRegistry.builder()
+                            .override(PromptType.BOUNDARY_DETECTION, "Custom boundary instruction")
+                            .build();
+            var detector =
+                    new LlmContextCommitDetector(
+                            new CommitDetectorConfig(20, 8192, 2), client, registry);
+            var input =
+                    new CommitDetectionInput(
+                            List.of(
+                                    Message.user("Let's talk about Java"),
+                                    Message.assistant("Java is object oriented")),
+                            List.of(Message.user("Let's talk about Python")),
+                            EMPTY_CONTEXT);
+
+            StepVerifier.create(detector.shouldCommit(input))
+                    .assertNext(decision -> assertThat(decision.shouldSeal()).isTrue())
+                    .verifyComplete();
+
+            assertThat(client.lastMessages().getFirst().content())
+                    .contains("Custom boundary instruction");
+        }
+
+        @Test
         @DisplayName("Should hold when the structured LLM call fails")
         void shouldHoldWhenStructuredLlmCallFails() {
             var detector =
@@ -156,6 +187,32 @@ class LlmContextCommitDetectorTest {
         @Override
         public <T> Mono<T> call(List<ChatMessage> messages, Class<T> responseType) {
             return Mono.empty();
+        }
+    }
+
+    private static final class CapturingStructuredChatClient implements StructuredChatClient {
+
+        private final Object response;
+        private List<ChatMessage> lastMessages = List.of();
+
+        private CapturingStructuredChatClient(Object response) {
+            this.response = response;
+        }
+
+        @Override
+        public Mono<String> call(List<ChatMessage> messages) {
+            return Mono.error(new UnsupportedOperationException("Not used in this test"));
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> Mono<T> call(List<ChatMessage> messages, Class<T> responseType) {
+            lastMessages = List.copyOf(messages);
+            return Mono.justOrEmpty((T) response);
+        }
+
+        private List<ChatMessage> lastMessages() {
+            return lastMessages;
         }
     }
 }

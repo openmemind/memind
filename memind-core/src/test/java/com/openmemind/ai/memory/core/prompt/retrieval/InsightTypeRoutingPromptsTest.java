@@ -15,6 +15,8 @@ package com.openmemind.ai.memory.core.prompt.retrieval;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -36,12 +38,43 @@ class InsightTypeRoutingPromptsTest {
                                         "resolutions", "Resolved problems"))
                         .render("English");
 
-        assertThat(prompt.userPrompt())
+        assertThat(prompt.systemPrompt())
                 .contains("DURABLE AGENT RULES")
                 .contains("REUSABLE WORKFLOWS")
                 .contains("RESOLVED PROBLEMS")
                 .contains("Show the plan before changes")
                 .contains("Compare repositories by scope")
                 .doesNotContain("- " + "proc" + "edural: Query asks about HOW-TO");
+        assertThat(prompt.userPrompt())
+                .contains("How should repository comparisons be handled?")
+                .contains("- directives: Durable agent rules")
+                .contains("- playbooks: Reusable workflows")
+                .contains("- resolutions: Resolved problems")
+                .doesNotContain("DURABLE AGENT RULES")
+                .doesNotContain("REUSABLE WORKFLOWS")
+                .doesNotContain("RESOLVED PROBLEMS");
+    }
+
+    @Test
+    @DisplayName("build with registry should replace insight type routing instructions")
+    void buildWithRegistryUsesOverrideInstruction() {
+        var registry =
+                InMemoryPromptRegistry.builder()
+                        .override(
+                                PromptType.INSIGHT_TYPE_ROUTING,
+                                "Custom insight type routing instruction")
+                        .build();
+
+        var prompt =
+                InsightTypeRoutingPrompts.build(
+                                registry,
+                                "How should repository comparisons be handled?",
+                                List.of("directives"),
+                                Map.of("directives", "Durable agent rules"),
+                                List.of())
+                        .render("English");
+
+        assertThat(prompt.systemPrompt()).contains("Custom insight type routing instruction");
+        assertThat(prompt.systemPrompt()).doesNotContain("DURABLE AGENT RULES");
     }
 }

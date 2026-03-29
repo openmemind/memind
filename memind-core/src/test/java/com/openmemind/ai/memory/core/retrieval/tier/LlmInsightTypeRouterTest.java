@@ -18,6 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import com.openmemind.ai.memory.core.prompt.retrieval.InsightTypeRoutingPrompts;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -63,10 +65,38 @@ class LlmInsightTypeRouterTest {
                     .verifyComplete();
 
             var prompt =
-                    InsightTypeRoutingPrompts.build("Query", List.of(), availableTypes)
+                    InsightTypeRoutingPrompts.build(
+                                    "Query",
+                                    List.copyOf(availableTypes.keySet()),
+                                    availableTypes,
+                                    List.of())
                             .render("English");
             assertThat(((FakeStructuredChatClient) structuredChatClient).lastMessages())
                     .isEqualTo(ChatMessages.systemUser(prompt.systemPrompt(), prompt.userPrompt()));
+        }
+
+        @Test
+        @DisplayName("constructor with prompt registry should use override instruction")
+        void constructorWithPromptRegistryUsesOverrideInstruction() {
+            var registry =
+                    InMemoryPromptRegistry.builder()
+                            .override(
+                                    PromptType.INSIGHT_TYPE_ROUTING,
+                                    "Custom insight type routing instruction")
+                            .build();
+            structuredChatClient = new FakeStructuredChatClient(List.of("profile"));
+            router = new LlmInsightTypeRouter(structuredChatClient, registry);
+
+            StepVerifier.create(router.route("Query", List.of(), availableTypes))
+                    .assertNext(types -> assertThat(types).containsExactly("profile"))
+                    .verifyComplete();
+
+            assertThat(
+                            ((FakeStructuredChatClient) structuredChatClient)
+                                    .lastMessages()
+                                    .getFirst()
+                                    .content())
+                    .contains("Custom insight type routing instruction");
         }
     }
 

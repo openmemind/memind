@@ -20,6 +20,8 @@ import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
+import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.stats.DefaultToolStatsService;
 import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -53,6 +55,12 @@ public class MemoryAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean
+    public PromptRegistry promptRegistry() {
+        return InMemoryPromptRegistry.builder().build();
+    }
+
+    @Bean
     @ConditionalOnMissingBean(Memory.class)
     @ConditionalOnBean({
         ChatClientRegistry.class,
@@ -66,13 +74,15 @@ public class MemoryAutoConfiguration {
             MemoryBuffer buffer,
             MemoryVector vector,
             ObjectProvider<MemoryTextSearch> textSearchProvider,
-            ObjectProvider<MemoryBuildOptions> buildOptionsProvider) {
+            ObjectProvider<MemoryBuildOptions> buildOptionsProvider,
+            PromptRegistry promptRegistry) {
         var builder =
                 Memory.builder()
                         .chatClient(chatClientRegistry.defaultClient())
                         .store(store)
                         .buffer(buffer)
-                        .vector(vector);
+                        .vector(vector)
+                        .promptRegistry(promptRegistry);
 
         for (ChatClientSlot slot : ChatClientSlot.values()) {
             var client = chatClientRegistry.resolve(slot);

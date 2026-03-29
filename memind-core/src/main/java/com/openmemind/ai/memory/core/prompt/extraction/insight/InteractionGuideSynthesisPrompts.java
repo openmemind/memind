@@ -13,9 +13,13 @@
  */
 package com.openmemind.ai.memory.core.prompt.extraction.insight;
 
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
+import com.openmemind.ai.memory.core.prompt.PromptBuilderSupport;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.util.List;
 
 /**
@@ -32,17 +36,7 @@ public final class InteractionGuideSynthesisPrompts {
 
     private InteractionGuideSynthesisPrompts() {}
 
-    // ===== Section name constants =====
-
-    public static final String NAME_OBJECTIVE = "objective";
-    public static final String NAME_CONTEXT = "context";
-    public static final String NAME_WORKFLOW = "workflow";
-    public static final String NAME_OUTPUT = "output";
-    public static final String NAME_EXAMPLES = "examples";
-
-    // ===== OBJECTIVE =====
-
-    private static final String OBJECTIVE =
+    private static final String SYSTEM_OBJECTIVE =
             """
             You are an interaction directive engine. Your task is to analyze all BRANCH-level \
             insight summaries and produce prescriptive interaction directives for the AI agent. \
@@ -55,9 +49,7 @@ public final class InteractionGuideSynthesisPrompts {
             3 paragraphs. Lead with the answer, then explain only if needed."\
             """;
 
-    // ===== CONTEXT =====
-
-    private static final String CONTEXT =
+    private static final String SYSTEM_CONTEXT =
             """
             # Context
 
@@ -89,9 +81,7 @@ public final class InteractionGuideSynthesisPrompts {
             You handle the prescriptive side: what the AI should DO differently for this user.\
             """;
 
-    // ===== WORKFLOW (includes Core Principles, Steps, Dimension Decision Logic) =====
-
-    private static final String WORKFLOW =
+    private static final String SYSTEM_WORKFLOW =
             """
             # Core Principles
             1. Prescriptive, Not Descriptive: Every point MUST be an imperative instruction. \
@@ -168,9 +158,7 @@ public final class InteractionGuideSynthesisPrompts {
             "For Spring Boot questions, use code examples" (domain-specific) → domain_strategy.\
             """;
 
-    // ===== OUTPUT FORMAT =====
-
-    private static final String OUTPUT =
+    private static final String SYSTEM_OUTPUT =
             """
             # Output Format
 
@@ -209,9 +197,7 @@ public final class InteractionGuideSynthesisPrompts {
             was chosen. This field is for reasoning only and will NOT be stored.\
             """;
 
-    // ===== EXAMPLES =====
-
-    private static final String EXAMPLES =
+    private static final String SYSTEM_EXAMPLES =
             """
             # Examples
 
@@ -374,33 +360,65 @@ public final class InteractionGuideSynthesisPrompts {
             }\
             """;
 
-    // ==================== Public API ====================
+    public static PromptTemplate build(
+            MemoryInsightType rootInsightType,
+            String existingSummary,
+            List<MemoryInsight> branchInsights,
+            int targetTokens) {
+        return build(
+                PromptRegistry.EMPTY,
+                rootInsightType,
+                existingSummary,
+                branchInsights,
+                targetTokens);
+    }
+
+    public static PromptTemplate buildDefault() {
+        return defaultBuilder().build();
+    }
+
+    public static PromptTemplate buildPreview() {
+        var rootInsightType = DefaultInsightTypes.interaction();
+        return defaultBuilder()
+                .variable("root_type_name", rootInsightType.name())
+                .variable(
+                        "root_description", PromptBuilderSupport.descriptionOrName(rootInsightType))
+                .build();
+    }
 
     public static PromptTemplate build(
+            PromptRegistry registry,
             MemoryInsightType rootInsightType,
             String existingSummary,
             List<MemoryInsight> branchInsights,
             int targetTokens) {
 
         var userPromptContent = buildUserPrompt(existingSummary, branchInsights, targetTokens);
+        var builder =
+                registry.hasOverride(PromptType.INTERACTION_GUIDE_SYNTHESIS)
+                        ? PromptTemplate.builder("interaction-guide-synthesis")
+                                .section(
+                                        "system",
+                                        registry.getOverride(
+                                                PromptType.INTERACTION_GUIDE_SYNTHESIS))
+                        : defaultBuilder();
 
-        return PromptTemplate.builder("interaction-guide-synthesis")
-                .section(NAME_OBJECTIVE, OBJECTIVE)
-                .section(NAME_CONTEXT, CONTEXT)
-                .section(NAME_WORKFLOW, WORKFLOW)
-                .section(NAME_OUTPUT, OUTPUT)
-                .section(NAME_EXAMPLES, EXAMPLES)
-                .variable("root_type_name", rootInsightType.name())
+        return builder.variable("root_type_name", rootInsightType.name())
                 .variable(
-                        "root_description",
-                        rootInsightType.description() != null
-                                ? rootInsightType.description()
-                                : rootInsightType.name())
+                        "root_description", PromptBuilderSupport.descriptionOrName(rootInsightType))
                 .userPrompt(userPromptContent)
                 .build();
     }
 
-    // ==================== Internal Helpers ====================
+    private static PromptTemplate.Builder defaultBuilder() {
+        return PromptBuilderSupport.coreSections(
+                "interaction-guide-synthesis",
+                SYSTEM_OBJECTIVE,
+                SYSTEM_CONTEXT,
+                SYSTEM_WORKFLOW,
+                SYSTEM_OUTPUT,
+                SYSTEM_EXAMPLES);
+    }
 
     private static String buildUserPrompt(
             String existingSummary, List<MemoryInsight> branchInsights, int targetTokens) {

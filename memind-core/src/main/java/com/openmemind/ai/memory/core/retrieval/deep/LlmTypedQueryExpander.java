@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.retrieval.deep;
 
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.retrieval.TypedQueryExpandPrompts;
 import com.openmemind.ai.memory.core.retrieval.deep.ExpandedQuery.QueryType;
 import java.time.Duration;
@@ -38,11 +39,19 @@ public class LlmTypedQueryExpander implements TypedQueryExpander {
     private static final Logger log = LoggerFactory.getLogger(LlmTypedQueryExpander.class);
 
     private final StructuredChatClient structuredChatClient;
+    private final PromptRegistry promptRegistry;
 
     public LlmTypedQueryExpander(StructuredChatClient structuredChatClient) {
+        this(structuredChatClient, PromptRegistry.EMPTY);
+    }
+
+    public LlmTypedQueryExpander(
+            StructuredChatClient structuredChatClient, PromptRegistry promptRegistry) {
         this.structuredChatClient =
                 Objects.requireNonNull(
                         structuredChatClient, "structuredChatClient must not be null");
+        this.promptRegistry =
+                Objects.requireNonNull(promptRegistry, "promptRegistry must not be null");
     }
 
     @Override
@@ -56,6 +65,7 @@ public class LlmTypedQueryExpander implements TypedQueryExpander {
                         () -> {
                             var promptResult =
                                     TypedQueryExpandPrompts.build(
+                                                    promptRegistry,
                                                     query,
                                                     gaps,
                                                     keyInformation,

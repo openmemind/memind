@@ -255,4 +255,39 @@ class PromptTemplateTest {
             assertThat(preview).contains("Hello");
         }
     }
+
+    @Nested
+    @DisplayName("Preview support")
+    class PreviewSupport {
+
+        @Test
+        void previewSystemPromptKeepsUnresolvedVariablesAndLanguageRule() {
+            var template =
+                    PromptTemplate.builder("preview")
+                            .section("system", "Use {{query}} and {{CATEGORY_CONTEXT}}")
+                            .userPrompt("ignored {{input}}")
+                            .build();
+
+            String preview = template.previewSystemPrompt("Chinese");
+
+            assertThat(preview).contains("# ABSOLUTE REQUIREMENT: Output Language = Chinese");
+            assertThat(preview).contains("Use {{query}} and {{CATEGORY_CONTEXT}}");
+        }
+
+        @Test
+        void previewResolvedSystemPromptResolvesKnownVariablesAndKeepsUnknownOnes() {
+            var template =
+                    PromptTemplate.builder("preview")
+                            .section("system", "Use {{query}} and {{CATEGORY_CONTEXT}}")
+                            .userPrompt("ignored {{input}}")
+                            .variable("CATEGORY_CONTEXT", "resolved category context")
+                            .build();
+
+            String preview = template.previewResolvedSystemPrompt("Chinese");
+
+            assertThat(preview).contains("# ABSOLUTE REQUIREMENT: Output Language = Chinese");
+            assertThat(preview).contains("Use {{query}} and resolved category context");
+            assertThat(preview).doesNotContain("{{CATEGORY_CONTEXT}}");
+        }
+    }
 }

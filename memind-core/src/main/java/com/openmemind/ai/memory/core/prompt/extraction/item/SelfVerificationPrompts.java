@@ -13,10 +13,13 @@
  */
 package com.openmemind.ai.memory.core.prompt.extraction.item;
 
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
+import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
+import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -34,7 +37,7 @@ import java.util.stream.Collectors;
  */
 public final class SelfVerificationPrompts {
 
-    private static final String SYSTEM_PROMPT_TEMPLATE =
+    private static final String OBJECTIVE =
             """
             You are a memory extraction reviewer. Upstream extractors have already made a \
             first pass over the conversation. Your task is to find atomic facts that were \
@@ -42,7 +45,10 @@ public final class SelfVerificationPrompts {
             list. Return ONLY new, non-overlapping items.
 
             Return an empty list if nothing was missed. Do NOT fabricate or hallucinate items.
+            """;
 
+    private static final String PRINCIPLES =
+            """
             # Core Principles
             1. Atomicity: Each item must express EXACTLY ONE coherent unit of meaning. If a \
             message contains multiple distinct ideas, split them into separate items. Do NOT \
@@ -57,7 +63,10 @@ public final class SelfVerificationPrompts {
             6. Non-overlap: Each item MUST cover information NOT already present in the \
             AlreadyExtracted list. Rephrasing an existing item in different words does NOT \
             count as a new item.
+            """;
 
+    private static final String EXTRACTION_SCOPE =
+            """
             # Extraction Scope
             - Extract from BOTH user AND assistant messages.
             - Keep assistant content ONLY when it contains durable agent instructions, \
@@ -73,7 +82,10 @@ public final class SelfVerificationPrompts {
             as a lasting routine, preference, or instruction.
             - One-off control messages, transient execution commands, and session-management \
             turns are not durable agent memory.
+            """;
 
+    private static final String MISS_PATTERNS =
+            """
             # Common Miss Patterns
             Focus on these frequently missed patterns during review:
             1. **Technical assistant solutions**: Technical solutions, configuration advice, and \
@@ -93,21 +105,27 @@ public final class SelfVerificationPrompts {
             7. **Team or project context**: Team member roles, infrastructure details, and \
             project context that the first pass treated as background noise.
             Do NOT treat supportive or therapeutic assistant language as a missed agent memory.
+            """;
 
+    private static final String EXTRACTION_BIAS =
+            """
             # Extraction Bias
             - Add only clearly missed items.
             - For directive, playbook, and resolution, use strict precision.
             - If there is no clear evidence, do not add the item.
             - if uncertain between agent memory and nothing, prefer nothing
+            """;
 
-            {{CATEGORY_CONTEXT}}
+    private static final String CATEGORY_CONTEXT_SECTION = "{{CATEGORY_CONTEXT}}";
 
-            {{IDENTITY_CONTEXT}}
+    private static final String IDENTITY_CONTEXT_SECTION = "{{IDENTITY_CONTEXT}}";
 
-            {{SUBJECT_CONTEXT}}
+    private static final String SUBJECT_CONTEXT_SECTION = "{{SUBJECT_CONTEXT}}";
 
-            {{TEMPORAL_CONTEXT}}
+    private static final String TEMPORAL_CONTEXT_SECTION = "{{TEMPORAL_CONTEXT}}";
 
+    private static final String SCORING =
+            """
             # Scoring Guidelines
 
             ## occurredAt
@@ -121,7 +139,10 @@ public final class SelfVerificationPrompts {
             start/end marker.
             - Do NOT use message timestamps or conversation timestamps as `occurredAt` by \
             default. They are for resolving relative expressions, not for persistence defaults.
+            """;
 
+    private static final String OUTPUT =
+            """
             <OutputFormat>
             Return a JSON object ONLY. No extra text. No markdown fences.
             {
@@ -137,7 +158,10 @@ public final class SelfVerificationPrompts {
             }
             (Return `{"items": []}` if nothing was missed)
             </OutputFormat>
+            """;
 
+    private static final String EXAMPLES =
+            """
             # Examples
 
             ## Good Example 1: First pass merged multiple facts into one item
@@ -344,10 +368,57 @@ public final class SelfVerificationPrompts {
             List<MemoryInsightType> insightTypes,
             String userName,
             Set<MemoryCategory> categories) {
+        return build(
+                PromptRegistry.EMPTY,
+                originalText,
+                existingEntries,
+                referenceTime,
+                insightTypes,
+                userName,
+                categories);
+    }
 
-        return PromptTemplate.builder("self-verification")
-                .section("system", SYSTEM_PROMPT_TEMPLATE)
-                .userPrompt(USER_PROMPT_TEMPLATE)
+    public static PromptTemplate buildDefault() {
+        return defaultBuilder().build();
+    }
+
+    public static PromptTemplate buildPreview() {
+        return defaultBuilder()
+                .variable(
+                        "CATEGORY_CONTEXT",
+                        MemoryItemUnifiedPrompts.buildCategoryContext(
+                                null, DefaultInsightTypes.all()))
+                .variable("IDENTITY_CONTEXT", MemoryItemUnifiedPrompts.buildIdentityContext("Ada"))
+                .variable(
+                        "SUBJECT_CONTEXT",
+                        MemoryItemUnifiedPrompts.buildSubjectClarityContext("Ada")
+                                + "\nReject any item if a reader cannot identify who each pronoun"
+                                + " refers to without reading the original conversation.")
+                .variable(
+                        "TEMPORAL_CONTEXT",
+                        MemoryItemUnifiedPrompts.buildTimeContext(
+                                null, Instant.parse("2026-03-29T00:00:00Z")))
+                .build();
+    }
+
+    public static PromptTemplate build(
+            PromptRegistry registry,
+            String originalText,
+            List<ExtractedMemoryEntry> existingEntries,
+            Instant referenceTime,
+            List<MemoryInsightType> insightTypes,
+            String userName,
+            Set<MemoryCategory> categories) {
+
+        PromptTemplate.Builder builder =
+                registry.hasOverride(PromptType.SELF_VERIFICATION)
+                        ? PromptTemplate.builder("self-verification")
+                                .section(
+                                        "system",
+                                        registry.getOverride(PromptType.SELF_VERIFICATION))
+                        : defaultBuilder();
+
+        return builder.userPrompt(USER_PROMPT_TEMPLATE)
                 .variable(
                         "CATEGORY_CONTEXT",
                         MemoryItemUnifiedPrompts.buildCategoryContext(categories, insightTypes))
@@ -364,6 +435,22 @@ public final class SelfVerificationPrompts {
                 .variable("existing_entries", formatExistingEntries(existingEntries))
                 .variable("original_text", originalText != null ? originalText : "")
                 .build();
+    }
+
+    private static PromptTemplate.Builder defaultBuilder() {
+        return PromptTemplate.builder("self-verification")
+                .section("objective", OBJECTIVE)
+                .section("principles", PRINCIPLES)
+                .section("extractionScope", EXTRACTION_SCOPE)
+                .section("missPatterns", MISS_PATTERNS)
+                .section("extractionBias", EXTRACTION_BIAS)
+                .section("categoryContext", CATEGORY_CONTEXT_SECTION)
+                .section("identityContext", IDENTITY_CONTEXT_SECTION)
+                .section("subjectContext", SUBJECT_CONTEXT_SECTION)
+                .section("temporalContext", TEMPORAL_CONTEXT_SECTION)
+                .section("scoring", SCORING)
+                .section("output", OUTPUT)
+                .section("examples", EXAMPLES);
     }
 
     private static String formatExistingEntries(List<ExtractedMemoryEntry> entries) {
