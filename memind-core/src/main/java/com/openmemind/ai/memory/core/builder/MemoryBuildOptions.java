@@ -13,10 +13,6 @@
  */
 package com.openmemind.ai.memory.core.builder;
 
-import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
-import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig.ConversationSegmentStrategy;
 import java.util.Objects;
 
 /**
@@ -24,23 +20,12 @@ import java.util.Objects;
  */
 public final class MemoryBuildOptions {
 
-    private static final ConversationChunkingConfig DEFAULT_CONVERSATION_CHUNKING =
-            new ConversationChunkingConfig(10, ConversationSegmentStrategy.FIXED_SIZE, 20);
-    private static final InsightBuildConfig DEFAULT_INSIGHT_BUILD =
-            new InsightBuildConfig(3, 2, 8, 2);
-    private static final CommitDetectorConfig DEFAULT_BOUNDARY_DETECTOR =
-            CommitDetectorConfig.defaults();
-
-    private final ConversationChunkingConfig conversationChunking;
-    private final InsightBuildConfig insightBuild;
-    private final CommitDetectorConfig boundaryDetector;
+    private final ExtractionOptions extraction;
+    private final RetrievalOptions retrieval;
 
     private MemoryBuildOptions(Builder builder) {
-        this.conversationChunking =
-                Objects.requireNonNull(builder.conversationChunking, "conversationChunking");
-        this.insightBuild = Objects.requireNonNull(builder.insightBuild, "insightBuild");
-        this.boundaryDetector =
-                Objects.requireNonNull(builder.boundaryDetector, "boundaryDetector");
+        this.extraction = Objects.requireNonNull(builder.extraction, "extraction");
+        this.retrieval = Objects.requireNonNull(builder.retrieval, "retrieval");
     }
 
     public static Builder builder() {
@@ -51,39 +36,28 @@ public final class MemoryBuildOptions {
         return builder().build();
     }
 
-    public ConversationChunkingConfig conversationChunking() {
-        return conversationChunking;
+    public ExtractionOptions extraction() {
+        return extraction;
     }
 
-    public InsightBuildConfig insightBuild() {
-        return insightBuild;
-    }
-
-    public CommitDetectorConfig boundaryDetector() {
-        return boundaryDetector;
+    public RetrievalOptions retrieval() {
+        return retrieval;
     }
 
     public static final class Builder {
 
-        private ConversationChunkingConfig conversationChunking = DEFAULT_CONVERSATION_CHUNKING;
-        private InsightBuildConfig insightBuild = DEFAULT_INSIGHT_BUILD;
-        private CommitDetectorConfig boundaryDetector = DEFAULT_BOUNDARY_DETECTOR;
+        private ExtractionOptions extraction = ExtractionOptions.defaults();
+        private RetrievalOptions retrieval = RetrievalOptions.defaults();
 
         private Builder() {}
 
-        public Builder conversationChunking(ConversationChunkingConfig conversationChunking) {
-            this.conversationChunking =
-                    Objects.requireNonNull(conversationChunking, "conversationChunking");
+        public Builder extraction(ExtractionOptions extraction) {
+            this.extraction = Objects.requireNonNull(extraction, "extraction");
             return this;
         }
 
-        public Builder insightBuild(InsightBuildConfig insightBuild) {
-            this.insightBuild = Objects.requireNonNull(insightBuild, "insightBuild");
-            return this;
-        }
-
-        public Builder boundaryDetector(CommitDetectorConfig boundaryDetector) {
-            this.boundaryDetector = Objects.requireNonNull(boundaryDetector, "boundaryDetector");
+        public Builder retrieval(RetrievalOptions retrieval) {
+            this.retrieval = Objects.requireNonNull(retrieval, "retrieval");
             return this;
         }
 

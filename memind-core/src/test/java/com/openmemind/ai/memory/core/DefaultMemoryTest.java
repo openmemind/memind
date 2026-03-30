@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
@@ -23,6 +24,19 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.builder.DeepRetrievalOptions;
+import com.openmemind.ai.memory.core.builder.ExtractionCommonOptions;
+import com.openmemind.ai.memory.core.builder.ExtractionOptions;
+import com.openmemind.ai.memory.core.builder.InsightExtractionOptions;
+import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
+import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.builder.QueryExpansionOptions;
+import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
+import com.openmemind.ai.memory.core.builder.RetrievalAdvancedOptions;
+import com.openmemind.ai.memory.core.builder.RetrievalCommonOptions;
+import com.openmemind.ai.memory.core.builder.RetrievalOptions;
+import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
+import com.openmemind.ai.memory.core.builder.SufficiencyOptions;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
@@ -33,6 +47,7 @@ import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
 import com.openmemind.ai.memory.core.extraction.result.InsightResult;
@@ -42,6 +57,7 @@ import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
+import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
 import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
@@ -124,6 +140,97 @@ class DefaultMemoryTest {
 
             StepVerifier.create(memind.addMessage(memoryId, message)).verifyComplete();
         }
+
+        @Test
+        @DisplayName("extract(memoryId, content) uses builder-level extraction defaults")
+        void extractUsesBuilderLevelExtractionDefaults() {
+            var memory =
+                    new DefaultMemory(
+                            extractor,
+                            retriever,
+                            store,
+                            memoryBuffer,
+                            vector,
+                            toolStatsService,
+                            null,
+                            null,
+                            MemoryBuildOptions.builder()
+                                    .extraction(
+                                            new ExtractionOptions(
+                                                    new ExtractionCommonOptions(
+                                                            MemoryScope.AGENT,
+                                                            Duration.ofSeconds(40),
+                                                            "Chinese"),
+                                                    RawDataExtractionOptions.defaults(),
+                                                    ItemExtractionOptions.defaults(),
+                                                    InsightExtractionOptions.defaults()))
+                                    .build());
+            when(extractor.extract(any(ExtractionRequest.class)))
+                    .thenReturn(Mono.just(successResult()));
+
+            StepVerifier.create(
+                            memory.extract(
+                                    memoryId,
+                                    new ConversationContent(List.of(Message.user("test")))))
+                    .expectNextCount(1)
+                    .verifyComplete();
+
+            verify(extractor)
+                    .extract(
+                            argThat(
+                                    request ->
+                                            request.config().scope() == MemoryScope.AGENT
+                                                    && request.config()
+                                                            .timeout()
+                                                            .equals(Duration.ofSeconds(40))
+                                                    && request.config()
+                                                            .language()
+                                                            .equals("Chinese")));
+        }
+
+        @Test
+        @DisplayName("addMessage uses builder-level extraction defaults")
+        void addMessageUsesBuilderLevelExtractionDefaults() {
+            var memory =
+                    new DefaultMemory(
+                            extractor,
+                            retriever,
+                            store,
+                            memoryBuffer,
+                            vector,
+                            toolStatsService,
+                            null,
+                            null,
+                            MemoryBuildOptions.builder()
+                                    .extraction(
+                                            new ExtractionOptions(
+                                                    new ExtractionCommonOptions(
+                                                            MemoryScope.USER,
+                                                            Duration.ofSeconds(30),
+                                                            "Chinese"),
+                                                    RawDataExtractionOptions.defaults(),
+                                                    new ItemExtractionOptions(true),
+                                                    InsightExtractionOptions.defaults()))
+                                    .build());
+            var message = Message.user("test");
+            when(extractor.addMessage(eq(memoryId), eq(message), any()))
+                    .thenReturn(Mono.just(successResult()));
+
+            StepVerifier.create(memory.addMessage(memoryId, message))
+                    .expectNextCount(1)
+                    .verifyComplete();
+
+            verify(extractor)
+                    .addMessage(
+                            eq(memoryId),
+                            eq(message),
+                            argThat(
+                                    config ->
+                                            config.language().equals("Chinese")
+                                                    && config.enableForesight()
+                                                    && config.timeout()
+                                                            .equals(Duration.ofSeconds(30))));
+        }
     }
 
     @Nested
@@ -141,6 +248,58 @@ class DefaultMemoryTest {
                                     memoryId, "User Preferences", RetrievalConfig.Strategy.SIMPLE))
                     .expectNext(result)
                     .verifyComplete();
+        }
+
+        @Test
+        @DisplayName("retrieve(memoryId, query, DEEP) uses builder-level retrieval defaults")
+        void retrieveUsesBuilderLevelDeepDefaults() {
+            var memory =
+                    new DefaultMemory(
+                            extractor,
+                            retriever,
+                            store,
+                            memoryBuffer,
+                            vector,
+                            toolStatsService,
+                            null,
+                            null,
+                            MemoryBuildOptions.builder()
+                                    .retrieval(
+                                            new RetrievalOptions(
+                                                    new RetrievalCommonOptions(false),
+                                                    SimpleRetrievalOptions.defaults(),
+                                                    new DeepRetrievalOptions(
+                                                            Duration.ofSeconds(45),
+                                                            5,
+                                                            22,
+                                                            false,
+                                                            0,
+                                                            QueryExpansionOptions.defaults(),
+                                                            new SufficiencyOptions(12)),
+                                                    RetrievalAdvancedOptions.defaults()))
+                                    .build());
+            when(retriever.retrieve(any(RetrievalRequest.class)))
+                    .thenReturn(Mono.just(RetrievalResult.empty("deep_retrieval", "test")));
+
+            StepVerifier.create(memory.retrieve(memoryId, "test", RetrievalConfig.Strategy.DEEP))
+                    .expectNextCount(1)
+                    .verifyComplete();
+
+            verify(retriever)
+                    .retrieve(
+                            argThat(
+                                    request ->
+                                            request.config()
+                                                            .timeout()
+                                                            .equals(Duration.ofSeconds(45))
+                                                    && !request.config().enableCache()
+                                                    && request.config().tier2().topK() == 22
+                                                    && ((DeepStrategyConfig)
+                                                                            request.config()
+                                                                                    .strategyConfig())
+                                                                    .sufficiency()
+                                                                    .itemTopK()
+                                                            == 12));
         }
     }
 

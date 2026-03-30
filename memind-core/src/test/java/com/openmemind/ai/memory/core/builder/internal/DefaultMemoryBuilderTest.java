@@ -22,8 +22,18 @@ import com.openmemind.ai.memory.core.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
+import com.openmemind.ai.memory.core.builder.DeepRetrievalOptions;
+import com.openmemind.ai.memory.core.builder.ExtractionCommonOptions;
+import com.openmemind.ai.memory.core.builder.ExtractionOptions;
+import com.openmemind.ai.memory.core.builder.InsightExtractionOptions;
+import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuilder;
+import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
+import com.openmemind.ai.memory.core.builder.RetrievalAdvancedOptions;
+import com.openmemind.ai.memory.core.builder.RetrievalCommonOptions;
+import com.openmemind.ai.memory.core.builder.RetrievalOptions;
+import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
@@ -33,6 +43,7 @@ import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItem
 import com.openmemind.ai.memory.core.extraction.item.strategy.LlmItemExtractionStrategy;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
@@ -181,7 +192,16 @@ class DefaultMemoryBuilderTest {
                                 .vector(MEMORY_VECTOR)
                                 .options(
                                         MemoryBuildOptions.builder()
-                                                .boundaryDetector(config)
+                                                .extraction(
+                                                        new ExtractionOptions(
+                                                                ExtractionCommonOptions.defaults(),
+                                                                new RawDataExtractionOptions(
+                                                                        ConversationChunkingConfig
+                                                                                .DEFAULT,
+                                                                        config),
+                                                                ItemExtractionOptions.defaults(),
+                                                                InsightExtractionOptions
+                                                                        .defaults()))
                                                 .build())
                                 .build();
 
@@ -195,9 +215,35 @@ class DefaultMemoryBuilderTest {
     }
 
     @Test
-    void defaultBuildOptionsExposeBoundaryDetectorDefaults() {
-        assertThat(MemoryBuildOptions.defaults().boundaryDetector())
+    void defaultBuildOptionsExposeNestedCommitDetectionDefaults() {
+        assertThat(MemoryBuildOptions.defaults().extraction().rawdata().commitDetection())
                 .isEqualTo(CommitDetectorConfig.defaults());
+    }
+
+    @Test
+    void builderPropagatesOptionsIntoDefaultMemory() {
+        MemoryBuildOptions configured =
+                MemoryBuildOptions.builder()
+                        .retrieval(
+                                new RetrievalOptions(
+                                        new RetrievalCommonOptions(false),
+                                        SimpleRetrievalOptions.defaults(),
+                                        DeepRetrievalOptions.defaults(),
+                                        RetrievalAdvancedOptions.defaults()))
+                        .build();
+
+        DefaultMemory memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(CHAT_CLIENT)
+                                .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .options(configured)
+                                .build();
+
+        assertThat(readField(memory, "buildOptions", MemoryBuildOptions.class))
+                .isEqualTo(configured);
     }
 
     @Test

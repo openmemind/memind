@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -25,8 +26,20 @@ import com.openmemind.ai.memory.core.buffer.InMemoryRecentConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
+import com.openmemind.ai.memory.core.builder.DeepRetrievalOptions;
+import com.openmemind.ai.memory.core.builder.ExtractionCommonOptions;
+import com.openmemind.ai.memory.core.builder.ExtractionOptions;
+import com.openmemind.ai.memory.core.builder.InsightExtractionOptions;
+import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
+import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
+import com.openmemind.ai.memory.core.builder.RetrievalAdvancedOptions;
+import com.openmemind.ai.memory.core.builder.RetrievalCommonOptions;
+import com.openmemind.ai.memory.core.builder.RetrievalOptions;
+import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
@@ -169,6 +182,49 @@ class DefaultMemoryContextTest {
         }
 
         @Test
+        @DisplayName("Uses builder-level simple retrieval defaults when loading context")
+        void getContextUsesBuilderLevelSimpleDefaults() {
+            memory =
+                    new DefaultMemory(
+                            extractor,
+                            retriever,
+                            memoryStore,
+                            memoryBuffer,
+                            vector,
+                            toolStatsService,
+                            null,
+                            null,
+                            MemoryBuildOptions.builder()
+                                    .retrieval(
+                                            new RetrievalOptions(
+                                                    new RetrievalCommonOptions(false),
+                                                    new SimpleRetrievalOptions(
+                                                            Duration.ofSeconds(15), 5, 9, 3, true),
+                                                    DeepRetrievalOptions.defaults(),
+                                                    RetrievalAdvancedOptions.defaults()))
+                                    .build());
+            recentConversationBuffer.append(
+                    "user1:agent1", Message.user("Tell me about my project"));
+            when(retriever.retrieve(any(RetrievalRequest.class)))
+                    .thenReturn(
+                            Mono.just(RetrievalResult.empty("simple", "Tell me about my project")));
+
+            StepVerifier.create(memory.getContext(ContextRequest.of(memoryId, 80000)))
+                    .assertNext(ctx -> assertThat(ctx.hasMemories()).isFalse())
+                    .verifyComplete();
+
+            verify(retriever)
+                    .retrieve(
+                            argThat(
+                                    request ->
+                                            request.config()
+                                                            .timeout()
+                                                            .equals(Duration.ofSeconds(15))
+                                                    && !request.config().enableCache()
+                                                    && request.config().tier2().topK() == 9));
+        }
+
+        @Test
         @DisplayName("Loads only the configured recent message window")
         void loads_only_recent_message_window() {
             for (int i = 1; i <= 12; i++) {
@@ -267,6 +323,58 @@ class DefaultMemoryContextTest {
                     .verifyComplete();
 
             assertThat(pendingConversationBuffer.load("user1:agent1")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("Uses builder-level extraction defaults when committing")
+        void commitUsesBuilderLevelExtractionDefaults() {
+            pendingConversationBuffer.save("user1:agent1", List.of(Message.user("test")));
+            var expectedResult =
+                    ExtractionResult.success(
+                            memoryId,
+                            RawDataResult.empty(),
+                            MemoryItemResult.empty(),
+                            InsightResult.empty(),
+                            Duration.ofMillis(50));
+            when(extractor.extract(any())).thenReturn(Mono.just(expectedResult));
+
+            memory =
+                    new DefaultMemory(
+                            extractor,
+                            retriever,
+                            memoryStore,
+                            memoryBuffer,
+                            vector,
+                            toolStatsService,
+                            null,
+                            null,
+                            MemoryBuildOptions.builder()
+                                    .extraction(
+                                            new ExtractionOptions(
+                                                    new ExtractionCommonOptions(
+                                                            MemoryScope.AGENT,
+                                                            Duration.ofSeconds(25),
+                                                            "Chinese"),
+                                                    RawDataExtractionOptions.defaults(),
+                                                    ItemExtractionOptions.defaults(),
+                                                    InsightExtractionOptions.defaults()))
+                                    .build());
+
+            StepVerifier.create(memory.commit(memoryId))
+                    .assertNext(result -> assertThat(result).isNotNull())
+                    .verifyComplete();
+
+            verify(extractor)
+                    .extract(
+                            argThat(
+                                    request ->
+                                            request.config().scope() == MemoryScope.AGENT
+                                                    && request.config()
+                                                            .timeout()
+                                                            .equals(Duration.ofSeconds(25))
+                                                    && request.config()
+                                                            .language()
+                                                            .equals("Chinese")));
         }
     }
 }
