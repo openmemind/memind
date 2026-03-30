@@ -21,8 +21,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
-import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
@@ -33,6 +33,7 @@ import com.openmemind.ai.memory.core.retrieval.tier.TierResult;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
+import com.openmemind.ai.memory.core.support.TestMemoryIds;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.textsearch.TextSearchResult;
 import java.util.List;
@@ -52,7 +53,7 @@ import reactor.test.StepVerifier;
 @DisplayName("SimpleRetrievalStrategy")
 class SimpleRetrievalStrategyTest {
 
-    private static final MemoryId MEMORY_ID = new DefaultMemoryId("user", null);
+    private static final MemoryId MEMORY_ID = TestMemoryIds.userAgent();
     private static final RetrievalConfig CONFIG = RetrievalConfig.simple();
 
     @Mock private InsightTierRetriever insightRetriever;
@@ -227,6 +228,67 @@ class SimpleRetrievalStrategyTest {
                                 assertThat(result.strategy()).isEqualTo("simple");
                                 // BM25 result should exist
                                 assertThat(result.items()).isNotEmpty();
+                            })
+                    .verifyComplete();
+        }
+
+        @Test
+        @DisplayName("Expanded insights are appended in ROOT -> BRANCH -> LEAF order")
+        void expandedInsightsAreAppendedInRootBranchLeafOrder() {
+            var insightResult =
+                    new TierResult(
+                            List.of(),
+                            List.of(),
+                            List.of(
+                                    new InsightTreeExpander.ExpandedInsight(
+                                            "leaf", "leaf", InsightTier.LEAF),
+                                    new InsightTreeExpander.ExpandedInsight(
+                                            "root", "root", InsightTier.ROOT),
+                                    new InsightTreeExpander.ExpandedInsight(
+                                            "branch", "branch", InsightTier.BRANCH)));
+            when(insightRetriever.retrieve(any(), any())).thenReturn(Mono.just(insightResult));
+            when(itemRetriever.searchByVector(any(), any()))
+                    .thenReturn(Mono.just(TierResult.empty()));
+            when(textSearch.search(any(), anyString(), anyInt(), any()))
+                    .thenReturn(Mono.just(List.of()));
+
+            StepVerifier.create(strategy.retrieve(context, CONFIG))
+                    .assertNext(
+                            result ->
+                                    assertThat(result.insights())
+                                            .extracting(
+                                                    com.openmemind.ai.memory.core.retrieval
+                                                                    .RetrievalResult.InsightResult
+                                                            ::id)
+                                            .containsExactly("root", "branch", "leaf"))
+                    .verifyComplete();
+        }
+
+        @Test
+        @DisplayName("Item retrieval failure still returns insight results")
+        void itemFailuresStillReturnInsightResults() {
+            when(insightRetriever.retrieve(any(), any()))
+                    .thenReturn(
+                            Mono.just(
+                                    new TierResult(
+                                            List.of(
+                                                    new ScoredResult(
+                                                            ScoredResult.SourceType.INSIGHT,
+                                                            "i1",
+                                                            "insight",
+                                                            1f,
+                                                            1.0)),
+                                            List.of())));
+            when(itemRetriever.searchByVector(any(), any()))
+                    .thenReturn(Mono.error(new RuntimeException("vector failed")));
+            when(textSearch.search(any(), anyString(), anyInt(), any()))
+                    .thenReturn(Mono.just(List.of()));
+
+            StepVerifier.create(strategy.retrieve(context, CONFIG))
+                    .assertNext(
+                            result -> {
+                                assertThat(result.insights()).hasSize(1);
+                                assertThat(result.items()).isEmpty();
                             })
                     .verifyComplete();
         }

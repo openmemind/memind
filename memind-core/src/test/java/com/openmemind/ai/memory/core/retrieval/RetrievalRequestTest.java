@@ -28,33 +28,42 @@ class RetrievalRequestTest {
     private static final MemoryId MID = () -> "test";
 
     @Test
-    @DisplayName("of factory method should return unfiltered request")
-    void ofShouldHaveNoFilters() {
-        var req = RetrievalRequest.of(MID, "query", RetrievalConfig.Strategy.DEEP);
-        assertThat(req.scope()).isNull();
+    @DisplayName("strategy factories materialize matching configs")
+    void strategyFactoriesMaterializeMatchingConfigs() {
+        var simple = RetrievalRequest.of(MID, "query", RetrievalConfig.Strategy.SIMPLE);
+        var deep = RetrievalRequest.of(MID, "query", RetrievalConfig.Strategy.DEEP);
+
+        assertThat(simple.config().strategyName()).isEqualTo("simple");
+        assertThat(deep.config().strategyName()).isEqualTo("deep_retrieval");
+        assertThat(simple.conversationHistory()).isEmpty();
+        assertThat(deep.metadata()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("userMemory sets USER scope")
+    void userMemorySetsUserScope() {
+        var req = RetrievalRequest.userMemory(MID, "query", RetrievalConfig.Strategy.DEEP);
+        assertThat(req.scope()).isEqualTo(MemoryScope.USER);
         assertThat(req.categories()).isNull();
     }
 
     @Test
-    @DisplayName("userMemory should set USER scope")
-    void userMemoryShouldSetUserScope() {
-        var req = RetrievalRequest.userMemory(MID, "query", RetrievalConfig.Strategy.DEEP);
-        assertThat(req.scope()).isEqualTo(MemoryScope.USER);
-    }
-
-    @Test
-    @DisplayName("agentMemory should set AGENT scope")
-    void agentMemoryShouldSetAgentScope() {
+    @DisplayName("agentMemory sets AGENT scope")
+    void agentMemorySetsAgentScope() {
         var req = RetrievalRequest.agentMemory(MID, "query", RetrievalConfig.Strategy.DEEP);
         assertThat(req.scope()).isEqualTo(MemoryScope.AGENT);
+        assertThat(req.categories()).isNull();
     }
 
     @Test
-    @DisplayName("byCategories should set specified categories")
-    void byCategoriesShouldSetCategories() {
-        var req =
+    @DisplayName("byCategories preserves explicit filters and empty metadata")
+    void byCategoriesPreservesExplicitFiltersAndEmptyMetadata() {
+        var request =
                 RetrievalRequest.byCategories(
                         MID, "query", Set.of(MemoryCategory.TOOL), RetrievalConfig.Strategy.DEEP);
-        assertThat(req.categories()).containsExactly(MemoryCategory.TOOL);
+
+        assertThat(request.categories()).containsExactly(MemoryCategory.TOOL);
+        assertThat(request.scope()).isNull();
+        assertThat(request.metadata()).isEmpty();
     }
 }

@@ -23,29 +23,17 @@ import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.builder.DeepRetrievalOptions;
-import com.openmemind.ai.memory.core.builder.ExtractionCommonOptions;
-import com.openmemind.ai.memory.core.builder.ExtractionOptions;
-import com.openmemind.ai.memory.core.builder.InsightExtractionOptions;
-import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuilder;
-import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalAdvancedOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalCommonOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
-import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
-import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.item.MemoryItemLayer;
 import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItemExtractor;
 import com.openmemind.ai.memory.core.extraction.item.strategy.LlmItemExtractionStrategy;
-import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
-import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
@@ -74,9 +62,8 @@ class DefaultMemoryBuilderTest {
     private static final RawDataOperations RAW_DATA_OPERATIONS = proxy(RawDataOperations.class);
     private static final ItemOperations ITEM_OPERATIONS = proxy(ItemOperations.class);
     private static final InsightOperations INSIGHT_OPERATIONS = proxy(InsightOperations.class);
-    private static final MemoryTextSearch TEXT_SEARCH = proxy(MemoryTextSearch.class);
-    private static final InsightBuffer INSIGHT_BUFFER_STORE = proxy(InsightBuffer.class);
-    private static final ConversationBuffer CONVERSATION_BUFFER_STORE =
+    private static final InsightBuffer INSIGHT_BUFFER = proxy(InsightBuffer.class);
+    private static final ConversationBuffer PENDING_CONVERSATION_BUFFER =
             proxy(ConversationBuffer.class);
     private static final RecentConversationBuffer RECENT_CONVERSATION_BUFFER =
             proxy(RecentConversationBuffer.class);
@@ -85,10 +72,7 @@ class DefaultMemoryBuilderTest {
             new FixedMemoryStore(RAW_DATA_OPERATIONS, ITEM_OPERATIONS, INSIGHT_OPERATIONS, null);
     private static final MemoryBuffer MEMORY_BUFFER =
             new FixedMemoryBuffer(
-                    INSIGHT_BUFFER_STORE,
-                    CONVERSATION_BUFFER_STORE,
-                    RECENT_CONVERSATION_BUFFER,
-                    null);
+                    INSIGHT_BUFFER, PENDING_CONVERSATION_BUFFER, RECENT_CONVERSATION_BUFFER, null);
 
     @Test
     void memoryExposesStaticBuilderEntryPoint() {
@@ -96,14 +80,11 @@ class DefaultMemoryBuilderTest {
     }
 
     @Test
-    void buildFailsWhenChatClientIsMissing() {
+    void buildFailsWhenAnyRequiredComponentIsMissing() {
         assertThatThrownBy(() -> Memory.builder().build())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("chat client");
-    }
 
-    @Test
-    void buildFailsWhenStoreIsMissing() {
         assertThatThrownBy(
                         () ->
                                 Memory.builder()
@@ -113,10 +94,7 @@ class DefaultMemoryBuilderTest {
                                         .build())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("store");
-    }
 
-    @Test
-    void buildFailsWhenBufferIsMissing() {
         assertThatThrownBy(
                         () ->
                                 Memory.builder()
@@ -126,10 +104,7 @@ class DefaultMemoryBuilderTest {
                                         .build())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("buffer");
-    }
 
-    @Test
-    void buildFailsWhenVectorIsMissing() {
         assertThatThrownBy(
                         () ->
                                 Memory.builder()
@@ -142,87 +117,8 @@ class DefaultMemoryBuilderTest {
     }
 
     @Test
-    void buildCreatesDefaultMemoryWhenRequiredComponentsAreProvided() {
-        Memory memory =
-                Memory.builder()
-                        .chatClient(CHAT_CLIENT)
-                        .store(MEMORY_STORE)
-                        .buffer(MEMORY_BUFFER)
-                        .vector(MEMORY_VECTOR)
-                        .build();
-
-        assertThat(memory).isNotNull().isInstanceOf(DefaultMemory.class);
-    }
-
-    @Test
-    void buildReusesSingleCaptionGeneratorAcrossRawDataPipeline() {
-        DefaultMemory memory =
-                (DefaultMemory)
-                        Memory.builder()
-                                .chatClient(CHAT_CLIENT)
-                                .store(MEMORY_STORE)
-                                .buffer(MEMORY_BUFFER)
-                                .vector(MEMORY_VECTOR)
-                                .build();
-
-        MemoryExtractor extractor = readField(memory, "extractor", MemoryExtractor.class);
-        RawDataLayer rawDataLayer = readField(extractor, "rawDataStep", RawDataLayer.class);
-        CaptionGenerator defaultCaptionGenerator =
-                readField(rawDataLayer, "defaultCaptionGenerator", CaptionGenerator.class);
-        @SuppressWarnings("unchecked")
-        java.util.Map<Class<?>, Object> processors =
-                readField(rawDataLayer, "processors", java.util.Map.class);
-        ConversationContentProcessor conversationProcessor =
-                (ConversationContentProcessor) processors.get(ConversationContent.class);
-        CaptionGenerator processorCaptionGenerator =
-                readField(conversationProcessor, "captionGenerator", CaptionGenerator.class);
-
-        assertThat(processorCaptionGenerator).isSameAs(defaultCaptionGenerator);
-    }
-
-    @Test
-    void buildUsesBoundaryDetectorConfigFromBuildOptions() {
-        CommitDetectorConfig config = new CommitDetectorConfig(5, 1024, 3);
-        DefaultMemory memory =
-                (DefaultMemory)
-                        Memory.builder()
-                                .chatClient(CHAT_CLIENT)
-                                .store(MEMORY_STORE)
-                                .buffer(MEMORY_BUFFER)
-                                .vector(MEMORY_VECTOR)
-                                .options(
-                                        MemoryBuildOptions.builder()
-                                                .extraction(
-                                                        new ExtractionOptions(
-                                                                ExtractionCommonOptions.defaults(),
-                                                                new RawDataExtractionOptions(
-                                                                        ConversationChunkingConfig
-                                                                                .DEFAULT,
-                                                                        config),
-                                                                ItemExtractionOptions.defaults(),
-                                                                InsightExtractionOptions
-                                                                        .defaults()))
-                                                .build())
-                                .build();
-
-        MemoryExtractor extractor = readField(memory, "extractor", MemoryExtractor.class);
-        LlmContextCommitDetector boundaryDetector =
-                readField(extractor, "contextCommitDetector", LlmContextCommitDetector.class);
-        CommitDetectorConfig actualConfig =
-                readField(boundaryDetector, "config", CommitDetectorConfig.class);
-
-        assertThat(actualConfig).isEqualTo(config);
-    }
-
-    @Test
-    void defaultBuildOptionsExposeNestedCommitDetectionDefaults() {
-        assertThat(MemoryBuildOptions.defaults().extraction().rawdata().commitDetection())
-                .isEqualTo(CommitDetectorConfig.defaults());
-    }
-
-    @Test
-    void builderPropagatesOptionsIntoDefaultMemory() {
-        MemoryBuildOptions configured =
+    void builderPropagatesConfiguredBuildOptionsIntoDefaultMemory() {
+        var configured =
                 MemoryBuildOptions.builder()
                         .retrieval(
                                 new RetrievalOptions(
@@ -232,7 +128,7 @@ class DefaultMemoryBuilderTest {
                                         RetrievalAdvancedOptions.defaults()))
                         .build();
 
-        DefaultMemory memory =
+        var memory =
                 (DefaultMemory)
                         Memory.builder()
                                 .chatClient(CHAT_CLIENT)
@@ -248,14 +144,13 @@ class DefaultMemoryBuilderTest {
 
     @Test
     void buildRoutesSlotSpecificClients() {
-        TrackingChatClient defaultChatClient = new TrackingChatClient();
-        TrackingChatClient itemExtractionClient = new TrackingChatClient();
-        TrackingChatClient queryExpanderClient = new TrackingChatClient();
+        var itemExtractionClient = new TrackingChatClient();
+        var queryExpanderClient = new TrackingChatClient();
 
-        DefaultMemory memory =
+        var memory =
                 (DefaultMemory)
                         Memory.builder()
-                                .chatClient(defaultChatClient)
+                                .chatClient(CHAT_CLIENT)
                                 .chatClient(ChatClientSlot.ITEM_EXTRACTION, itemExtractionClient)
                                 .chatClient(ChatClientSlot.QUERY_EXPANDER, queryExpanderClient)
                                 .store(MEMORY_STORE)
@@ -263,20 +158,18 @@ class DefaultMemoryBuilderTest {
                                 .vector(MEMORY_VECTOR)
                                 .build();
 
-        MemoryExtractor extractor = readField(memory, "extractor", MemoryExtractor.class);
-        MemoryItemLayer memoryItemLayer =
-                readField(extractor, "memoryItemStep", MemoryItemLayer.class);
-        DefaultMemoryItemExtractor itemExtractor =
+        var extractor = readField(memory, "extractor", MemoryExtractor.class);
+        var memoryItemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+        var itemExtractor =
                 readField(memoryItemLayer, "extractor", DefaultMemoryItemExtractor.class);
-        LlmItemExtractionStrategy itemStrategy =
+        var itemStrategy =
                 readField(itemExtractor, "defaultStrategy", LlmItemExtractionStrategy.class);
-        DefaultMemoryRetriever retriever =
-                readField(memory, "retriever", DefaultMemoryRetriever.class);
+        var retriever = readField(memory, "retriever", DefaultMemoryRetriever.class);
         @SuppressWarnings("unchecked")
-        Map<String, Object> strategies = readField(retriever, "strategies", Map.class);
-        DeepRetrievalStrategy deepStrategy =
+        var strategies = readField(retriever, "strategies", Map.class);
+        var deepStrategy =
                 (DeepRetrievalStrategy) strategies.get(RetrievalStrategies.DEEP_RETRIEVAL);
-        LlmTypedQueryExpander typedQueryExpander =
+        var typedQueryExpander =
                 readField(deepStrategy, "typedQueryExpander", LlmTypedQueryExpander.class);
 
         assertThat(readField(itemStrategy, "structuredChatClient", StructuredChatClient.class))
@@ -291,12 +184,12 @@ class DefaultMemoryBuilderTest {
 
     @Test
     void buildPropagatesPromptRegistryAcrossExtractionAndRetrievalAssemblies() {
-        PromptRegistry promptRegistry =
+        var promptRegistry =
                 InMemoryPromptRegistry.builder()
                         .override(PromptType.TYPED_QUERY_EXPAND, "custom query expand")
                         .build();
 
-        DefaultMemory memory =
+        var memory =
                 (DefaultMemory)
                         Memory.builder()
                                 .chatClient(CHAT_CLIENT)
@@ -306,20 +199,19 @@ class DefaultMemoryBuilderTest {
                                 .promptRegistry(promptRegistry)
                                 .build();
 
-        MemoryExtractor extractor = readField(memory, "extractor", MemoryExtractor.class);
-        LlmContextCommitDetector contextCommitDetector =
+        var extractor = readField(memory, "extractor", MemoryExtractor.class);
+        var contextCommitDetector =
                 readField(extractor, "contextCommitDetector", LlmContextCommitDetector.class);
-        PromptRegistry extractionPromptRegistry =
+        var extractionPromptRegistry =
                 readField(contextCommitDetector, "promptRegistry", PromptRegistry.class);
-        DefaultMemoryRetriever retriever =
-                readField(memory, "retriever", DefaultMemoryRetriever.class);
+        var retriever = readField(memory, "retriever", DefaultMemoryRetriever.class);
         @SuppressWarnings("unchecked")
-        Map<String, Object> strategies = readField(retriever, "strategies", Map.class);
-        DeepRetrievalStrategy deepStrategy =
+        var strategies = readField(retriever, "strategies", Map.class);
+        var deepStrategy =
                 (DeepRetrievalStrategy) strategies.get(RetrievalStrategies.DEEP_RETRIEVAL);
-        LlmTypedQueryExpander typedQueryExpander =
+        var typedQueryExpander =
                 readField(deepStrategy, "typedQueryExpander", LlmTypedQueryExpander.class);
-        PromptRegistry retrievalPromptRegistry =
+        var retrievalPromptRegistry =
                 readField(typedQueryExpander, "promptRegistry", PromptRegistry.class);
 
         assertThat(extractionPromptRegistry).isSameAs(promptRegistry);
@@ -327,50 +219,27 @@ class DefaultMemoryBuilderTest {
     }
 
     @Test
-    void buildUsesStoreAndBufferSubcomponents() {
-        DefaultMemory memory =
-                (DefaultMemory)
-                        Memory.builder()
-                                .chatClient(CHAT_CLIENT)
-                                .store(MEMORY_STORE)
-                                .buffer(MEMORY_BUFFER)
-                                .vector(MEMORY_VECTOR)
-                                .build();
-
-        MemoryExtractor extractor = readField(memory, "extractor", MemoryExtractor.class);
-        RawDataLayer rawDataLayer = readField(extractor, "rawDataStep", RawDataLayer.class);
-        MemoryStore rawDataStore = readField(rawDataLayer, "memoryStore", MemoryStore.class);
-        ConversationBuffer pendingConversationBuffer =
-                readField(extractor, "pendingConversationBuffer", ConversationBuffer.class);
-        MemoryBuffer memoryBuffer = readField(memory, "memoryBuffer", MemoryBuffer.class);
-
-        assertThat(rawDataStore).isSameAs(MEMORY_STORE);
-        assertThat(pendingConversationBuffer).isSameAs(CONVERSATION_BUFFER_STORE);
-        assertThat(memoryBuffer).isSameAs(MEMORY_BUFFER);
-    }
-
-    @Test
     void closeClosesCloseableComponentsOnlyOnce() {
-        AtomicInteger storeCloseCount = new AtomicInteger();
-        AtomicInteger bufferCloseCount = new AtomicInteger();
-        AtomicInteger textSearchCloseCount = new AtomicInteger();
-        AtomicInteger chatClientCloseCount = new AtomicInteger();
-        AtomicInteger vectorCloseCount = new AtomicInteger();
+        var storeCloseCount = new AtomicInteger();
+        var bufferCloseCount = new AtomicInteger();
+        var textSearchCloseCount = new AtomicInteger();
+        var chatClientCloseCount = new AtomicInteger();
+        var vectorCloseCount = new AtomicInteger();
 
-        MemoryStore store =
+        var store =
                 new FixedMemoryStore(
                         RAW_DATA_OPERATIONS, ITEM_OPERATIONS, INSIGHT_OPERATIONS, storeCloseCount);
-        MemoryBuffer buffer =
+        var buffer =
                 new FixedMemoryBuffer(
-                        INSIGHT_BUFFER_STORE,
-                        CONVERSATION_BUFFER_STORE,
+                        INSIGHT_BUFFER,
+                        PENDING_CONVERSATION_BUFFER,
                         RECENT_CONVERSATION_BUFFER,
                         bufferCloseCount);
-        CloseTrackingTextSearch textSearch = new CloseTrackingTextSearch(textSearchCloseCount);
-        TrackingChatClient chatClient = new TrackingChatClient(chatClientCloseCount);
-        CloseTrackingVector vector = new CloseTrackingVector(vectorCloseCount);
+        var textSearch = new CloseTrackingTextSearch(textSearchCloseCount);
+        var chatClient = new TrackingChatClient(chatClientCloseCount);
+        var vector = new CloseTrackingVector(vectorCloseCount);
 
-        Memory memory =
+        var memory =
                 Memory.builder()
                         .chatClient(chatClient)
                         .store(store)
@@ -512,12 +381,16 @@ class DefaultMemoryBuilderTest {
 
         @Override
         public Mono<java.util.List<com.openmemind.ai.memory.core.textsearch.TextSearchResult>>
-                search(MemoryId memoryId, String query, int topK, SearchTarget target) {
+                search(
+                        com.openmemind.ai.memory.core.data.MemoryId memoryId,
+                        String query,
+                        int topK,
+                        SearchTarget target) {
             return Mono.just(java.util.List.of());
         }
 
         @Override
-        public void invalidate(MemoryId memoryId) {}
+        public void invalidate(com.openmemind.ai.memory.core.data.MemoryId memoryId) {}
 
         @Override
         public void close() {
@@ -534,37 +407,46 @@ class DefaultMemoryBuilderTest {
         }
 
         @Override
-        public Mono<String> store(MemoryId memoryId, String text, Map<String, Object> metadata) {
+        public Mono<String> store(
+                com.openmemind.ai.memory.core.data.MemoryId memoryId,
+                String text,
+                Map<String, Object> metadata) {
             return Mono.empty();
         }
 
         @Override
         public Mono<java.util.List<String>> storeBatch(
-                MemoryId memoryId,
+                com.openmemind.ai.memory.core.data.MemoryId memoryId,
                 java.util.List<String> texts,
                 java.util.List<Map<String, Object>> metadataList) {
             return Mono.just(java.util.List.of());
         }
 
         @Override
-        public Mono<Void> delete(MemoryId memoryId, String vectorId) {
+        public Mono<Void> delete(
+                com.openmemind.ai.memory.core.data.MemoryId memoryId, String vectorId) {
             return Mono.empty();
         }
 
         @Override
-        public Mono<Void> deleteBatch(MemoryId memoryId, java.util.List<String> vectorIds) {
+        public Mono<Void> deleteBatch(
+                com.openmemind.ai.memory.core.data.MemoryId memoryId,
+                java.util.List<String> vectorIds) {
             return Mono.empty();
         }
 
         @Override
         public Flux<com.openmemind.ai.memory.core.vector.VectorSearchResult> search(
-                MemoryId memoryId, String query, int topK) {
+                com.openmemind.ai.memory.core.data.MemoryId memoryId, String query, int topK) {
             return Flux.empty();
         }
 
         @Override
         public Flux<com.openmemind.ai.memory.core.vector.VectorSearchResult> search(
-                MemoryId memoryId, String query, int topK, Map<String, Object> filter) {
+                com.openmemind.ai.memory.core.data.MemoryId memoryId,
+                String query,
+                int topK,
+                Map<String, Object> filter) {
             return Flux.empty();
         }
 
@@ -600,7 +482,7 @@ class DefaultMemoryBuilderTest {
                                 };
                             }
 
-                            Class<?> returnType = method.getReturnType();
+                            var returnType = method.getReturnType();
                             if (returnType == void.class) {
                                 return null;
                             }

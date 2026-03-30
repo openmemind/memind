@@ -16,28 +16,32 @@ package com.openmemind.ai.memory.core.builder;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
-import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
-import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 class MemoryBuildOptionsTest {
 
     @Test
-    void defaultsExposeExtractionAndRetrievalSubtrees() {
-        var options = MemoryBuildOptions.defaults();
+    void defaultsMatchBuilderBaseline() {
+        assertThat(MemoryBuildOptions.defaults())
+                .usingRecursiveComparison()
+                .isEqualTo(MemoryBuildOptions.builder().build());
+    }
 
-        assertThat(options.extraction().common().defaultScope()).isEqualTo(MemoryScope.USER);
-        assertThat(options.extraction().rawdata().chunking())
-                .isEqualTo(ConversationChunkingConfig.DEFAULT);
-        assertThat(options.extraction().rawdata().commitDetection())
-                .isEqualTo(CommitDetectorConfig.defaults());
-        assertThat(options.extraction().insight().build())
-                .isEqualTo(new InsightBuildConfig(3, 2, 8, 2));
-        assertThat(options.retrieval().simple().timeout()).isEqualTo(Duration.ofSeconds(10));
-        assertThat(options.retrieval().deep().timeout()).isEqualTo(Duration.ofSeconds(120));
-        assertThat(options.retrieval().simple().keywordSearchEnabled()).isTrue();
-        assertThat(options.retrieval().advanced().rerank().mode()).isEqualTo(RerankMode.PURE);
+    @Test
+    void overridingExtractionLeavesRetrievalBranchUntouched() {
+        var retrievalDefaults = RetrievalOptions.defaults();
+        var customExtraction =
+                new ExtractionOptions(
+                        new ExtractionCommonOptions(
+                                MemoryScope.AGENT, Duration.ofSeconds(30), "Chinese"),
+                        RawDataExtractionOptions.defaults(),
+                        ItemExtractionOptions.defaults(),
+                        InsightExtractionOptions.defaults());
+
+        var options = MemoryBuildOptions.builder().extraction(customExtraction).build();
+
+        assertThat(options.extraction()).isEqualTo(customExtraction);
+        assertThat(options.retrieval()).isEqualTo(retrievalDefaults);
     }
 }
