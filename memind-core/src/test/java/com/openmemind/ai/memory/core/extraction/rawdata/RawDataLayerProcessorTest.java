@@ -16,11 +16,14 @@ package com.openmemind.ai.memory.core.extraction.rawdata;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.openmemind.ai.memory.core.data.MemoryRawData;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
@@ -225,6 +228,39 @@ class RawDataLayerProcessorTest {
     }
 
     @Test
+    @DisplayName("processSegment returns existing rawData without vectorizing again")
+    void processSegmentReturnsExistingRawDataWithoutVectorizingAgain() {
+        var layer = new RawDataLayer(List.of(), defaultCaption, store, vector);
+        var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
+        var segment = new Segment("hello", null, new CharBoundary(0, 5), Map.of());
+        var existing =
+                new MemoryRawData(
+                        "raw-1",
+                        memoryId.toIdentifier(),
+                        "CONVERSATION",
+                        "content-1",
+                        new Segment("persisted", "caption", new CharBoundary(0, 9), Map.of()),
+                        "caption",
+                        "vec-1",
+                        Map.of(),
+                        Instant.parse("2026-03-27T02:18:00Z"),
+                        Instant.parse("2026-03-27T02:17:00Z"),
+                        Instant.parse("2026-03-27T02:18:00Z"));
+        when(rawDataOps.getRawDataByContentId(memoryId, "content-1"))
+                .thenReturn(java.util.Optional.of(existing));
+
+        var result =
+                layer.processSegment(
+                                memoryId, segment, "CONVERSATION", "content-1", Map.of(), "zh-CN")
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.existed()).isTrue();
+        assertThat(result.rawDataList()).containsExactly(existing);
+        verifyNoInteractions(defaultCaption, vector);
+    }
+
+    @Test
     @DisplayName("processSegment keeps runtime context transient while using it for rawdata timing")
     void processSegmentKeepsRuntimeContextTransientWhileUsingItForRawdataTiming() {
         var layer = new RawDataLayer(List.of(), defaultCaption, store, vector);
@@ -260,9 +296,21 @@ class RawDataLayerProcessorTest {
         assertThat(result).isNotNull();
         assertThat(result.segments().getFirst().runtimeContext()).isEqualTo(runtimeContext);
         assertThat(result.rawDataList().getFirst().segment().runtimeContext()).isNull();
-        assertThat(result.rawDataList().getFirst().startTime())
-                .isEqualTo(Instant.parse("2026-03-27T02:17:00Z"));
-        assertThat(result.rawDataList().getFirst().endTime())
-                .isEqualTo(Instant.parse("2026-03-27T02:18:00Z"));
+        verify(rawDataOps)
+                .upsertRawData(
+                        eq(memoryId),
+                        argThat(
+                                rawDataList ->
+                                        rawDataList.size() == 1
+                                                && rawDataList.getFirst().segment().runtimeContext()
+                                                        == null
+                                                && rawDataList
+                                                        .getFirst()
+                                                        .startTime()
+                                                        .equals(runtimeContext.startTime())
+                                                && rawDataList
+                                                        .getFirst()
+                                                        .endTime()
+                                                        .equals(runtimeContext.observedAt())));
     }
 }
