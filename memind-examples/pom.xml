@@ -34,7 +34,6 @@
     </properties>
 
     <modules>
-        <module>memind-example-spring-boot</module>
         <module>memind-example-java</module>
     </modules>
 </project>

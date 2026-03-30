@@ -1,4 +1,0 @@
-com.openmemind.ai.memory.autoconfigure.MemoryLlmAutoConfiguration
-com.openmemind.ai.memory.autoconfigure.extraction.MemoryExtractionAutoConfiguration
-com.openmemind.ai.memory.autoconfigure.retrieval.MemoryRetrievalAutoConfiguration
-com.openmemind.ai.memory.autoconfigure.MemoryAutoConfiguration

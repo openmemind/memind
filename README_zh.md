@@ -125,43 +125,37 @@ cd memind
 mvn clean install
 ```
 
-然后在你的项目 `pom.xml` 中添加 Spring Boot Starter：
+然后在你的项目 `pom.xml` 中添加所需的运行时模块：
 
 ```xml
 <dependency>
   <groupId>com.openmemind.ai</groupId>
-  <artifactId>memind-spring-boot-starter</artifactId>
+  <artifactId>memind-core</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+  <groupId>com.openmemind.ai</groupId>
+  <artifactId>memind-plugin-ai-spring-ai</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+  <groupId>com.openmemind.ai</groupId>
+  <artifactId>memind-plugin-jdbc</artifactId>
   <version>0.1.0-SNAPSHOT</version>
 </dependency>
 ```
 
-### 配置
+Memind 支持两种主要集成方式：
 
-在 `application.yml` 中配置：
-
-```yaml
-spring:
-  ai:
-    openai:
-      api-key: ${OPENAI_API_KEY}
-      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
-      chat:
-        options:
-          model: gpt-4o-mini
-      embedding:
-        options:
-          model: text-embedding-3-small
-
-memind:
-  store:
-    type: sqlite
-    sqlite:
-      path: ./data/memind.db
-```
+- 纯 Java：`memind-core` 加上你需要的插件
+- Spring Boot 基础设施装配：使用 `memind-plugin-ai-spring-ai-starter`、`memind-plugin-jdbc-starter` 这类插件 starter
 
 ### 使用
 
 ```java
+// 在应用中先组装好运行时
+Memory memory = ...;
+
 // 创建记忆标识（用户 + Agent）
 MemoryId memoryId = DefaultMemoryId.of("user-1", "my-agent");
 
@@ -202,7 +196,12 @@ Memory memory = Memory.builder()
         .textSearch(jdbc.textSearch())
         .vector(SpringAiFileVector.file("./data/vector-store.json", embeddingModel))
         .options(MemoryBuildOptions.builder()
-                .insightBuild(new InsightBuildConfig(2, 2, 8, 2))
+                .extraction(new ExtractionOptions(
+                        ExtractionCommonOptions.defaults(),
+                        RawDataExtractionOptions.defaults(),
+                        ItemExtractionOptions.defaults(),
+                        new InsightExtractionOptions(true, new InsightBuildConfig(2, 2, 8, 2))))
+                .retrieval(RetrievalOptions.defaults())
                 .build())
         .build();
 ```
@@ -220,25 +219,21 @@ cd memind
 
 示例现在统一放在 `memind-examples/` 下，并共享 `memind-examples/data` 这份测试数据。
 
-配置 `OPENAI_API_KEY` 后，可以先运行 Spring Boot 示例：
+配置 `OPENAI_API_KEY` 后，可以先运行纯 Java 示例：
 
 ```bash
 # 基础提取 + 检索
-mvn -pl memind-examples/memind-example-spring-boot -am spring-boot:run \
-  -Dspring-boot.run.mainClass=com.openmemind.ai.memory.example.springboot.quickstart.QuickStartExample
+mvn -pl memind-examples/memind-example-java -am \
+  -Dexec.mainClass=com.openmemind.ai.memory.example.java.quickstart.QuickStartExample \
+  exec:java
 ```
 
-纯 Java 示例位于 `memind-examples/memind-example-java`，可以直接在 IDE 中运行，或使用 Maven Exec Plugin 按下面这些主类启动。
-
-这些纯 Java 示例现在统一使用上面的对象直连 builder 方式。
+当前维护的示例都位于 `memind-examples/memind-example-java`，可以直接在 IDE 中运行，
+也可以使用 Maven Exec Plugin 按下面这些主类启动。它们统一使用上面的对象直连
+builder 方式。
 
 | 运行方式 | 示例 | 主类 | 说明 |
 |---------|------|------|------|
-| Spring Boot | **QuickStart** | `com.openmemind.ai.memory.example.springboot.quickstart.QuickStartExample` | 基础提取 + 检索流程 |
-| Spring Boot | **Agent Scope** | `com.openmemind.ai.memory.example.springboot.agent.AgentScopeMemoryExample` | Agent scope 记忆提取、insight tree 刷新与 directives、playbooks、resolutions 检索 |
-| Spring Boot | **Insight** | `com.openmemind.ai.memory.example.springboot.insight.InsightTreeExample` | Insight Tree 多层级生成（Leaf → Branch → Root） |
-| Spring Boot | **Foresight** | `com.openmemind.ai.memory.example.springboot.foresight.ForesightExample` | 预测性记忆与用户需求预判 |
-| Spring Boot | **Tool** | `com.openmemind.ai.memory.example.springboot.tool.ToolMemoryExample` | 工具调用追踪与聚合统计 |
 | 纯 Java | **QuickStart** | `com.openmemind.ai.memory.example.java.quickstart.QuickStartExample` | 通过对象直连 `Memory.builder()` 组装运行时 |
 | 纯 Java | **Agent Scope** | `com.openmemind.ai.memory.example.java.agent.AgentScopeMemoryExample` | 通过对象直连 builder 完成 agent scope 记忆提取、insight tree 刷新与定向检索 |
 | 纯 Java | **Insight** | `com.openmemind.ai.memory.example.java.insight.InsightTreeExample` | 通过对象直连 `Memory.builder()` 并自定义 `MemoryBuildOptions` |
@@ -260,7 +255,8 @@ mvn -pl memind-examples/memind-example-spring-boot -am spring-boot:run \
 | | Deep 策略 | LLM 辅助的查询扩展、充分性检查和重排序 |
 | | 意图路由 | 自动判断是否需要检索 |
 | | 多粒度检索 | 根据查询需求从 Insight Tree 任意层级检索 |
-| **集成** | Spring Boot Starter | 通过 `memind-spring-boot-starter` 自动配置 |
+| **集成** | 纯 Java 运行时 | 通过 `memind-core` 加插件并使用 `Memory.builder()` 显式装配 |
+| | Spring Boot 基础设施 Starter | 通过 `memind-plugin-ai-spring-ai-starter`、`memind-plugin-jdbc-starter` 提供基础设施 bean |
 | | 插件架构 | 可插拔的存储（SQLite、MySQL）和追踪（OpenTelemetry） |
 
 ---
