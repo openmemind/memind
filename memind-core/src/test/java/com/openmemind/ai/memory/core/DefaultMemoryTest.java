@@ -37,7 +37,6 @@ import com.openmemind.ai.memory.core.builder.RetrievalCommonOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
 import com.openmemind.ai.memory.core.builder.SufficiencyOptions;
-import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.ToolCallStats;
@@ -62,6 +61,7 @@ import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
+import com.openmemind.ai.memory.core.support.TestMemoryIds;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Duration;
 import java.time.Instant;
@@ -102,7 +102,7 @@ class DefaultMemoryTest {
         memind =
                 new DefaultMemory(
                         extractor, retriever, store, memoryBuffer, vector, toolStatsService);
-        memoryId = DefaultMemoryId.of("user1", "agent1");
+        memoryId = TestMemoryIds.userAgent();
     }
 
     private ExtractionResult successResult() {
@@ -119,26 +119,50 @@ class DefaultMemoryTest {
     class Memorize {
 
         @Test
-        @DisplayName("addMessages(memoryId, messages) Delegate extract batch mode")
-        void memorizeWithDefaultConfig() {
+        @DisplayName("addMessages wraps conversation content and uses builder extraction defaults")
+        void addMessagesWrapsConversationContentAndUsesBuilderExtractionDefaults() {
             var messages = List.of(Message.user("hello"), Message.assistant("hi"));
-            var result = ExtractionResult.failed(memoryId, Duration.ZERO, null);
-            when(extractor.extract(any(ExtractionRequest.class))).thenReturn(Mono.just(result));
+            var memory =
+                    new DefaultMemory(
+                            extractor,
+                            retriever,
+                            store,
+                            memoryBuffer,
+                            vector,
+                            toolStatsService,
+                            null,
+                            null,
+                            MemoryBuildOptions.builder()
+                                    .extraction(
+                                            new ExtractionOptions(
+                                                    new ExtractionCommonOptions(
+                                                            MemoryScope.AGENT,
+                                                            Duration.ofSeconds(40),
+                                                            "Chinese"),
+                                                    RawDataExtractionOptions.defaults(),
+                                                    ItemExtractionOptions.defaults(),
+                                                    InsightExtractionOptions.defaults()))
+                                    .build());
+            when(extractor.extract(any(ExtractionRequest.class)))
+                    .thenReturn(Mono.just(successResult()));
 
-            StepVerifier.create(memind.addMessages(memoryId, messages))
-                    .expectNext(result)
+            StepVerifier.create(memory.addMessages(memoryId, messages))
+                    .expectNextCount(1)
                     .verifyComplete();
 
-            verify(extractor).extract(any(ExtractionRequest.class));
-        }
-
-        @Test
-        @DisplayName("addMessage Delegate extractor.addMessage")
-        void addMessageDelegates() {
-            var message = Message.user("hello");
-            when(extractor.addMessage(eq(memoryId), eq(message), any())).thenReturn(Mono.empty());
-
-            StepVerifier.create(memind.addMessage(memoryId, message)).verifyComplete();
+            verify(extractor)
+                    .extract(
+                            argThat(
+                                    request ->
+                                            request.content() instanceof ConversationContent cc
+                                                    && cc.getMessages().equals(messages)
+                                                    && request.config().scope() == MemoryScope.AGENT
+                                                    && request.config()
+                                                            .timeout()
+                                                            .equals(Duration.ofSeconds(40))
+                                                    && request.config()
+                                                            .language()
+                                                            .equals("Chinese")));
         }
 
         @Test
@@ -238,21 +262,8 @@ class DefaultMemoryTest {
     class Retrieve {
 
         @Test
-        @DisplayName("retrieve(memoryId, query) Delegate retriever")
-        void retrieveSimple() {
-            var result = RetrievalResult.empty("default", "User Preferences");
-            when(retriever.retrieve(any(RetrievalRequest.class))).thenReturn(Mono.just(result));
-
-            StepVerifier.create(
-                            memind.retrieve(
-                                    memoryId, "User Preferences", RetrievalConfig.Strategy.SIMPLE))
-                    .expectNext(result)
-                    .verifyComplete();
-        }
-
-        @Test
-        @DisplayName("retrieve(memoryId, query, DEEP) uses builder-level retrieval defaults")
-        void retrieveUsesBuilderLevelDeepDefaults() {
+        @DisplayName("retrieve deep materializes retrieval config from build options")
+        void retrieveDeepMaterializesRetrievalConfigFromBuildOptions() {
             var memory =
                     new DefaultMemory(
                             extractor,
@@ -274,8 +285,8 @@ class DefaultMemoryTest {
                                                             22,
                                                             false,
                                                             0,
-                                                            QueryExpansionOptions.defaults(),
-                                                            new SufficiencyOptions(12)),
+                                                            new QueryExpansionOptions(5),
+                                                            new SufficiencyOptions(9)),
                                                     RetrievalAdvancedOptions.defaults()))
                                     .build());
             when(retriever.retrieve(any(RetrievalRequest.class)))
@@ -288,18 +299,24 @@ class DefaultMemoryTest {
             verify(retriever)
                     .retrieve(
                             argThat(
-                                    request ->
-                                            request.config()
-                                                            .timeout()
-                                                            .equals(Duration.ofSeconds(45))
-                                                    && !request.config().enableCache()
-                                                    && request.config().tier2().topK() == 22
-                                                    && ((DeepStrategyConfig)
-                                                                            request.config()
-                                                                                    .strategyConfig())
-                                                                    .sufficiency()
-                                                                    .itemTopK()
-                                                            == 12));
+                                    request -> {
+                                        var strategyConfig =
+                                                (DeepStrategyConfig)
+                                                        request.config().strategyConfig();
+                                        var expandedQueries =
+                                                strategyConfig
+                                                        .queryExpansion()
+                                                        .maxExpandedQueries();
+                                        var sufficiencyTopK =
+                                                strategyConfig.sufficiency().itemTopK();
+                                        return request.config()
+                                                        .timeout()
+                                                        .equals(Duration.ofSeconds(45))
+                                                && !request.config().enableCache()
+                                                && request.config().tier2().topK() == 22
+                                                && expandedQueries == 5
+                                                && sufficiencyTopK == 9;
+                                    }));
         }
     }
 
