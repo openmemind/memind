@@ -13,63 +13,64 @@
  */
 package com.openmemind.ai.memory.core.tracing.decorator;
 
+import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.MEMORY_ID;
 import static com.openmemind.ai.memory.core.tracing.MemorySpanNames.EXTRACTION_ITEM;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
-import com.openmemind.ai.memory.core.tracing.MemoryObserver;
-import com.openmemind.ai.memory.core.tracing.ObservationContext;
-import java.util.function.Supplier;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
+import com.openmemind.ai.memory.core.support.RecordingMemoryObserver;
+import com.openmemind.ai.memory.core.support.TestMemoryIds;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 class TracingMemoryItemExtractStepTest {
 
-    @Nested
-    @DisplayName("extract()")
-    class ExtractTests {
+    @Test
+    void extractPublishesItemSpanAndPropagatesResult() {
+        var observer = new RecordingMemoryObserver();
+        var delegate = mock(MemoryItemExtractStep.class);
+        var result = MemoryItemResult.empty();
+        when(delegate.extract(any(), any(), any())).thenReturn(Mono.just(result));
 
-        @Test
-        @DisplayName("Delegate to delegate and wrap with observer")
-        @SuppressWarnings("unchecked")
-        void delegatesAndWraps() {
-            var result = MemoryItemResult.empty();
-            var memoryId = mock(MemoryId.class);
-            when(memoryId.toIdentifier()).thenReturn("test-id");
-            var rawDataResult = RawDataResult.empty();
-            var config = ItemExtractionConfig.defaults();
+        var traced = new TracingMemoryItemExtractStep(delegate, observer);
+        var memoryId = TestMemoryIds.userAgent();
 
-            var delegate = mock(MemoryItemExtractStep.class);
-            when(delegate.extract(any(), any(), any())).thenReturn(Mono.just(result));
+        StepVerifier.create(
+                        traced.extract(
+                                memoryId, RawDataResult.empty(), ItemExtractionConfig.defaults()))
+                .expectNext(result)
+                .verifyComplete();
 
-            var observer = mock(MemoryObserver.class);
-            when(observer.observeMono(any(ObservationContext.class), any(Supplier.class)))
-                    .thenAnswer(
-                            invocation -> {
-                                Supplier<Mono<MemoryItemResult>> op = invocation.getArgument(1);
-                                return op.get();
-                            });
+        assertThat(observer.monoContexts()).hasSize(1);
+        assertThat(observer.monoContexts().getFirst().spanName()).isEqualTo(EXTRACTION_ITEM);
+        assertThat(observer.monoContexts().getFirst().requestAttributes())
+                .containsEntry(MEMORY_ID, memoryId.toIdentifier());
+    }
 
-            var traced = new TracingMemoryItemExtractStep(delegate, observer);
+    @Test
+    void extractPropagatesDelegateErrorsThroughObserver() {
+        var observer = new RecordingMemoryObserver();
+        var delegate = mock(MemoryItemExtractStep.class);
+        when(delegate.extract(any(), any(), any()))
+                .thenReturn(Mono.error(new IllegalStateException("boom")));
 
-            StepVerifier.create(traced.extract(memoryId, rawDataResult, config))
-                    .expectNext(result)
-                    .verifyComplete();
+        var traced = new TracingMemoryItemExtractStep(delegate, observer);
 
-            verify(observer)
-                    .observeMono(argThat(ctx -> ctx.spanName().equals(EXTRACTION_ITEM)), any());
-            verify(delegate).extract(any(), any(), any());
-        }
+        StepVerifier.create(
+                        traced.extract(
+                                TestMemoryIds.userAgent(),
+                                RawDataResult.empty(),
+                                ItemExtractionConfig.defaults()))
+                .expectErrorMessage("boom")
+                .verify();
+
+        assertThat(observer.monoContexts()).hasSize(1);
     }
 }

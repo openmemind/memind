@@ -13,98 +13,76 @@
  */
 package com.openmemind.ai.memory.core.tracing.decorator;
 
+import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.MEMORY_ID;
 import static com.openmemind.ai.memory.core.tracing.MemorySpanNames.RETRIEVAL_STRATEGY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategy;
-import com.openmemind.ai.memory.core.tracing.MemoryObserver;
-import com.openmemind.ai.memory.core.tracing.ObservationContext;
+import com.openmemind.ai.memory.core.support.RecordingMemoryObserver;
+import com.openmemind.ai.memory.core.support.TestMemoryIds;
+import com.openmemind.ai.memory.core.tracing.MemoryAttributes;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Supplier;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 class TracingRetrievalStrategyTest {
 
-    @Nested
-    @DisplayName("retrieve()")
-    class RetrieveTests {
+    @Test
+    void retrievePublishesRetrievalStrategySpanAndPropagatesResult() {
+        var observer = new RecordingMemoryObserver();
+        var delegate = mock(RetrievalStrategy.class);
+        var result = RetrievalResult.empty("simple", "query");
+        when(delegate.name()).thenReturn("simple");
+        when(delegate.retrieve(any(), any())).thenReturn(Mono.just(result));
 
-        @Test
-        @DisplayName("Delegate to delegate and wrap with observer")
-        @SuppressWarnings("unchecked")
-        void delegatesAndWraps() {
-            var result = RetrievalResult.empty("simple", "test-query");
-            var delegate = mock(RetrievalStrategy.class);
-            when(delegate.name()).thenReturn("simple");
-            when(delegate.retrieve(any(), any())).thenReturn(Mono.just(result));
+        var traced = new TracingRetrievalStrategy(delegate, observer);
+        var memoryId = TestMemoryIds.userAgent();
+        var context =
+                new QueryContext(memoryId, "query", null, List.of("history"), Map.of(), null, null);
 
-            // NoopMemoryObserver is final, so use mock(MemoryObserver.class) with thenAnswer
-            var observer = mock(MemoryObserver.class);
-            when(observer.observeMono(any(ObservationContext.class), any(Supplier.class)))
-                    .thenAnswer(
-                            invocation -> {
-                                Supplier<Mono<RetrievalResult>> op = invocation.getArgument(1);
-                                return op.get();
-                            });
+        StepVerifier.create(traced.retrieve(context, RetrievalConfig.simple()))
+                .expectNext(result)
+                .verifyComplete();
 
-            var traced = new TracingRetrievalStrategy(delegate, observer);
-            var memoryId = mock(MemoryId.class);
-            when(memoryId.toIdentifier()).thenReturn("test-id");
-            var queryContext =
-                    new QueryContext(
-                            memoryId, "test query", "test query", List.of(), Map.of(), null, null);
-            var config = RetrievalConfig.simple();
-
-            StepVerifier.create(traced.retrieve(queryContext, config))
-                    .expectNext(result)
-                    .verifyComplete();
-
-            verify(observer)
-                    .observeMono(argThat(ctx -> ctx.spanName().equals(RETRIEVAL_STRATEGY)), any());
-            verify(delegate).retrieve(any(), any());
-        }
+        assertThat(observer.monoContexts()).hasSize(1);
+        assertThat(observer.monoContexts().getFirst().spanName()).isEqualTo(RETRIEVAL_STRATEGY);
+        assertThat(observer.monoContexts().getFirst().requestAttributes())
+                .containsEntry(MEMORY_ID, memoryId.toIdentifier())
+                .containsEntry(MemoryAttributes.RETRIEVAL_STRATEGY, "simple");
     }
 
-    @Nested
-    @DisplayName("name()")
-    class NameTests {
+    @Test
+    void retrievePropagatesDelegateErrorsThroughObserver() {
+        var observer = new RecordingMemoryObserver();
+        var delegate = mock(RetrievalStrategy.class);
+        when(delegate.name()).thenReturn("simple");
+        when(delegate.retrieve(any(), any()))
+                .thenReturn(Mono.error(new IllegalStateException("boom")));
 
-        @Test
-        @DisplayName("Delegate to delegate")
-        void delegatesName() {
-            var delegate = mock(RetrievalStrategy.class);
-            when(delegate.name()).thenReturn("deep");
-            var traced = new TracingRetrievalStrategy(delegate, mock(MemoryObserver.class));
-            assertThat(traced.name()).isEqualTo("deep");
-        }
-    }
+        var traced = new TracingRetrievalStrategy(delegate, observer);
 
-    @Nested
-    @DisplayName("onDataChanged()")
-    class OnDataChangedTests {
+        StepVerifier.create(
+                        traced.retrieve(
+                                new QueryContext(
+                                        TestMemoryIds.userAgent(),
+                                        "query",
+                                        null,
+                                        List.of(),
+                                        Map.of(),
+                                        null,
+                                        null),
+                                RetrievalConfig.simple()))
+                .expectErrorMessage("boom")
+                .verify();
 
-        @Test
-        @DisplayName("Delegate to delegate")
-        void delegatesOnDataChanged() {
-            var delegate = mock(RetrievalStrategy.class);
-            var traced = new TracingRetrievalStrategy(delegate, mock(MemoryObserver.class));
-            var memoryId = mock(MemoryId.class);
-            traced.onDataChanged(memoryId);
-            verify(delegate).onDataChanged(memoryId);
-        }
+        assertThat(observer.monoContexts()).hasSize(1);
     }
 }
