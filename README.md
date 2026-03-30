@@ -125,43 +125,37 @@ cd memind
 mvn clean install
 ```
 
-Then add the Spring Boot Starter to your project's `pom.xml`:
+Then add the runtime modules you need to your project's `pom.xml`:
 
 ```xml
 <dependency>
   <groupId>com.openmemind.ai</groupId>
-  <artifactId>memind-spring-boot-starter</artifactId>
+  <artifactId>memind-core</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+  <groupId>com.openmemind.ai</groupId>
+  <artifactId>memind-plugin-ai-spring-ai</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+  <groupId>com.openmemind.ai</groupId>
+  <artifactId>memind-plugin-jdbc</artifactId>
   <version>0.1.0-SNAPSHOT</version>
 </dependency>
 ```
 
-### Configuration
+Memind supports two primary integration styles:
 
-Configure in `application.yml`:
-
-```yaml
-spring:
-  ai:
-    openai:
-      api-key: ${OPENAI_API_KEY}
-      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
-      chat:
-        options:
-          model: gpt-4o-mini
-      embedding:
-        options:
-          model: text-embedding-3-small
-
-memind:
-  store:
-    type: sqlite
-    sqlite:
-      path: ./data/memind.db
-```
+- Pure Java: `memind-core` plus the plugins you need
+- Spring Boot infrastructure wiring: plugin starters such as `memind-plugin-ai-spring-ai-starter` and `memind-plugin-jdbc-starter`
 
 ### Usage
 
 ```java
+// Assemble the runtime once in your application
+Memory memory = ...;
+
 // Create a memory identity (user + agent)
 MemoryId memoryId = DefaultMemoryId.of("user-1", "my-agent");
 
@@ -203,7 +197,12 @@ Memory memory = Memory.builder()
         .textSearch(jdbc.textSearch())
         .vector(SpringAiFileVector.file("./data/vector-store.json", embeddingModel))
         .options(MemoryBuildOptions.builder()
-                .insightBuild(new InsightBuildConfig(2, 2, 8, 2))
+                .extraction(new ExtractionOptions(
+                        ExtractionCommonOptions.defaults(),
+                        RawDataExtractionOptions.defaults(),
+                        ItemExtractionOptions.defaults(),
+                        new InsightExtractionOptions(true, new InsightBuildConfig(2, 2, 8, 2))))
+                .retrieval(RetrievalOptions.defaults())
                 .build())
         .build();
 ```
@@ -221,25 +220,21 @@ cd memind
 
 Examples now live under `memind-examples/` and share one data directory at `memind-examples/data`.
 
-Configure `OPENAI_API_KEY`, then run one of the Spring Boot examples:
+Configure `OPENAI_API_KEY`, then run one of the pure Java examples:
 
 ```bash
 # Basic extract + retrieve
-mvn -pl memind-examples/memind-example-spring-boot -am spring-boot:run \
-  -Dspring-boot.run.mainClass=com.openmemind.ai.memory.example.springboot.quickstart.QuickStartExample
+mvn -pl memind-examples/memind-example-java -am \
+  -Dexec.mainClass=com.openmemind.ai.memory.example.java.quickstart.QuickStartExample \
+  exec:java
 ```
 
-Pure Java examples are available in `memind-examples/memind-example-java`. Run the same scenario mains from your IDE, or invoke them with Maven Exec Plugin using the fully qualified class names below.
-
-They now use the same object-first builder approach shown above.
+All maintained examples now live in `memind-examples/memind-example-java`. Run them from your
+IDE, or invoke them with Maven Exec Plugin using the fully qualified class names below. They use
+the same object-first builder approach shown above.
 
 | Runtime | Example | Main Class | Description |
 |---------|---------|------------|-------------|
-| Spring Boot | **QuickStart** | `com.openmemind.ai.memory.example.springboot.quickstart.QuickStartExample` | Basic extract + retrieve flow |
-| Spring Boot | **Agent Scope** | `com.openmemind.ai.memory.example.springboot.agent.AgentScopeMemoryExample` | Agent-scope extraction, insight tree flush, and retrieval for directives, playbooks, and resolutions |
-| Spring Boot | **Insight** | `com.openmemind.ai.memory.example.springboot.insight.InsightTreeExample` | Insight Tree multi-tier generation (Leaf → Branch → Root) |
-| Spring Boot | **Foresight** | `com.openmemind.ai.memory.example.springboot.foresight.ForesightExample` | Predictive memory — anticipate user needs |
-| Spring Boot | **Tool** | `com.openmemind.ai.memory.example.springboot.tool.ToolMemoryExample` | Tool call tracking and aggregated tool statistics |
 | Pure Java | **QuickStart** | `com.openmemind.ai.memory.example.java.quickstart.QuickStartExample` | Object-first builder with direct Spring AI runtime objects |
 | Pure Java | **Agent Scope** | `com.openmemind.ai.memory.example.java.agent.AgentScopeMemoryExample` | Object-first agent-scope extraction with insight tree flush and targeted retrieval |
 | Pure Java | **Insight** | `com.openmemind.ai.memory.example.java.insight.InsightTreeExample` | Object-first builder with custom `MemoryBuildOptions` |
@@ -261,7 +256,8 @@ They now use the same object-first builder approach shown above.
 | | Deep Strategy | LLM-assisted query expansion, sufficiency checking, and reranking |
 | | Intent Routing | Automatically determine whether retrieval is needed |
 | | Multi-granularity | Retrieve from any Insight Tree tier based on query needs |
-| **Integration** | Spring Boot Starter | Auto-configuration with `memind-spring-boot-starter` |
+| **Integration** | Pure Java Runtime | `memind-core` plus plugins assembled through `Memory.builder()` |
+| | Spring Boot Infrastructure Starters | Optional infrastructure wiring with `memind-plugin-ai-spring-ai-starter` and `memind-plugin-jdbc-starter` |
 | | Plugin Architecture | Pluggable store (SQLite, MySQL) and tracing (OpenTelemetry) |
 
 ---

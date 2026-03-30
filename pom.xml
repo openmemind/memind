@@ -32,7 +32,6 @@
         <module>memind-core</module>
         <module>memind-plugins</module>
         <module>memind-evaluation</module>
-        <module>memind-spring-boot-starter</module>
         <module>memind-examples</module>
     </modules>
 
