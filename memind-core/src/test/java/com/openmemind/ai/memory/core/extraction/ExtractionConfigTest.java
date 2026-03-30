@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core.extraction;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -23,17 +24,24 @@ import org.junit.jupiter.api.Test;
 class ExtractionConfigTest {
 
     @Test
-    @DisplayName("defaults should enable insight and use USER scope")
-    void defaultsShouldHaveCorrectSettings() {
-        var config = ExtractionConfig.defaults();
-        assertThat(config.enableInsight()).isTrue();
+    @DisplayName("withoutInsight only disables insight generation")
+    void withoutInsightOnlyDisablesInsightGeneration() {
+        var config = ExtractionConfig.withoutInsight();
+
+        assertThat(config.enableInsight()).isFalse();
         assertThat(config.scope()).isEqualTo(MemoryScope.USER);
+        assertThat(config.enableForesight()).isFalse();
+        assertThat(config.timeout()).isEqualTo(Duration.ofMinutes(10));
     }
 
     @Test
-    @DisplayName("agentOnly should use AGENT scope")
-    void agentOnlyShouldUseAgentScope() {
-        var config = ExtractionConfig.agentOnly();
-        assertThat(config.scope()).isEqualTo(MemoryScope.AGENT);
+    @DisplayName("withLanguage only changes language")
+    void withLanguageOnlyChangesLanguage() {
+        var config = ExtractionConfig.defaults().withLanguage("Chinese");
+
+        assertThat(config.language()).isEqualTo("Chinese");
+        assertThat(config.enableInsight()).isTrue();
+        assertThat(config.scope()).isEqualTo(MemoryScope.USER);
+        assertThat(config.timeout()).isEqualTo(Duration.ofMinutes(10));
     }
 }
