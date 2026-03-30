@@ -13,24 +13,21 @@
  */
 package com.openmemind.ai.memory.evaluation.adapter.memind;
 
-import com.openmemind.ai.memory.core.buffer.ConversationBuffer;
+import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
-import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
-import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
-import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import com.openmemind.ai.memory.core.extraction.result.InsightResult;
+import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
+import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
-import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig.TierConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
-import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.evaluation.adapter.AddMode;
 import com.openmemind.ai.memory.evaluation.adapter.BaseMemoryAdapter;
 import com.openmemind.ai.memory.evaluation.adapter.model.AddRequest;
@@ -138,12 +135,8 @@ public class MemindAdapter extends BaseMemoryAdapter {
             Now, follow the Chain-of-Thought process above to answer the question:
             """;
 
-    private final MemoryExtractionPipeline extractor;
-    private final MemoryRetriever retriever;
+    private final Memory memory;
     private final ChatClient chatClient;
-    private final ContextCommitDetector contextCommitDetector;
-    private final ConversationBuffer bufferStore;
-    private final MemoryStore memoryStore;
     private final Reranker reranker;
 
     /** Is dual perspective: false=only use speakerA (default), true=speakerA+speakerB */
@@ -159,21 +152,13 @@ public class MemindAdapter extends BaseMemoryAdapter {
     private final RetrievalConfig retrievalConfig;
 
     public MemindAdapter(
-            MemoryExtractionPipeline extractor,
-            MemoryRetriever retriever,
+            Memory memory,
             ChatClient chatClient,
-            ContextCommitDetector contextCommitDetector,
-            ConversationBuffer bufferStore,
-            MemoryStore memoryStore,
             Reranker reranker,
             RetrievalConfig retrievalConfig,
             EvaluationProperties props) {
-        this.extractor = extractor;
-        this.retriever = retriever;
+        this.memory = memory;
         this.chatClient = chatClient;
-        this.contextCommitDetector = contextCommitDetector;
-        this.bufferStore = bufferStore;
-        this.memoryStore = memoryStore;
         this.reranker = reranker;
         this.dualPerspective = props.getSystem().getSearch().isDualPerspective();
         this.extractionConfig = ExtractionConfig.withoutInsight();
@@ -217,10 +202,10 @@ public class MemindAdapter extends BaseMemoryAdapter {
             return Mono.zip(
                             extractForSpeaker(request, request.speakerAUserId()),
                             extractForSpeaker(request, request.speakerBUserId()))
-                    .map(tuple -> toAddResult(tuple.getT1()).merge(toAddResult(tuple.getT2())));
+                    .map(tuple -> tuple.getT1().merge(tuple.getT2()));
         } else {
             // Single perspective (default): extract only from speakerA
-            return extractForSpeaker(request, request.speakerAUserId()).map(this::toAddResult);
+            return extractForSpeaker(request, request.speakerAUserId());
         }
     }
 
@@ -229,38 +214,42 @@ public class MemindAdapter extends BaseMemoryAdapter {
      * After all messages are processed, flush the remaining messages in the buffer.
      * In dual perspective, distinguish USER/ASSISTANT roles by mainUserId, in single perspective unified as USER.
      */
-    private Mono<ExtractionResult> extractForSpeaker(AddRequest req, String mainUserId) {
+    private Mono<AddResult> extractForSpeaker(AddRequest req, String mainUserId) {
         MemoryId memoryId = DefaultMemoryId.of(mainUserId, AGENT_ID);
-        String bufferKey = memoryId.toIdentifier();
 
         return Flux.fromIterable(req.messages())
                 .concatMap(
                         m ->
-                                extractor.addMessage(
-                                        memoryId, toMessage(m, mainUserId), extractionConfig))
+                                memory.addMessage(
+                                                memoryId,
+                                                toMessage(m, mainUserId),
+                                                extractionConfig)
+                                        .defaultIfEmpty(emptyExtractionResult(memoryId)))
                 .collectList()
                 .flatMap(
-                        intermediateResults -> {
-                            // flush remaining buffer
-                            List<Message> remaining = bufferStore.load(bufferKey);
-                            if (remaining.isEmpty()) {
-                                // No remaining messages: return intermediate result summary (or
-                                // empty result)
-                                if (intermediateResults.isEmpty()) {
-                                    return Mono.just(
-                                            ExtractionResult.failed(
-                                                    memoryId, Duration.ZERO, "empty buffer"));
-                                }
-                                return Mono.just(intermediateResults.getLast());
-                            }
-                            bufferStore.clear(bufferKey);
-                            var content = new ConversationContent(remaining);
-                            var request =
-                                    ExtractionRequest.conversation(memoryId, content)
-                                            .withConfig(extractionConfig);
-                            return extractor.extract(request);
-                        })
-                .defaultIfEmpty(ExtractionResult.failed(memoryId, Duration.ZERO, "empty buffer"));
+                        intermediateResults ->
+                                memory.commit(memoryId, extractionConfig)
+                                        .map(
+                                                commitResult -> {
+                                                    AddResult aggregated = AddResult.empty();
+                                                    for (ExtractionResult result :
+                                                            intermediateResults) {
+                                                        aggregated =
+                                                                aggregated.merge(
+                                                                        toAddResult(result));
+                                                    }
+                                                    return aggregated.merge(
+                                                            toAddResult(commitResult));
+                                                }));
+    }
+
+    private ExtractionResult emptyExtractionResult(MemoryId memoryId) {
+        return ExtractionResult.success(
+                memoryId,
+                RawDataResult.empty(),
+                MemoryItemResult.empty(),
+                InsightResult.empty(),
+                Duration.ZERO);
     }
 
     /**
@@ -273,12 +262,7 @@ public class MemindAdapter extends BaseMemoryAdapter {
         List<Message> messages =
                 req.messages().stream().map(em -> toMessage(em, mainUserId)).toList();
 
-        ConversationContent content = new ConversationContent(messages);
-        ExtractionRequest extractionRequest =
-                ExtractionRequest.conversation(memoryId, content).withConfig(extractionConfig);
-
-        return extractor
-                .extract(extractionRequest)
+        return memory.addMessages(memoryId, messages, extractionConfig)
                 .map(this::toAddResult)
                 .defaultIfEmpty(AddResult.empty());
     }
@@ -302,16 +286,14 @@ public class MemindAdapter extends BaseMemoryAdapter {
                             Map.of(),
                             null,
                             null);
-            return Mono.zip(retriever.retrieve(reqA), retriever.retrieve(reqB))
+            return Mono.zip(memory.retrieve(reqA), memory.retrieve(reqB))
                     .flatMap(
                             tuple ->
                                     mergeRerankAndFormat(
                                             request, memIdA, tuple.getT1(), memIdB, tuple.getT2()));
         } else {
             // Single perspective (default): only retrieve for speakerA
-            return retriever
-                    .retrieve(reqA)
-                    .map(result -> formatSingleResult(request, memIdA, result));
+            return memory.retrieve(reqA).map(result -> formatSingleResult(request, memIdA, result));
         }
     }
 
