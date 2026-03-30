@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.plugin.ai.spring.autoconfigure;
 
-import com.openmemind.ai.memory.autoconfigure.MemoryProperties;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import com.openmemind.ai.memory.plugin.ai.spring.FileSimpleVectorStore;
 import com.openmemind.ai.memory.plugin.ai.spring.SpringAiMemoryVector;
@@ -38,14 +37,14 @@ import org.springframework.context.annotation.Bean;
         })
 @ConditionalOnClass(EmbeddingModel.class)
 @ConditionalOnBean(EmbeddingModel.class)
-@EnableConfigurationProperties(MemoryProperties.class)
+@EnableConfigurationProperties(SpringAiVectorProperties.class)
 public class SpringAiVectorAutoConfiguration {
 
     @Bean(destroyMethod = "")
     @ConditionalOnMissingBean({VectorStore.class, MemoryVector.class})
-    public VectorStore vectorStore(EmbeddingModel embeddingModel, MemoryProperties properties) {
-        return new FileSimpleVectorStore(
-                embeddingModel, Path.of(properties.getVector().getStorePath()));
+    public VectorStore vectorStore(
+            EmbeddingModel embeddingModel, SpringAiVectorProperties properties) {
+        return new FileSimpleVectorStore(embeddingModel, Path.of(properties.getStorePath()));
     }
 
     @Bean

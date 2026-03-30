@@ -41,9 +41,7 @@ import org.springframework.core.env.Environment;
         afterName = {
             "org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration",
             "com.openmemind.ai.memory.plugin.store.mybatis.MemoryMybatisPlusAutoConfiguration"
-        },
-        beforeName =
-                "com.openmemind.ai.memory.autoconfigure.extraction.MemoryExtractionAutoConfiguration")
+        })
 @ConditionalOnBean(DataSource.class)
 public class JdbcPluginAutoConfiguration {
 
