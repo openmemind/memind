@@ -114,7 +114,7 @@ final class MemoryExtractionAssembler {
                         insightTreeReorganizer,
                         context.memoryVector(),
                         IdUtils.snowflake(),
-                        context.options().insightBuild(),
+                        context.options().extraction().insight().build(),
                         null);
         InsightLayer insightLayer =
                 new InsightLayer(
@@ -124,7 +124,7 @@ final class MemoryExtractionAssembler {
 
         ContextCommitDetector contextCommitDetector =
                 new LlmContextCommitDetector(
-                        context.options().boundaryDetector(),
+                        context.options().extraction().rawdata().commitDetection(),
                         registry.resolve(ChatClientSlot.CONTEXT_COMMIT_DETECTOR),
                         context.promptRegistry());
         MemoryExtractionPipeline pipeline =
@@ -155,7 +155,7 @@ final class MemoryExtractionAssembler {
                 new ConversationContentProcessor(
                         conversationChunker,
                         llmConversationChunker,
-                        options.conversationChunking(),
+                        options.extraction().rawdata().chunking(),
                         captionGenerator,
                         null);
         ToolCallContentProcessor toolCallProcessor =

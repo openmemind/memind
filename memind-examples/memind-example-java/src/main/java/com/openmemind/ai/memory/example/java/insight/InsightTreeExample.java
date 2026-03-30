@@ -14,7 +14,13 @@
 package com.openmemind.ai.memory.example.java.insight;
 
 import com.openmemind.ai.memory.core.Memory;
+import com.openmemind.ai.memory.core.builder.ExtractionCommonOptions;
+import com.openmemind.ai.memory.core.builder.ExtractionOptions;
+import com.openmemind.ai.memory.core.builder.InsightExtractionOptions;
+import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
+import com.openmemind.ai.memory.core.builder.RetrievalOptions;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
@@ -85,10 +91,21 @@ public final class InsightTreeExample {
     }
 
     private static MemoryBuildOptions insightOptions() {
-        InsightBuildConfig defaults = MemoryBuildOptions.defaults().insightBuild();
+        InsightBuildConfig defaults = MemoryBuildOptions.defaults().extraction().insight().build();
         return MemoryBuildOptions.builder()
-                .insightBuild(
-                        new InsightBuildConfig(2, 2, defaults.concurrency(), defaults.maxRetries()))
+                .extraction(
+                        new ExtractionOptions(
+                                ExtractionCommonOptions.defaults(),
+                                RawDataExtractionOptions.defaults(),
+                                ItemExtractionOptions.defaults(),
+                                new InsightExtractionOptions(
+                                        true,
+                                        new InsightBuildConfig(
+                                                2,
+                                                2,
+                                                defaults.concurrency(),
+                                                defaults.maxRetries()))))
+                .retrieval(RetrievalOptions.defaults())
                 .build();
     }
 

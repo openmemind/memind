@@ -70,10 +70,9 @@ public record DeepStrategyConfig(
     }
 
     /** Multi-query expansion */
-    public record QueryExpansionConfig(
-            int maxExpandedQueries, double originalWeight, double expandedWeight) {
+    public record QueryExpansionConfig(int maxExpandedQueries) {
         public static QueryExpansionConfig defaults() {
-            return new QueryExpansionConfig(3, 2.0, 1.0);
+            return new QueryExpansionConfig(3);
         }
     }
 

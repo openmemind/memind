@@ -136,7 +136,8 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
                         context.chatClientRegistry().defaultClient(),
                         context.memoryStore(),
                         context.memoryBuffer(),
-                        extractionAssembly.lifecycle()));
+                        extractionAssembly.lifecycle()),
+                options);
     }
 
     MemoryBuildOptions buildOptions() {

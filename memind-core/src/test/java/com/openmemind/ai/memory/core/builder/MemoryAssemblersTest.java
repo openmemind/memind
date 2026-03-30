@@ -26,6 +26,7 @@ import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector
 import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
 import com.openmemind.ai.memory.core.extraction.insight.generator.LlmInsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.group.LlmInsightGroupClassifier;
+import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
 import com.openmemind.ai.memory.core.extraction.item.MemoryItemLayer;
 import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItemExtractor;
@@ -34,6 +35,7 @@ import com.openmemind.ai.memory.core.extraction.item.strategy.LlmToolCallItemExt
 import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.LlmConversationCaptionGenerator;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
@@ -97,14 +99,27 @@ class MemoryAssemblersTest {
                     return INSIGHT_OPERATIONS;
                 }
             };
+    private static final CommitDetectorConfig CUSTOM_COMMIT_DETECTION =
+            new CommitDetectorConfig(6, 2048, 4);
+    private static final InsightBuildConfig CUSTOM_INSIGHT_BUILD =
+            new InsightBuildConfig(7, 5, 3, 2);
 
     @Test
-    void extractionAssemblerUsesMemoryBufferAndBoundaryOptions() {
-        CommitDetectorConfig boundaryDetector = new CommitDetectorConfig(6, 2048, 4);
+    void extractionAssemblerUsesNestedRawdataAndInsightOptions() {
         MemoryAssemblyContext context =
                 context(
                         Map.of(),
-                        MemoryBuildOptions.builder().boundaryDetector(boundaryDetector).build());
+                        MemoryBuildOptions.builder()
+                                .extraction(
+                                        new ExtractionOptions(
+                                                ExtractionCommonOptions.defaults(),
+                                                new RawDataExtractionOptions(
+                                                        ConversationChunkingConfig.DEFAULT,
+                                                        CUSTOM_COMMIT_DETECTION),
+                                                ItemExtractionOptions.defaults(),
+                                                new InsightExtractionOptions(
+                                                        true, CUSTOM_INSIGHT_BUILD)))
+                                .build());
 
         MemoryExtractionAssembly assembly = new MemoryExtractionAssembler().assemble(context);
         MemoryExtractor extractor = (MemoryExtractor) assembly.pipeline();
@@ -130,7 +145,9 @@ class MemoryAssemblersTest {
 
         assertThat(processorCaptionGenerator).isSameAs(defaultCaptionGenerator);
         assertThat(readField(actualBoundaryDetector, "config", CommitDetectorConfig.class))
-                .isEqualTo(boundaryDetector);
+                .isEqualTo(CUSTOM_COMMIT_DETECTION);
+        assertThat(readField(scheduler, "config", InsightBuildConfig.class))
+                .isEqualTo(CUSTOM_INSIGHT_BUILD);
         assertThat(rawDataStore).isSameAs(MEMORY_STORE);
         assertThat(pendingConversationBuffer).isSameAs(PENDING_CONVERSATION_BUFFER);
         assertThat(insightBuffer).isSameAs(INSIGHT_BUFFER_STORE);

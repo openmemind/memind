@@ -55,7 +55,13 @@ class RetrievalConfigTest {
             assertThat(config.tier1().enabled()).isTrue();
             assertThat(config.tier2().enabled()).isTrue();
             assertThat(config.tier3().enabled()).isFalse();
+            assertThat(config.rerank().enabled()).isTrue();
             assertThat(config.timeout()).isEqualTo(Duration.ofSeconds(120));
+            assertThat(
+                            ((DeepStrategyConfig) config.strategyConfig())
+                                    .queryExpansion()
+                                    .maxExpandedQueries())
+                    .isEqualTo(3);
         }
     }
 

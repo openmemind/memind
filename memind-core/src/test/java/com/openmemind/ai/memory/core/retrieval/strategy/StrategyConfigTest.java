@@ -68,8 +68,7 @@ class StrategyConfigTest {
         void withMethods() {
             var config =
                     DeepStrategyConfig.defaults()
-                            .withQueryExpansion(
-                                    new DeepStrategyConfig.QueryExpansionConfig(5, 3.0, 1.5));
+                            .withQueryExpansion(new DeepStrategyConfig.QueryExpansionConfig(5));
             assertThat(config.queryExpansion().maxExpandedQueries()).isEqualTo(5);
             assertThat(config.sufficiency().itemTopK()).isEqualTo(20); // unchanged
         }

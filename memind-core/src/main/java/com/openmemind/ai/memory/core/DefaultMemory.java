@@ -16,6 +16,8 @@ package com.openmemind.ai.memory.core;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
+import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.builder.RerankOptions;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.ToolCallStats;
@@ -35,6 +37,8 @@ import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
+import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
+import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
 import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
@@ -71,6 +75,7 @@ public class DefaultMemory implements Memory {
     private final ToolStatsService toolStatsService;
     private final InsightLayer insightLayer;
     private final AutoCloseable lifecycle;
+    private final MemoryBuildOptions buildOptions;
     private final AtomicBoolean closed = new AtomicBoolean();
 
     public DefaultMemory(
@@ -80,7 +85,16 @@ public class DefaultMemory implements Memory {
             MemoryBuffer memoryBuffer,
             MemoryVector vector,
             ToolStatsService toolStatsService) {
-        this(extractor, retriever, memoryStore, memoryBuffer, vector, toolStatsService, null, null);
+        this(
+                extractor,
+                retriever,
+                memoryStore,
+                memoryBuffer,
+                vector,
+                toolStatsService,
+                null,
+                null,
+                MemoryBuildOptions.defaults());
     }
 
     public DefaultMemory(
@@ -92,6 +106,28 @@ public class DefaultMemory implements Memory {
             ToolStatsService toolStatsService,
             InsightLayer insightLayer,
             AutoCloseable lifecycle) {
+        this(
+                extractor,
+                retriever,
+                memoryStore,
+                memoryBuffer,
+                vector,
+                toolStatsService,
+                insightLayer,
+                lifecycle,
+                MemoryBuildOptions.defaults());
+    }
+
+    public DefaultMemory(
+            MemoryExtractionPipeline extractor,
+            MemoryRetriever retriever,
+            MemoryStore memoryStore,
+            MemoryBuffer memoryBuffer,
+            MemoryVector vector,
+            ToolStatsService toolStatsService,
+            InsightLayer insightLayer,
+            AutoCloseable lifecycle,
+            MemoryBuildOptions buildOptions) {
         this.extractor = Objects.requireNonNull(extractor, "extractor must not be null");
         this.retriever = Objects.requireNonNull(retriever, "retriever must not be null");
         this.memoryStore = Objects.requireNonNull(memoryStore, "memoryStore must not be null");
@@ -101,13 +137,14 @@ public class DefaultMemory implements Memory {
                 Objects.requireNonNull(toolStatsService, "toolStatsService must not be null");
         this.insightLayer = insightLayer;
         this.lifecycle = lifecycle;
+        this.buildOptions = Objects.requireNonNull(buildOptions, "buildOptions must not be null");
     }
 
     // ===== Generic extraction =====
 
     @Override
     public Mono<ExtractionResult> extract(MemoryId memoryId, RawContent content) {
-        return extract(memoryId, content, ExtractionConfig.defaults());
+        return extract(memoryId, content, defaultExtractionConfig());
     }
 
     @Override
@@ -132,7 +169,7 @@ public class DefaultMemory implements Memory {
 
     @Override
     public Mono<ExtractionResult> addMessage(MemoryId memoryId, Message message) {
-        return extractor.addMessage(memoryId, message, ExtractionConfig.defaults());
+        return extractor.addMessage(memoryId, message, defaultExtractionConfig());
     }
 
     @Override
@@ -162,7 +199,15 @@ public class DefaultMemory implements Memory {
 
         String query = buildQueryFromRecentMessages(messages);
         return retriever
-                .retrieve(RetrievalRequest.of(request.memoryId(), query, request.strategy()))
+                .retrieve(
+                        new RetrievalRequest(
+                                request.memoryId(),
+                                query,
+                                List.of(),
+                                defaultRetrievalConfig(request.strategy()),
+                                Map.of(),
+                                null,
+                                null))
                 .map(
                         memories -> {
                             int memoriesTokens = TokenUtils.countTokens(memories.formattedResult());
@@ -173,7 +218,7 @@ public class DefaultMemory implements Memory {
 
     @Override
     public Mono<ExtractionResult> commit(MemoryId memoryId) {
-        return commit(memoryId, ExtractionConfig.defaults());
+        return commit(memoryId, defaultExtractionConfig());
     }
 
     @Override
@@ -237,12 +282,103 @@ public class DefaultMemory implements Memory {
     @Override
     public Mono<RetrievalResult> retrieve(
             MemoryId memoryId, String query, RetrievalConfig.Strategy strategy) {
-        return retriever.retrieve(RetrievalRequest.of(memoryId, query, strategy));
+        return retriever.retrieve(
+                new RetrievalRequest(
+                        memoryId,
+                        query,
+                        List.of(),
+                        defaultRetrievalConfig(strategy),
+                        Map.of(),
+                        null,
+                        null));
     }
 
     @Override
     public Mono<RetrievalResult> retrieve(RetrievalRequest request) {
         return retriever.retrieve(request);
+    }
+
+    private ExtractionConfig defaultExtractionConfig() {
+        var extraction = buildOptions.extraction();
+        return new ExtractionConfig(
+                extraction.insight().enabled(),
+                extraction.common().defaultScope(),
+                extraction.item().foresightEnabled(),
+                extraction.common().timeout(),
+                extraction.common().language());
+    }
+
+    private RetrievalConfig defaultRetrievalConfig(RetrievalConfig.Strategy strategy) {
+        var retrieval = buildOptions.retrieval();
+        return switch (strategy) {
+            case SIMPLE -> {
+                var base =
+                        RetrievalConfig.simple(
+                                new SimpleStrategyConfig(
+                                        retrieval.simple().keywordSearchEnabled()));
+                yield applyCache(
+                        base.withTier1(copyTier(base.tier1(), retrieval.simple().insightTopK()))
+                                .withTier2(copyTier(base.tier2(), retrieval.simple().itemTopK()))
+                                .withTier3(copyTier(base.tier3(), retrieval.simple().rawDataTopK()))
+                                .withScoring(retrieval.advanced().scoring())
+                                .withTimeout(retrieval.simple().timeout()),
+                        retrieval.common().cacheEnabled());
+            }
+            case DEEP -> {
+                var base = RetrievalConfig.deep();
+                var baseStrategy = (DeepStrategyConfig) base.strategyConfig();
+                var strategyConfig =
+                        new DeepStrategyConfig(
+                                new DeepStrategyConfig.QueryExpansionConfig(
+                                        retrieval.deep().queryExpansion().maxExpandedQueries()),
+                                new DeepStrategyConfig.SufficiencyConfig(
+                                        retrieval.deep().sufficiency().itemTopK()),
+                                baseStrategy.tier2InitTopK(),
+                                baseStrategy.bm25InitTopK(),
+                                baseStrategy.minScore());
+                var tier3 =
+                        retrieval.deep().rawDataEnabled()
+                                ? new RetrievalConfig.TierConfig(
+                                        true,
+                                        retrieval.deep().rawDataTopK(),
+                                        base.tier3().minScore(),
+                                        base.tier3().truncation())
+                                : RetrievalConfig.TierConfig.disabled();
+                yield applyCache(
+                        RetrievalConfig.deep(strategyConfig)
+                                .withTier1(copyTier(base.tier1(), retrieval.deep().insightTopK()))
+                                .withTier2(copyTier(base.tier2(), retrieval.deep().itemTopK()))
+                                .withTier3(tier3)
+                                .withRerank(toRerankConfig(retrieval.advanced().rerank()))
+                                .withScoring(retrieval.advanced().scoring())
+                                .withTimeout(retrieval.deep().timeout()),
+                        retrieval.common().cacheEnabled());
+            }
+        };
+    }
+
+    private RetrievalConfig applyCache(RetrievalConfig config, boolean enabled) {
+        return enabled ? config : config.withoutCache();
+    }
+
+    private RetrievalConfig.TierConfig copyTier(RetrievalConfig.TierConfig base, int topK) {
+        return new RetrievalConfig.TierConfig(
+                base.enabled(), topK, base.minScore(), base.truncation());
+    }
+
+    private RetrievalConfig.RerankConfig toRerankConfig(RerankOptions options) {
+        return switch (options.mode()) {
+            case DISABLED -> RetrievalConfig.RerankConfig.disabled();
+            case PURE -> RetrievalConfig.RerankConfig.pure(options.topK());
+            case BLEND ->
+                    new RetrievalConfig.RerankConfig(
+                            true,
+                            true,
+                            options.top3Weight(),
+                            options.top10Weight(),
+                            options.otherWeight(),
+                            options.topK());
+        };
     }
 
     @Override
