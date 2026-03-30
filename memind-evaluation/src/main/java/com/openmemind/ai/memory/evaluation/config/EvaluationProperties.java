@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.evaluation.config;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -277,6 +278,9 @@ public class EvaluationProperties {
 
             private String addMode = "context";
             private boolean enableInsight = false;
+            private StorageProperties storage = new StorageProperties();
+            private ExtractionProperties extraction = new ExtractionProperties();
+            private RetrievalProperties retrieval = new RetrievalProperties();
 
             public String getAddMode() {
                 return addMode;
@@ -292,6 +296,180 @@ public class EvaluationProperties {
 
             public void setEnableInsight(boolean enableInsight) {
                 this.enableInsight = enableInsight;
+            }
+
+            public StorageProperties getStorage() {
+                return storage;
+            }
+
+            public void setStorage(StorageProperties storage) {
+                this.storage = storage;
+            }
+
+            public ExtractionProperties getExtraction() {
+                return extraction;
+            }
+
+            public void setExtraction(ExtractionProperties extraction) {
+                this.extraction = extraction;
+            }
+
+            public RetrievalProperties getRetrieval() {
+                return retrieval;
+            }
+
+            public void setRetrieval(RetrievalProperties retrieval) {
+                this.retrieval = retrieval;
+            }
+
+            public static class StorageProperties {
+
+                private SqliteProperties sqlite = new SqliteProperties();
+
+                public SqliteProperties getSqlite() {
+                    return sqlite;
+                }
+
+                public void setSqlite(SqliteProperties sqlite) {
+                    this.sqlite = sqlite;
+                }
+            }
+
+            public static class SqliteProperties {
+
+                private String path = "./eval-data/memind-eval.db";
+
+                public String getPath() {
+                    return path;
+                }
+
+                public void setPath(String path) {
+                    this.path = path;
+                }
+            }
+
+            public static class ExtractionProperties {
+
+                private BoundaryProperties boundary = new BoundaryProperties();
+
+                public BoundaryProperties getBoundary() {
+                    return boundary;
+                }
+
+                public void setBoundary(BoundaryProperties boundary) {
+                    this.boundary = boundary;
+                }
+            }
+
+            public static class BoundaryProperties {
+
+                private int maxMessages = 30;
+                private int maxTokens = 8_000;
+                private int minMessagesForLlm = 5;
+
+                public int getMaxMessages() {
+                    return maxMessages;
+                }
+
+                public void setMaxMessages(int maxMessages) {
+                    this.maxMessages = maxMessages;
+                }
+
+                public int getMaxTokens() {
+                    return maxTokens;
+                }
+
+                public void setMaxTokens(int maxTokens) {
+                    this.maxTokens = maxTokens;
+                }
+
+                public int getMinMessagesForLlm() {
+                    return minMessagesForLlm;
+                }
+
+                public void setMinMessagesForLlm(int minMessagesForLlm) {
+                    this.minMessagesForLlm = minMessagesForLlm;
+                }
+            }
+
+            public static class RetrievalProperties {
+
+                private Duration timeout = Duration.ofMinutes(5);
+                private RerankProperties rerank = new RerankProperties();
+
+                public Duration getTimeout() {
+                    return timeout;
+                }
+
+                public void setTimeout(Duration timeout) {
+                    this.timeout = timeout;
+                }
+
+                public RerankProperties getRerank() {
+                    return rerank;
+                }
+
+                public void setRerank(RerankProperties rerank) {
+                    this.rerank = rerank;
+                }
+            }
+
+            public static class RerankProperties {
+
+                private boolean enabled = true;
+                private boolean blendWithRetrieval = true;
+                private int topK = 20;
+                private String baseUrl = "";
+                private String apiKey = "";
+                private String model = "jina-reranker-v3";
+
+                public boolean isEnabled() {
+                    return enabled;
+                }
+
+                public void setEnabled(boolean enabled) {
+                    this.enabled = enabled;
+                }
+
+                public boolean isBlendWithRetrieval() {
+                    return blendWithRetrieval;
+                }
+
+                public void setBlendWithRetrieval(boolean blendWithRetrieval) {
+                    this.blendWithRetrieval = blendWithRetrieval;
+                }
+
+                public int getTopK() {
+                    return topK;
+                }
+
+                public void setTopK(int topK) {
+                    this.topK = topK;
+                }
+
+                public String getBaseUrl() {
+                    return baseUrl;
+                }
+
+                public void setBaseUrl(String baseUrl) {
+                    this.baseUrl = baseUrl;
+                }
+
+                public String getApiKey() {
+                    return apiKey;
+                }
+
+                public void setApiKey(String apiKey) {
+                    this.apiKey = apiKey;
+                }
+
+                public String getModel() {
+                    return model;
+                }
+
+                public void setModel(String model) {
+                    this.model = model;
+                }
             }
         }
 

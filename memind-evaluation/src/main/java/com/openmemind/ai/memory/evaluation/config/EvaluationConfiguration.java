@@ -15,15 +15,7 @@ package com.openmemind.ai.memory.evaluation.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.openmemind.ai.memory.autoconfigure.MemoryExtractionProperties;
-import com.openmemind.ai.memory.core.buffer.InsightBuffer;
-import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
-import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
-import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
-import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.evaluation.checkpoint.CheckpointStore;
-import com.openmemind.ai.memory.plugin.store.mybatis.MybatisPlusInsightBuffer;
-import com.openmemind.ai.memory.plugin.store.mybatis.mapper.InsightBufferMapper;
 import io.netty.channel.ChannelOption;
 import java.time.Duration;
 import org.springframework.context.annotation.Bean;
@@ -35,12 +27,12 @@ import reactor.netty.http.client.HttpClient;
 import reactor.netty.resources.ConnectionProvider;
 
 /**
- * Evaluation-specific Spring configuration.
+ * Evaluation-specific infrastructure configuration.
  *
- * <p>The bulk of the extraction and retrieval pipeline is provided by memind-spring-boot-starter.
- * This class only overrides or adds beans specific to the evaluation environment.
+ * <p>HTTP clients, object mapping, and checkpoint storage live here. Memind runtime assembly is
+ * provided by {@link EvaluationMemindConfiguration}.
  */
-@Configuration
+@Configuration(proxyBeanMethods = false)
 public class EvaluationConfiguration {
 
     // ─── Infrastructure ─────────────────────────────
@@ -89,30 +81,5 @@ public class EvaluationConfiguration {
     @Bean
     public WebClient.Builder webClientBuilder(HttpClient httpClient) {
         return WebClient.builder().clientConnector(new ReactorClientHttpConnector(httpClient));
-    }
-
-    // ─── Overrides ──────────────────────────────────
-
-    /**
-     * Override starter's default ContextCommitDetector (rule-based) with LLM-based detection
-     * for more accurate conversation segmentation during evaluation.
-     */
-    @Bean
-    public ContextCommitDetector boundaryDetector(
-            StructuredChatClient structuredChatClient, MemoryExtractionProperties props) {
-        var b = props.getBoundary();
-        var config =
-                new CommitDetectorConfig(
-                        b.getMaxMessages(), b.getMaxTokens(), b.getMinMessagesForLlm());
-        return new LlmContextCommitDetector(config, structuredChatClient);
-    }
-
-    /**
-     * Override starter's InMemoryInsightBuffer with MyBatis-backed persistent store
-     * so that the insight buffer survives restarts during long benchmark runs.
-     */
-    @Bean
-    public InsightBuffer insightBufferStore(InsightBufferMapper insightBufferMapper) {
-        return new MybatisPlusInsightBuffer(insightBufferMapper);
     }
 }
