@@ -17,7 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.openmemind.ai.memory.core.DefaultMemory;
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.buffer.InMemoryConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.InMemoryInsightBuffer;
@@ -25,7 +24,6 @@ import com.openmemind.ai.memory.core.buffer.InMemoryRecentConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
-import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -53,10 +51,8 @@ class AiStarterCompositionAutoConfigurationTest {
                             "memind.vector.store-path=/tmp/memind-starter-composition-vector-store.json");
 
     @Test
-    @DisplayName(
-            "Base starter plus AI starter wires the expected top-level beans when memory buffer is"
-                    + " present")
-    void baseStarterPlusAiStarterWiresExpectedBeans() {
+    @DisplayName("AI starter only contributes AI infrastructure beans")
+    void aiStarterOnlyContributesInfrastructureBeans() {
         contextRunner
                 .withUserConfiguration(AiPrerequisitesConfig.class)
                 .run(
@@ -68,21 +64,15 @@ class AiStarterCompositionAutoConfigurationTest {
                             assertThat(context).hasSingleBean(MemoryVector.class);
                             assertThat(context.getBean(MemoryVector.class))
                                     .isInstanceOf(SpringAiMemoryVector.class);
-                            assertThat(context).hasSingleBean(MemoryExtractionPipeline.class);
-                            assertThat(context).hasSingleBean(MemoryRetriever.class);
-                            assertThat(context.getBean(MemoryRetriever.class))
-                                    .isInstanceOf(DefaultMemoryRetriever.class);
-                            assertThat(context).hasSingleBean(Memory.class);
-                            assertThat(context.getBean(Memory.class))
-                                    .isInstanceOf(DefaultMemory.class);
+                            assertThat(context).doesNotHaveBean(MemoryExtractionPipeline.class);
+                            assertThat(context).doesNotHaveBean(MemoryRetriever.class);
+                            assertThat(context).doesNotHaveBean(Memory.class);
                         });
     }
 
     @Test
-    @DisplayName(
-            "Base starter plus AI starter backs off from extraction and memory beans when memory"
-                    + " buffer is missing")
-    void baseStarterPlusAiStarterBacksOffWithoutMemoryBuffer() {
+    @DisplayName("AI starter still avoids memory pipeline beans when memory buffer is missing")
+    void aiStarterBacksOffWithoutMemoryBuffer() {
         contextRunner
                 .withUserConfiguration(AiProviderOnlyConfig.class)
                 .run(
@@ -90,17 +80,15 @@ class AiStarterCompositionAutoConfigurationTest {
                             assertThat(context).hasNotFailed();
                             assertThat(context).hasSingleBean(StructuredChatClient.class);
                             assertThat(context).hasSingleBean(MemoryVector.class);
-                            assertThat(context).hasSingleBean(MemoryRetriever.class);
-                            assertThat(context.getBean(MemoryRetriever.class))
-                                    .isInstanceOf(DefaultMemoryRetriever.class);
+                            assertThat(context).doesNotHaveBean(MemoryRetriever.class);
                             assertThat(context).doesNotHaveBean(MemoryExtractionPipeline.class);
                             assertThat(context).doesNotHaveBean(Memory.class);
                         });
     }
 
     @Test
-    @DisplayName("Base starter plus AI starter backs off cleanly without Spring AI provider beans")
-    void baseStarterPlusAiStarterBacksOffWithoutProviderBeans() {
+    @DisplayName("AI starter backs off cleanly without Spring AI provider beans")
+    void aiStarterBacksOffWithoutProviderBeans() {
         contextRunner
                 .withUserConfiguration(StoreOnlyConfig.class)
                 .run(

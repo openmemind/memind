@@ -31,11 +31,6 @@
     <dependencies>
         <dependency>
             <groupId>com.openmemind.ai</groupId>
-            <artifactId>memind-spring-boot-starter</artifactId>
-            <version>${revision}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.openmemind.ai</groupId>
             <artifactId>memind-plugin-ai-spring-ai</artifactId>
             <version>${revision}</version>
         </dependency>
