@@ -22,15 +22,14 @@ import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunki
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
-import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptType;
 import com.openmemind.ai.memory.core.prompt.extraction.rawdata.ConversationSegmentationPrompts;
+import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -79,12 +78,30 @@ class LlmConversationChunkerTest {
         void shouldSegmentByLlmBoundaries() {
             var messages =
                     List.of(
-                            Message.user("Hello"),
-                            Message.assistant("Hello!"),
-                            Message.user("How's the weather?"),
-                            Message.assistant("It's sunny today"),
-                            Message.user("Recommend a book"),
-                            Message.assistant("I recommend The Three-Body Problem"));
+                            Message.user("Hello", Instant.parse("2026-03-27T02:17:00Z"), "Alice"),
+                            new Message(
+                                    Message.Role.ASSISTANT,
+                                    List.of(),
+                                    Instant.parse("2026-03-27T02:18:00Z"),
+                                    null),
+                            Message.user(
+                                    "How's the weather?",
+                                    Instant.parse("2026-03-27T02:19:00Z"),
+                                    "Alice"),
+                            new Message(
+                                    Message.Role.ASSISTANT,
+                                    List.of(),
+                                    Instant.parse("2026-03-27T02:20:00Z"),
+                                    null),
+                            Message.user(
+                                    "Recommend a book",
+                                    Instant.parse("2026-03-27T02:21:00Z"),
+                                    "Alice"),
+                            new Message(
+                                    Message.Role.ASSISTANT,
+                                    List.of(),
+                                    Instant.parse("2026-03-27T02:22:00Z"),
+                                    null));
             var llmResponse =
                     "{\"segments\": [{\"start\": 0, \"end\": 4}, {\"start\": 4, \"end\": 6}]}";
             var structuredLlmClient = new FakeStructuredChatClient(llmResponse);
@@ -99,9 +116,18 @@ class LlmConversationChunkerTest {
                                         .isEqualTo(new MessageBoundary(0, 4));
                                 assertThat(segments.getLast().boundary())
                                         .isEqualTo(new MessageBoundary(4, 6));
-                                assertThat(segments.getFirst().content()).contains("user: Hello");
+                                assertThat(segments.getFirst().content()).contains("Hello");
                                 assertThat(segments.getLast().content())
-                                        .contains("user: Recommend a book");
+                                        .contains("Recommend a book");
+                                assertThat(segments.getFirst().metadata())
+                                        .doesNotContainKey("messages");
+                                assertThat(segments.getFirst().runtimeContext()).isNotNull();
+                                assertThat(segments.getFirst().runtimeContext().startTime())
+                                        .isEqualTo(Instant.parse("2026-03-27T02:17:00Z"));
+                                assertThat(segments.getFirst().runtimeContext().observedAt())
+                                        .isEqualTo(Instant.parse("2026-03-27T02:20:00Z"));
+                                assertThat(segments.getFirst().runtimeContext().userName())
+                                        .isEqualTo("Alice");
                             })
                     .verifyComplete();
 
@@ -175,29 +201,33 @@ class LlmConversationChunkerTest {
         @Test
         @DisplayName("Should degrade to fallback segmentation when the LLM call fails")
         void shouldDegradeToFallbackSegmentationWhenLlmFails() {
-            var messages = List.of(Message.user("Hello"), Message.assistant("Hello!"));
-            var fallbackSegments =
+            var messages =
                     List.of(
-                            new Segment(
-                                    "fallback",
-                                    null,
-                                    new MessageBoundary(0, 2),
-                                    Map.of("messages", messages)));
-            ConversationChunker fallback =
-                    new ConversationChunker() {
-                        @Override
-                        public List<Segment> chunk(
-                                List<Message> ignoredMessages, ConversationChunkingConfig config) {
-                            return fallbackSegments;
-                        }
-                    };
+                            Message.user("Hello", Instant.parse("2026-03-27T02:17:00Z"), "Alice"),
+                            new Message(
+                                    Message.Role.ASSISTANT,
+                                    List.of(),
+                                    Instant.parse("2026-03-27T02:18:00Z"),
+                                    null));
             var chunker =
                     new LlmConversationChunker(
                             new FakeStructuredChatClient(new RuntimeException("LLM unavailable")),
-                            fallback);
+                            new ConversationChunker());
 
             StepVerifier.create(chunker.chunk(messages, CONFIG))
-                    .expectNext(fallbackSegments)
+                    .assertNext(
+                            segments -> {
+                                assertThat(segments).hasSize(1);
+                                assertThat(segments.getFirst().metadata())
+                                        .doesNotContainKey("messages");
+                                assertThat(segments.getFirst().runtimeContext()).isNotNull();
+                                assertThat(segments.getFirst().runtimeContext().startTime())
+                                        .isEqualTo(Instant.parse("2026-03-27T02:17:00Z"));
+                                assertThat(segments.getFirst().runtimeContext().observedAt())
+                                        .isEqualTo(Instant.parse("2026-03-27T02:18:00Z"));
+                                assertThat(segments.getFirst().runtimeContext().userName())
+                                        .isEqualTo("Alice");
+                            })
                     .verifyComplete();
         }
     }

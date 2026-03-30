@@ -26,6 +26,7 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationCont
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
 import com.openmemind.ai.memory.core.extraction.result.InsightResult;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
@@ -184,7 +185,11 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         int endMessage = sealMetadata.get("end_message") instanceof Integer e ? e : messages.size();
         Segment segment =
                 new Segment(
-                        content, null, new MessageBoundary(startMessage, endMessage), sealMetadata);
+                        content,
+                        null,
+                        new MessageBoundary(startMessage, endMessage),
+                        sealMetadata,
+                        SegmentRuntimeContext.fromConversationMessages(messages));
         String contentId = HashUtils.sampledSha256(content);
 
         var request =

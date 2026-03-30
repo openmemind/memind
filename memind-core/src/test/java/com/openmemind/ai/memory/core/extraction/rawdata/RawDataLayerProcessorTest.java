@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.core.extraction.rawdata;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -28,7 +29,9 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRec
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
+import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
@@ -219,5 +222,47 @@ class RawDataLayerProcessorTest {
                 .block();
 
         verify(defaultCaption).generateForSegments(any(), eq("zh-CN"));
+    }
+
+    @Test
+    @DisplayName("processSegment keeps runtime context transient while using it for rawdata timing")
+    void processSegmentKeepsRuntimeContextTransientWhileUsingItForRawdataTiming() {
+        var layer = new RawDataLayer(List.of(), defaultCaption, store, vector);
+        var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
+        var runtimeContext =
+                new SegmentRuntimeContext(
+                        Instant.parse("2026-03-27T02:17:00Z"),
+                        Instant.parse("2026-03-27T02:18:00Z"),
+                        "Alice");
+        var transientSegment =
+                new Segment(
+                        "hello",
+                        null,
+                        new MessageBoundary(0, 2),
+                        Map.of("start_message", 0, "end_message", 2),
+                        runtimeContext);
+
+        when(defaultCaption.generateForSegments(any(), eq("zh-CN")))
+                .thenReturn(Mono.just(List.of(transientSegment.withCaption("caption"))));
+        when(rawDataOps.getRawDataByContentId(any(), any())).thenReturn(java.util.Optional.empty());
+        when(vector.storeBatch(any(), any(), any())).thenReturn(Mono.just(List.of("vec-1")));
+
+        var result =
+                layer.processSegment(
+                                memoryId,
+                                transientSegment,
+                                "CONVERSATION",
+                                "content-1",
+                                Map.of(),
+                                "zh-CN")
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.segments().getFirst().runtimeContext()).isEqualTo(runtimeContext);
+        assertThat(result.rawDataList().getFirst().segment().runtimeContext()).isNull();
+        assertThat(result.rawDataList().getFirst().startTime())
+                .isEqualTo(Instant.parse("2026-03-27T02:17:00Z"));
+        assertThat(result.rawDataList().getFirst().endTime())
+                .isEqualTo(Instant.parse("2026-03-27T02:18:00Z"));
     }
 }

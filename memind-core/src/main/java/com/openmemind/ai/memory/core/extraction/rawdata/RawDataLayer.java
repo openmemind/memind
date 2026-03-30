@@ -229,7 +229,8 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
                                                             segment.content(),
                                                             segment.caption(),
                                                             segment.boundary(),
-                                                            newMetadata);
+                                                            newMetadata,
+                                                            segment.runtimeContext());
                                                 })
                                         .toList());
     }
@@ -243,19 +244,21 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
         List<MemoryRawData> rawDataList =
                 segments.stream()
                         .map(
-                                segment ->
-                                        new MemoryRawData(
-                                                UUID.randomUUID().toString(),
-                                                memoryId.toIdentifier(),
-                                                input.contentType(),
-                                                contentId,
-                                                segment,
-                                                segment.caption(),
-                                                (String) segment.metadata().get("vectorId"),
-                                                segment.metadata(),
-                                                now,
-                                                resolveStartTime(segment, messages, now),
-                                                resolveEndTime(segment, messages, now)))
+                                segment -> {
+                                    Segment durableSegment = segment.withoutRuntimeContext();
+                                    return new MemoryRawData(
+                                            UUID.randomUUID().toString(),
+                                            memoryId.toIdentifier(),
+                                            input.contentType(),
+                                            contentId,
+                                            durableSegment,
+                                            segment.caption(),
+                                            (String) segment.metadata().get("vectorId"),
+                                            segment.metadata(),
+                                            now,
+                                            resolveStartTime(segment, messages, now),
+                                            resolveEndTime(segment, messages, now));
+                                })
                         .toList();
 
         List<ParsedSegment> parsedSegments =
@@ -270,7 +273,8 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
                                             getBoundaryStart(segment),
                                             getBoundaryEnd(segment),
                                             rawDataBizId,
-                                            segment.metadata());
+                                            segment.metadata(),
+                                            segment.runtimeContext());
                                 })
                         .toList();
 
@@ -302,6 +306,9 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
     }
 
     private Instant resolveStartTime(Segment segment, List<Message> messages, Instant fallback) {
+        if (segment.runtimeContext() != null && segment.runtimeContext().startTime() != null) {
+            return segment.runtimeContext().startTime();
+        }
         if (segment.boundary() instanceof MessageBoundary mb && !messages.isEmpty()) {
             int idx = mb.startMessage();
             if (idx >= 0 && idx < messages.size()) {
@@ -313,6 +320,9 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
     }
 
     private Instant resolveEndTime(Segment segment, List<Message> messages, Instant fallback) {
+        if (segment.runtimeContext() != null && segment.runtimeContext().observedAt() != null) {
+            return segment.runtimeContext().observedAt();
+        }
         if (segment.boundary() instanceof MessageBoundary mb && !messages.isEmpty()) {
             int idx = mb.endMessage() - 1;
             if (idx >= 0 && idx < messages.size()) {

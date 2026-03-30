@@ -22,6 +22,8 @@ import static org.mockito.Mockito.when;
 import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
+import com.openmemind.ai.memory.core.data.MemoryInsightType;
+import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.item.dedup.DeduplicationResult;
 import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicator;
@@ -36,17 +38,15 @@ import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Instant;
 import java.util.List;
-import org.junit.jupiter.api.DisplayName;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
-@DisplayName("MemoryItemLayer language forwarding")
-class MemoryItemLayerLanguageTest {
+class MemoryItemLayerRuntimeContextTest {
 
     @Test
-    @DisplayName("Self verification receives extraction language")
-    void selfVerification_receives_extraction_language() {
+    void selfVerificationUsesFirstUserNameAndLastObservedAtFromSegments() {
         MemoryItemExtractor extractor = mock(MemoryItemExtractor.class);
         MemoryItemDeduplicator deduplicator = mock(MemoryItemDeduplicator.class);
         MemoryStore memoryStore = mock(MemoryStore.class);
@@ -57,38 +57,50 @@ class MemoryItemLayerLanguageTest {
                 new MemoryItemLayer(
                         extractor, deduplicator, memoryStore, vector, selfVerificationStep);
 
-        var segment =
+        var first =
                 new ParsedSegment(
-                        "user: hello",
-                        "caption",
+                        "seg-1",
+                        "caption-1",
                         0,
                         1,
-                        "raw-001",
+                        "raw-1",
                         java.util.Map.of(),
                         new SegmentRuntimeContext(
-                                Instant.parse("2024-03-15T10:00:00Z"),
-                                Instant.parse("2024-03-15T10:00:00Z"),
-                                "User"));
-        var extractedEntry =
+                                Instant.parse("2026-03-27T02:17:00Z"),
+                                Instant.parse("2026-03-27T02:18:00Z"),
+                                "Alice"));
+        var second =
+                new ParsedSegment(
+                        "seg-2",
+                        "caption-2",
+                        1,
+                        2,
+                        "raw-2",
+                        java.util.Map.of(),
+                        new SegmentRuntimeContext(
+                                Instant.parse("2026-03-27T02:19:00Z"),
+                                Instant.parse("2026-03-27T02:20:00Z"),
+                                null));
+        var config =
+                new ItemExtractionConfig(
+                        MemoryScope.USER, ContentTypes.CONVERSATION, false, "zh-CN");
+        var entry =
                 new ExtractedMemoryEntry(
                         "hello",
                         1.0f,
-                        Instant.parse("2024-03-15T10:00:00Z"),
-                        Instant.parse("2024-03-15T10:00:00Z"),
-                        "raw-001",
+                        null,
+                        Instant.parse("2026-03-27T02:18:00Z"),
+                        "raw-1",
                         null,
                         List.of(),
                         java.util.Map.of(),
                         null,
                         null);
-        var config =
-                new ItemExtractionConfig(
-                        MemoryScope.USER, ContentTypes.CONVERSATION, false, "zh-CN");
 
         when(memoryStore.insightOperations()).thenReturn(insightOperations);
         when(insightOperations.listInsightTypes()).thenReturn(DefaultInsightTypes.all());
-        when(extractor.extract(eq(List.of(segment)), anyList(), eq(config)))
-                .thenReturn(Mono.just(List.of(extractedEntry)));
+        when(extractor.extract(eq(List.of(first, second)), anyList(), eq(config)))
+                .thenReturn(Mono.just(List.of(entry)));
         when(deduplicator.deduplicate(
                         org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(Mono.just(new DeduplicationResult(List.of(), List.of())));
@@ -97,19 +109,19 @@ class MemoryItemLayerLanguageTest {
         StepVerifier.create(
                         layer.extract(
                                 DefaultMemoryId.of("user1", "agent1"),
-                                new RawDataResult(List.of(), List.of(segment), false),
+                                new RawDataResult(List.of(), List.of(first, second), false),
                                 config))
                 .assertNext(result -> assertThat(result.isEmpty()).isTrue())
                 .verifyComplete();
 
-        assertThat(selfVerificationStep.capturedLanguage()).isEqualTo("zh-CN");
+        assertThat(selfVerificationStep.capturedUserName()).isEqualTo("Alice");
         assertThat(selfVerificationStep.capturedObservedAt())
-                .isEqualTo(Instant.parse("2024-03-15T10:00:00Z"));
+                .isEqualTo(Instant.parse("2026-03-27T02:20:00Z"));
     }
 
     private static final class CapturingSelfVerificationStep extends LlmSelfVerificationStep {
 
-        private String capturedLanguage;
+        private String capturedUserName;
         private Instant capturedObservedAt;
 
         private CapturingSelfVerificationStep() {
@@ -122,18 +134,18 @@ class MemoryItemLayerLanguageTest {
                 List<ExtractedMemoryEntry> existingEntries,
                 String rawDataId,
                 Instant referenceTime,
-                List<com.openmemind.ai.memory.core.data.MemoryInsightType> insightTypes,
+                List<MemoryInsightType> insightTypes,
                 String userName,
-                java.util.Set<com.openmemind.ai.memory.core.data.enums.MemoryCategory> categories,
+                Set<MemoryCategory> categories,
                 String language,
                 Instant observedAt) {
-            capturedLanguage = language;
+            capturedUserName = userName;
             capturedObservedAt = observedAt;
             return Mono.just(List.of());
         }
 
-        private String capturedLanguage() {
-            return capturedLanguage;
+        private String capturedUserName() {
+            return capturedUserName;
         }
 
         private Instant capturedObservedAt() {

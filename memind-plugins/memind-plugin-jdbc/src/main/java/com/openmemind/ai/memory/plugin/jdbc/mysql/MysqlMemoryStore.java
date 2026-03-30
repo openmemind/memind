@@ -842,13 +842,14 @@ public class MysqlMemoryStore implements RawDataOperations, ItemOperations, Insi
     }
 
     private Map<String, Object> segmentToMap(Segment segment) {
+        Segment durableSegment = segment.withoutRuntimeContext();
         Map<String, Object> map = new LinkedHashMap<>();
-        map.put("content", segment.content());
-        map.put("caption", segment.caption());
-        map.put("metadata", segment.metadata());
-        if (segment.boundary() != null) {
+        map.put("content", durableSegment.content());
+        map.put("caption", durableSegment.caption());
+        map.put("metadata", durableSegment.metadata());
+        if (durableSegment.boundary() != null) {
             Map<String, Object> boundaryMap = new LinkedHashMap<>();
-            switch (segment.boundary()) {
+            switch (durableSegment.boundary()) {
                 case CharBoundary charBoundary -> {
                     boundaryMap.put("type", "char");
                     boundaryMap.put("startChar", charBoundary.startChar());

@@ -17,9 +17,9 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationCont
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -52,7 +52,13 @@ public class ConversationChunker {
             String text = formatMessages(chunkMessages);
             MessageBoundary boundary = new MessageBoundary(i, end);
 
-            segments.add(new Segment(text, null, boundary, Map.of("messages", chunkMessages)));
+            segments.add(
+                    new Segment(
+                            text,
+                            null,
+                            boundary,
+                            java.util.Map.of(),
+                            SegmentRuntimeContext.fromConversationMessages(chunkMessages)));
         }
 
         return segments;
