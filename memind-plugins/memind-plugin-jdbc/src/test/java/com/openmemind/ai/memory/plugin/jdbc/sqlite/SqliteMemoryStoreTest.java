@@ -32,6 +32,7 @@ import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -143,6 +144,63 @@ class SqliteMemoryStoreTest {
         assertThat(vectorized.captionVectorId()).isEqualTo("vec-1");
         assertThat(vectorized.metadata()).containsEntry("source", "patched");
         assertThat(vectorized.metadata()).containsEntry("score", 0.9d);
+    }
+
+    @Test
+    void rawDataSegmentRuntimeContextIsNotPersisted() {
+        MemoryRawData rawData =
+                new MemoryRawData(
+                        "rd-runtime",
+                        memoryId.toIdentifier(),
+                        ContentTypes.CONVERSATION,
+                        "content-runtime",
+                        new Segment(
+                                "hello world",
+                                "segment caption",
+                                new CharBoundary(0, 11),
+                                Map.of("chunk", 1),
+                                new SegmentRuntimeContext(
+                                        Instant.parse("2026-03-27T02:17:00Z"),
+                                        Instant.parse("2026-03-27T02:18:00Z"),
+                                        "Alice")),
+                        "caption-1",
+                        null,
+                        Map.of("source", "chat"),
+                        BASE_TIME.minusSeconds(300),
+                        BASE_TIME.minusSeconds(320),
+                        BASE_TIME.minusSeconds(290));
+
+        store.upsertRawData(memoryId, List.of(rawData));
+
+        MemoryRawData inserted = store.getRawData(memoryId, "rd-runtime").orElseThrow();
+        assertThat(inserted.segment().runtimeContext()).isNull();
+    }
+
+    @Test
+    void legacySegmentJsonWithoutRuntimeContextStillLoads() {
+        String legacySegmentJson =
+                "{\"content\":\"legacy\",\"caption\":\"legacy"
+                        + " caption\",\"metadata\":{\"source\":\"legacy\"},"
+                        + "\"boundary\":{\"type\":\"char\",\"startChar\":0,\"endChar\":6}}";
+
+        executeUpdate(
+                """
+                INSERT INTO memory_raw_data
+                    (biz_id, user_id, agent_id, memory_id, type, content_id, segment, caption, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                "rd-legacy-segment",
+                memoryId.userId(),
+                memoryId.agentId(),
+                memoryId.toIdentifier(),
+                ContentTypes.CONVERSATION,
+                "content-legacy-segment",
+                legacySegmentJson,
+                "legacy caption",
+                "2026-03-22T00:00:00Z");
+
+        MemoryRawData legacy = store.getRawData(memoryId, "rd-legacy-segment").orElseThrow();
+        assertThat(legacy.segment().runtimeContext()).isNull();
     }
 
     @Test

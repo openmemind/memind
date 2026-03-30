@@ -24,7 +24,6 @@ import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicato
 import com.openmemind.ai.memory.core.extraction.item.extractor.MemoryItemExtractor;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
@@ -371,16 +370,8 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
     private static Instant resolveObservedAt(List<ParsedSegment> segments) {
         for (int i = segments.size() - 1; i >= 0; i--) {
             ParsedSegment segment = segments.get(i);
-            if (segment.metadata() != null) {
-                Object messagesObj = segment.metadata().get("messages");
-                if (messagesObj instanceof List<?> messageList && !messageList.isEmpty()) {
-                    for (int j = messageList.size() - 1; j >= 0; j--) {
-                        Object message = messageList.get(j);
-                        if (message instanceof Message m && m.timestamp() != null) {
-                            return m.timestamp();
-                        }
-                    }
-                }
+            if (segment.runtimeContext() != null && segment.runtimeContext().observedAt() != null) {
+                return segment.runtimeContext().observedAt();
             }
         }
         return null;
@@ -388,18 +379,10 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
 
     private static String resolveUserName(List<ParsedSegment> segments) {
         for (ParsedSegment segment : segments) {
-            if (segment.metadata() != null) {
-                Object messagesObj = segment.metadata().get("messages");
-                if (messagesObj instanceof List<?> messageList) {
-                    for (Object obj : messageList) {
-                        if (obj instanceof Message m
-                                && m.role() == Message.Role.USER
-                                && m.userName() != null
-                                && !m.userName().isBlank()) {
-                            return m.userName();
-                        }
-                    }
-                }
+            if (segment.runtimeContext() != null
+                    && segment.runtimeContext().userName() != null
+                    && !segment.runtimeContext().userName().isBlank()) {
+                return segment.runtimeContext().userName();
             }
         }
         return null;

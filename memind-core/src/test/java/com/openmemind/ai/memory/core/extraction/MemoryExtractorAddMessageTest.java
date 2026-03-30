@@ -36,6 +36,7 @@ import com.openmemind.ai.memory.core.extraction.step.InsightExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.SegmentProcessor;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -268,6 +269,63 @@ class MemoryExtractorAddMessageTest {
             verify(segmentProcessor)
                     .processSegment(
                             eq(memoryId), any(), eq("CONVERSATION"), any(), any(), eq("zh-CN"));
+        }
+
+        @Test
+        @DisplayName("Seal path passes runtime context with durable-only metadata")
+        void sealPathPassesRuntimeContextWithDurableOnlyMetadata() {
+            Message existing =
+                    new Message(
+                            Message.Role.ASSISTANT,
+                            List.of(),
+                            Instant.parse("2026-03-27T02:17:00Z"),
+                            null);
+            Message trigger =
+                    Message.user("Tell me more", Instant.parse("2026-03-27T02:18:00Z"), "Alice");
+            when(pendingBufferStore.load("user1:agent1")).thenReturn(List.of(existing));
+            when(pendingBufferStore.loadMessageCount("user1:agent1")).thenReturn(1);
+            when(contextCommitDetector.shouldCommit(any(CommitDetectionInput.class)))
+                    .thenReturn(Mono.just(CommitDecision.commit(0.9, "test")));
+            when(segmentProcessor.processSegment(
+                            eq(memoryId), any(), eq("CONVERSATION"), any(), any(), any()))
+                    .thenReturn(Mono.just(RawDataResult.empty()));
+
+            StepVerifier.create(
+                            extractor.addMessage(
+                                    memoryId, trigger, ExtractionConfig.withoutInsight()))
+                    .assertNext(result -> assertThat(result).isNotNull())
+                    .verifyComplete();
+
+            verify(segmentProcessor)
+                    .processSegment(
+                            eq(memoryId),
+                            argThat(
+                                    segment ->
+                                            !segment.metadata().containsKey("messages")
+                                                    && Integer.valueOf(0)
+                                                            .equals(
+                                                                    segment.metadata()
+                                                                            .get("start_message"))
+                                                    && Integer.valueOf(1)
+                                                            .equals(
+                                                                    segment.metadata()
+                                                                            .get("end_message"))
+                                                    && segment.runtimeContext() != null
+                                                    && segment.runtimeContext()
+                                                            .startTime()
+                                                            .equals(
+                                                                    Instant.parse(
+                                                                            "2026-03-27T02:17:00Z"))
+                                                    && segment.runtimeContext()
+                                                            .observedAt()
+                                                            .equals(
+                                                                    Instant.parse(
+                                                                            "2026-03-27T02:17:00Z"))
+                                                    && segment.runtimeContext().userName() == null),
+                            eq("CONVERSATION"),
+                            any(),
+                            any(),
+                            any());
         }
     }
 

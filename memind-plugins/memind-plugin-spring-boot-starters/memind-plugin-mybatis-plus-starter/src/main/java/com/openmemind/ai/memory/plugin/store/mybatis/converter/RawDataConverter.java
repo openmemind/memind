@@ -79,13 +79,14 @@ public final class RawDataConverter {
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> segmentToMap(Segment segment) {
+        Segment durableSegment = segment.withoutRuntimeContext();
         Map<String, Object> map = new HashMap<>();
-        map.put("content", segment.content());
-        map.put("caption", segment.caption());
-        map.put("metadata", segment.metadata());
-        if (segment.boundary() != null) {
+        map.put("content", durableSegment.content());
+        map.put("caption", durableSegment.caption());
+        map.put("metadata", durableSegment.metadata());
+        if (durableSegment.boundary() != null) {
             Map<String, Object> boundaryMap = new HashMap<>();
-            switch (segment.boundary()) {
+            switch (durableSegment.boundary()) {
                 case CharBoundary cb -> {
                     boundaryMap.put("type", "char");
                     boundaryMap.put("startChar", cb.startChar());

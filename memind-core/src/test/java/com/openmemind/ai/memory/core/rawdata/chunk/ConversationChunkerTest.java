@@ -20,6 +20,7 @@ import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunki
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -100,21 +101,30 @@ class ConversationChunkerTest {
     }
 
     @Nested
-    @DisplayName("Metadata")
-    class MetadataTests {
+    @DisplayName("Runtime Context")
+    class RuntimeContextTests {
 
         @Test
-        @DisplayName("Should include original messages in metadata")
-        void shouldIncludeOriginalMessagesInMetadata() {
-            List<Message> messages = List.of(Message.user("Hello"), Message.assistant("Hello!"));
+        @DisplayName("Should expose runtime context instead of persisting source messages")
+        void shouldExposeRuntimeContextInsteadOfPersistingSourceMessages() {
+            List<Message> messages =
+                    List.of(
+                            Message.user("Hello", Instant.parse("2026-03-27T02:17:00Z"), "Alice"),
+                            new Message(
+                                    Message.Role.ASSISTANT,
+                                    List.of(),
+                                    Instant.parse("2026-03-27T02:18:00Z"),
+                                    null));
 
             List<Segment> segments = chunker.chunk(messages, ConversationChunkingConfig.DEFAULT);
 
-            assertThat(segments.getFirst().metadata()).containsKey("messages");
-            @SuppressWarnings("unchecked")
-            List<Message> storedMessages =
-                    (List<Message>) segments.getFirst().metadata().get("messages");
-            assertThat(storedMessages).hasSize(2);
+            assertThat(segments.getFirst().metadata()).doesNotContainKey("messages");
+            assertThat(segments.getFirst().runtimeContext()).isNotNull();
+            assertThat(segments.getFirst().runtimeContext().startTime())
+                    .isEqualTo(Instant.parse("2026-03-27T02:17:00Z"));
+            assertThat(segments.getFirst().runtimeContext().observedAt())
+                    .isEqualTo(Instant.parse("2026-03-27T02:18:00Z"));
+            assertThat(segments.getFirst().runtimeContext().userName()).isEqualTo("Alice");
         }
     }
 }

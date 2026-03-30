@@ -19,13 +19,13 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationCont
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.extraction.rawdata.ConversationSegmentationPrompts;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -110,7 +110,9 @@ public class LlmConversationChunker {
                                     text,
                                     null,
                                     new MessageBoundary(start, end),
-                                    Map.of("messages", segmentMessages));
+                                    java.util.Map.of(),
+                                    SegmentRuntimeContext.fromConversationMessages(
+                                            segmentMessages));
                         })
                 .toList();
     }

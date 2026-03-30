@@ -24,9 +24,22 @@ import java.util.Map;
  * @param caption Summary (can be null, filled by CaptionGenerator)
  * @param boundary Type-safe boundary
  * @param metadata Metadata
+ * @param runtimeContext Runtime-only extraction context, not intended for persistence
  */
 public record Segment(
-        String content, String caption, SegmentBoundary boundary, Map<String, Object> metadata) {
+        String content,
+        String caption,
+        SegmentBoundary boundary,
+        Map<String, Object> metadata,
+        SegmentRuntimeContext runtimeContext) {
+
+    public Segment(
+            String content,
+            String caption,
+            SegmentBoundary boundary,
+            Map<String, Object> metadata) {
+        this(content, caption, boundary, metadata, null);
+    }
 
     /**
      * Create a Segment with a new summary
@@ -35,7 +48,18 @@ public record Segment(
      * @return New Segment
      */
     public Segment withCaption(String caption) {
-        return new Segment(content, caption, boundary, metadata);
+        return new Segment(content, caption, boundary, metadata, runtimeContext);
+    }
+
+    /**
+     * Create a copy that drops runtime-only context for durable persistence.
+     *
+     * @return New Segment without runtime context
+     */
+    public Segment withoutRuntimeContext() {
+        return runtimeContext == null
+                ? this
+                : new Segment(content, caption, boundary, metadata, null);
     }
 
     /**
@@ -45,6 +69,6 @@ public record Segment(
      * @return Single segment
      */
     public static Segment single(String content) {
-        return new Segment(content, null, new CharBoundary(0, content.length()), Map.of());
+        return new Segment(content, null, new CharBoundary(0, content.length()), Map.of(), null);
     }
 }

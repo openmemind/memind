@@ -22,7 +22,6 @@ import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntr
 import com.openmemind.ai.memory.core.extraction.item.support.ForesightExtractionResponse;
 import com.openmemind.ai.memory.core.extraction.item.support.MemoryItemExtractionResponse;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
@@ -247,18 +246,7 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
     }
 
     static Instant resolveObservedAt(ParsedSegment segment) {
-        if (segment.metadata() != null) {
-            Object messagesObj = segment.metadata().get("messages");
-            if (messagesObj instanceof List<?> messageList && !messageList.isEmpty()) {
-                for (int i = messageList.size() - 1; i >= 0; i--) {
-                    Object message = messageList.get(i);
-                    if (message instanceof Message m && m.timestamp() != null) {
-                        return m.timestamp();
-                    }
-                }
-            }
-        }
-        return null;
+        return segment.runtimeContext() != null ? segment.runtimeContext().observedAt() : null;
     }
 
     static Map<String, Object> mergeMetadata(
@@ -284,19 +272,6 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
     }
 
     static String resolveUserName(ParsedSegment segment) {
-        if (segment.metadata() != null) {
-            Object messagesObj = segment.metadata().get("messages");
-            if (messagesObj instanceof List<?> messageList && !messageList.isEmpty()) {
-                for (Object obj : messageList) {
-                    if (obj instanceof Message m
-                            && m.role() == Message.Role.USER
-                            && m.userName() != null
-                            && !m.userName().isBlank()) {
-                        return m.userName();
-                    }
-                }
-            }
-        }
-        return null;
+        return segment.runtimeContext() != null ? segment.runtimeContext().userName() : null;
     }
 }

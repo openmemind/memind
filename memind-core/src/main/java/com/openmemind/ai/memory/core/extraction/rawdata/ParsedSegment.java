@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.core.extraction.rawdata;
 
+import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
 import java.util.Map;
 
 /**
@@ -24,6 +25,7 @@ import java.util.Map;
  * @param endIndex Ending position in the original content
  * @param rawDataId Persisted MemoryRawData business ID
  * @param metadata Segment metadata
+ * @param runtimeContext Runtime-only extraction context
  */
 public record ParsedSegment(
         String text,
@@ -31,4 +33,16 @@ public record ParsedSegment(
         int startIndex,
         int endIndex,
         String rawDataId,
-        Map<String, Object> metadata) {}
+        Map<String, Object> metadata,
+        SegmentRuntimeContext runtimeContext) {
+
+    public ParsedSegment(
+            String text,
+            String caption,
+            int startIndex,
+            int endIndex,
+            String rawDataId,
+            Map<String, Object> metadata) {
+        this(text, caption, startIndex, endIndex, rawDataId, metadata, null);
+    }
+}

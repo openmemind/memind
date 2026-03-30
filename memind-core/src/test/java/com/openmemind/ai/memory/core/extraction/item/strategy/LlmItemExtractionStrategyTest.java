@@ -21,7 +21,7 @@ import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.item.support.ForesightExtractionResponse;
 import com.openmemind.ai.memory.core.extraction.item.support.MemoryItemExtractionResponse;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
@@ -121,8 +121,8 @@ class LlmItemExtractionStrategyTest {
     }
 
     @Test
-    @DisplayName("resolveObservedAt should use the latest source message timestamp")
-    void resolveObservedAtShouldUseTheLatestSourceMessageTimestamp() {
+    @DisplayName("resolveObservedAt should read runtime context instead of metadata messages")
+    void resolveObservedAtShouldReadRuntimeContextInsteadOfMetadataMessages() {
         var segment =
                 new ParsedSegment(
                         "text",
@@ -130,34 +130,28 @@ class LlmItemExtractionStrategyTest {
                         0,
                         1,
                         "raw-1",
-                        Map.of(
-                                "messages",
-                                List.of(
-                                        Message.user(
-                                                "hello",
-                                                Instant.parse("2026-03-27T02:17:00Z"),
-                                                "User"),
-                                        new Message(
-                                                Message.Role.ASSISTANT,
-                                                List.of(),
-                                                Instant.parse("2026-03-27T02:18:00Z"),
-                                                null))));
+                        Map.of(),
+                        new SegmentRuntimeContext(
+                                Instant.parse("2026-03-27T02:17:00Z"),
+                                Instant.parse("2026-03-27T02:18:00Z"),
+                                "Alice"));
 
         assertThat(LlmItemExtractionStrategy.resolveObservedAt(segment))
                 .isEqualTo(Instant.parse("2026-03-27T02:18:00Z"));
+        assertThat(LlmItemExtractionStrategy.resolveUserName(segment)).isEqualTo("Alice");
     }
 
     @Test
-    @DisplayName("resolveObservedAt should return null when source messages have no timestamp")
-    void resolveObservedAtShouldReturnNullWhenSourceMessagesHaveNoTimestamp() {
+    @DisplayName("resolveObservedAt should return null when runtime context is missing")
+    void resolveObservedAtShouldReturnNullWhenRuntimeContextIsMissing() {
         var segment = new ParsedSegment("text", null, 0, 1, "raw-1", Map.of());
 
         assertThat(LlmItemExtractionStrategy.resolveObservedAt(segment)).isNull();
     }
 
     @Test
-    @DisplayName("resolveUserName should ignore assistant-role userName values")
-    void resolveUserNameShouldIgnoreAssistantRoleUserNameValues() {
+    @DisplayName("mergeMetadata should still strip legacy messages payloads")
+    void mergeMetadataShouldStillStripLegacyMessagesPayloads() {
         var segment =
                 new ParsedSegment(
                         "text",
@@ -165,20 +159,16 @@ class LlmItemExtractionStrategyTest {
                         0,
                         1,
                         "raw-1",
-                        Map.of(
-                                "messages",
-                                List.of(
-                                        new Message(
-                                                Message.Role.ASSISTANT,
-                                                List.of(),
-                                                Instant.parse("2024-03-15T10:00:00Z"),
-                                                "AssistantAlias"),
-                                        Message.user(
-                                                "hello",
-                                                Instant.parse("2024-03-15T10:01:00Z"),
-                                                "RealUser"))));
+                        Map.of("messages", List.of("legacy"), "channel", "chat"),
+                        null);
+        var item =
+                new MemoryItemExtractionResponse.ExtractedItem(
+                        "fact", 0.9f, null, List.of(), Map.of("source", "llm"), null);
 
-        assertThat(LlmItemExtractionStrategy.resolveUserName(segment)).isEqualTo("RealUser");
+        assertThat(LlmItemExtractionStrategy.mergeMetadata(segment, item))
+                .containsEntry("channel", "chat")
+                .containsEntry("source", "llm")
+                .doesNotContainKey("messages");
     }
 
     private static ParsedSegment sampleSegment() {
@@ -188,13 +178,11 @@ class LlmItemExtractionStrategyTest {
                 0,
                 1,
                 "raw-1",
-                Map.of(
-                        "messages",
-                        List.of(
-                                Message.user(
-                                        "I work on Spring Boot services.",
-                                        Instant.parse("2024-03-15T10:00:00Z"),
-                                        "Alice"))));
+                Map.of(),
+                new SegmentRuntimeContext(
+                        Instant.parse("2024-03-15T10:00:00Z"),
+                        Instant.parse("2024-03-15T10:00:00Z"),
+                        "Alice"));
     }
 
     private static final class FakeStructuredChatClient implements StructuredChatClient {
