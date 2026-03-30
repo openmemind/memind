@@ -15,8 +15,6 @@
 spring:
   application:
     name: memind-evaluation
-  main:
-    allow-bean-definition-overriding: true
   ai:
     openai:
       base-url: ${OPENAI_BASE_URL:}
@@ -31,34 +29,10 @@ spring:
           model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
 
 memind:
-  store:
-    sqlite:
-      path: ./eval-data/memind-eval.db
-    init-schema: true
   vector:
     store-path: ./eval-data/memind-eval-vectors.json
-  extraction:
-    boundary:
-      max-messages: 30
-  retrieval:
-    timeout: 5m
-    rerank:
-      base-url: ${RERANK_BASE_URL:}
-      api-key: ${RERANK_API_KEY:}
-      model: ${RERANK_MODEL:jina-reranker-v3}
-      blend-with-retrieval: true
-      top-k: 20
-
-# MyBatis Plus 的配置项
-mybatis-plus:
-  configuration:
-    map-underscore-to-camel-case: true
-  global-config:
-    db-config:
-      logic-delete-value: 1
-      logic-not-delete-value: 0
-    banner: false
-  type-aliases-package: com.openmemind.ai.memory.plugin.store.mybatis.dataobject
+  store:
+    init-schema: true
 
 logging:
   file:
@@ -98,6 +72,21 @@ evaluation:
     memind:
       add-mode: chunk
       enable-insight: false
+      storage:
+        sqlite:
+          path: ./eval-data/memind-eval.db
+      extraction:
+        boundary:
+          max-messages: 30
+      retrieval:
+        timeout: 5m
+        rerank:
+          enabled: true
+          base-url: ${RERANK_BASE_URL:}
+          api-key: ${RERANK_API_KEY:}
+          model: ${RERANK_MODEL:jina-reranker-v3}
+          blend-with-retrieval: true
+          top-k: 20
     answer:
       max-retries: 3
     llm:
