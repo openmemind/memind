@@ -14,83 +14,19 @@
 package com.openmemind.ai.memory.plugin.jdbc.sqlite;
 
 import com.openmemind.ai.memory.plugin.jdbc.internal.buffer.AbstractJdbcConversationBuffer;
-import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaBootstrap;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import javax.sql.DataSource;
 
 public class SqliteConversationBuffer extends AbstractJdbcConversationBuffer {
-
-    private static final DateTimeFormatter SQLITE_TIME_FORMATTER =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     public SqliteConversationBuffer(DataSource dataSource) {
         this(dataSource, true);
     }
 
     public SqliteConversationBuffer(DataSource dataSource, boolean createIfNotExist) {
-        super(dataSource);
-        StoreSchemaBootstrap.ensureSqlite(dataSource, createIfNotExist);
+        this(new SqliteConversationBufferAccessor(dataSource, createIfNotExist));
     }
 
-    @Override
-    protected String insertSql() {
-        return """
-        INSERT INTO memory_conversation_buffer
-            (session_id, user_id, agent_id, memory_id, role, content, user_name, timestamp, deleted)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
-        """;
-    }
-
-    @Override
-    protected String falseLiteral() {
-        return "0";
-    }
-
-    @Override
-    protected String trueLiteral() {
-        return "1";
-    }
-
-    @Override
-    protected void bindTimestamp(PreparedStatement statement, int parameterIndex, Instant instant)
-            throws SQLException {
-        statement.setString(parameterIndex, instant == null ? null : instant.toString());
-    }
-
-    @Override
-    protected Instant readTimestamp(ResultSet resultSet, String columnLabel) throws SQLException {
-        return parseInstant(resultSet.getString(columnLabel));
-    }
-
-    private Instant parseInstant(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return Instant.parse(value);
-        } catch (DateTimeParseException ignored) {
-        }
-        try {
-            return OffsetDateTime.parse(value).toInstant();
-        } catch (DateTimeParseException ignored) {
-        }
-        try {
-            return LocalDateTime.parse(value, SQLITE_TIME_FORMATTER).toInstant(ZoneOffset.UTC);
-        } catch (DateTimeParseException ignored) {
-        }
-        try {
-            return LocalDateTime.parse(value, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-                    .toInstant(ZoneOffset.UTC);
-        } catch (DateTimeParseException ignored) {
-        }
-        throw new IllegalArgumentException("Unsupported datetime value: " + value);
+    public SqliteConversationBuffer(SqliteConversationBufferAccessor accessor) {
+        super(accessor);
     }
 }

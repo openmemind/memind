@@ -20,34 +20,41 @@ import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 @Mapper
 public interface ConversationBufferMapper extends BaseMapper<ConversationBufferDO> {
 
     @Select(
             """
-            SELECT COUNT(*)
+            SELECT id, session_id AS sessionId, role, content, user_name AS userName, timestamp
             FROM memory_conversation_buffer
-            WHERE session_id = #{sessionId}
-            """)
-    long countAllBySessionId(@Param("sessionId") String sessionId);
-
-    @Select(
-            """
-            SELECT role, content, user_name AS userName, timestamp
-            FROM memory_conversation_buffer
-            WHERE session_id = #{sessionId} AND deleted = FALSE
+            WHERE session_id = #{sessionId} AND extracted = FALSE AND deleted = FALSE
             ORDER BY id ASC
             """)
-    List<ConversationBufferRow> selectActiveRowsBySessionId(@Param("sessionId") String sessionId);
+    List<ConversationBufferRow> selectPendingRowsBySessionId(@Param("sessionId") String sessionId);
 
     @Select(
             """
-            SELECT DISTINCT session_id
+            SELECT id, session_id AS sessionId, role, content, user_name AS userName, timestamp
             FROM memory_conversation_buffer
-            WHERE user_id = #{userId} AND agent_id = #{agentId} AND deleted = FALSE
-            ORDER BY session_id ASC
+            WHERE session_id = #{sessionId} AND deleted = FALSE
+            ORDER BY id DESC
+            LIMIT #{limit}
             """)
-    List<String> selectActiveSessionIds(
-            @Param("userId") String userId, @Param("agentId") String agentId);
+    List<ConversationBufferRow> selectRecentRowsBySessionId(
+            @Param("sessionId") String sessionId, @Param("limit") int limit);
+
+    @Update({
+        "<script>",
+        "UPDATE memory_conversation_buffer",
+        "SET extracted = TRUE, updated_at = CURRENT_TIMESTAMP",
+        "WHERE deleted = FALSE",
+        "AND id IN",
+        "<foreach collection='ids' item='id' open='(' separator=',' close=')'>",
+        "#{id}",
+        "</foreach>",
+        "</script>"
+    })
+    int markExtractedByIds(@Param("ids") List<Long> ids);
 }

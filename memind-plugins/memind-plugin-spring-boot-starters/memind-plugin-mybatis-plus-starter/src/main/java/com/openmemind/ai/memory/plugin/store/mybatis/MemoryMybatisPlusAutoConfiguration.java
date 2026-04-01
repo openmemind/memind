@@ -22,9 +22,7 @@ import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.openmemind.ai.memory.core.buffer.InMemoryRecentConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
-import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
@@ -135,21 +133,14 @@ public class MemoryMybatisPlusAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean(RecentConversationBuffer.class)
-    public RecentConversationBuffer recentConversationBuffer() {
-        return new InMemoryRecentConversationBuffer();
-    }
-
-    @Bean
     @ConditionalOnMissingBean(MemoryBuffer.class)
     public MemoryBuffer memoryBuffer(
             InsightBufferMapper insightBufferMapper,
-            ConversationBufferMapper conversationBufferMapper,
-            RecentConversationBuffer recentConversationBuffer) {
+            ConversationBufferMapper conversationBufferMapper) {
         return MemoryBuffer.of(
                 new MybatisPlusInsightBuffer(insightBufferMapper),
                 new MybatisPlusConversationBuffer(conversationBufferMapper),
-                recentConversationBuffer);
+                new MybatisPlusRecentConversationBuffer(conversationBufferMapper));
     }
 
     @Bean

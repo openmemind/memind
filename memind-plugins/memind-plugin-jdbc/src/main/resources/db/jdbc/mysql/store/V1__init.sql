@@ -126,12 +126,14 @@ CREATE TABLE IF NOT EXISTS memory_conversation_buffer (
     content    TEXT         NOT NULL,
     user_name  VARCHAR(64),
     timestamp  DATETIME(3),
+    extracted  TINYINT      NOT NULL DEFAULT 0,
     created_at DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     updated_at DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
     deleted    TINYINT      NOT NULL DEFAULT 0,
     PRIMARY KEY (id),
-    KEY idx_buf_session (session_id),
-    KEY idx_buf_memory_id (user_id, agent_id)
+    KEY idx_buf_pending (session_id, extracted, deleted, id),
+    KEY idx_buf_recent (session_id, deleted, id),
+    KEY idx_buf_memory_id (user_id, agent_id, deleted, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS memory_insight_buffer (

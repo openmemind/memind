@@ -46,5 +46,7 @@ public interface MemoryBuilder {
 
     MemoryBuilder options(MemoryBuildOptions options);
 
+    MemoryBuilder externallyManaged(boolean externallyManaged);
+
     Memory build();
 }

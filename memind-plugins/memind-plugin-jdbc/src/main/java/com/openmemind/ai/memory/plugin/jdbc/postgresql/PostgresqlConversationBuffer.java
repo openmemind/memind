@@ -14,12 +14,6 @@
 package com.openmemind.ai.memory.plugin.jdbc.postgresql;
 
 import com.openmemind.ai.memory.plugin.jdbc.internal.buffer.AbstractJdbcConversationBuffer;
-import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaBootstrap;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Timestamp;
-import java.time.Instant;
 import javax.sql.DataSource;
 
 public class PostgresqlConversationBuffer extends AbstractJdbcConversationBuffer {
@@ -29,38 +23,10 @@ public class PostgresqlConversationBuffer extends AbstractJdbcConversationBuffer
     }
 
     public PostgresqlConversationBuffer(DataSource dataSource, boolean createIfNotExist) {
-        super(dataSource);
-        StoreSchemaBootstrap.ensurePostgresql(dataSource, createIfNotExist);
+        this(new PostgresqlConversationBufferAccessor(dataSource, createIfNotExist));
     }
 
-    @Override
-    protected String insertSql() {
-        return """
-        INSERT INTO memory_conversation_buffer
-            (session_id, user_id, agent_id, memory_id, role, content, user_name, timestamp, deleted)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, FALSE)
-        """;
-    }
-
-    @Override
-    protected String falseLiteral() {
-        return "FALSE";
-    }
-
-    @Override
-    protected String trueLiteral() {
-        return "TRUE";
-    }
-
-    @Override
-    protected void bindTimestamp(PreparedStatement statement, int parameterIndex, Instant instant)
-            throws SQLException {
-        statement.setTimestamp(parameterIndex, instant == null ? null : Timestamp.from(instant));
-    }
-
-    @Override
-    protected Instant readTimestamp(ResultSet resultSet, String columnLabel) throws SQLException {
-        Timestamp timestamp = resultSet.getTimestamp(columnLabel);
-        return timestamp == null ? null : timestamp.toInstant();
+    public PostgresqlConversationBuffer(PostgresqlConversationBufferAccessor accessor) {
+        super(accessor);
     }
 }

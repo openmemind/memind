@@ -46,6 +46,7 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     private Reranker reranker = new NoopReranker();
     private PromptRegistry promptRegistry = PromptRegistry.EMPTY;
     private MemoryBuildOptions options = MemoryBuildOptions.defaults();
+    private boolean externallyManaged;
 
     @Override
     public MemoryBuilder chatClient(StructuredChatClient chatClient) {
@@ -104,6 +105,12 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     }
 
     @Override
+    public MemoryBuilder externallyManaged(boolean externallyManaged) {
+        this.externallyManaged = externallyManaged;
+        return this;
+    }
+
+    @Override
     public Memory build() {
         validateRequiredComponents();
 
@@ -122,6 +129,16 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
                 new MemoryExtractionAssembler().assemble(context);
         var memoryRetriever = new MemoryRetrievalAssembler().assemble(context);
         ToolStatsService toolStatsService = new DefaultToolStatsService(context.memoryStore());
+        AutoCloseable lifecycle =
+                externallyManaged
+                        ? lifecycle(extractionAssembly.lifecycle())
+                        : lifecycle(
+                                context.memoryVector(),
+                                context.textSearch(),
+                                context.chatClientRegistry().defaultClient(),
+                                context.memoryStore(),
+                                context.memoryBuffer(),
+                                extractionAssembly.lifecycle());
         return new DefaultMemory(
                 extractionAssembly.pipeline(),
                 memoryRetriever,
@@ -130,13 +147,7 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
                 context.memoryVector(),
                 toolStatsService,
                 extractionAssembly.insightLayer(),
-                lifecycle(
-                        context.memoryVector(),
-                        context.textSearch(),
-                        context.chatClientRegistry().defaultClient(),
-                        context.memoryStore(),
-                        context.memoryBuffer(),
-                        extractionAssembly.lifecycle()),
+                lifecycle,
                 options);
     }
 

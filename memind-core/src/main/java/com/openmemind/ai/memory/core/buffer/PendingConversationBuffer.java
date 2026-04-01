@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.core.buffer;
 
-import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import java.util.List;
 
@@ -22,7 +21,7 @@ import java.util.List;
  */
 public interface PendingConversationBuffer extends AutoCloseable {
 
-    void save(String sessionId, List<Message> buffer);
+    void append(String sessionId, Message message);
 
     List<Message> load(String sessionId);
 
@@ -32,14 +31,6 @@ public interface PendingConversationBuffer extends AutoCloseable {
         List<Message> messages = load(sessionId);
         clear(sessionId);
         return messages;
-    }
-
-    List<String> listActiveSessions(MemoryId memoryId);
-
-    default void saveMessageCount(String sessionId, int count) {}
-
-    default int loadMessageCount(String sessionId) {
-        return 0;
     }
 
     @Override

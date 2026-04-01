@@ -123,12 +123,15 @@ CREATE TABLE IF NOT EXISTS memory_conversation_buffer (
     content    TEXT         NOT NULL,
     user_name  TEXT,
     timestamp  TEXT,
+    extracted  INTEGER      NOT NULL DEFAULT 0,
     created_at TEXT         NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT         NOT NULL DEFAULT (datetime('now')),
     deleted    INTEGER      NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_buf_session ON memory_conversation_buffer(session_id);
-CREATE INDEX IF NOT EXISTS idx_buf_memory_id ON memory_conversation_buffer(user_id, agent_id);
+CREATE INDEX IF NOT EXISTS idx_buf_pending
+    ON memory_conversation_buffer(session_id, extracted, deleted, id);
+CREATE INDEX IF NOT EXISTS idx_buf_recent ON memory_conversation_buffer(session_id, deleted, id);
+CREATE INDEX IF NOT EXISTS idx_buf_memory_id ON memory_conversation_buffer(user_id, agent_id, deleted, id);
 
 CREATE TABLE IF NOT EXISTS memory_insight_buffer (
     id                INTEGER      NOT NULL PRIMARY KEY AUTOINCREMENT,

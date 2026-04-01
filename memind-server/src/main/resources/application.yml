@@ -1,0 +1,112 @@
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Local development defaults:
+# - SQLite is used by default and can be overridden through MEMIND_DATASOURCE_* env vars.
+# - The fallback vector store is a local JSON file.
+# - Spring AI OpenAI-compatible settings are read from OPENAI_* env vars.
+# - Optional rerank provider settings are read from MEMIND_RERANK_* env vars.
+# - To switch to MySQL or Qdrant, replace/merge the commented examples at the bottom of this file.
+
+spring:
+  application:
+    name: memind-server
+  datasource:
+    url: ${MEMIND_DATASOURCE_URL:jdbc:sqlite:./data/memind-server.db}
+    driver-class-name: ${MEMIND_DATASOURCE_DRIVER_CLASS_NAME:org.sqlite.JDBC}
+    username: ${MEMIND_DATASOURCE_USERNAME:}
+    password: ${MEMIND_DATASOURCE_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${MEMIND_DATASOURCE_MAX_POOL_SIZE:1}
+      minimum-idle: ${MEMIND_DATASOURCE_MIN_IDLE:1}
+      connection-test-query: ${MEMIND_DATASOURCE_CONNECTION_TEST_QUERY:SELECT 1}
+  jackson:
+    default-property-inclusion: non_null
+  ai:
+    # Keeps external Spring AI vector stores dormant by default.
+    # Switch this to qdrant in the commented example below when enabling Qdrant.
+    vectorstore:
+      type: simple
+    openai:
+      base-url: ${OPENAI_BASE_URL:https://openrouter.ai/api}
+      api-key: ${OPENAI_API_KEY:}
+      chat:
+        options:
+          model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+      embedding:
+        base-url: ${EMBEDDING_BASE_URL:${OPENAI_BASE_URL:}}
+        api-key: ${EMBEDDING_API_KEY:${OPENAI_API_KEY:}}
+        options:
+          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+
+server:
+  port: ${SERVER_PORT:8366}
+
+memind:
+  vector:
+    # Used only by the fallback local file vector store.
+    # When an external VectorStore bean such as Qdrant is configured, this path is ignored.
+    store-path: ${MEMIND_VECTOR_STORE_PATH:./data/vector-store.json}
+  rerank:
+    # Optional reranker. When base-url and api-key are set, memind-server creates an
+    # LlmReranker bean and calls <base-url>/v1/rerank during deep retrieval.
+    # Leave base-url/api-key empty to keep the default NoopReranker behavior.
+    base-url: ${MEMIND_RERANK_BASE_URL:https://aihubmix.com}
+    api-key: ${MEMIND_RERANK_API_KEY:}
+    model: ${MEMIND_RERANK_MODEL:jina-reranker-v3}
+  store:
+    init-schema: ${MEMIND_STORE_INIT_SCHEMA:true}
+
+logging:
+  level:
+    root: ${ROOT_LOG_LEVEL:INFO}
+    com.openmemind.ai.memory: ${MEMIND_LOG_LEVEL:INFO}
+    com.baomidou.mybatisplus: WARN
+    org.springframework.ai.retry: WARN
+
+# Example: replace the spring.datasource block above when switching to MySQL.
+# spring:
+#   datasource:
+#     url: jdbc:mysql://127.0.0.1:3306/memind?useSSL=false&serverTimezone=UTC&characterEncoding=UTF-8
+#     driver-class-name: com.mysql.cj.jdbc.Driver
+#     username: memind
+#     password: changeit
+#     hikari:
+#       maximum-pool-size: 10
+#       minimum-idle: 2
+#       connection-test-query: SELECT 1
+#
+# Example: merge this block under spring.ai when switching the vector store to Qdrant.
+# The Qdrant starter dependency is already on the classpath.
+# Once type=qdrant is enabled, memind's fallback file vector store backs off automatically.
+# spring:
+#   ai:
+#     vectorstore:
+#       type: qdrant
+#       qdrant:
+#         host: 127.0.0.1
+#         port: 6334
+#         use-tls: false
+#         api-key:
+#         collection-name: memind
+#         content-field-name: doc_content
+#         initialize-schema: true
+#
+# Example: replace the spring.datasource block above when switching to PostgreSQL.
+# spring:
+#   datasource:
+#     url: jdbc:postgresql://127.0.0.1:5432/memind
+#     driver-class-name: org.postgresql.Driver
+#     username: memind
+#     password: changeit

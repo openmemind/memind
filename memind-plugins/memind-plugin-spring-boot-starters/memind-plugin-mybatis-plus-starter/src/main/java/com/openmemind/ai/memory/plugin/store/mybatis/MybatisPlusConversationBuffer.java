@@ -13,89 +13,59 @@
  */
 package com.openmemind.ai.memory.plugin.store.mybatis;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.openmemind.ai.memory.core.buffer.ConversationBuffer;
-import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.ConversationBufferConverter;
-import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.ConversationBufferDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.ConversationBufferRow;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.ConversationBufferMapper;
 import java.util.List;
-import org.springframework.transaction.annotation.Transactional;
+import java.util.Objects;
 
-/**
- * MyBatis Plus based implementation of session buffer persistence (single message storage)
- *
- */
-public class MybatisPlusConversationBuffer implements ConversationBuffer {
+public class MybatisPlusConversationBuffer implements PendingConversationBuffer {
 
     private final ConversationBufferMapper mapper;
 
     public MybatisPlusConversationBuffer(ConversationBufferMapper mapper) {
-        this.mapper = mapper;
+        this.mapper = Objects.requireNonNull(mapper, "mapper");
     }
 
     @Override
-    public void save(String sessionId, List<Message> buffer) {
-        if (buffer == null || buffer.isEmpty()) {
-            clear(sessionId);
-            return;
-        }
-
-        long existingCount = mapper.selectCount(sessionQuery(sessionId));
-
-        List<Message> newMessages = buffer.subList((int) existingCount, buffer.size());
-        if (newMessages.isEmpty()) {
-            return;
-        }
-
-        List<ConversationBufferDO> rows =
-                ConversationBufferConverter.toDOList(sessionId, newMessages);
-        rows.forEach(mapper::insert);
+    public void append(String sessionId, Message message) {
+        mapper.insert(
+                ConversationBufferConverter.toDO(
+                        Objects.requireNonNull(sessionId, "sessionId"),
+                        Objects.requireNonNull(message, "message")));
     }
 
     @Override
     public List<Message> load(String sessionId) {
         return ConversationBufferConverter.toMessagesFromRows(
-                mapper.selectActiveRowsBySessionId(sessionId));
+                mapper.selectPendingRowsBySessionId(
+                        Objects.requireNonNull(sessionId, "sessionId")));
     }
 
     @Override
     public void clear(String sessionId) {
-        mapper.delete(new QueryWrapper<ConversationBufferDO>().eq("session_id", sessionId));
+        List<Long> ids =
+                mapper
+                        .selectPendingRowsBySessionId(
+                                Objects.requireNonNull(sessionId, "sessionId"))
+                        .stream()
+                        .map(ConversationBufferRow::getId)
+                        .toList();
+        if (!ids.isEmpty()) {
+            mapper.markExtractedByIds(ids);
+        }
     }
 
-    @Transactional
     @Override
     public List<Message> drain(String sessionId) {
-        List<Message> messages = load(sessionId);
-        clear(sessionId);
-        return messages;
-    }
-
-    @Override
-    public int loadMessageCount(String sessionId) {
-        return Math.toIntExact(mapper.countAllBySessionId(sessionId));
-    }
-
-    @Override
-    public List<String> listActiveSessions(MemoryId memoryId) {
-        MemoryScope scope = MemoryScope.from(memoryId);
-        return mapper.selectActiveSessionIds(scope.userId(), scope.agentId());
-    }
-
-    private QueryWrapper<ConversationBufferDO> sessionQuery(String sessionId) {
-        return new QueryWrapper<ConversationBufferDO>().eq("session_id", sessionId);
-    }
-
-    private record MemoryScope(String userId, String agentId) {
-
-        private static MemoryScope from(MemoryId memoryId) {
-            return new MemoryScope(
-                    memoryId.getAttribute("userId"),
-                    memoryId.getAttribute("agentId") == null
-                            ? ""
-                            : memoryId.getAttribute("agentId"));
+        var rows =
+                mapper.selectPendingRowsBySessionId(Objects.requireNonNull(sessionId, "sessionId"));
+        List<Long> ids = rows.stream().map(ConversationBufferRow::getId).toList();
+        if (!ids.isEmpty()) {
+            mapper.markExtractedByIds(ids);
         }
+        return ConversationBufferConverter.toMessagesFromRows(rows);
     }
 }

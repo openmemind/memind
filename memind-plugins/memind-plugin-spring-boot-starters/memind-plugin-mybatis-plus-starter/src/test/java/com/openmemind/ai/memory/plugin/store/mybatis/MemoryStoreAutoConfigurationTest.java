@@ -19,9 +19,10 @@ import com.baomidou.mybatisplus.autoconfigure.DdlApplicationRunner;
 import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
-import com.openmemind.ai.memory.core.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
+import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
@@ -80,7 +81,9 @@ class MemoryStoreAutoConfigurationTest {
                                 assertThat(memoryStore.itemOperations()).isNotNull();
                                 assertThat(memoryStore.insightOperations()).isNotNull();
                                 assertThat(context).doesNotHaveBean(InsightBuffer.class);
-                                assertThat(context).doesNotHaveBean(ConversationBuffer.class);
+                                assertThat(context)
+                                        .doesNotHaveBean(PendingConversationBuffer.class);
+                                assertThat(context).doesNotHaveBean(RecentConversationBuffer.class);
                                 assertThat(context).hasSingleBean(MybatisPlusInterceptor.class);
                                 assertThat(context).hasSingleBean(MetaObjectHandler.class);
                                 assertThat(context).hasSingleBean(MemoryTextSearch.class);
@@ -103,7 +106,9 @@ class MemoryStoreAutoConfigurationTest {
                                 assertThat(context).doesNotHaveBean(DataSource.class);
                                 assertThat(context).doesNotHaveBean(MemoryStore.class);
                                 assertThat(context).doesNotHaveBean(InsightBuffer.class);
-                                assertThat(context).doesNotHaveBean(ConversationBuffer.class);
+                                assertThat(context)
+                                        .doesNotHaveBean(PendingConversationBuffer.class);
+                                assertThat(context).doesNotHaveBean(RecentConversationBuffer.class);
                                 assertThat(context).doesNotHaveBean(MybatisPlusInterceptor.class);
                                 assertThat(context).doesNotHaveBean(MetaObjectHandler.class);
                                 assertThat(context).doesNotHaveBean(MemoryTextSearch.class);
@@ -130,37 +135,33 @@ class MemoryStoreAutoConfigurationTest {
                                 context.getBean(DdlApplicationRunner.class)
                                         .run(new DefaultApplicationArguments(new String[0]));
                                 MemoryBuffer memoryBuffer = context.getBean(MemoryBuffer.class);
-                                var conversationBufferStore =
+                                PendingConversationBuffer conversationBufferStore =
                                         memoryBuffer.pendingConversationBuffer();
                                 var memoryId = new DefaultMemoryId("u1", "a1");
                                 String sessionId = memoryId.toIdentifier();
 
-                                conversationBufferStore.save(
-                                        sessionId,
-                                        List.of(Message.user("hello"), Message.assistant("hi")));
+                                conversationBufferStore.append(sessionId, Message.user("hello"));
+                                conversationBufferStore.append(sessionId, Message.assistant("hi"));
 
                                 assertThat(conversationBufferStore.load(sessionId))
                                         .extracting(Message::textContent)
                                         .containsExactly("hello", "hi");
-                                assertThat(conversationBufferStore.loadMessageCount(sessionId))
-                                        .isEqualTo(2);
 
                                 conversationBufferStore.clear(sessionId);
 
                                 assertThat(conversationBufferStore.load(sessionId)).isEmpty();
-                                assertThat(conversationBufferStore.loadMessageCount(sessionId))
-                                        .isEqualTo(2);
 
-                                conversationBufferStore.save(
-                                        sessionId, List.of(Message.user("next")));
+                                conversationBufferStore.append(sessionId, Message.user("next"));
 
                                 assertThat(conversationBufferStore.load(sessionId))
                                         .extracting(Message::textContent)
                                         .containsExactly("next");
-                                assertThat(conversationBufferStore.loadMessageCount(sessionId))
-                                        .isEqualTo(3);
-                                assertThat(conversationBufferStore.listActiveSessions(memoryId))
-                                        .containsExactly(sessionId);
+                                assertThat(
+                                                memoryBuffer
+                                                        .recentConversationBuffer()
+                                                        .loadRecent(sessionId, 10))
+                                        .extracting(Message::textContent)
+                                        .containsExactly("hello", "hi", "next");
                             });
         }
     }
@@ -194,7 +195,8 @@ class MemoryStoreAutoConfigurationTest {
                         assertThat(context.getBean(MemoryTextSearch.class))
                                 .isSameAs(context.getBean("customMemoryTextSearch"));
                         assertThat(context).doesNotHaveBean(InsightBuffer.class);
-                        assertThat(context).doesNotHaveBean(ConversationBuffer.class);
+                        assertThat(context).doesNotHaveBean(PendingConversationBuffer.class);
+                        assertThat(context).doesNotHaveBean(RecentConversationBuffer.class);
 
                         assertThat(context).doesNotHaveBean(MybatisPlusMemoryStore.class);
                         assertThat(context.getBeansOfType(DefaultDBFieldHandler.class)).isEmpty();

@@ -13,23 +13,27 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.autoconfigure;
 
-import com.openmemind.ai.memory.core.buffer.InMemoryRecentConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
-import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBuffer;
+import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBufferAccessor;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlInsightBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlMemoryStore;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlMemoryTextSearch;
+import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlRecentConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlConversationBuffer;
+import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlConversationBufferAccessor;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlInsightBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlMemoryStore;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlMemoryTextSearch;
+import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlRecentConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteConversationBuffer;
+import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteConversationBufferAccessor;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteInsightBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryStore;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryTextSearch;
+import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteRecentConversationBuffer;
 import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -67,35 +71,35 @@ public class JdbcPluginAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean(RecentConversationBuffer.class)
-    public RecentConversationBuffer recentConversationBuffer() {
-        return new InMemoryRecentConversationBuffer();
-    }
-
-    @Bean
     @ConditionalOnMissingBean(MemoryBuffer.class)
-    public MemoryBuffer memoryBuffer(
-            DataSource dataSource,
-            Environment environment,
-            RecentConversationBuffer recentConversationBuffer) {
+    public MemoryBuffer memoryBuffer(DataSource dataSource, Environment environment) {
         boolean createIfNotExist =
                 environment.getProperty("memind.store.init-schema", Boolean.class, true);
         return switch (detectDialect(dataSource)) {
-            case SQLITE ->
-                    MemoryBuffer.of(
-                            new SqliteInsightBuffer(dataSource, createIfNotExist),
-                            new SqliteConversationBuffer(dataSource, createIfNotExist),
-                            recentConversationBuffer);
-            case MYSQL ->
-                    MemoryBuffer.of(
-                            new MysqlInsightBuffer(dataSource, createIfNotExist),
-                            new MysqlConversationBuffer(dataSource, createIfNotExist),
-                            recentConversationBuffer);
-            case POSTGRESQL ->
-                    MemoryBuffer.of(
-                            new PostgresqlInsightBuffer(dataSource, createIfNotExist),
-                            new PostgresqlConversationBuffer(dataSource, createIfNotExist),
-                            recentConversationBuffer);
+            case SQLITE -> {
+                var conversationBufferAccessor =
+                        new SqliteConversationBufferAccessor(dataSource, createIfNotExist);
+                yield MemoryBuffer.of(
+                        new SqliteInsightBuffer(dataSource, createIfNotExist),
+                        new SqliteConversationBuffer(conversationBufferAccessor),
+                        new SqliteRecentConversationBuffer(conversationBufferAccessor));
+            }
+            case MYSQL -> {
+                var conversationBufferAccessor =
+                        new MysqlConversationBufferAccessor(dataSource, createIfNotExist);
+                yield MemoryBuffer.of(
+                        new MysqlInsightBuffer(dataSource, createIfNotExist),
+                        new MysqlConversationBuffer(conversationBufferAccessor),
+                        new MysqlRecentConversationBuffer(conversationBufferAccessor));
+            }
+            case POSTGRESQL -> {
+                var conversationBufferAccessor =
+                        new PostgresqlConversationBufferAccessor(dataSource, createIfNotExist);
+                yield MemoryBuffer.of(
+                        new PostgresqlInsightBuffer(dataSource, createIfNotExist),
+                        new PostgresqlConversationBuffer(conversationBufferAccessor),
+                        new PostgresqlRecentConversationBuffer(conversationBufferAccessor));
+            }
         };
     }
 

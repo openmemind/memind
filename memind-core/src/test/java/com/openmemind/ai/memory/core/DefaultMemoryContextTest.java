@@ -20,11 +20,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.openmemind.ai.memory.core.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.InMemoryConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.InMemoryRecentConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.builder.DeepRetrievalOptions;
 import com.openmemind.ai.memory.core.builder.ExtractionCommonOptions;
@@ -43,6 +43,7 @@ import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
+import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.ContextRequest;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.result.InsightResult;
@@ -58,7 +59,12 @@ import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -79,7 +85,7 @@ class DefaultMemoryContextTest {
     @Mock MemoryVector vector;
     @Mock ToolStatsService toolStatsService;
 
-    ConversationBuffer pendingConversationBuffer;
+    PendingConversationBuffer pendingConversationBuffer;
     RecentConversationBuffer recentConversationBuffer;
     MemoryBuffer memoryBuffer;
     DefaultMemory memory;
@@ -107,8 +113,8 @@ class DefaultMemoryContextTest {
         @Test
         @DisplayName("Returns buffer-only when includeMemories=false")
         void buffer_only_when_memories_disabled() {
-            pendingConversationBuffer.save(
-                    "user1:agent1", List.of(Message.user("stale"), Message.assistant("pending")));
+            pendingConversationBuffer.append("user1:agent1", Message.user("stale"));
+            pendingConversationBuffer.append("user1:agent1", Message.assistant("pending"));
             recentConversationBuffer.append("user1:agent1", Message.user("Hello"));
             recentConversationBuffer.append("user1:agent1", Message.assistant("Hi"));
 
@@ -277,7 +283,7 @@ class DefaultMemoryContextTest {
         void clears_buffer_and_extracts() {
             var messages =
                     List.of(Message.user("I like Python"), Message.assistant("Python is great!"));
-            pendingConversationBuffer.save("user1:agent1", messages);
+            messages.forEach(message -> pendingConversationBuffer.append("user1:agent1", message));
             recentConversationBuffer.append("user1:agent1", Message.user("Keep recent user"));
             recentConversationBuffer.append(
                     "user1:agent1", Message.assistant("Keep recent assistant"));
@@ -305,7 +311,7 @@ class DefaultMemoryContextTest {
         @Test
         @DisplayName("Commit with custom config passes config to extraction")
         void commit_with_custom_config() {
-            pendingConversationBuffer.save("user1:agent1", List.of(Message.user("test")));
+            pendingConversationBuffer.append("user1:agent1", Message.user("test"));
 
             var expectedResult =
                     ExtractionResult.success(
@@ -328,7 +334,7 @@ class DefaultMemoryContextTest {
         @Test
         @DisplayName("Uses builder-level extraction defaults when committing")
         void commitUsesBuilderLevelExtractionDefaults() {
-            pendingConversationBuffer.save("user1:agent1", List.of(Message.user("test")));
+            pendingConversationBuffer.append("user1:agent1", Message.user("test"));
             var expectedResult =
                     ExtractionResult.success(
                             memoryId,
@@ -376,5 +382,110 @@ class DefaultMemoryContextTest {
                                                             .language()
                                                             .equals("Chinese")));
         }
+
+        @Test
+        @DisplayName("Coordinates concurrent addMessage sealing with explicit commit")
+        void coordinatesConcurrentAddMessageSealingWithExplicitCommit() throws Exception {
+            var localPendingConversationBuffer = new InMemoryConversationBuffer();
+            var localRecentConversationBuffer = new InMemoryRecentConversationBuffer();
+            var localMemoryBuffer =
+                    MemoryBuffer.of(
+                            mock(InsightBuffer.class),
+                            localPendingConversationBuffer,
+                            localRecentConversationBuffer);
+            var extractedBatches = Collections.synchronizedList(new ArrayList<String>());
+            var detectionStarted = new CountDownLatch(1);
+            var releaseDetection = new CountDownLatch(1);
+            var existing = Message.assistant("I am fine");
+            var trigger = Message.user("Tell me more");
+
+            localPendingConversationBuffer.append("user1:agent1", existing);
+            localRecentConversationBuffer.append("user1:agent1", existing);
+
+            var localExtractor =
+                    new MemoryExtractor(
+                            (mid, content, contentType, metadata) ->
+                                    Mono.fromCallable(
+                                            () -> {
+                                                extractedBatches.add(content.toContentString());
+                                                return RawDataResult.empty();
+                                            }),
+                            (mid, rawResult, config) -> Mono.just(MemoryItemResult.empty()),
+                            (mid, itemResult) -> Mono.just(InsightResult.empty()),
+                            (mid, segment, type, contentId, metadata) ->
+                                    Mono.fromCallable(
+                                            () -> {
+                                                extractedBatches.add(segment.content());
+                                                return RawDataResult.empty();
+                                            }),
+                            input ->
+                                    Mono.fromCallable(
+                                            () -> {
+                                                detectionStarted.countDown();
+                                                assertThat(
+                                                                releaseDetection.await(
+                                                                        5, TimeUnit.SECONDS))
+                                                        .isTrue();
+                                                return com.openmemind.ai.memory.core.extraction
+                                                        .context.CommitDecision.commit(0.9, "test");
+                                            }),
+                            localPendingConversationBuffer,
+                            localRecentConversationBuffer);
+            var localMemory =
+                    new DefaultMemory(
+                            localExtractor,
+                            retriever,
+                            memoryStore,
+                            localMemoryBuffer,
+                            vector,
+                            toolStatsService);
+
+            try (var executor = Executors.newFixedThreadPool(2)) {
+                var addMessageFuture =
+                        executor.submit(
+                                () ->
+                                        localMemory
+                                                .addMessage(
+                                                        memoryId,
+                                                        trigger,
+                                                        ExtractionConfig.withoutInsight())
+                                                .block());
+
+                assertThat(detectionStarted.await(5, TimeUnit.SECONDS)).isTrue();
+
+                var commitFuture =
+                        executor.submit(
+                                () ->
+                                        localMemory
+                                                .commit(memoryId, ExtractionConfig.withoutInsight())
+                                                .block());
+
+                releaseDetection.countDown();
+
+                assertThat(addMessageFuture.get(5, TimeUnit.SECONDS)).isNotNull();
+                assertThat(commitFuture.get(5, TimeUnit.SECONDS)).isNotNull();
+            }
+
+            var pendingMessages = localPendingConversationBuffer.load("user1:agent1");
+            long existingCopies =
+                    countLineOccurrences(extractedBatches, "assistant: I am fine")
+                            + pendingMessages.stream()
+                                    .filter(message -> "I am fine".equals(message.textContent()))
+                                    .count();
+            long triggerCopies =
+                    countLineOccurrences(extractedBatches, "user: Tell me more")
+                            + pendingMessages.stream()
+                                    .filter(message -> "Tell me more".equals(message.textContent()))
+                                    .count();
+
+            assertThat(existingCopies).isEqualTo(1);
+            assertThat(triggerCopies).isEqualTo(1);
+        }
+    }
+
+    private static long countLineOccurrences(List<String> batches, String expectedLine) {
+        return batches.stream()
+                .mapToLong(batch -> batch.lines().filter(expectedLine::equals).count())
+                .sum();
     }
 }

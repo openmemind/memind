@@ -11,12 +11,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.buffer;
+package com.openmemind.ai.memory.server.domain.config.response;
 
-/**
- * Stream buffer persistent storage
- *
- * <p>Persist the message buffer of the ConversationSession to prevent loss of unarchived messages due to application crashes.
- *
- */
-public interface ConversationBuffer extends PendingConversationBuffer {}
+import com.openmemind.ai.memory.server.domain.config.view.MemoryOptionItemView;
+import java.util.List;
+import java.util.Map;
+
+public record MemoryOptionsGetResponse(
+        long version, Map<String, List<MemoryOptionItemView>> config) {}
