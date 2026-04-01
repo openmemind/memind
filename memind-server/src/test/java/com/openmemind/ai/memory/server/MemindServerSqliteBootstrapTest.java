@@ -18,6 +18,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.openmemind.ai.memory.server.support.NoopRuntimeTestConfiguration;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -35,7 +36,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
-@SpringBootTest(classes = MemindServerApplication.class)
+@SpringBootTest(classes = {MemindServerApplication.class, NoopRuntimeTestConfiguration.class})
 class MemindServerSqliteBootstrapTest {
 
     private static final Path TEST_ROOT =
@@ -64,6 +65,9 @@ class MemindServerSqliteBootstrapTest {
         registry.add("spring.datasource.url", () -> "jdbc:sqlite:" + DB_PATH);
         registry.add("spring.datasource.driver-class-name", () -> "org.sqlite.JDBC");
         registry.add("memind.store.init-schema", () -> "true");
+        registry.add(
+                "spring.autoconfigure.exclude",
+                () -> NoopRuntimeTestConfiguration.SPRING_AI_AUTOCONFIG_EXCLUDES);
     }
 
     @BeforeEach

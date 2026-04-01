@@ -27,6 +27,18 @@ import reactor.core.publisher.Mono;
 @TestConfiguration(proxyBeanMethods = false)
 public class NoopRuntimeTestConfiguration {
 
+    public static final String SPRING_AI_AUTOCONFIG_EXCLUDES =
+            String.join(
+                    ",",
+                    "org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration",
+                    "org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration",
+                    "org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration",
+                    "org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration",
+                    "org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration",
+                    "org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration",
+                    "com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.SpringAiLlmAutoConfiguration",
+                    "com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.SpringAiVectorAutoConfiguration");
+
     @Bean
     StructuredChatClient structuredChatClient() {
         return new NoopStructuredChatClient();

@@ -44,7 +44,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -52,8 +51,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
-@SpringBootTest(classes = MemindServerApplication.class)
-@Import(NoopRuntimeTestConfiguration.class)
+@SpringBootTest(classes = {MemindServerApplication.class, NoopRuntimeTestConfiguration.class})
 class MemindServerIntegrationTest {
 
     private static final Path DB_PATH =
@@ -75,6 +73,9 @@ class MemindServerIntegrationTest {
         registry.add("spring.datasource.url", () -> "jdbc:sqlite:" + DB_PATH);
         registry.add("spring.datasource.driver-class-name", () -> "org.sqlite.JDBC");
         registry.add("memind.store.init-schema", () -> "true");
+        registry.add(
+                "spring.autoconfigure.exclude",
+                () -> NoopRuntimeTestConfiguration.SPRING_AI_AUTOCONFIG_EXCLUDES);
     }
 
     private MockMvc mockMvc;
