@@ -1,0 +1,9 @@
+Evaluate whether the generated answer correctly answers the question using the golden answer.
+Return JSON with fields: verdict, score, reason.
+Use verdict CORRECT or WRONG.
+Use score 1.0 for correct and 0.0 for wrong.
+
+Question: {{question}}
+Generated answer: {{generated}}
+Golden answer: {{golden}}
+Category: {{category}}
