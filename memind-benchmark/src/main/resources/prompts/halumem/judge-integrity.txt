@@ -1,0 +1,3 @@
+Score memory completeness against the golden memory points.
+Return JSON with verdict, score, reason.
+Use score 2 for complete coverage, 1 for partial coverage, 0 for missing coverage.
