@@ -44,6 +44,21 @@ public final class ExamplePrinter {
         log.info("═══════════════════════════════════════════════════════");
     }
 
+    public static void printRuntimeSummary(String scenario, ExampleRuntime runtime) {
+        log.info("");
+        log.info("═══════════════════════════════════════════════════════");
+        log.info("  Scenario      : {}", scenario);
+        log.info("  Runtime Dir   : {}", runtime.runtimeDir());
+        log.info("  JDBC Dialect  : {}", runtime.jdbcDialect());
+        log.info("  JDBC URL      : {}", runtime.settings().store().jdbcUrl());
+        log.info("  Chat Model    : {}", runtime.settings().openAi().chatModel());
+        log.info("  Embed Model   : {}", runtime.settings().openAi().embeddingModel());
+        log.info(
+                "  Rerank        : {}",
+                runtime.settings().rerank().enabled() ? "enabled" : "disabled");
+        log.info("═══════════════════════════════════════════════════════");
+    }
+
     public static void printExtractionResult(ExtractionResult result) {
         log.info("  status       : {}", result.status());
         log.info("  duration     : {}ms", result.duration().toMillis());
