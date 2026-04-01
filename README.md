@@ -194,6 +194,7 @@ JdbcMemoryAccess jdbc = JdbcStore.sqlite("./data/memind.db");
 Memory memory = Memory.builder()
         .chatClient(new SpringAiStructuredChatClient(ChatClient.builder(chatModel).build()))
         .store(jdbc.store())
+        .buffer(jdbc.buffer())
         .textSearch(jdbc.textSearch())
         .vector(SpringAiFileVector.file("./data/vector-store.json", embeddingModel))
         .options(MemoryBuildOptions.builder()
@@ -207,6 +208,11 @@ Memory memory = Memory.builder()
         .build();
 ```
 
+The maintained Java examples wrap this assembly behind a small shared support layer. Start with
+`memind-examples/memind-example-java/README.md` and
+`memind-examples/memind-example-java/src/main/java/com/openmemind/ai/memory/example/java/support/ExampleSettings.java`
+if you want the runnable version with centralized configuration defaults.
+
 ---
 
 ## Examples
@@ -218,9 +224,17 @@ git clone https://github.com/openmemind-ai/memind.git
 cd memind
 ```
 
-Examples now live under `memind-examples/` and share one data directory at `memind-examples/data`.
+Maintained Java examples now live in `memind-examples/memind-example-java`.
 
-Configure `OPENAI_API_KEY`, then run one of the pure Java examples:
+They still read shared input data from `memind-examples/data`, while each scenario writes its own
+runtime artifacts under `target/example-runtime/<scenario>` by default.
+
+Configuration is centralized in
+`memind-examples/memind-example-java/src/main/java/com/openmemind/ai/memory/example/java/support/ExampleSettings.java`.
+Set `OPENAI_API_KEY` first, then optionally enable rerank with
+`MEMIND_EXAMPLES_RERANK_ENABLED=true` plus `RERANK_API_KEY`.
+
+Then run one of the pure Java examples:
 
 ```bash
 # Basic extract + retrieve
@@ -229,15 +243,15 @@ mvn -pl memind-examples/memind-example-java -am \
   exec:java
 ```
 
-All maintained examples now live in `memind-examples/memind-example-java`. Run them from your
-IDE, or invoke them with Maven Exec Plugin using the fully qualified class names below. They use
-the same object-first builder approach shown above.
+Run them from your IDE, or invoke them with Maven Exec Plugin using the fully qualified class
+names below. They all share the same support layer for settings, runtime assembly, and example
+output formatting.
 
 | Runtime | Example | Main Class | Description |
 |---------|---------|------------|-------------|
-| Pure Java | **QuickStart** | `com.openmemind.ai.memory.example.java.quickstart.QuickStartExample` | Object-first builder with direct Spring AI runtime objects |
-| Pure Java | **Agent Scope** | `com.openmemind.ai.memory.example.java.agent.AgentScopeMemoryExample` | Object-first agent-scope extraction with insight tree flush and targeted retrieval |
-| Pure Java | **Insight** | `com.openmemind.ai.memory.example.java.insight.InsightTreeExample` | Object-first builder with custom `MemoryBuildOptions` |
+| Pure Java | **QuickStart** | `com.openmemind.ai.memory.example.java.quickstart.QuickStartExample` | Shared runtime bootstrap plus basic `addMessages` and `retrieve` |
+| Pure Java | **Agent Scope** | `com.openmemind.ai.memory.example.java.agent.AgentScopeMemoryExample` | Shared runtime bootstrap plus agent-scope extraction, insight flush, and targeted retrieval |
+| Pure Java | **Insight** | `com.openmemind.ai.memory.example.java.insight.InsightTreeExample` | Shared runtime bootstrap plus lower-threshold insight-tree options |
 | Pure Java | **Foresight** | `com.openmemind.ai.memory.example.java.foresight.ForesightExample` | Pure Java foresight extraction and retrieval |
 | Pure Java | **Tool** | `com.openmemind.ai.memory.example.java.tool.ToolMemoryExample` | Pure Java tool call tracking and aggregated statistics |
 

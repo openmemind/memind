@@ -193,6 +193,7 @@ JdbcMemoryAccess jdbc = JdbcStore.sqlite("./data/memind.db");
 Memory memory = Memory.builder()
         .chatClient(new SpringAiStructuredChatClient(ChatClient.builder(chatModel).build()))
         .store(jdbc.store())
+        .buffer(jdbc.buffer())
         .textSearch(jdbc.textSearch())
         .vector(SpringAiFileVector.file("./data/vector-store.json", embeddingModel))
         .options(MemoryBuildOptions.builder()
@@ -206,6 +207,10 @@ Memory memory = Memory.builder()
         .build();
 ```
 
+当前维护的 Java 示例已经把这套装配收敛到一层共享 support 代码里。想看可直接运行、且配置入口更清晰的版本，可以先看
+`memind-examples/memind-example-java/README.md` 和
+`memind-examples/memind-example-java/src/main/java/com/openmemind/ai/memory/example/java/support/ExampleSettings.java`。
+
 ---
 
 ## 示例
@@ -217,9 +222,17 @@ git clone https://github.com/openmemind-ai/memind.git
 cd memind
 ```
 
-示例现在统一放在 `memind-examples/` 下，并共享 `memind-examples/data` 这份测试数据。
+当前维护的 Java 示例统一放在 `memind-examples/memind-example-java`。
 
-配置 `OPENAI_API_KEY` 后，可以先运行纯 Java 示例：
+它们仍然共用 `memind-examples/data` 这份输入数据，但每个场景默认会把自己的运行时产物写到
+`target/example-runtime/<scenario>`。
+
+配置入口统一收敛在
+`memind-examples/memind-example-java/src/main/java/com/openmemind/ai/memory/example/java/support/ExampleSettings.java`。
+先设置 `OPENAI_API_KEY`，如果要启用 rerank，再设置
+`MEMIND_EXAMPLES_RERANK_ENABLED=true` 和 `RERANK_API_KEY`。
+
+然后就可以运行纯 Java 示例：
 
 ```bash
 # 基础提取 + 检索
@@ -228,15 +241,14 @@ mvn -pl memind-examples/memind-example-java -am \
   exec:java
 ```
 
-当前维护的示例都位于 `memind-examples/memind-example-java`，可以直接在 IDE 中运行，
-也可以使用 Maven Exec Plugin 按下面这些主类启动。它们统一使用上面的对象直连
-builder 方式。
+可以直接在 IDE 中运行，也可以使用 Maven Exec Plugin 按下面这些主类启动。
+它们统一复用同一套 settings、runtime 装配和输出格式化 support 层。
 
 | 运行方式 | 示例 | 主类 | 说明 |
 |---------|------|------|------|
-| 纯 Java | **QuickStart** | `com.openmemind.ai.memory.example.java.quickstart.QuickStartExample` | 通过对象直连 `Memory.builder()` 组装运行时 |
-| 纯 Java | **Agent Scope** | `com.openmemind.ai.memory.example.java.agent.AgentScopeMemoryExample` | 通过对象直连 builder 完成 agent scope 记忆提取、insight tree 刷新与定向检索 |
-| 纯 Java | **Insight** | `com.openmemind.ai.memory.example.java.insight.InsightTreeExample` | 通过对象直连 `Memory.builder()` 并自定义 `MemoryBuildOptions` |
+| 纯 Java | **QuickStart** | `com.openmemind.ai.memory.example.java.quickstart.QuickStartExample` | 复用共享运行时装配，演示基础 `addMessages` 和 `retrieve` |
+| 纯 Java | **Agent Scope** | `com.openmemind.ai.memory.example.java.agent.AgentScopeMemoryExample` | 复用共享运行时装配，演示 agent scope 提取、insight 刷新与定向检索 |
+| 纯 Java | **Insight** | `com.openmemind.ai.memory.example.java.insight.InsightTreeExample` | 复用共享运行时装配，并使用更低阈值的 insight tree 选项 |
 | 纯 Java | **Foresight** | `com.openmemind.ai.memory.example.java.foresight.ForesightExample` | 纯 Java 前瞻记忆提取与检索 |
 | 纯 Java | **Tool** | `com.openmemind.ai.memory.example.java.tool.ToolMemoryExample` | 纯 Java 工具调用追踪与聚合统计 |
 
