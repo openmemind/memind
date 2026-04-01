@@ -18,9 +18,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.DefaultMemory;
 import com.openmemind.ai.memory.core.Memory;
-import com.openmemind.ai.memory.core.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.builder.DeepRetrievalOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
@@ -63,8 +63,8 @@ class DefaultMemoryBuilderTest {
     private static final ItemOperations ITEM_OPERATIONS = proxy(ItemOperations.class);
     private static final InsightOperations INSIGHT_OPERATIONS = proxy(InsightOperations.class);
     private static final InsightBuffer INSIGHT_BUFFER = proxy(InsightBuffer.class);
-    private static final ConversationBuffer PENDING_CONVERSATION_BUFFER =
-            proxy(ConversationBuffer.class);
+    private static final PendingConversationBuffer PENDING_CONVERSATION_BUFFER =
+            proxy(PendingConversationBuffer.class);
     private static final RecentConversationBuffer RECENT_CONVERSATION_BUFFER =
             proxy(RecentConversationBuffer.class);
     private static final MemoryVector MEMORY_VECTOR = proxy(MemoryVector.class);
@@ -258,6 +258,46 @@ class DefaultMemoryBuilderTest {
         assertThat(vectorCloseCount).hasValue(1);
     }
 
+    @Test
+    void externallyManagedBuilderDoesNotCloseInjectedCloseables() {
+        var storeCloseCount = new AtomicInteger();
+        var bufferCloseCount = new AtomicInteger();
+        var textSearchCloseCount = new AtomicInteger();
+        var chatClientCloseCount = new AtomicInteger();
+        var vectorCloseCount = new AtomicInteger();
+
+        var store =
+                new FixedMemoryStore(
+                        RAW_DATA_OPERATIONS, ITEM_OPERATIONS, INSIGHT_OPERATIONS, storeCloseCount);
+        var buffer =
+                new FixedMemoryBuffer(
+                        INSIGHT_BUFFER,
+                        PENDING_CONVERSATION_BUFFER,
+                        RECENT_CONVERSATION_BUFFER,
+                        bufferCloseCount);
+        var textSearch = new CloseTrackingTextSearch(textSearchCloseCount);
+        var chatClient = new TrackingChatClient(chatClientCloseCount);
+        var vector = new CloseTrackingVector(vectorCloseCount);
+
+        var memory =
+                Memory.builder()
+                        .chatClient(chatClient)
+                        .store(store)
+                        .buffer(buffer)
+                        .textSearch(textSearch)
+                        .vector(vector)
+                        .externallyManaged(true)
+                        .build();
+
+        memory.close();
+
+        assertThat(storeCloseCount).hasValue(0);
+        assertThat(bufferCloseCount).hasValue(0);
+        assertThat(textSearchCloseCount).hasValue(0);
+        assertThat(chatClientCloseCount).hasValue(0);
+        assertThat(vectorCloseCount).hasValue(0);
+    }
+
     private static final class FixedMemoryStore implements MemoryStore {
 
         private final RawDataOperations rawDataOperations;
@@ -302,13 +342,13 @@ class DefaultMemoryBuilderTest {
     private static final class FixedMemoryBuffer implements MemoryBuffer {
 
         private final InsightBuffer insightBuffer;
-        private final ConversationBuffer pendingConversationBuffer;
+        private final PendingConversationBuffer pendingConversationBuffer;
         private final RecentConversationBuffer recentConversationBuffer;
         private final AtomicInteger closeCount;
 
         private FixedMemoryBuffer(
                 InsightBuffer insightBuffer,
-                ConversationBuffer pendingConversationBuffer,
+                PendingConversationBuffer pendingConversationBuffer,
                 RecentConversationBuffer recentConversationBuffer,
                 AtomicInteger closeCount) {
             this.insightBuffer = insightBuffer;
@@ -323,7 +363,7 @@ class DefaultMemoryBuilderTest {
         }
 
         @Override
-        public ConversationBuffer pendingConversationBuffer() {
+        public PendingConversationBuffer pendingConversationBuffer() {
             return pendingConversationBuffer;
         }
 

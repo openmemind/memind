@@ -28,7 +28,7 @@ import java.time.Instant;
 public class ConversationBufferDO extends BaseDO {
 
     @TableId(type = IdType.AUTO)
-    private Integer id;
+    private Long id;
 
     private String sessionId;
     private String userId;
@@ -41,11 +41,13 @@ public class ConversationBufferDO extends BaseDO {
     @TableField(typeHandler = InstantTypeHandler.class)
     private Instant timestamp;
 
-    public Integer getId() {
+    private Boolean extracted;
+
+    public Long getId() {
         return id;
     }
 
-    public void setId(Integer id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
@@ -111,5 +113,13 @@ public class ConversationBufferDO extends BaseDO {
 
     public void setTimestamp(Instant timestamp) {
         this.timestamp = timestamp;
+    }
+
+    public Boolean getExtracted() {
+        return extracted;
+    }
+
+    public void setExtracted(Boolean extracted) {
+        this.extracted = extracted;
     }
 }

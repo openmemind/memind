@@ -14,12 +14,6 @@
 package com.openmemind.ai.memory.plugin.jdbc.mysql;
 
 import com.openmemind.ai.memory.plugin.jdbc.internal.buffer.AbstractJdbcConversationBuffer;
-import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaBootstrap;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Timestamp;
-import java.time.Instant;
 import javax.sql.DataSource;
 
 public class MysqlConversationBuffer extends AbstractJdbcConversationBuffer {
@@ -29,38 +23,10 @@ public class MysqlConversationBuffer extends AbstractJdbcConversationBuffer {
     }
 
     public MysqlConversationBuffer(DataSource dataSource, boolean createIfNotExist) {
-        super(dataSource);
-        StoreSchemaBootstrap.ensureMysql(dataSource, createIfNotExist);
+        this(new MysqlConversationBufferAccessor(dataSource, createIfNotExist));
     }
 
-    @Override
-    protected String insertSql() {
-        return """
-        INSERT INTO memory_conversation_buffer
-            (session_id, user_id, agent_id, memory_id, role, content, user_name, timestamp, deleted)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
-        """;
-    }
-
-    @Override
-    protected String falseLiteral() {
-        return "0";
-    }
-
-    @Override
-    protected String trueLiteral() {
-        return "1";
-    }
-
-    @Override
-    protected void bindTimestamp(PreparedStatement statement, int parameterIndex, Instant instant)
-            throws SQLException {
-        statement.setTimestamp(parameterIndex, instant == null ? null : Timestamp.from(instant));
-    }
-
-    @Override
-    protected Instant readTimestamp(ResultSet resultSet, String columnLabel) throws SQLException {
-        Timestamp timestamp = resultSet.getTimestamp(columnLabel);
-        return timestamp == null ? null : timestamp.toInstant();
+    public MysqlConversationBuffer(MysqlConversationBufferAccessor accessor) {
+        super(accessor);
     }
 }

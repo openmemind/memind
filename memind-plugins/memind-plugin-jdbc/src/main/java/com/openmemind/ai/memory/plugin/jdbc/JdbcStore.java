@@ -13,22 +13,27 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc;
 
-import com.openmemind.ai.memory.core.buffer.InMemoryRecentConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBuffer;
+import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBufferAccessor;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlInsightBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlMemoryStore;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlMemoryTextSearch;
+import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlRecentConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlConversationBuffer;
+import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlConversationBufferAccessor;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlInsightBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlMemoryStore;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlMemoryTextSearch;
+import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlRecentConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteConversationBuffer;
+import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteConversationBufferAccessor;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteInsightBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryStore;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryTextSearch;
+import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteRecentConversationBuffer;
 import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -130,13 +135,13 @@ public final class JdbcStore {
             case SQLITE -> {
                 var store = new SqliteMemoryStore(dataSource, createIfNotExist);
                 var insightBufferStore = new SqliteInsightBuffer(dataSource, createIfNotExist);
-                var conversationBufferStore =
-                        new SqliteConversationBuffer(dataSource, createIfNotExist);
+                var conversationBufferAccessor =
+                        new SqliteConversationBufferAccessor(dataSource, createIfNotExist);
                 var memoryBuffer =
                         MemoryBuffer.of(
                                 insightBufferStore,
-                                conversationBufferStore,
-                                new InMemoryRecentConversationBuffer());
+                                new SqliteConversationBuffer(conversationBufferAccessor),
+                                new SqliteRecentConversationBuffer(conversationBufferAccessor));
                 yield new DefaultJdbcMemoryAccess(
                         MemoryStore.of(store, store, store),
                         memoryBuffer,
@@ -146,13 +151,13 @@ public final class JdbcStore {
             case MYSQL -> {
                 var store = new MysqlMemoryStore(dataSource, createIfNotExist);
                 var insightBufferStore = new MysqlInsightBuffer(dataSource, createIfNotExist);
-                var conversationBufferStore =
-                        new MysqlConversationBuffer(dataSource, createIfNotExist);
+                var conversationBufferAccessor =
+                        new MysqlConversationBufferAccessor(dataSource, createIfNotExist);
                 var memoryBuffer =
                         MemoryBuffer.of(
                                 insightBufferStore,
-                                conversationBufferStore,
-                                new InMemoryRecentConversationBuffer());
+                                new MysqlConversationBuffer(conversationBufferAccessor),
+                                new MysqlRecentConversationBuffer(conversationBufferAccessor));
                 yield new DefaultJdbcMemoryAccess(
                         MemoryStore.of(store, store, store),
                         memoryBuffer,
@@ -162,13 +167,13 @@ public final class JdbcStore {
             case POSTGRESQL -> {
                 var store = new PostgresqlMemoryStore(dataSource, createIfNotExist);
                 var insightBufferStore = new PostgresqlInsightBuffer(dataSource, createIfNotExist);
-                var conversationBufferStore =
-                        new PostgresqlConversationBuffer(dataSource, createIfNotExist);
+                var conversationBufferAccessor =
+                        new PostgresqlConversationBufferAccessor(dataSource, createIfNotExist);
                 var memoryBuffer =
                         MemoryBuffer.of(
                                 insightBufferStore,
-                                conversationBufferStore,
-                                new InMemoryRecentConversationBuffer());
+                                new PostgresqlConversationBuffer(conversationBufferAccessor),
+                                new PostgresqlRecentConversationBuffer(conversationBufferAccessor));
                 yield new DefaultJdbcMemoryAccess(
                         MemoryStore.of(store, store, store),
                         memoryBuffer,

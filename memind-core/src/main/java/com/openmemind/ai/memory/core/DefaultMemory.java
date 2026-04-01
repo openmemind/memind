@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.core;
 
+import com.openmemind.ai.memory.core.buffer.ConversationBufferLocks;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
@@ -229,7 +230,9 @@ public class DefaultMemory implements Memory {
         PendingConversationBuffer pendingConversationBuffer =
                 memoryBuffer.pendingConversationBuffer();
         var bufferKey = memoryId.toIdentifier();
-        List<Message> messages = List.copyOf(pendingConversationBuffer.drain(bufferKey));
+        List<Message> messages =
+                ConversationBufferLocks.withLock(
+                        bufferKey, () -> List.copyOf(pendingConversationBuffer.drain(bufferKey)));
 
         if (messages.isEmpty()) {
             return Mono.just(
@@ -424,6 +427,11 @@ public class DefaultMemory implements Memory {
                                         .insightOperations()
                                         .deleteInsights(memoryId, requestedIds))
                 .doOnSuccess(ignored -> retriever.onDataChanged(memoryId));
+    }
+
+    @Override
+    public Mono<Void> invalidate(MemoryId memoryId) {
+        return Mono.<Void>fromRunnable(() -> retriever.onDataChanged(memoryId));
     }
 
     // ===== Agent memory reporting =====

@@ -50,6 +50,7 @@ public final class ConversationBufferConverter {
         dataObject.setContent(message.textContent());
         dataObject.setUserName(message.userName());
         dataObject.setTimestamp(message.timestamp());
+        dataObject.setExtracted(Boolean.FALSE);
         return dataObject;
     }
 

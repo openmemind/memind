@@ -17,7 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.buffer.InMemoryConversationBuffer;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
-import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -38,9 +37,9 @@ class InMemoryConversationBufferTest {
     class BufferTests {
 
         @Test
-        @DisplayName("save + load Normal Access")
+        @DisplayName("append + load Normal Access")
         void shouldSaveAndLoadBuffer() {
-            store.save("session-1", List.of(Message.user("Message")));
+            store.append("session-1", Message.user("Message"));
 
             assertThat(store.load("session-1")).hasSize(1);
             assertThat(store.load("session-1").getFirst().textContent()).isEqualTo("Message");
@@ -53,15 +52,25 @@ class InMemoryConversationBufferTest {
         }
 
         @Test
-        @DisplayName("clear Should Clear Buffer and Message Count")
-        void shouldClearBufferAndMessageCount() {
-            store.save("session-1", List.of(Message.user("Message")));
-            store.saveMessageCount("session-1", 5);
+        @DisplayName("clear Should Clear Buffer")
+        void shouldClearBuffer() {
+            store.append("session-1", Message.user("Message"));
 
             store.clear("session-1");
 
             assertThat(store.load("session-1")).isEmpty();
-            assertThat(store.loadMessageCount("session-1")).isZero();
+        }
+
+        @Test
+        @DisplayName("append Should Preserve Existing Messages and Increment Count")
+        void shouldAppendMessageAndIncrementCount() {
+            store.append("session-1", Message.user("first"));
+
+            store.append("session-1", Message.assistant("second"));
+
+            assertThat(store.load("session-1"))
+                    .extracting(Message::textContent)
+                    .containsExactly("first", "second");
         }
     }
 }

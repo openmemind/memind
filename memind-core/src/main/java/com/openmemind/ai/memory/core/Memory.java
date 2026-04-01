@@ -226,6 +226,19 @@ public interface Memory extends AutoCloseable {
      */
     Mono<Void> deleteInsights(MemoryId memoryId, Collection<Long> insightIds);
 
+    /**
+     * Invalidates retrieval and text-search caches after an out-of-band data change.
+     *
+     * <p>This is intended for administrative workflows that mutate storage directly rather than
+     * going through the standard runtime deletion APIs.
+     *
+     * @param memoryId the memory identity whose caches should be invalidated
+     * @return completion signal
+     */
+    default Mono<Void> invalidate(MemoryId memoryId) {
+        return Mono.empty();
+    }
+
     // ===== Agent tool stats =====
 
     /**

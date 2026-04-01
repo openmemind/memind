@@ -43,12 +43,22 @@ import org.springframework.context.annotation.Configuration;
 @DisplayName("AI starter composition auto-configuration")
 class AiStarterCompositionAutoConfigurationTest {
 
+    private static final String EXCLUDED_PROVIDER_AUTOCONFIGURATIONS =
+            "org.springframework.ai.model.chat.client.autoconfigure.ChatClientAutoConfiguration,"
+                + "org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration,"
+                + "org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration,"
+                + "org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration,"
+                + "org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration,"
+                + "org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration,"
+                + "org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration";
+
     private final ApplicationContextRunner contextRunner =
             new ApplicationContextRunner()
                     .withUserConfiguration(AiStarterApplication.class)
                     .withPropertyValues(
                             "memind.retrieval.rerank.enabled=false",
-                            "memind.vector.store-path=/tmp/memind-starter-composition-vector-store.json");
+                            "memind.vector.store-path=/tmp/memind-starter-composition-vector-store.json",
+                            "spring.autoconfigure.exclude=" + EXCLUDED_PROVIDER_AUTOCONFIGURATIONS);
 
     @Test
     @DisplayName("AI starter only contributes AI infrastructure beans")
@@ -162,7 +172,9 @@ class AiStarterCompositionAutoConfigurationTest {
     @EnableAutoConfiguration(
             excludeName = {
                 "org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration",
-                "com.openmemind.ai.memory.plugin.store.mybatis.MemoryMybatisPlusAutoConfiguration"
+                "com.openmemind.ai.memory.plugin.store.mybatis.MemoryMybatisPlusAutoConfiguration",
+                "org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration",
+                "org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration"
             })
     static class AiStarterApplication {}
 }

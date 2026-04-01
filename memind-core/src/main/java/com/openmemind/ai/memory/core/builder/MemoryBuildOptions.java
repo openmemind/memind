@@ -44,6 +44,33 @@ public final class MemoryBuildOptions {
         return retrieval;
     }
 
+    @Override
+    public boolean equals(Object object) {
+        if (this == object) {
+            return true;
+        }
+        if (!(object instanceof MemoryBuildOptions that)) {
+            return false;
+        }
+        return Objects.equals(extraction, that.extraction)
+                && Objects.equals(retrieval, that.retrieval);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(extraction, retrieval);
+    }
+
+    @Override
+    public String toString() {
+        return "MemoryBuildOptions{"
+                + "extraction="
+                + extraction
+                + ", retrieval="
+                + retrieval
+                + '}';
+    }
+
     public static final class Builder {
 
         private ExtractionOptions extraction = ExtractionOptions.defaults();

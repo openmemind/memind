@@ -15,10 +15,28 @@ package com.openmemind.ai.memory.plugin.store.mybatis.dataobject;
 
 public class ConversationBufferRow {
 
+    private Long id;
+    private String sessionId;
     private String role;
     private String content;
     private String userName;
     private Object timestamp;
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getSessionId() {
+        return sessionId;
+    }
+
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
+    }
 
     public String getRole() {
         return role;

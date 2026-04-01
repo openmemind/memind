@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.core.buffer;
 
-import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,14 +24,20 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Used for testing and scenarios that do not require persistence. Data is lost after application restart.
  *
  */
-public class InMemoryConversationBuffer implements ConversationBuffer {
+public class InMemoryConversationBuffer implements PendingConversationBuffer {
 
     private final ConcurrentHashMap<String, List<Message>> buffers = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, Integer> messageCounts = new ConcurrentHashMap<>();
 
     @Override
-    public void save(String sessionId, List<Message> buffer) {
-        buffers.put(sessionId, new ArrayList<>(buffer));
+    public void append(String sessionId, Message message) {
+        buffers.compute(
+                sessionId,
+                (ignored, existing) -> {
+                    List<Message> next =
+                            existing != null ? new ArrayList<>(existing) : new ArrayList<>();
+                    next.add(message);
+                    return next;
+                });
     }
 
     @Override
@@ -44,28 +49,11 @@ public class InMemoryConversationBuffer implements ConversationBuffer {
     @Override
     public void clear(String sessionId) {
         buffers.remove(sessionId);
-        messageCounts.remove(sessionId);
     }
 
     @Override
     public List<Message> drain(String sessionId) {
         List<Message> removed = buffers.remove(sessionId);
-        messageCounts.remove(sessionId);
         return removed != null ? removed : List.of();
-    }
-
-    @Override
-    public void saveMessageCount(String sessionId, int count) {
-        messageCounts.put(sessionId, count);
-    }
-
-    @Override
-    public int loadMessageCount(String sessionId) {
-        return messageCounts.getOrDefault(sessionId, 0);
-    }
-
-    @Override
-    public List<String> listActiveSessions(MemoryId memoryId) {
-        return new ArrayList<>(buffers.keySet());
     }
 }

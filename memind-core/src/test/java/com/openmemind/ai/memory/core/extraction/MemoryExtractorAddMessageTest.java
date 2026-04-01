@@ -20,7 +20,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.openmemind.ai.memory.core.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.InMemoryConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.InMemoryRecentConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
@@ -90,14 +89,12 @@ class MemoryExtractorAddMessageTest {
         @DisplayName("Directly accumulate to buffer, no boundary detection triggered")
         void accumulates_without_boundary_check() {
             Message msg = Message.assistant("Hello");
-            when(pendingBufferStore.load("user1:agent1")).thenReturn(List.of());
-            when(pendingBufferStore.loadMessageCount("user1:agent1")).thenReturn(0);
 
             StepVerifier.create(extractor.addMessage(memoryId, msg, ExtractionConfig.defaults()))
                     .verifyComplete();
 
             verify(recentBufferStore).append("user1:agent1", msg);
-            verify(pendingBufferStore).save("user1:agent1", List.of(msg));
+            verify(pendingBufferStore).append("user1:agent1", msg);
         }
     }
 
@@ -110,13 +107,12 @@ class MemoryExtractorAddMessageTest {
         void appends_to_buffer_returns_empty() {
             Message msg = Message.user("How are you?");
             when(pendingBufferStore.load("user1:agent1")).thenReturn(new ArrayList<>());
-            when(pendingBufferStore.loadMessageCount("user1:agent1")).thenReturn(0);
 
             StepVerifier.create(extractor.addMessage(memoryId, msg, ExtractionConfig.defaults()))
                     .verifyComplete();
 
             verify(recentBufferStore).append("user1:agent1", msg);
-            verify(pendingBufferStore).save("user1:agent1", List.of(msg));
+            verify(pendingBufferStore).append("user1:agent1", msg);
         }
 
         @Test
@@ -125,7 +121,6 @@ class MemoryExtractorAddMessageTest {
             Message existing = Message.assistant("Earlier detail");
             Message current = Message.user("New question");
             when(pendingBufferStore.load("user1:agent1")).thenReturn(List.of(existing));
-            when(pendingBufferStore.loadMessageCount("user1:agent1")).thenReturn(1);
             when(contextCommitDetector.shouldCommit(any(CommitDetectionInput.class)))
                     .thenReturn(Mono.just(CommitDecision.hold()));
 
@@ -140,7 +135,7 @@ class MemoryExtractorAddMessageTest {
                                             input.history().equals(List.of(existing))
                                                     && input.incomingMessages()
                                                             .equals(List.of(current))));
-            verify(pendingBufferStore).save("user1:agent1", List.of(existing, current));
+            verify(pendingBufferStore).append("user1:agent1", current);
         }
     }
 
@@ -156,8 +151,7 @@ class MemoryExtractorAddMessageTest {
             var existing = Message.assistant("I am fine");
             var trigger = Message.user("Tell me more");
 
-            pendingStore.save("user1:agent1", List.of(existing));
-            pendingStore.saveMessageCount("user1:agent1", 1);
+            pendingStore.append("user1:agent1", existing);
             recentStore.append("user1:agent1", existing);
 
             MemoryExtractor localExtractor =
@@ -188,8 +182,7 @@ class MemoryExtractorAddMessageTest {
             var pendingStore = new InMemoryConversationBuffer();
             var recentStore = new InMemoryRecentConversationBuffer();
             var existing = Message.assistant("I am fine");
-            pendingStore.save("user1:agent1", List.of(existing));
-            pendingStore.saveMessageCount("user1:agent1", 1);
+            pendingStore.append("user1:agent1", existing);
             recentStore.append("user1:agent1", existing);
 
             var extractionStarted = new CountDownLatch(1);
@@ -251,7 +244,6 @@ class MemoryExtractorAddMessageTest {
             Message existing = Message.assistant("I am fine");
             Message trigger = Message.user("Tell me more");
             when(pendingBufferStore.load("user1:agent1")).thenReturn(List.of(existing));
-            when(pendingBufferStore.loadMessageCount("user1:agent1")).thenReturn(1);
             when(contextCommitDetector.shouldCommit(any(CommitDetectionInput.class)))
                     .thenReturn(Mono.just(CommitDecision.commit(0.9, "test")));
             when(segmentProcessor.processSegment(
@@ -283,7 +275,6 @@ class MemoryExtractorAddMessageTest {
             Message trigger =
                     Message.user("Tell me more", Instant.parse("2026-03-27T02:18:00Z"), "Alice");
             when(pendingBufferStore.load("user1:agent1")).thenReturn(List.of(existing));
-            when(pendingBufferStore.loadMessageCount("user1:agent1")).thenReturn(1);
             when(contextCommitDetector.shouldCommit(any(CommitDetectionInput.class)))
                     .thenReturn(Mono.just(CommitDecision.commit(0.9, "test")));
             when(segmentProcessor.processSegment(
@@ -302,14 +293,7 @@ class MemoryExtractorAddMessageTest {
                             argThat(
                                     segment ->
                                             !segment.metadata().containsKey("messages")
-                                                    && Integer.valueOf(0)
-                                                            .equals(
-                                                                    segment.metadata()
-                                                                            .get("start_message"))
-                                                    && Integer.valueOf(1)
-                                                            .equals(
-                                                                    segment.metadata()
-                                                                            .get("end_message"))
+                                                    && segment.metadata().isEmpty()
                                                     && segment.runtimeContext() != null
                                                     && segment.runtimeContext()
                                                             .startTime()
@@ -383,7 +367,6 @@ class MemoryExtractorAddMessageTest {
             }
 
             assertThat(pendingStore.load("user1:agent1")).containsExactlyInAnyOrder(first, second);
-            assertThat(pendingStore.loadMessageCount("user1:agent1")).isEqualTo(2);
             assertThat(recentStore.loadRecent("user1:agent1", 10))
                     .containsExactlyInAnyOrder(first, second);
         }
@@ -403,14 +386,19 @@ class MemoryExtractorAddMessageTest {
                 Mono.just(com.openmemind.ai.memory.core.extraction.result.InsightResult.empty());
     }
 
-    private static final class SlowSnapshotConversationBuffer implements ConversationBuffer {
+    private static final class SlowSnapshotConversationBuffer implements PendingConversationBuffer {
 
         private final ConcurrentHashMap<String, List<Message>> buffers = new ConcurrentHashMap<>();
-        private final ConcurrentHashMap<String, Integer> messageCounts = new ConcurrentHashMap<>();
 
         @Override
-        public void save(String sessionId, List<Message> buffer) {
-            buffers.put(sessionId, new ArrayList<>(buffer));
+        public void append(String sessionId, Message message) {
+            buffers.compute(
+                    sessionId,
+                    (ignored, existing) -> {
+                        var next = new ArrayList<>(existing != null ? existing : List.of());
+                        next.add(message);
+                        return next;
+                    });
         }
 
         @Override
@@ -423,22 +411,6 @@ class MemoryExtractorAddMessageTest {
         @Override
         public void clear(String sessionId) {
             buffers.remove(sessionId);
-            messageCounts.remove(sessionId);
-        }
-
-        @Override
-        public List<String> listActiveSessions(MemoryId memoryId) {
-            return List.copyOf(buffers.keySet());
-        }
-
-        @Override
-        public void saveMessageCount(String sessionId, int count) {
-            messageCounts.put(sessionId, count);
-        }
-
-        @Override
-        public int loadMessageCount(String sessionId) {
-            return messageCounts.getOrDefault(sessionId, 0);
         }
 
         private void sleepQuietly() {

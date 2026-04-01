@@ -22,6 +22,7 @@ import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteInsightBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryStore;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryTextSearch;
+import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteRecentConversationBuffer;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -46,6 +47,8 @@ class JdbcStoreTest {
         assertThat(jdbc.buffer().insightBuffer()).isInstanceOf(SqliteInsightBuffer.class);
         assertThat(jdbc.buffer().pendingConversationBuffer())
                 .isInstanceOf(SqliteConversationBuffer.class);
+        assertThat(jdbc.buffer().recentConversationBuffer())
+                .isInstanceOf(SqliteRecentConversationBuffer.class);
         assertThat(jdbc.textSearch()).isInstanceOf(SqliteMemoryTextSearch.class);
     }
 

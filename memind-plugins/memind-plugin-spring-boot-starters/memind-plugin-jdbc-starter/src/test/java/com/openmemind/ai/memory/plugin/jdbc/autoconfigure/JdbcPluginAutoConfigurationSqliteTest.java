@@ -15,9 +15,10 @@ package com.openmemind.ai.memory.plugin.jdbc.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.openmemind.ai.memory.core.buffer.ConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
+import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
@@ -67,7 +68,8 @@ class JdbcPluginAutoConfigurationSqliteTest {
                             assertThat(context.getBean(MemoryTextSearch.class))
                                     .isInstanceOf(SqliteMemoryTextSearch.class);
                             assertThat(context).doesNotHaveBean(InsightBuffer.class);
-                            assertThat(context).doesNotHaveBean(ConversationBuffer.class);
+                            assertThat(context).doesNotHaveBean(PendingConversationBuffer.class);
+                            assertThat(context).doesNotHaveBean(RecentConversationBuffer.class);
 
                             DataSource dataSource = context.getBean(DataSource.class);
                             MemoryStore memoryStore = context.getBean(MemoryStore.class);
@@ -129,7 +131,8 @@ class JdbcPluginAutoConfigurationSqliteTest {
                                     .extracting(entry -> entry.itemId())
                                     .containsExactly(101L);
 
-                            var conversationBufferStore = memoryBuffer.pendingConversationBuffer();
+                            PendingConversationBuffer conversationBufferStore =
+                                    memoryBuffer.pendingConversationBuffer();
                             String sessionId = memoryId.toIdentifier();
                             Message userMessage =
                                     Message.user(
@@ -143,30 +146,28 @@ class JdbcPluginAutoConfigurationSqliteTest {
                                             "next",
                                             java.time.Instant.parse("2026-03-22T00:00:02Z"));
 
-                            conversationBufferStore.save(
-                                    sessionId, List.of(userMessage, assistantMessage));
+                            conversationBufferStore.append(sessionId, userMessage);
+                            conversationBufferStore.append(sessionId, assistantMessage);
 
                             assertThat(conversationBufferStore.load(sessionId))
                                     .extracting(Message::textContent)
                                     .containsExactly("hello", "hi");
-                            assertThat(conversationBufferStore.loadMessageCount(sessionId))
-                                    .isEqualTo(2);
 
                             conversationBufferStore.clear(sessionId);
 
                             assertThat(conversationBufferStore.load(sessionId)).isEmpty();
-                            assertThat(conversationBufferStore.loadMessageCount(sessionId))
-                                    .isEqualTo(2);
 
-                            conversationBufferStore.save(sessionId, List.of(followUp));
+                            conversationBufferStore.append(sessionId, followUp);
 
                             assertThat(conversationBufferStore.load(sessionId))
                                     .extracting(Message::textContent)
                                     .containsExactly("next");
-                            assertThat(conversationBufferStore.loadMessageCount(sessionId))
-                                    .isEqualTo(3);
-                            assertThat(conversationBufferStore.listActiveSessions(memoryId))
-                                    .containsExactly(sessionId);
+                            assertThat(
+                                            memoryBuffer
+                                                    .recentConversationBuffer()
+                                                    .loadRecent(sessionId, 10))
+                                    .extracting(Message::textContent)
+                                    .containsExactly("hello", "hi", "next");
                         });
     }
 
@@ -200,7 +201,8 @@ class JdbcPluginAutoConfigurationSqliteTest {
                             assertThat(context.getBean(MemoryTextSearch.class))
                                     .isSameAs(context.getBean("customMemoryTextSearch"));
                             assertThat(context).doesNotHaveBean(InsightBuffer.class);
-                            assertThat(context).doesNotHaveBean(ConversationBuffer.class);
+                            assertThat(context).doesNotHaveBean(PendingConversationBuffer.class);
+                            assertThat(context).doesNotHaveBean(RecentConversationBuffer.class);
                             assertThat(context).doesNotHaveBean(JdbcDialectDetector.class);
                         });
     }
