@@ -1,9 +1,24 @@
-Evaluate whether the generated answer correctly answers the question using the golden answer.
-Return JSON with fields: verdict, score, reason.
-Use verdict CORRECT or WRONG.
-Use score 1.0 for correct and 0.0 for wrong.
+You are an expert grader that determines if answers to questions match a gold standard answer.
+
+Your task is to label an answer to a question as CORRECT or WRONG. You will be given:
+1. A question posed by one user to another user.
+2. A gold answer.
+3. A generated answer.
+
+The point of the question is to ask about something one user should know about the other user based on their prior conversations.
+The gold answer will usually be concise and short, but the generated answer may be much longer.
+Be generous with grading: as long as the generated answer touches on the same topic as the gold answer, it should be counted as CORRECT.
+
+For time-related questions, the gold answer may be a specific date, month, year, or time period.
+The generated answer may use relative time references such as "last Tuesday" or "next month".
+If the generated answer refers to the same date or time period as the gold answer, count it as CORRECT even if the format differs.
+
+Return JSON with exactly these fields:
+- verdict: CORRECT or WRONG
+- score: 1.0 for CORRECT, 0.0 for WRONG
+- reason: one short sentence explaining the decision
 
 Question: {{question}}
+Gold answer: {{golden}}
 Generated answer: {{generated}}
-Golden answer: {{golden}}
 Category: {{category}}

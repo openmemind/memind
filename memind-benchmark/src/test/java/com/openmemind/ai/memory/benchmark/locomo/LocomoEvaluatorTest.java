@@ -24,6 +24,32 @@ import org.junit.jupiter.api.Test;
 class LocomoEvaluatorTest {
 
     @Test
+    void extractAnswerPrefersFinalAnswerSection() {
+        String response =
+                """
+                ## STEP 1: RELEVANT MEMORIES EXTRACTION
+                - Memory 1: [2025-01-01] Amy moved to Hangzhou.
+
+                ## FINAL ANSWER:
+                Amy moved to Hangzhou.
+                """;
+
+        assertThat(LocomoEvaluator.extractAnswer(response)).isEqualTo("Amy moved to Hangzhou.");
+    }
+
+    @Test
+    void extractAnswerFallsBackToLastNonEmptyLine() {
+        String response =
+                """
+                Reasoning line one
+
+                Final line answer
+                """;
+
+        assertThat(LocomoEvaluator.extractAnswer(response)).isEqualTo("Final line answer");
+    }
+
+    @Test
     void aggregateComputesPerCategoryAndOverallAccuracy() {
         LocomoEvaluator evaluator = new LocomoEvaluator(null, null, null, "gpt-4o-mini", "gpt-4o");
 

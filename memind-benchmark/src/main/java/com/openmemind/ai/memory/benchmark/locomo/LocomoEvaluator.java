@@ -54,7 +54,7 @@ public final class LocomoEvaluator {
                 judgeEvaluator,
                 memoryModel,
                 evalModel,
-                PromptTemplate.fromClasspath("prompts/answer-with-memory.txt"));
+                PromptTemplate.fromClasspath("prompts/locomo/answer-with-memory.txt"));
     }
 
     LocomoEvaluator(
@@ -101,7 +101,8 @@ public final class LocomoEvaluator {
                                 3));
 
         Instant answerStartedAt = Instant.now();
-        String generatedAnswer = answerClient.call(ChatMessages.systemUser("", prompt)).block();
+        String generatedAnswer =
+                extractAnswer(answerClient.call(ChatMessages.systemUser("", prompt)).block());
         Duration answerTime = Duration.between(answerStartedAt, Instant.now());
 
         Judgment judgment =
@@ -175,6 +176,32 @@ public final class LocomoEvaluator {
             case 4 -> "open-domain";
             default -> "other";
         };
+    }
+
+    static String extractAnswer(String response) {
+        if (response == null) {
+            return "";
+        }
+
+        if (response.contains("FINAL ANSWER:")) {
+            String[] parts = response.split("FINAL ANSWER:", 2);
+            if (parts.length > 1) {
+                for (String line : parts[1].split("\n")) {
+                    String trimmed = line.trim();
+                    if (!trimmed.isBlank() && !trimmed.startsWith("#")) {
+                        return trimmed;
+                    }
+                }
+            }
+        }
+
+        String[] lines = response.strip().split("\n");
+        for (int i = lines.length - 1; i >= 0; i--) {
+            if (!lines[i].isBlank()) {
+                return lines[i].trim();
+            }
+        }
+        return response.trim();
     }
 
     private boolean isCorrect(QuestionResult result) {
