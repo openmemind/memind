@@ -11,21 +11,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.evaluation.evaluator;
+package com.openmemind.ai.memory.evaluation.pipeline.query;
 
 import com.openmemind.ai.memory.evaluation.dataset.model.QAPair;
-import com.openmemind.ai.memory.evaluation.pipeline.model.AnswerResult;
-import com.openmemind.ai.memory.evaluation.pipeline.model.QuestionJudgment;
-import reactor.core.publisher.Mono;
 
-/**
- * Answer evaluator interface, compares generated answers with standard answers and returns judgment results
- *
- */
-public interface AnswerEvaluator {
-    default String strategy() {
-        return getClass().getSimpleName();
-    }
+public interface SearchQueryBuilder {
+    String mode();
 
-    Mono<QuestionJudgment> evaluate(AnswerResult answer, QAPair qa);
+    String build(QAPair qa);
 }

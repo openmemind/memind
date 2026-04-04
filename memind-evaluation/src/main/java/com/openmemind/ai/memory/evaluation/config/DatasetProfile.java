@@ -11,17 +11,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.evaluation.dataset;
+package com.openmemind.ai.memory.evaluation.config;
 
-import com.openmemind.ai.memory.evaluation.dataset.model.EvalDataset;
 import java.nio.file.Path;
+import java.util.List;
 
 /**
- * Dataset loader interface, parses external data files into a unified EvalDataset model
- *
+ * Resolved dataset profile used by the evaluation pipeline.
  */
-public interface DatasetLoader {
-    String datasetName();
-
-    EvalDataset load(Path dataPath, DatasetLoadOptions options);
-}
+public record DatasetProfile(
+        String name,
+        Path path,
+        String sourceFormat,
+        String loaderFormat,
+        Integer maxContentLength,
+        List<String> filterCategories,
+        String searchQueryMode,
+        String judgeStrategy) {}

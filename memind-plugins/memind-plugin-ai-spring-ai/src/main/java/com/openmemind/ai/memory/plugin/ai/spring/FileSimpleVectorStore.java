@@ -13,10 +13,16 @@
  */
 package com.openmemind.ai.memory.plugin.ai.spring;
 
+import com.fasterxml.jackson.databind.ObjectWriter;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
@@ -34,16 +40,23 @@ import org.springframework.ai.vectorstore.SimpleVectorStoreContent;
 public class FileSimpleVectorStore extends SimpleVectorStore {
 
     private static final Logger log = LoggerFactory.getLogger(FileSimpleVectorStore.class);
+    private static final ConcurrentHashMap<Path, Object> FILE_LOCKS = new ConcurrentHashMap<>();
+    private static final ObjectWriter VECTOR_STORE_WRITER =
+            JsonMapper.builder().findAndAddModules().build().writerWithDefaultPrettyPrinter();
 
     private final Path filePath;
-    private final Object persistLock = new Object();
+    private final Object persistLock;
 
     public FileSimpleVectorStore(EmbeddingModel embeddingModel, Path filePath) {
         super(SimpleVectorStore.builder(embeddingModel));
-        this.filePath = Objects.requireNonNull(filePath, "filePath is required");
-        if (Files.exists(filePath)) {
-            log.info("Loading vector data from file: {}", filePath);
-            load(filePath.toFile());
+        this.filePath =
+                Objects.requireNonNull(filePath, "filePath is required")
+                        .toAbsolutePath()
+                        .normalize();
+        this.persistLock = FILE_LOCKS.computeIfAbsent(this.filePath, ignored -> new Object());
+        if (Files.exists(this.filePath)) {
+            log.info("Loading vector data from file: {}", this.filePath);
+            load(this.filePath.toFile());
         }
     }
 
@@ -61,38 +74,83 @@ public class FileSimpleVectorStore extends SimpleVectorStore {
         log.info("Batch vectorizing {} documents", texts.size());
         List<float[]> embeddings = this.embeddingModel.embed(texts);
 
-        for (int i = 0; i < documents.size(); i++) {
-            Document doc = documents.get(i);
-            var content =
-                    new SimpleVectorStoreContent(
-                            doc.getId(),
-                            Objects.requireNonNullElse(doc.getText(), ""),
-                            doc.getMetadata(),
-                            embeddings.get(i));
-            this.store.put(doc.getId(), content);
-        }
+        synchronized (persistLock) {
+            for (int i = 0; i < documents.size(); i++) {
+                Document doc = documents.get(i);
+                var content =
+                        new SimpleVectorStoreContent(
+                                doc.getId(),
+                                Objects.requireNonNullElse(doc.getText(), ""),
+                                doc.getMetadata(),
+                                embeddings.get(i));
+                this.store.put(doc.getId(), content);
+            }
 
-        persist();
+            persistLocked();
+        }
     }
 
     @Override
     public void doDelete(List<String> idList) {
-        super.doDelete(idList);
-        persist();
+        synchronized (persistLock) {
+            super.doDelete(idList);
+            persistLocked();
+        }
     }
 
-    private void persist() {
-        synchronized (persistLock) {
-            try {
-                Path parent = filePath.getParent();
-                if (parent != null) {
-                    Files.createDirectories(parent);
-                }
-            } catch (java.io.IOException e) {
-                throw new IllegalStateException(
-                        "Failed to create vector store directory: " + filePath.getParent(), e);
+    private void persistLocked() {
+        try {
+            Path parent = filePath.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
             }
-            save(filePath.toFile());
+            writeStoreSnapshot(filePath);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to persist vector store file: " + filePath, e);
+        }
+    }
+
+    @Override
+    public void save(File file) {
+        try {
+            writeStoreSnapshot(file.toPath().toAbsolutePath().normalize());
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to save vector store file: " + file, e);
+        }
+    }
+
+    private void writeStoreSnapshot(Path targetPath) throws IOException {
+        Path parent = targetPath.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+
+        Path tempFile =
+                Files.createTempFile(
+                        parent != null ? parent : targetPath.toAbsolutePath().getParent(),
+                        targetPath.getFileName().toString(),
+                        ".tmp");
+        boolean replaceSucceeded = false;
+        try {
+            VECTOR_STORE_WRITER.writeValue(tempFile.toFile(), this.store);
+            moveAtomicallyIfPossible(tempFile, targetPath);
+            replaceSucceeded = true;
+        } finally {
+            if (!replaceSucceeded) {
+                Files.deleteIfExists(tempFile);
+            }
+        }
+    }
+
+    private void moveAtomicallyIfPossible(Path source, Path target) throws IOException {
+        try {
+            Files.move(
+                    source,
+                    target,
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE);
+        } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 }

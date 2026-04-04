@@ -39,6 +39,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class ReportWriter {
     private static final Logger log = LoggerFactory.getLogger(ReportWriter.class);
+    private static final String SYSTEM_NAME = "memind";
     private static final String SEPARATOR =
             "============================================================";
     private final ObjectMapper mapper;
@@ -47,17 +48,10 @@ public class ReportWriter {
         this.mapper = mapper;
     }
 
-    public void write(
-            EvaluationResult result,
-            Path runDir,
-            String dataset,
-            String adapter,
-            String runName,
-            long elapsedMs,
-            PipelineConfig config) {
+    public void write(EvaluationResult result, Path runDir, long elapsedMs, PipelineConfig config) {
         try {
             Files.createDirectories(runDir);
-            writeReport(result, runDir, adapter, elapsedMs);
+            writeReport(result, runDir, elapsedMs);
             writeJson(result, runDir, config);
             log.info("Report written to {}", runDir);
         } catch (IOException e) {
@@ -65,7 +59,7 @@ public class ReportWriter {
         }
     }
 
-    private void writeReport(EvaluationResult result, Path runDir, String adapter, long elapsedMs)
+    private void writeReport(EvaluationResult result, Path runDir, long elapsedMs)
             throws IOException {
 
         String report =
@@ -75,7 +69,7 @@ public class ReportWriter {
                         "📊 Evaluation Report",
                         SEPARATOR,
                         "",
-                        "System: " + adapter,
+                        "System: " + SYSTEM_NAME,
                         "Time Elapsed: " + String.format("%.2fs", elapsedMs / 1000.0),
                         "",
                         "Total Questions: " + result.totalQuestions(),
@@ -104,7 +98,8 @@ public class ReportWriter {
         // detailed_results grouped by conversation_id
         Map<String, List<Map<String, Object>>> detailedResults = new LinkedHashMap<>();
         for (QuestionJudgment j : result.details()) {
-            String convId = extractConvId(j.questionId());
+            String convId =
+                    j.conversationId() != null ? j.conversationId() : extractConvId(j.questionId());
             detailedResults.computeIfAbsent(convId, k -> new ArrayList<>()).add(toDetailMap(j));
         }
 
@@ -123,6 +118,7 @@ public class ReportWriter {
 
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("model", config != null ? config.model() : "unknown");
+        metadata.put("eval_model", config != null ? config.evalModel() : "unknown");
         metadata.put("num_runs", config != null ? config.numRuns() : 1);
         metadata.put("mean_accuracy", result.meanAccuracy());
         metadata.put("std_accuracy", result.stdAccuracy());
@@ -149,6 +145,12 @@ public class ReportWriter {
             m.put("llm_judgments", j.llmJudgments());
         }
         m.put("category", j.category());
+        if (j.conversationId() != null) {
+            m.put("conversation_id", j.conversationId());
+        }
+        if (!j.metadata().isEmpty()) {
+            m.put("metadata", j.metadata());
+        }
         return m;
     }
 
@@ -190,7 +192,9 @@ public class ReportWriter {
             m.put("category", ar.category());
             m.put("conversation_id", ar.conversationId());
             m.put("formatted_context", ar.formattedContext());
-            m.put("metadata", Map.of("conversation_id", ar.conversationId()));
+            Map<String, Object> metadata = new LinkedHashMap<>(ar.metadata());
+            metadata.putIfAbsent("conversation_id", ar.conversationId());
+            m.put("metadata", metadata);
             output.add(m);
         }
         mapper.writerWithDefaultPrettyPrinter()

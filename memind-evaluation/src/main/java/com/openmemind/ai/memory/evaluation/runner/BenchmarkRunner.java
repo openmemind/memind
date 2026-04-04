@@ -11,9 +11,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.evaluation.cli;
+package com.openmemind.ai.memory.evaluation.runner;
 
 import com.openmemind.ai.memory.evaluation.adapter.AddMode;
+import com.openmemind.ai.memory.evaluation.config.ActiveDatasetProfileResolver;
+import com.openmemind.ai.memory.evaluation.config.DatasetProfile;
 import com.openmemind.ai.memory.evaluation.config.EvaluationProperties;
 import com.openmemind.ai.memory.evaluation.pipeline.BenchmarkPipeline;
 import com.openmemind.ai.memory.evaluation.pipeline.PipelineConfig;
@@ -24,6 +26,7 @@ import java.util.Arrays;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -56,18 +59,27 @@ public class BenchmarkRunner implements ApplicationRunner {
 
     private final BenchmarkPipeline pipeline;
     private final EvaluationProperties props;
+    private final ActiveDatasetProfileResolver datasetProfileResolver;
+    private final String chatModel;
 
-    public BenchmarkRunner(BenchmarkPipeline pipeline, EvaluationProperties props) {
+    public BenchmarkRunner(
+            BenchmarkPipeline pipeline,
+            EvaluationProperties props,
+            ActiveDatasetProfileResolver datasetProfileResolver,
+            @Value("${spring.ai.openai.chat.options.model:unknown}") String chatModel) {
         this.pipeline = pipeline;
         this.props = props;
+        this.datasetProfileResolver = datasetProfileResolver;
+        this.chatModel = chatModel;
     }
 
     @Override
     public void run(ApplicationArguments args) {
-        if (props.getDataset().getPath() == null || props.getDataset().getPath().isBlank()) {
+        DatasetProfile datasetProfile = datasetProfileResolver.resolve();
+        if (datasetProfile.path() == null) {
             log.warn(
-                    "evaluation.dataset.path is not configured, skipping automatic run. Please"
-                        + " specify the dataset path through --evaluation.dataset.path=<path>.");
+                    "Dataset path is not configured for active dataset {}, skipping automatic run.",
+                    props.getActiveDataset());
             return;
         }
 
@@ -80,9 +92,10 @@ public class BenchmarkRunner implements ApplicationRunner {
 
         PipelineConfig config =
                 PipelineConfig.builder()
-                        .datasetName(props.getDataset().getName())
-                        .adapterName(props.getSystem().getAdapter())
-                        .dataPath(Path.of(props.getDataset().getPath()))
+                        .datasetName(datasetProfile.name())
+                        .sourceFormat(datasetProfile.sourceFormat())
+                        .loaderFormat(datasetProfile.loaderFormat())
+                        .dataPath(datasetProfile.path())
                         .stages(stageList)
                         .smoke(props.isSmoke())
                         .smokeMessages(props.getSmokeMessages())
@@ -93,22 +106,27 @@ public class BenchmarkRunner implements ApplicationRunner {
                         .addConcurrency(props.getConcurrency().getAdd())
                         .searchConcurrency(props.getConcurrency().getSearch())
                         .convConcurrency(props.getConcurrency().getConv())
+                        .answerConcurrency(props.getConcurrency().getAnswer())
+                        .evaluateConcurrency(props.getConcurrency().getEvaluate())
                         .outputDir(Path.of(props.getOutputDir()))
                         .runName(props.getRunName())
                         .cleanGroups(props.isCleanGroups())
-                        .filterCategories(props.getDataset().getFilterCategories())
+                        .filterCategories(datasetProfile.filterCategories())
+                        .maxContentLength(datasetProfile.maxContentLength())
+                        .searchQueryMode(datasetProfile.searchQueryMode())
+                        .judgeStrategy(datasetProfile.judgeStrategy())
                         .dualPerspective(props.getSystem().getSearch().isDualPerspective())
                         .numRuns(props.getSystem().getLlm().getNumRuns())
                         .addMode(
                                 AddMode.valueOf(
                                         props.getSystem().getMemind().getAddMode().toUpperCase()))
-                        .model(props.getSystem().getLlm().getModel())
+                        .model(chatModel)
+                        .evalModel(props.getSystem().getLlm().getEvalModel())
                         .build();
 
         log.info(
-                "Starting benchmark: dataset={} adapter={} stages={} conv=[{},{})",
-                props.getDataset().getName(),
-                props.getSystem().getAdapter(),
+                "Starting benchmark: dataset={} stages={} conv=[{},{})",
+                datasetProfile.name(),
                 props.getStages(),
                 props.getFromConv(),
                 props.getToConv());
@@ -124,11 +142,8 @@ public class BenchmarkRunner implements ApplicationRunner {
                     result.correct(),
                     result.totalQuestions());
             System.out.printf(
-                    "Report saved to: %s/%s-%s-%s/report.txt%n",
-                    props.getOutputDir(),
-                    props.getDataset().getName(),
-                    props.getSystem().getAdapter(),
-                    props.getRunName());
+                    "Report saved to: %s/%s-%s/report.txt%n",
+                    props.getOutputDir(), datasetProfile.name(), props.getRunName());
         }
     }
 }

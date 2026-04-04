@@ -13,15 +13,7 @@
  */
 package com.openmemind.ai.memory.evaluation.dataset;
 
-import com.openmemind.ai.memory.evaluation.dataset.model.EvalDataset;
-import java.nio.file.Path;
-
 /**
- * Dataset loader interface, parses external data files into a unified EvalDataset model
- *
+ * Dataset load options resolved before a concrete loader parses the file.
  */
-public interface DatasetLoader {
-    String datasetName();
-
-    EvalDataset load(Path dataPath, DatasetLoadOptions options);
-}
+public record DatasetLoadOptions(String datasetName, Integer maxContentLength) {}

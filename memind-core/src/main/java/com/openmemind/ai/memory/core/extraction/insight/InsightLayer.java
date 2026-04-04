@@ -30,8 +30,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -149,25 +147,16 @@ public class InsightLayer implements InsightExtractStep {
                         .filter(t -> t.insightAnalysisMode() != InsightAnalysisMode.ROOT)
                         .toList();
 
-        var flushExecutor = Executors.newVirtualThreadPerTaskExecutor();
-        var futures =
-                branchTypes.stream()
-                        .map(
-                                type ->
-                                        CompletableFuture.runAsync(
-                                                () ->
-                                                        scheduler.flushSync(
-                                                                memoryId, type.name(), language),
-                                                flushExecutor))
-                        .toArray(CompletableFuture[]::new);
-
-        try {
-            CompletableFuture.allOf(futures).join();
-        } catch (Exception e) {
-            log.warn(
-                    "flush partially failed [memoryId={}]: {}",
-                    memoryId.toIdentifier(),
-                    e.getMessage());
+        for (var type : branchTypes) {
+            try {
+                scheduler.flushSync(memoryId, type.name(), language);
+            } catch (Exception e) {
+                log.warn(
+                        "flush failed [memoryId={}, type={}]: {}",
+                        memoryId.toIdentifier(),
+                        type.name(),
+                        e.getMessage());
+            }
         }
 
         // Compensate: force-summarize any BRANCH that has LEAFs but no summary yet.

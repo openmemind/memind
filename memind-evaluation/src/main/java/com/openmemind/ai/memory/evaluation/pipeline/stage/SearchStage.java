@@ -13,8 +13,7 @@
  */
 package com.openmemind.ai.memory.evaluation.pipeline.stage;
 
-import com.openmemind.ai.memory.evaluation.adapter.BaseMemoryAdapter;
-import com.openmemind.ai.memory.evaluation.adapter.MemoryAdapter;
+import com.openmemind.ai.memory.evaluation.adapter.memind.MemindAdapter;
 import com.openmemind.ai.memory.evaluation.adapter.model.SearchRequest;
 import com.openmemind.ai.memory.evaluation.adapter.model.SearchResult;
 import com.openmemind.ai.memory.evaluation.checkpoint.CheckpointStore;
@@ -22,6 +21,7 @@ import com.openmemind.ai.memory.evaluation.dataset.model.EvalConversation;
 import com.openmemind.ai.memory.evaluation.dataset.model.EvalDataset;
 import com.openmemind.ai.memory.evaluation.dataset.model.QAPair;
 import com.openmemind.ai.memory.evaluation.pipeline.PipelineConfig;
+import com.openmemind.ai.memory.evaluation.pipeline.query.SearchQueryBuilderRegistry;
 import com.openmemind.ai.memory.evaluation.progress.StageProgressBar;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -42,9 +42,12 @@ import reactor.core.publisher.Mono;
 public class SearchStage {
     private static final Logger log = LoggerFactory.getLogger(SearchStage.class);
     private final CheckpointStore checkpointStore;
+    private final SearchQueryBuilderRegistry queryBuilderRegistry;
 
-    public SearchStage(CheckpointStore checkpointStore) {
+    public SearchStage(
+            CheckpointStore checkpointStore, SearchQueryBuilderRegistry queryBuilderRegistry) {
         this.checkpointStore = checkpointStore;
+        this.queryBuilderRegistry = queryBuilderRegistry;
     }
 
     /**
@@ -56,7 +59,7 @@ public class SearchStage {
      * @return List of search results for all conversations
      */
     public Mono<List<SearchResult>> run(
-            EvalDataset dataset, MemoryAdapter adapter, Path runDir, PipelineConfig config) {
+            EvalDataset dataset, MemindAdapter adapter, Path runDir, PipelineConfig config) {
 
         // Load completed search checkpoint, key=convId, value=all search results for that
         // conversation
@@ -101,10 +104,8 @@ public class SearchStage {
                                 return Mono.empty();
                             }
 
-                            String speakerAId =
-                                    BaseMemoryAdapter.buildUserId(convId, conv.speakerA());
-                            String speakerBId =
-                                    BaseMemoryAdapter.buildUserId(convId, conv.speakerB());
+                            String speakerAId = MemindAdapter.buildUserId(convId, conv.speakerA());
+                            String speakerBId = MemindAdapter.buildUserId(convId, conv.speakerB());
                             List<QAPair> qas = applySmoke(entry.getValue(), config);
                             log.info(
                                     "[Search] Processing conv={} ({} questions)",
@@ -114,12 +115,16 @@ public class SearchStage {
                             return Flux.fromIterable(qas)
                                     .flatMap(
                                             qa -> {
+                                                String query =
+                                                        queryBuilderRegistry
+                                                                .get(config.searchQueryMode())
+                                                                .build(qa);
                                                 SearchRequest req =
                                                         new SearchRequest(
                                                                 convId,
                                                                 speakerAId,
                                                                 speakerBId,
-                                                                qa.question(),
+                                                                query,
                                                                 config.topK());
                                                 return adapter.search(req)
                                                         .map(r -> r.withQuestionId(qa.questionId()))

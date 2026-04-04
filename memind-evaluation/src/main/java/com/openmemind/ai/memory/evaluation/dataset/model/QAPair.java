@@ -35,4 +35,12 @@ public record QAPair(
     public String allOptions() {
         return (String) metadata.getOrDefault("all_options", "");
     }
+
+    public String questionType() {
+        return (String) metadata.getOrDefault("question_type", category);
+    }
+
+    public String questionDate() {
+        return (String) metadata.getOrDefault("question_date", "");
+    }
 }

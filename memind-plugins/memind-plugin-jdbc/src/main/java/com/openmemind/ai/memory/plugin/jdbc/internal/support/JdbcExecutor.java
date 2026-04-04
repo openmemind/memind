@@ -20,9 +20,13 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import javax.sql.DataSource;
 
 public final class JdbcExecutor {
+
+    private static final int SQLITE_BUSY_MAX_RETRIES = 5;
+    private static final long SQLITE_BUSY_RETRY_BASE_DELAY_MS = 25L;
 
     private JdbcExecutor() {}
 
@@ -84,6 +88,23 @@ public final class JdbcExecutor {
     }
 
     public static <T> T inTransaction(DataSource dataSource, TransactionCallback<T> callback) {
+        int retryCount = 0;
+        while (true) {
+            try {
+                return inTransactionOnce(dataSource, callback);
+            } catch (RuntimeException e) {
+                if (!isRetryableSqliteBusy(e) || retryCount >= SQLITE_BUSY_MAX_RETRIES) {
+                    throw e;
+                }
+                retryCount++;
+                if (!sleepBeforeRetry(retryCount)) {
+                    throw e;
+                }
+            }
+        }
+    }
+
+    private static <T> T inTransactionOnce(DataSource dataSource, TransactionCallback<T> callback) {
         try (Connection connection = dataSource.getConnection()) {
             boolean autoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
@@ -103,6 +124,36 @@ public final class JdbcExecutor {
             throw new JdbcPluginException(e);
         } catch (Exception e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    private static boolean isRetryableSqliteBusy(Throwable throwable) {
+        for (Throwable current = throwable; current != null; current = current.getCause()) {
+            if (!(current instanceof SQLException sqlException)) {
+                continue;
+            }
+            String message = sqlException.getMessage();
+            if (message == null) {
+                continue;
+            }
+            String normalized = message.toUpperCase(Locale.ROOT);
+            if (normalized.contains("SQLITE_BUSY")
+                    || normalized.contains("SQLITE_BUSY_SNAPSHOT")
+                    || normalized.contains("DATABASE IS LOCKED")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean sleepBeforeRetry(int retryCount) {
+        long delayMs = SQLITE_BUSY_RETRY_BASE_DELAY_MS * retryCount;
+        try {
+            Thread.sleep(delayMs);
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
         }
     }
 

@@ -24,6 +24,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,18 +43,19 @@ public class CheckpointStore {
 
     private final ObjectMapper mapper;
     private final Path baseDir;
+    private final Map<Path, ReentrantLock> fileLocks = new ConcurrentHashMap<>();
 
     public CheckpointStore(ObjectMapper mapper, Path baseDir) {
         this.mapper = mapper;
         this.baseDir = baseDir;
     }
 
-    private Path checkpointPath(String dataset, String adapter, String runName) {
-        return baseDir.resolve(dataset + "-" + adapter + "-" + runName).resolve(CHECKPOINT_FILE);
+    private Path checkpointPath(String dataset, String runName) {
+        return baseDir.resolve(dataset + "-" + runName).resolve(CHECKPOINT_FILE);
     }
 
-    public CheckpointState load(String dataset, String adapter, String runName) {
-        Path path = checkpointPath(dataset, adapter, runName);
+    public CheckpointState load(String dataset, String runName) {
+        Path path = checkpointPath(dataset, runName);
         if (Files.exists(path)) {
             try {
                 CheckpointState state = mapper.readValue(path.toFile(), CheckpointState.class);
@@ -65,17 +68,12 @@ public class CheckpointStore {
                 log.warn("Failed to read checkpoint, starting fresh: {}", e.getMessage());
             }
         }
-        return new CheckpointState(dataset, adapter, runName);
+        return new CheckpointState(dataset, runName);
     }
 
     public void save(CheckpointState state) {
-        Path path =
-                checkpointPath(state.getDatasetName(), state.getAdapterName(), state.getRunName());
+        Path path = checkpointPath(state.getDatasetName(), state.getRunName());
         saveFile(path, state);
-    }
-
-    public Path runDir(String dataset, String adapter, String runName) {
-        return baseDir.resolve(dataset + "-" + adapter + "-" + runName);
     }
 
     // ── Stage-level checkpoint ──────────────────────────────────────────
@@ -196,6 +194,10 @@ public class CheckpointStore {
     // Write to a temporary file first and then atomically move it to prevent data corruption in
     // case of a crash during writing
     private void saveFile(Path path, Object data) {
+        Path normalizedPath = path.toAbsolutePath().normalize();
+        ReentrantLock lock =
+                fileLocks.computeIfAbsent(normalizedPath, ignored -> new ReentrantLock());
+        lock.lock();
         try {
             Files.createDirectories(path.getParent());
             Path tmp = path.resolveSibling(path.getFileName() + ".tmp");
@@ -204,6 +206,8 @@ public class CheckpointStore {
                     tmp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
             log.error("Failed to save file {}: {}", path, e.getMessage());
+        } finally {
+            lock.unlock();
         }
     }
 

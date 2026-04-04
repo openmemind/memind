@@ -86,11 +86,12 @@ public class EvaluationMemindConfiguration {
     RetrievalConfig retrievalConfig(EvaluationProperties props) {
         var retrieval = props.getSystem().getMemind().getRetrieval();
         var rerank = retrieval.getRerank();
+        int topK = props.getSystem().getSearch().getTopK();
         var rerankConfig =
                 rerank.isEnabled()
                         ? (rerank.isBlendWithRetrieval()
-                                ? RetrievalConfig.RerankConfig.blend(rerank.getTopK())
-                                : RetrievalConfig.RerankConfig.pure(rerank.getTopK()))
+                                ? RetrievalConfig.RerankConfig.blend(topK)
+                                : RetrievalConfig.RerankConfig.pure(topK))
                         : RetrievalConfig.RerankConfig.disabled();
         return RetrievalConfig.deep().withRerank(rerankConfig).withTimeout(retrieval.getTimeout());
     }
@@ -101,6 +102,7 @@ public class EvaluationMemindConfiguration {
         var boundary = memind.getExtraction().getBoundary();
         var retrieval = memind.getRetrieval();
         var rerank = retrieval.getRerank();
+        int topK = props.getSystem().getSearch().getTopK();
         var defaultInsight = InsightExtractionOptions.defaults();
         var insight =
                 new InsightExtractionOptions(memind.isEnableInsight(), defaultInsight.build());
@@ -136,7 +138,7 @@ public class EvaluationMemindConfiguration {
                                                                 ? RerankMode.BLEND
                                                                 : RerankMode.PURE)
                                                         : RerankMode.DISABLED,
-                                                rerank.getTopK(),
+                                                topK,
                                                 RerankOptions.defaults().top3Weight(),
                                                 RerankOptions.defaults().top10Weight(),
                                                 RerankOptions.defaults().otherWeight()),

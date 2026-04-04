@@ -13,11 +13,10 @@
  */
 package com.openmemind.ai.memory.evaluation.pipeline;
 
-import com.openmemind.ai.memory.evaluation.adapter.AdapterRegistry;
-import com.openmemind.ai.memory.evaluation.adapter.MemoryAdapter;
 import com.openmemind.ai.memory.evaluation.adapter.memind.MemindAdapter;
 import com.openmemind.ai.memory.evaluation.checkpoint.CheckpointState;
 import com.openmemind.ai.memory.evaluation.checkpoint.CheckpointStore;
+import com.openmemind.ai.memory.evaluation.dataset.DatasetLoadOptions;
 import com.openmemind.ai.memory.evaluation.dataset.DatasetLoader;
 import com.openmemind.ai.memory.evaluation.dataset.converter.ConverterRegistry;
 import com.openmemind.ai.memory.evaluation.dataset.model.EvalDataset;
@@ -47,7 +46,7 @@ import reactor.core.publisher.Mono;
 public class BenchmarkPipeline {
     private static final Logger log = LoggerFactory.getLogger(BenchmarkPipeline.class);
 
-    private final AdapterRegistry adapterRegistry;
+    private final MemindAdapter memindAdapter;
     private final Map<String, DatasetLoader> loaders;
     private final CheckpointStore checkpointStore;
     private final ConverterRegistry converterRegistry;
@@ -58,7 +57,7 @@ public class BenchmarkPipeline {
     private final ReportWriter reportWriter;
 
     public BenchmarkPipeline(
-            AdapterRegistry adapterRegistry,
+            MemindAdapter memindAdapter,
             List<DatasetLoader> loaders,
             CheckpointStore checkpointStore,
             ConverterRegistry converterRegistry,
@@ -67,7 +66,7 @@ public class BenchmarkPipeline {
             AnswerStage answerStage,
             EvaluateStage evaluateStage,
             ReportWriter reportWriter) {
-        this.adapterRegistry = adapterRegistry;
+        this.memindAdapter = memindAdapter;
         this.loaders =
                 loaders.stream()
                         .collect(Collectors.toMap(DatasetLoader::datasetName, Function.identity()));
@@ -82,42 +81,32 @@ public class BenchmarkPipeline {
 
     public Mono<EvaluationResult> run(PipelineConfig config) {
         long startMs = System.currentTimeMillis();
-        MemoryAdapter adapter = adapterRegistry.get(config.adapterName());
+        MemindAdapter adapter = memindAdapter;
+        adapter.setDualPerspective(config.dualPerspective());
+        adapter.setAddMode(config.addMode());
 
-        // Pass the dualPerspective and addMode parameters from CLI to MemindAdapter
-        if (adapter instanceof MemindAdapter m4j) {
-            m4j.setDualPerspective(config.dualPerspective());
-            m4j.setAddMode(config.addMode());
-        }
-
-        DatasetLoader loader = loaders.get(config.datasetName());
+        DatasetLoader loader = loaders.get(config.loaderFormat());
         if (loader == null) {
-            throw new IllegalArgumentException("Unknown dataset: " + config.datasetName());
+            throw new IllegalArgumentException("Unknown loader format: " + config.loaderFormat());
         }
 
         // Calculate runDir using config.outputDir() to make --output-dir CLI parameter effective
-        Path runDir =
-                config.outputDir()
-                        .resolve(
-                                config.datasetName()
-                                        + "-"
-                                        + config.adapterName()
-                                        + "-"
-                                        + config.runName());
+        Path runDir = config.outputDir().resolve(config.datasetName() + "-" + config.runName());
 
         Path effectivePath =
-                converterRegistry.convertIfNeeded(config.datasetName(), config.dataPath(), runDir);
-        EvalDataset rawDataset = loader.load(effectivePath);
+                converterRegistry.convertIfNeeded(config.sourceFormat(), config.dataPath(), runDir);
+        EvalDataset rawDataset =
+                loader.load(
+                        effectivePath,
+                        new DatasetLoadOptions(config.datasetName(), config.maxContentLength()));
 
         // Category filtering: skip QAPair with category in filterCategories
         EvalDataset dataset = applyFilterCategories(rawDataset, config.filterCategories());
-        CheckpointState checkpoint =
-                checkpointStore.load(config.datasetName(), config.adapterName(), config.runName());
+        CheckpointState checkpoint = checkpointStore.load(config.datasetName(), config.runName());
 
         log.info(
-                "Starting benchmark: dataset={} adapter={} conversations={} qaPairs={}",
+                "Starting benchmark: dataset={} conversations={} qaPairs={}",
                 config.datasetName(),
-                config.adapterName(),
                 dataset.conversations().size(),
                 dataset.qaPairs().size());
 
@@ -200,14 +189,7 @@ public class BenchmarkPipeline {
                                                         "Failed to write intermediate results: {}",
                                                         e.getMessage());
                                             }
-                                            reportWriter.write(
-                                                    result,
-                                                    runDir,
-                                                    config.datasetName(),
-                                                    config.adapterName(),
-                                                    config.runName(),
-                                                    elapsed,
-                                                    config);
+                                            reportWriter.write(result, runDir, elapsed, config);
                                         })
                         : Mono.empty());
     }

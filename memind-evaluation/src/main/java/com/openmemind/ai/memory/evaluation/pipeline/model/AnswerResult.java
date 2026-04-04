@@ -13,6 +13,8 @@
  */
 package com.openmemind.ai.memory.evaluation.pipeline.model;
 
+import java.util.Map;
+
 /**
  * Single question answer result, including question, standard answer, generated answer, and formatted context
  *
@@ -24,4 +26,28 @@ public record AnswerResult(
         String generatedAnswer,
         String category,
         String conversationId,
-        String formattedContext) {}
+        String formattedContext,
+        Map<String, Object> metadata) {
+    public AnswerResult(
+            String questionId,
+            String question,
+            String goldenAnswer,
+            String generatedAnswer,
+            String category,
+            String conversationId,
+            String formattedContext) {
+        this(
+                questionId,
+                question,
+                goldenAnswer,
+                generatedAnswer,
+                category,
+                conversationId,
+                formattedContext,
+                Map.of());
+    }
+
+    public AnswerResult {
+        metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+    }
+}

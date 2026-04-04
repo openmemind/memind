@@ -25,7 +25,6 @@ import java.util.Set;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class CheckpointState {
     private String datasetName;
-    private String adapterName;
     private String runName;
 
     /** Set of completed stage names (ADD/SEARCH/ANSWER/EVALUATE) */
@@ -39,9 +38,8 @@ public class CheckpointState {
     // Jackson needs no-arg constructor
     public CheckpointState() {}
 
-    public CheckpointState(String datasetName, String adapterName, String runName) {
+    public CheckpointState(String datasetName, String runName) {
         this.datasetName = datasetName;
-        this.adapterName = adapterName;
         this.runName = runName;
         this.lastUpdated = Instant.now();
     }
@@ -71,14 +69,6 @@ public class CheckpointState {
 
     public void setDatasetName(String v) {
         this.datasetName = v;
-    }
-
-    public String getAdapterName() {
-        return adapterName;
-    }
-
-    public void setAdapterName(String v) {
-        this.adapterName = v;
     }
 
     public String getRunName() {
