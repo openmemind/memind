@@ -33,7 +33,6 @@
         <module>memind-plugins</module>
         <module>memind-evaluation</module>
         <module>memind-examples</module>
-        <module>memind-benchmark</module>
         <module>memind-server</module>
     </modules>
 

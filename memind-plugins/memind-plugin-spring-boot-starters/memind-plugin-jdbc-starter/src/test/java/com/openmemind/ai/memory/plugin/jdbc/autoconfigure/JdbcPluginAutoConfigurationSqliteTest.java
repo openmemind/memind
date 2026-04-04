@@ -19,6 +19,7 @@ import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
@@ -37,6 +38,8 @@ import java.util.List;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
@@ -168,6 +171,30 @@ class JdbcPluginAutoConfigurationSqliteTest {
                                                     .loadRecent(sessionId, 10))
                                     .extracting(Message::textContent)
                                     .containsExactly("hello", "hi", "next");
+                        });
+    }
+
+    @Test
+    @DisplayName("Seed default insight taxonomy into JDBC-backed memory store")
+    void seedsDefaultInsightTaxonomy() {
+        contextRunner
+                .withUserConfiguration(SqliteDataSourceConfig.class)
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+                            assertThat(context).hasSingleBean(ApplicationRunner.class);
+
+                            context.getBean(ApplicationRunner.class)
+                                    .run(new DefaultApplicationArguments(new String[0]));
+
+                            MemoryStore memoryStore = context.getBean(MemoryStore.class);
+
+                            assertThat(memoryStore.insightOperations().listInsightTypes())
+                                    .extracting(type -> type.name())
+                                    .containsExactlyInAnyOrderElementsOf(
+                                            DefaultInsightTypes.all().stream()
+                                                    .map(type -> type.name())
+                                                    .toList());
                         });
     }
 

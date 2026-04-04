@@ -15,7 +15,7 @@ package com.openmemind.ai.memory.evaluation.dataset.loader;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.openmemind.ai.memory.evaluation.config.EvaluationProperties;
+import com.openmemind.ai.memory.evaluation.dataset.DatasetLoadOptions;
 import com.openmemind.ai.memory.evaluation.dataset.DatasetLoader;
 import com.openmemind.ai.memory.evaluation.dataset.model.EvalConversation;
 import com.openmemind.ai.memory.evaluation.dataset.model.EvalDataset;
@@ -52,11 +52,9 @@ public class LoCoMoDatasetLoader implements DatasetLoader {
                     .toFormatter(Locale.ENGLISH);
 
     private final ObjectMapper mapper;
-    private final EvaluationProperties props;
 
-    public LoCoMoDatasetLoader(ObjectMapper mapper, EvaluationProperties props) {
+    public LoCoMoDatasetLoader(ObjectMapper mapper) {
         this.mapper = mapper;
-        this.props = props;
     }
 
     @Override
@@ -65,36 +63,39 @@ public class LoCoMoDatasetLoader implements DatasetLoader {
     }
 
     @Override
-    public EvalDataset load(Path dataPath) {
+    public EvalDataset load(Path dataPath, DatasetLoadOptions options) {
         try {
             JsonNode root = mapper.readTree(dataPath.toFile());
             List<EvalConversation> conversations = new ArrayList<>();
             List<QAPair> qaPairs = new ArrayList<>();
 
             if (root.isArray()) {
-                // Original LoCoMo format: root node is an array, using locomo_{idx} as convId
-                // (aligned with EverMemOS)
                 int idx = 0;
                 for (JsonNode item : root) {
-                    String convId = "locomo_" + idx;
-                    conversations.add(parseLoCoMoConversation(convId, item));
+                    String convId = options.datasetName() + "_" + idx;
+                    conversations.add(
+                            parseLoCoMoConversation(convId, item, options.maxContentLength()));
                     qaPairs.addAll(parseQaPairs(convId, item.get("qa")));
                     idx++;
                 }
             } else {
-                // Converted format: root node is an object, key is convId, value contains
-                // conversation / qa_pairs
                 root.fields()
                         .forEachRemaining(
                                 entry -> {
                                     String convId = entry.getKey();
                                     JsonNode convNode = entry.getValue();
-                                    conversations.add(parseConversation(convId, convNode));
-                                    qaPairs.addAll(parseQaPairs(convId, convNode.get("qa_pairs")));
+                                    conversations.add(
+                                            parseConversation(
+                                                    convId, convNode, options.maxContentLength()));
+                                    JsonNode qaNode =
+                                            convNode.has("qa_pairs")
+                                                    ? convNode.get("qa_pairs")
+                                                    : convNode.get("qa");
+                                    qaPairs.addAll(parseQaPairs(convId, qaNode));
                                 });
             }
 
-            return new EvalDataset("locomo", conversations, qaPairs);
+            return new EvalDataset(options.datasetName(), conversations, qaPairs);
         } catch (IOException e) {
             throw new RuntimeException("Failed to load LoCoMo dataset from " + dataPath, e);
         }
@@ -104,10 +105,10 @@ public class LoCoMoDatasetLoader implements DatasetLoader {
      * Parse a single conversation from the original LoCoMo array format:
      * conversation is an object, containing speaker_a/b, session_N_date_time, session_N (message array)
      */
-    private EvalConversation parseLoCoMoConversation(String convId, JsonNode item) {
+    private EvalConversation parseLoCoMoConversation(
+            String convId, JsonNode item, Integer maxContentLength) {
         JsonNode convObj = item.get("conversation");
         List<EvalMessage> messages = new ArrayList<>();
-        Integer maxContentLength = props.getDataset().getMaxContentLength();
 
         String speakerA =
                 convObj != null && convObj.has("speaker_a")
@@ -171,11 +172,11 @@ public class LoCoMoDatasetLoader implements DatasetLoader {
         return new EvalConversation(convId, messages, convMeta);
     }
 
-    private EvalConversation parseConversation(String convId, JsonNode convNode) {
+    private EvalConversation parseConversation(
+            String convId, JsonNode convNode, Integer maxContentLength) {
         JsonNode sessions = convNode.get("conversation");
         List<EvalMessage> messages = new ArrayList<>();
         int globalMsgIdx = 0;
-        Integer maxContentLength = props.getDataset().getMaxContentLength();
 
         String speakerA =
                 convNode.has("person_1") ? convNode.get("person_1").asText() : "Speaker_A";
@@ -284,25 +285,33 @@ public class LoCoMoDatasetLoader implements DatasetLoader {
             return pairs;
         }
 
-        List<String> filtered = props.getDataset().getFilterCategories();
-
         for (int i = 0; i < qasNode.size(); i++) {
             JsonNode qa = qasNode.get(i);
-
             String category = qa.has("category") ? qa.get("category").asText() : "unknown";
-            if (!filtered.isEmpty() && filtered.contains(category)) {
-                continue;
-            }
-
             Map<String, Object> meta = new LinkedHashMap<>();
+            String qId =
+                    qa.has("question_id") ? qa.get("question_id").asText() : convId + "_qa" + i;
+            meta.put("conversation_id", convId);
+            meta.put("question_id", qId);
             if (qa.has("all_options")) {
                 meta.put("all_options", qa.get("all_options").asText());
+            }
+            if (qa.has("question_type")) {
+                meta.put("question_type", qa.get("question_type").asText());
+            }
+            if (qa.has("question_date")) {
+                meta.put("question_date", qa.get("question_date").asText());
+            }
+            if (qa.has("haystack_dates")) {
+                meta.put("haystack_dates", toTextList(qa.get("haystack_dates")));
+            }
+            if (qa.has("answer_session_ids")) {
+                meta.put("answer_session_ids", toTextList(qa.get("answer_session_ids")));
             }
             List<String> evidence = new ArrayList<>();
             if (qa.has("evidence") && qa.get("evidence").isArray()) {
                 qa.get("evidence").forEach(e -> evidence.add(e.asText()));
             }
-            String qId = convId + "_qa" + i;
             pairs.add(
                     new QAPair(
                             qId,
@@ -314,6 +323,15 @@ public class LoCoMoDatasetLoader implements DatasetLoader {
                             meta));
         }
         return pairs;
+    }
+
+    private List<String> toTextList(JsonNode node) {
+        List<String> values = new ArrayList<>();
+        if (node == null || !node.isArray()) {
+            return values;
+        }
+        node.forEach(item -> values.add(item.asText()));
+        return values;
     }
 
     // package-private for testing

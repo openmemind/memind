@@ -17,6 +17,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -35,6 +36,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class LongMemEvalConverter implements DatasetConverter {
+    private static final String DEFAULT_RAW_FILENAME = "longmemeval_s_cleaned.json";
 
     private static final Logger log = LoggerFactory.getLogger(LongMemEvalConverter.class);
 
@@ -56,17 +58,17 @@ public class LongMemEvalConverter implements DatasetConverter {
 
     @Override
     public Path convert(Path inputPath, Path outputDir) {
+        Path sourcePath = resolveInputFile(inputPath);
         try {
             List<Map<String, Object>> items =
-                    objectMapper.readValue(inputPath.toFile(), new TypeReference<>() {});
+                    objectMapper.readValue(sourcePath.toFile(), new TypeReference<>() {});
 
-            Map<String, Object> result = new LinkedHashMap<>();
-            for (int i = 0; i < items.size(); i++) {
-                Map<String, Object> item = items.get(i);
-                result.put("conv_" + i, convertItem(item));
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (Map<String, Object> item : items) {
+                result.add(convertItem(item));
             }
-
             Path outputFile = outputDir.resolve("longmemeval_converted.json");
+            Files.createDirectories(outputDir);
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(outputFile.toFile(), result);
             log.info(
                     "LongMemEval conversion completed, total {} dialogues -> {}",
@@ -85,6 +87,9 @@ public class LongMemEvalConverter implements DatasetConverter {
      * @return LoCoMo format time, such as "6:07 pm on 13 January, 2023"
      */
     String convertTimestamp(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "";
+        }
         LocalDateTime dateTime = LocalDateTime.parse(raw, INPUT_FORMAT);
         String formatted = dateTime.format(OUTPUT_FORMAT);
         // Only convert AM/PM to lowercase, keep month case
@@ -93,45 +98,96 @@ public class LongMemEvalConverter implements DatasetConverter {
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> convertItem(Map<String, Object> item) {
-        List<List<Map<String, String>>> haystackSessions =
-                (List<List<Map<String, String>>>) item.get("haystack_sessions");
-        List<String> haystackDates = (List<String>) item.get("haystack_dates");
+        String questionId = stringValue(item, "question_id", "questionId");
+        String question = stringValue(item, "question");
+        String answer = stringValue(item, "answer");
+        String questionType = stringValue(item, "question_type", "questionType", "category");
+        String questionDate = stringValue(item, "question_date", "questionDate");
+        List<String> haystackDates = stringList(item, "haystack_dates", "haystackDates");
+        List<String> haystackSessionIds =
+                stringList(item, "haystack_session_ids", "haystackSessionIds");
+        List<String> answerSessionIds = stringList(item, "answer_session_ids", "answerSessionIds");
+        List<List<Map<String, Object>>> haystackSessions =
+                (List<List<Map<String, Object>>>) item.get("haystack_sessions");
 
-        List<List<Map<String, String>>> conversation = new ArrayList<>();
+        Map<String, Object> conversation = new LinkedHashMap<>();
+        conversation.put("speaker_a", "user_" + questionId);
+        conversation.put("speaker_b", "assistant_" + questionId);
+        List<String> evidence = new ArrayList<>();
         for (int i = 0; i < haystackSessions.size(); i++) {
-            List<Map<String, String>> session = haystackSessions.get(i);
-            String dateStr = haystackDates.get(i);
-            String timestamp = convertTimestamp(dateStr);
+            List<Map<String, Object>> session = haystackSessions.get(i);
+            String sessionId = i < haystackSessionIds.size() ? haystackSessionIds.get(i) : "";
+            String dateStr = i < haystackDates.size() ? haystackDates.get(i) : "";
+            conversation.put("session_" + (i + 1) + "_date_time", convertTimestamp(dateStr));
 
-            List<Map<String, String>> convertedSession = new ArrayList<>();
-            for (Map<String, String> msg : session) {
-                Map<String, String> converted = new LinkedHashMap<>();
-                converted.put("role", mapRole(msg.get("role")));
-                converted.put("content", msg.get("content"));
-                converted.put("timestamp", timestamp);
+            List<Map<String, Object>> convertedSession = new ArrayList<>();
+            for (int j = 0; j < session.size(); j++) {
+                Map<String, Object> msg = session.get(j);
+                String diaId = "D" + i + ":" + j;
+                Map<String, Object> converted = new LinkedHashMap<>();
+                converted.put("speaker", mapRole(stringValue(msg, "role"), questionId));
+                converted.put("text", stringValue(msg, "content", "text"));
+                converted.put("dia_id", diaId);
                 convertedSession.add(converted);
+                if (!sessionId.isBlank() && answerSessionIds.contains(sessionId)) {
+                    evidence.add(diaId);
+                }
             }
-            conversation.add(convertedSession);
+            conversation.put("session_" + (i + 1), convertedSession);
         }
 
-        // QA pair
-        Map<String, String> qaPair = new LinkedHashMap<>();
-        qaPair.put("question", (String) item.get("question"));
-        qaPair.put("answer", (String) item.get("answer"));
-        qaPair.put("category", (String) item.get("category"));
+        Map<String, Object> qaPair = new LinkedHashMap<>();
+        qaPair.put("question_id", questionId);
+        qaPair.put("question", question);
+        qaPair.put("answer", answer);
+        qaPair.put("category", questionType);
+        qaPair.put("question_type", questionType);
+        qaPair.put("question_date", questionDate);
+        qaPair.put("haystack_dates", haystackDates);
+        qaPair.put("answer_session_ids", answerSessionIds);
+        qaPair.put("evidence", evidence);
 
         Map<String, Object> convEntry = new LinkedHashMap<>();
-        convEntry.put("person_1", "Speaker_A");
-        convEntry.put("person_2", "Speaker_B");
         convEntry.put("conversation", conversation);
-        convEntry.put("qa_pairs", List.of(qaPair));
+        convEntry.put("qa", List.of(qaPair));
         return convEntry;
     }
 
-    private static String mapRole(String role) {
+    private String stringValue(Map<String, ?> item, String... keys) {
+        for (String key : keys) {
+            Object value = item.get(key);
+            if (value instanceof String str) {
+                return str;
+            }
+            if (value instanceof Number || value instanceof Boolean) {
+                return String.valueOf(value);
+            }
+        }
+        return "";
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> stringList(Map<String, ?> item, String... keys) {
+        for (String key : keys) {
+            Object value = item.get(key);
+            if (value instanceof List<?> values) {
+                return values.stream().map(String::valueOf).toList();
+            }
+        }
+        return List.of();
+    }
+
+    private static String mapRole(String role, String questionId) {
         return switch (role) {
-            case "human", "user" -> "Speaker_A";
-            default -> "Speaker_B";
+            case "human", "user" -> "user_" + questionId;
+            default -> "assistant_" + questionId;
         };
+    }
+
+    private Path resolveInputFile(Path inputPath) {
+        if (Files.isDirectory(inputPath)) {
+            return inputPath.resolve(DEFAULT_RAW_FILENAME);
+        }
+        return inputPath;
     }
 }

@@ -13,7 +13,7 @@
  */
 package com.openmemind.ai.memory.evaluation.pipeline.stage;
 
-import com.openmemind.ai.memory.evaluation.adapter.MemoryAdapter;
+import com.openmemind.ai.memory.evaluation.adapter.memind.MemindAdapter;
 import com.openmemind.ai.memory.evaluation.adapter.model.SearchResult;
 import com.openmemind.ai.memory.evaluation.checkpoint.CheckpointStore;
 import com.openmemind.ai.memory.evaluation.dataset.model.EvalDataset;
@@ -43,7 +43,6 @@ import reactor.util.retry.Retry;
 @Component
 public class AnswerStage {
     private static final Logger log = LoggerFactory.getLogger(AnswerStage.class);
-    private static final int ANSWER_CONCURRENCY = 50;
     private static final int CHECKPOINT_BATCH = 400;
 
     private final CheckpointStore checkpointStore;
@@ -53,7 +52,7 @@ public class AnswerStage {
     }
 
     public Mono<Void> run(
-            EvalDataset dataset, MemoryAdapter adapter, Path runDir, PipelineConfig config) {
+            EvalDataset dataset, MemindAdapter adapter, Path runDir, PipelineConfig config) {
         Map<String, AnswerResult> answered =
                 new ConcurrentHashMap<>(checkpointStore.loadAnswerCheckpoint(runDir));
         List<SearchResult> searchResults = checkpointStore.loadSearchResults(runDir);
@@ -109,7 +108,8 @@ public class AnswerStage {
                                                             answer,
                                                             qa.category(),
                                                             qa.conversationId(),
-                                                            sr.formattedContext()))
+                                                            sr.formattedContext(),
+                                                            qa.metadata()))
                                     .doOnSuccess(
                                             ar -> {
                                                 answered.put(ar.questionId(), ar);
@@ -129,7 +129,7 @@ public class AnswerStage {
                                                             e.getMessage()))
                                     .onErrorResume(e -> Mono.empty());
                         },
-                        ANSWER_CONCURRENCY)
+                        config.answerConcurrency())
                 .buffer(CHECKPOINT_BATCH)
                 .doOnNext(
                         batch -> {

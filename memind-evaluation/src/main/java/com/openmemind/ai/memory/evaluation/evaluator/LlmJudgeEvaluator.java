@@ -75,12 +75,20 @@ public class LlmJudgeEvaluator implements AnswerEvaluator {
 
     private final ChatClient chatClient;
 
+    private final String evalModel;
+
     /** Independent evaluation count, read from EvaluationProperties.system.llm.numRuns */
     private final int numRuns;
 
     public LlmJudgeEvaluator(ChatClient chatClient, EvaluationProperties props) {
         this.chatClient = chatClient;
+        this.evalModel = props.getSystem().getLlm().getEvalModel();
         this.numRuns = props.getSystem().getLlm().getNumRuns();
+    }
+
+    @Override
+    public String strategy() {
+        return "llm_judge";
     }
 
     @Override
@@ -131,6 +139,7 @@ public class LlmJudgeEvaluator implements AnswerEvaluator {
                                             .user(userPrompt)
                                             .options(
                                                     OpenAiChatOptions.builder()
+                                                            .model(evalModel)
                                                             .temperature(0.0)
                                                             .build())
                                             .call()

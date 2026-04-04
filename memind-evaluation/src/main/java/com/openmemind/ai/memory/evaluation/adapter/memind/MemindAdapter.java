@@ -29,7 +29,6 @@ import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.evaluation.adapter.AddMode;
-import com.openmemind.ai.memory.evaluation.adapter.BaseMemoryAdapter;
 import com.openmemind.ai.memory.evaluation.adapter.model.AddRequest;
 import com.openmemind.ai.memory.evaluation.adapter.model.AddResult;
 import com.openmemind.ai.memory.evaluation.adapter.model.SearchRequest;
@@ -56,7 +55,7 @@ import reactor.core.scheduler.Schedulers;
  *
  */
 @Component
-public class MemindAdapter extends BaseMemoryAdapter {
+public class MemindAdapter {
 
     private static final String AGENT_ID = "eval-agent";
 
@@ -68,11 +67,25 @@ public class MemindAdapter extends BaseMemoryAdapter {
             You have access to episodic memories from conversations between two speakers. These memories contain
             timestamped information that may be relevant to answering the question.
 
+            # CONTEXT PRIORITY:
+            When the context contains information from multiple sources, follow this strict priority order:
+            1. **Captions** (highest priority) - Direct conversation summaries with rich context and temporal anchoring
+            2. **Items with timestamps** (high priority) - Individual memory facts that have an associated [yyyy-MM-dd] date
+            3. **Items without timestamps** (medium priority) - Individual memory facts without dates; useful for content but unreliable for temporal reasoning
+            4. **Insights** (lowest priority) - Aggregated knowledge patterns
+
             # INSTRUCTIONS:
             Your goal is to synthesize information from all relevant memories to provide a comprehensive and accurate answer.
             You MUST follow a structured Chain-of-Thought process to ensure no details are missed.
             Actively look for connections between people, places, and events to build a complete picture. Synthesize information from different memories to answer the user's question.
             It is CRITICAL that you move beyond simple fact extraction and perform logical inference. When the evidence strongly suggests a connection, you must state that connection. Do not dismiss reasonable inferences as "speculation." Your task is to provide the most complete answer supported by the available evidence.
+
+            # TEMPORAL REASONING GUIDELINES:
+            1. Timestamps on memories (e.g., [2023-05-11]) represent the time the event was MENTIONED in a conversation, which may differ from when the event actually occurred. Use them as reference anchors, not as the event date itself.
+            2. Relative time expressions in memories (e.g., "last week", "next month") are relative to the memory's timestamp, NOT to the current time. You MUST resolve them using the memory's timestamp as the reference point.
+            3. When a memory says "last week" and is timestamped [2023-07-09], the actual event happened around the first week of July 2023.
+            4. When answering time-related questions, always cross-reference timestamps across multiple memories to triangulate the actual event date.
+            5. If two memories conflict on timing, prefer the one with an explicit timestamp over one without, and prefer the one closest in time to the event.
 
             # CRITICAL REQUIREMENTS:
             1. NEVER omit specific names - use "Amy's colleague Rob" not "a colleague"
@@ -145,7 +158,7 @@ public class MemindAdapter extends BaseMemoryAdapter {
     /** Memory extraction mode: STREAMING (default) or CHUNK */
     private AddMode addMode = AddMode.STREAMING;
 
-    /** Extraction configuration: disable Insight, use PARALLEL mode */
+    /** Extraction configuration used by ADD stage */
     private final ExtractionConfig extractionConfig;
 
     /** Retrieval configuration: Deep mode, disable Tier1 Insight retrieval */
@@ -161,8 +174,8 @@ public class MemindAdapter extends BaseMemoryAdapter {
         this.chatClient = chatClient;
         this.reranker = reranker;
         this.dualPerspective = props.getSystem().getSearch().isDualPerspective();
-        this.extractionConfig = ExtractionConfig.withoutInsight();
         boolean enableInsight = props.getSystem().getMemind().isEnableInsight();
+        this.extractionConfig = ExtractionConfig.defaults().withEnableInsight(enableInsight);
         this.retrievalConfig =
                 enableInsight ? retrievalConfig : retrievalConfig.withTier1(TierConfig.disabled());
     }
@@ -180,12 +193,10 @@ public class MemindAdapter extends BaseMemoryAdapter {
         this.addMode = addMode;
     }
 
-    @Override
-    public String name() {
-        return "memind";
+    public static String buildUserId(String convId, String speakerName) {
+        return convId + "_" + speakerName.replace(" ", "_");
     }
 
-    @Override
     public Mono<AddResult> add(AddRequest request) {
         if (addMode == AddMode.CHUNK) {
             if (dualPerspective) {
@@ -267,7 +278,24 @@ public class MemindAdapter extends BaseMemoryAdapter {
                 .defaultIfEmpty(AddResult.empty());
     }
 
-    @Override
+    public Mono<Void> flush(AddRequest request) {
+        if (!extractionConfig.enableInsight()) {
+            return Mono.empty();
+        }
+
+        if (dualPerspective) {
+            return Mono.when(
+                    flushInsights(DefaultMemoryId.of(request.speakerAUserId(), AGENT_ID)),
+                    flushInsights(DefaultMemoryId.of(request.speakerBUserId(), AGENT_ID)));
+        }
+
+        return flushInsights(DefaultMemoryId.of(request.speakerAUserId(), AGENT_ID));
+    }
+
+    private Mono<Void> flushInsights(MemoryId memoryId) {
+        return Mono.fromRunnable(() -> memory.flushInsights(memoryId));
+    }
+
     public Mono<SearchResult> search(SearchRequest request) {
         MemoryId memIdA = DefaultMemoryId.of(request.speakerAUserId(), AGENT_ID);
         RetrievalRequest reqA =
@@ -433,7 +461,6 @@ public class MemindAdapter extends BaseMemoryAdapter {
                 null, request.conversationId(), request.query(), result, result.formattedResult());
     }
 
-    @Override
     public Mono<String> answer(String question, String formattedContext, QAPair qaPair) {
         // MC options have been appended to question by AnswerStage, use directly here
         String prompt =
@@ -448,7 +475,6 @@ public class MemindAdapter extends BaseMemoryAdapter {
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
-    @Override
     public Mono<Void> clean(String conversationId) {
         // TODO: Implement here when memind-core provides deleteByUserId API
         // Currently, memind-core does not have an interface for batch deletion by userId prefix
@@ -469,11 +495,25 @@ public class MemindAdapter extends BaseMemoryAdapter {
         if (response.contains("FINAL ANSWER:")) {
             String[] parts = response.split("FINAL ANSWER:", 2);
             if (parts.length > 1) {
-                for (String line : parts[1].split("\n")) {
-                    line = line.trim();
-                    if (!line.isBlank() && !line.startsWith("#")) {
-                        return line;
+                List<String> answerLines = new ArrayList<>();
+                boolean started = false;
+                for (String rawLine : parts[1].split("\n", -1)) {
+                    String line = rawLine.trim();
+                    if (!started) {
+                        if (line.isBlank() || line.startsWith("#")) {
+                            continue;
+                        }
+                        started = true;
+                    } else if (line.startsWith("#") || line.equals("---")) {
+                        break;
                     }
+                    answerLines.add(line);
+                }
+                while (!answerLines.isEmpty() && answerLines.getLast().isBlank()) {
+                    answerLines.removeLast();
+                }
+                if (!answerLines.isEmpty()) {
+                    return String.join("\n", answerLines);
                 }
             }
         }

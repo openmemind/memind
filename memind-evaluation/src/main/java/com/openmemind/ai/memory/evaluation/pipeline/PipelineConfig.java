@@ -23,7 +23,8 @@ import java.util.List;
  */
 public record PipelineConfig(
         String datasetName,
-        String adapterName,
+        String sourceFormat,
+        String loaderFormat,
         Path dataPath,
         List<Stage> stages,
         boolean smoke,
@@ -35,12 +36,17 @@ public record PipelineConfig(
         int addConcurrency,
         int searchConcurrency,
         int convConcurrency,
+        int answerConcurrency,
+        int evaluateConcurrency,
         Path outputDir,
         String runName,
         // Call adapter.clean() for each conversationId before the ADD stage
         boolean cleanGroups,
         // Category filter: skip QA in this list of categories, empty list = no filter
         List<String> filterCategories,
+        Integer maxContentLength,
+        String searchQueryMode,
+        String judgeStrategy,
         // Dual perspective switch (passed to adapter)
         boolean dualPerspective,
         // LLM Judge independent run count
@@ -48,33 +54,48 @@ public record PipelineConfig(
         // Memory extraction mode (passed to adapter)
         AddMode addMode,
         // LLM model name (for eval_results output)
-        String model) {
+        String model,
+        // Judge/eval model name (for eval_results output)
+        String evalModel) {
     public static Builder builder() {
         return new Builder();
     }
 
     public static class Builder {
-        private String datasetName, adapterName, runName = "default";
+        private String datasetName;
+        private String sourceFormat = "locomo";
+        private String loaderFormat = "locomo";
+        private String runName = "default";
         private Path dataPath, outputDir = Path.of("results");
         private List<Stage> stages = List.of(Stage.ADD, Stage.SEARCH, Stage.ANSWER, Stage.EVALUATE);
         private boolean smoke = false;
         private int smokeMessages = 10, smokeQuestions = 3;
         private int fromConv = 0, toConv = -1, topK = 20;
         private int addConcurrency = 1, searchConcurrency = 5, convConcurrency = 10;
+        private int answerConcurrency = 50, evaluateConcurrency = 20;
         private boolean cleanGroups = false;
         private List<String> filterCategories = List.of();
+        private Integer maxContentLength;
+        private String searchQueryMode = "raw-question";
+        private String judgeStrategy = "llm_judge";
         private boolean dualPerspective = false;
         private int numRuns = 3;
         private AddMode addMode = AddMode.STREAMING;
-        private String model = "gpt-4o-mini";
+        private String model = "openai/gpt-4o-mini";
+        private String evalModel = "openai/gpt-4.1-mini";
 
         public Builder datasetName(String datasetName) {
             this.datasetName = datasetName;
             return this;
         }
 
-        public Builder adapterName(String adapterName) {
-            this.adapterName = adapterName;
+        public Builder sourceFormat(String sourceFormat) {
+            this.sourceFormat = sourceFormat;
+            return this;
+        }
+
+        public Builder loaderFormat(String loaderFormat) {
+            this.loaderFormat = loaderFormat;
             return this;
         }
 
@@ -133,6 +154,16 @@ public record PipelineConfig(
             return this;
         }
 
+        public Builder answerConcurrency(int answerConcurrency) {
+            this.answerConcurrency = answerConcurrency;
+            return this;
+        }
+
+        public Builder evaluateConcurrency(int evaluateConcurrency) {
+            this.evaluateConcurrency = evaluateConcurrency;
+            return this;
+        }
+
         public Builder outputDir(Path outputDir) {
             this.outputDir = outputDir;
             return this;
@@ -150,6 +181,21 @@ public record PipelineConfig(
 
         public Builder filterCategories(List<String> filterCategories) {
             this.filterCategories = filterCategories;
+            return this;
+        }
+
+        public Builder maxContentLength(Integer maxContentLength) {
+            this.maxContentLength = maxContentLength;
+            return this;
+        }
+
+        public Builder searchQueryMode(String searchQueryMode) {
+            this.searchQueryMode = searchQueryMode;
+            return this;
+        }
+
+        public Builder judgeStrategy(String judgeStrategy) {
+            this.judgeStrategy = judgeStrategy;
             return this;
         }
 
@@ -173,10 +219,16 @@ public record PipelineConfig(
             return this;
         }
 
+        public Builder evalModel(String evalModel) {
+            this.evalModel = evalModel;
+            return this;
+        }
+
         public PipelineConfig build() {
             return new PipelineConfig(
                     datasetName,
-                    adapterName,
+                    sourceFormat,
+                    loaderFormat,
                     dataPath,
                     stages,
                     smoke,
@@ -188,14 +240,20 @@ public record PipelineConfig(
                     addConcurrency,
                     searchConcurrency,
                     convConcurrency,
+                    answerConcurrency,
+                    evaluateConcurrency,
                     outputDir,
                     runName,
                     cleanGroups,
                     filterCategories,
+                    maxContentLength,
+                    searchQueryMode,
+                    judgeStrategy,
                     dualPerspective,
                     numRuns,
                     addMode,
-                    model);
+                    model,
+                    evalModel);
         }
     }
 }

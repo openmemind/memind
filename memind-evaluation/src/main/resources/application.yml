@@ -15,18 +15,20 @@
 spring:
   application:
     name: memind-evaluation
+  profiles:
+    default: locomo
   ai:
     openai:
-      base-url: ${OPENAI_BASE_URL:}
+      base-url: ${OPENAI_BASE_URL:https://openrouter.ai/api}
       api-key: ${OPENAI_API_KEY:}
       chat:
         options:
-          model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+          model: ${OPENAI_CHAT_MODEL:openai/gpt-4o-mini}
       embedding:
-        base-url: ${EMBEDDING_BASE_URL:}
+        base-url: ${EMBEDDING_BASE_URL:https://openrouter.ai/api}
         api-key: ${EMBEDDING_API_KEY:}
         options:
-          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+          model: ${OPENAI_EMBEDDING_MODEL:openai/text-embedding-3-small}
 
 memind:
   vector:
@@ -42,7 +44,6 @@ logging:
     com.openmemind.ai.memory: INFO
     com.openmemind.ai.memory.evaluation.pipeline: INFO
     com.openmemind.ai.memory.evaluation.progress: INFO
-    # 关闭噪音日志
     reactor.netty.http.client: ERROR
     org.springframework.ai.retry: WARN
     io.micrometer: WARN
@@ -58,20 +59,15 @@ evaluation:
   clean-groups: false
   concurrency:
     add: 10       # conversations processed in parallel during ADD stage
-    search: 20   # QA questions processed in parallel during SEARCH stage
-    conv: 10      # conversations processed in parallel during SEARCH stage
-  dataset:
-    name: locomo
-    path: ./memind-evaluation/data/locomo/locomo10.json
-    filter-categories: [5]
+    search: 10   # QA questions processed in parallel during SEARCH stage
+    conv: 20      # conversations processed in parallel during SEARCH stage
+    answer: 20    # QA questions processed in parallel during ANSWER stage
+    evaluate: 10  # QA questions processed in parallel during EVALUATE stage
   system:
-    adapter: memind
     search:
       top-k: 20
-      dual-perspective: true
     memind:
       add-mode: chunk
-      enable-insight: false
       storage:
         sqlite:
           path: ./eval-data/memind-eval.db
@@ -86,9 +82,8 @@ evaluation:
           api-key: ${RERANK_API_KEY:}
           model: ${RERANK_MODEL:jina-reranker-v3}
           blend-with-retrieval: true
-          top-k: 20
     answer:
       max-retries: 3
     llm:
-      model: gpt-4.1-mini
+      eval-model: openai/gpt-4.1-mini
       num-runs: 3

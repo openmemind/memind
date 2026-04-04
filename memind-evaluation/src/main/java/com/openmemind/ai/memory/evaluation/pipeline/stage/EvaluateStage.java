@@ -15,7 +15,8 @@ package com.openmemind.ai.memory.evaluation.pipeline.stage;
 
 import com.openmemind.ai.memory.evaluation.dataset.model.EvalDataset;
 import com.openmemind.ai.memory.evaluation.dataset.model.QAPair;
-import com.openmemind.ai.memory.evaluation.evaluator.HybridEvaluator;
+import com.openmemind.ai.memory.evaluation.evaluator.AnswerEvaluator;
+import com.openmemind.ai.memory.evaluation.evaluator.EvaluatorRegistry;
 import com.openmemind.ai.memory.evaluation.pipeline.PipelineConfig;
 import com.openmemind.ai.memory.evaluation.pipeline.model.AnswerResult;
 import com.openmemind.ai.memory.evaluation.pipeline.model.EvaluationResult;
@@ -30,24 +31,24 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
- * EVALUATE stage: Use HybridEvaluator to judge the correctness of each answer and summarize it into EvaluationResult
+ * EVALUATE stage: Use the configured evaluator to judge each answer and summarize the result
  *
  */
 @Component
 public class EvaluateStage {
     private static final Logger log = LoggerFactory.getLogger(EvaluateStage.class);
-    private static final int EVALUATE_CONCURRENCY = 20;
 
-    private final HybridEvaluator evaluator;
+    private final EvaluatorRegistry evaluatorRegistry;
 
-    public EvaluateStage(HybridEvaluator evaluator) {
-        this.evaluator = evaluator;
+    public EvaluateStage(EvaluatorRegistry evaluatorRegistry) {
+        this.evaluatorRegistry = evaluatorRegistry;
     }
 
     public Mono<EvaluationResult> run(
             EvalDataset dataset, List<AnswerResult> answerResults, PipelineConfig config) {
         Map<String, QAPair> qaIndex =
                 dataset.qaPairs().stream().collect(Collectors.toMap(QAPair::questionId, q -> q));
+        AnswerEvaluator evaluator = evaluatorRegistry.get(config.judgeStrategy());
 
         StageProgressBar pb = StageProgressBar.create("Eval   ", answerResults.size(), 0);
 
@@ -69,7 +70,7 @@ public class EvaluateStage {
                                                             e.getMessage()))
                                     .onErrorResume(e -> Mono.empty());
                         },
-                        EVALUATE_CONCURRENCY)
+                        config.evaluateConcurrency())
                 .collectList()
                 .map(
                         judgments -> {

@@ -15,7 +15,9 @@ package com.openmemind.ai.memory.evaluation.config;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -34,7 +36,9 @@ public class EvaluationProperties {
     private int smokeMessages = 10;
     private int smokeQuestions = 3;
     private boolean cleanGroups = false;
+    private String activeDataset = "locomo";
     private DatasetProperties dataset = new DatasetProperties();
+    private Map<String, DatasetProperties> datasets = new LinkedHashMap<>();
     private SystemProperties system = new SystemProperties();
     private ConcurrencyProperties concurrency = new ConcurrencyProperties();
 
@@ -110,12 +114,28 @@ public class EvaluationProperties {
         this.cleanGroups = cleanGroups;
     }
 
+    public String getActiveDataset() {
+        return activeDataset;
+    }
+
+    public void setActiveDataset(String activeDataset) {
+        this.activeDataset = activeDataset;
+    }
+
     public DatasetProperties getDataset() {
         return dataset;
     }
 
     public void setDataset(DatasetProperties dataset) {
         this.dataset = dataset;
+    }
+
+    public Map<String, DatasetProperties> getDatasets() {
+        return datasets;
+    }
+
+    public void setDatasets(Map<String, DatasetProperties> datasets) {
+        this.datasets = datasets;
     }
 
     public SystemProperties getSystem() {
@@ -138,6 +158,8 @@ public class EvaluationProperties {
         private int add = 1;
         private int search = 10;
         private int conv = 5;
+        private int answer = 50;
+        private int evaluate = 20;
 
         public int getAdd() {
             return add;
@@ -162,14 +184,34 @@ public class EvaluationProperties {
         public void setConv(int conv) {
             this.conv = conv;
         }
+
+        public int getAnswer() {
+            return answer;
+        }
+
+        public void setAnswer(int answer) {
+            this.answer = answer;
+        }
+
+        public int getEvaluate() {
+            return evaluate;
+        }
+
+        public void setEvaluate(int evaluate) {
+            this.evaluate = evaluate;
+        }
     }
 
     public static class DatasetProperties {
 
         private String name = "locomo";
         private String path;
+        private String sourceFormat = "locomo";
+        private String loaderFormat = "locomo";
         private Integer maxContentLength;
         private List<String> filterCategories = new ArrayList<>();
+        private SearchDatasetProperties search = new SearchDatasetProperties();
+        private JudgeDatasetProperties judge = new JudgeDatasetProperties();
 
         public String getName() {
             return name;
@@ -187,6 +229,22 @@ public class EvaluationProperties {
             this.path = path;
         }
 
+        public String getSourceFormat() {
+            return sourceFormat;
+        }
+
+        public void setSourceFormat(String sourceFormat) {
+            this.sourceFormat = sourceFormat;
+        }
+
+        public String getLoaderFormat() {
+            return loaderFormat;
+        }
+
+        public void setLoaderFormat(String loaderFormat) {
+            this.loaderFormat = loaderFormat;
+        }
+
         public Integer getMaxContentLength() {
             return maxContentLength;
         }
@@ -202,23 +260,56 @@ public class EvaluationProperties {
         public void setFilterCategories(List<String> filterCategories) {
             this.filterCategories = filterCategories;
         }
+
+        public SearchDatasetProperties getSearch() {
+            return search;
+        }
+
+        public void setSearch(SearchDatasetProperties search) {
+            this.search = search;
+        }
+
+        public JudgeDatasetProperties getJudge() {
+            return judge;
+        }
+
+        public void setJudge(JudgeDatasetProperties judge) {
+            this.judge = judge;
+        }
+    }
+
+    public static class SearchDatasetProperties {
+
+        private String queryMode = "raw-question";
+
+        public String getQueryMode() {
+            return queryMode;
+        }
+
+        public void setQueryMode(String queryMode) {
+            this.queryMode = queryMode;
+        }
+    }
+
+    public static class JudgeDatasetProperties {
+
+        private String strategy = "llm_judge";
+
+        public String getStrategy() {
+            return strategy;
+        }
+
+        public void setStrategy(String strategy) {
+            this.strategy = strategy;
+        }
     }
 
     public static class SystemProperties {
 
-        private String adapter = "memind";
         private SearchProperties search = new SearchProperties();
         private AnswerProperties answer = new AnswerProperties();
         private LlmProperties llm = new LlmProperties();
         private MemindProperties memind = new MemindProperties();
-
-        public String getAdapter() {
-            return adapter;
-        }
-
-        public void setAdapter(String adapter) {
-            this.adapter = adapter;
-        }
 
         public SearchProperties getSearch() {
             return search;
@@ -276,7 +367,7 @@ public class EvaluationProperties {
 
         public static class MemindProperties {
 
-            private String addMode = "context";
+            private String addMode = "streaming";
             private boolean enableInsight = false;
             private StorageProperties storage = new StorageProperties();
             private ExtractionProperties extraction = new ExtractionProperties();
@@ -418,7 +509,6 @@ public class EvaluationProperties {
 
                 private boolean enabled = true;
                 private boolean blendWithRetrieval = true;
-                private int topK = 20;
                 private String baseUrl = "";
                 private String apiKey = "";
                 private String model = "jina-reranker-v3";
@@ -437,14 +527,6 @@ public class EvaluationProperties {
 
                 public void setBlendWithRetrieval(boolean blendWithRetrieval) {
                     this.blendWithRetrieval = blendWithRetrieval;
-                }
-
-                public int getTopK() {
-                    return topK;
-                }
-
-                public void setTopK(int topK) {
-                    this.topK = topK;
                 }
 
                 public String getBaseUrl() {
@@ -488,15 +570,15 @@ public class EvaluationProperties {
 
         public static class LlmProperties {
 
-            private String model = "gpt-4o-mini";
+            private String evalModel = "openai/gpt-4.1-mini";
             private int numRuns = 3;
 
-            public String getModel() {
-                return model;
+            public String getEvalModel() {
+                return evalModel;
             }
 
-            public void setModel(String model) {
-                this.model = model;
+            public void setEvalModel(String evalModel) {
+                this.evalModel = evalModel;
             }
 
             public int getNumRuns() {

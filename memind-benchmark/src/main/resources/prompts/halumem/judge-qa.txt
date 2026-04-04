@@ -1,3 +1,0 @@
-Judge the answer as CORRECT, HALLUCINATION, or OMISSION.
-Return JSON with verdict, score, reason.
-Use score 1.0 for CORRECT and 0.0 otherwise.

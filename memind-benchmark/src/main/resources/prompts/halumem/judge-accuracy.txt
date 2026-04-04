@@ -1,3 +1,0 @@
-Score factual accuracy of the extracted memory.
-Return JSON with verdict, score, reason.
-Use score 2 for correct, 1 for partially correct, 0 for incorrect.

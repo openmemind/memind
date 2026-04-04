@@ -13,8 +13,7 @@
  */
 package com.openmemind.ai.memory.evaluation.pipeline.stage;
 
-import com.openmemind.ai.memory.evaluation.adapter.BaseMemoryAdapter;
-import com.openmemind.ai.memory.evaluation.adapter.MemoryAdapter;
+import com.openmemind.ai.memory.evaluation.adapter.memind.MemindAdapter;
 import com.openmemind.ai.memory.evaluation.adapter.model.AddRequest;
 import com.openmemind.ai.memory.evaluation.checkpoint.CheckpointState;
 import com.openmemind.ai.memory.evaluation.checkpoint.CheckpointStore;
@@ -45,7 +44,7 @@ public class AddStage {
 
     public Mono<Void> run(
             EvalDataset dataset,
-            MemoryAdapter adapter,
+            MemindAdapter adapter,
             CheckpointState checkpoint,
             PipelineConfig config) {
         List<EvalConversation> conversations = applyRange(dataset.conversations(), config);
@@ -68,24 +67,13 @@ public class AddStage {
         return Flux.fromIterable(pending)
                 .flatMap(
                         conv -> {
-                            String speakerAId =
-                                    BaseMemoryAdapter.buildUserId(
-                                            conv.conversationId(), conv.speakerA());
-                            String speakerBId =
-                                    BaseMemoryAdapter.buildUserId(
-                                            conv.conversationId(), conv.speakerB());
                             List<EvalMessage> messages = applySmoke(conv.messages(), config);
                             log.info(
                                     "[Add] Processing conv={} ({} messages)",
                                     conv.conversationId(),
                                     messages.size());
 
-                            AddRequest req =
-                                    new AddRequest(
-                                            conv.conversationId(),
-                                            speakerAId,
-                                            speakerBId,
-                                            messages);
+                            AddRequest req = toAddRequest(conv, messages);
                             // If cleanGroups is enabled, clear the existing memory of the
                             // conversation before adding
                             Mono<Void> cleanMono =
@@ -122,6 +110,14 @@ public class AddStage {
                         config.addConcurrency())
                 .then()
                 .doFinally(signal -> pb.close());
+    }
+
+    private AddRequest toAddRequest(EvalConversation conversation, List<EvalMessage> messages) {
+        return new AddRequest(
+                conversation.conversationId(),
+                MemindAdapter.buildUserId(conversation.conversationId(), conversation.speakerA()),
+                MemindAdapter.buildUserId(conversation.conversationId(), conversation.speakerB()),
+                messages);
     }
 
     // Extract a subset of conversations based on fromConv/toConv

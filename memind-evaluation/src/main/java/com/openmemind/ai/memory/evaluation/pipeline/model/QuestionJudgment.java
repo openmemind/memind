@@ -33,7 +33,39 @@ public record QuestionJudgment(
         /** Mean of multiple judgments */
         double meanScore,
         /** Standard deviation of multiple judgments */
-        double stdScore) {
+        double stdScore,
+        String conversationId,
+        Map<String, Object> metadata) {
+
+    public QuestionJudgment(
+            String questionId,
+            String question,
+            String goldenAnswer,
+            String generatedAnswer,
+            String category,
+            boolean correct,
+            Map<String, Boolean> llmJudgments,
+            List<Double> runScores,
+            double meanScore,
+            double stdScore) {
+        this(
+                questionId,
+                question,
+                goldenAnswer,
+                generatedAnswer,
+                category,
+                correct,
+                llmJudgments,
+                runScores,
+                meanScore,
+                stdScore,
+                null,
+                Map.of());
+    }
+
+    public QuestionJudgment {
+        metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+    }
 
     public static QuestionJudgment exact(AnswerResult ar, boolean correct) {
         double score = correct ? 1.0 : 0.0;
@@ -47,7 +79,9 @@ public record QuestionJudgment(
                 null,
                 List.of(score),
                 score,
-                0.0);
+                0.0,
+                ar.conversationId(),
+                ar.metadata());
     }
 
     public static QuestionJudgment llm(
@@ -67,6 +101,8 @@ public record QuestionJudgment(
                 judgments,
                 runScores,
                 mean,
-                std);
+                std,
+                ar.conversationId(),
+                ar.metadata());
     }
 }

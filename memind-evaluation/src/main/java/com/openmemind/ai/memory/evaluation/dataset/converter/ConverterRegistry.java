@@ -63,6 +63,12 @@ public class ConverterRegistry {
             log.info("Conversion output already exists, skipping conversion: {}", outputFile);
             return outputFile;
         }
+        try {
+            Files.createDirectories(outputDir);
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "Failed to create conversion output directory " + outputDir, e);
+        }
         log.info("Converting dataset {} -> {}", inputPath, outputFile);
         return converter.convert(inputPath, outputDir);
     }
