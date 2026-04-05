@@ -37,6 +37,11 @@ public class ExactMatchEvaluator implements AnswerEvaluator {
     };
 
     @Override
+    public String strategy() {
+        return "exact_match";
+    }
+
+    @Override
     public Mono<QuestionJudgment> evaluate(AnswerResult answer, QAPair qa) {
         String gen = extractOption(answer.generatedAnswer());
         String golden = extractOption(qa.goldenAnswer());
