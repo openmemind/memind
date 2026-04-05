@@ -119,7 +119,7 @@ public class ReportWriter {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("model", config != null ? config.model() : "unknown");
         metadata.put("eval_model", config != null ? config.evalModel() : "unknown");
-        metadata.put("num_runs", config != null ? config.numRuns() : 1);
+        metadata.put("num_runs", result.runScores().size());
         metadata.put("mean_accuracy", result.meanAccuracy());
         metadata.put("std_accuracy", result.stdAccuracy());
         metadata.put("run_scores", result.runScores());

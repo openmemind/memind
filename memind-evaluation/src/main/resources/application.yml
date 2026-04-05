@@ -51,8 +51,8 @@ logging:
 evaluation:
   auto-run: true
   output-dir: ./eval-data/results
-  run-name: default
-  stages: add,search,answer,evaluate
+  run-name: default-01
+  stages: search,answer,evaluate
   from-conv: 0
   to-conv: -1
   smoke: false
