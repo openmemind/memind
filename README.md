@@ -22,7 +22,7 @@
 </p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/memind-0.1.0--SNAPSHOT-0A7AFF" alt="memind 0.1.0-SNAPSHOT"></a>
+  <a href="#"><img src="https://img.shields.io/badge/memind-0.1.0-0A7AFF" alt="memind 0.1.0"></a>
   <a href="#"><img src="https://img.shields.io/badge/Java-21-blue" alt="Java 21"></a>
   <a href="#"><img src="https://img.shields.io/badge/Spring%20Boot-4.0-brightgreen" alt="Spring Boot 4.0"></a>
   <a href="#"><img src="https://img.shields.io/badge/Spring%20AI-2.0-green" alt="Spring AI 2.0"></a>
@@ -150,7 +150,7 @@ and a JDBC driver for your store. For the default SQLite setup:
     <dependency>
       <groupId>com.openmemind.ai</groupId>
       <artifactId>memind-dependencies</artifactId>
-      <version>0.1.0-SNAPSHOT</version>
+      <version>0.1.0</version>
       <type>pom</type>
       <scope>import</scope>
     </dependency>
