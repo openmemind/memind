@@ -419,6 +419,9 @@ Re-running the same `run-name` resumes from checkpoints. Use a new `run-name` fo
 
 Contributions are welcome! Feel free to open an [issue](https://github.com/openmemind/memind/issues) or submit a pull request.
 
+## Community
+- [LINUX DO](https://linux.do/)
+
 ## License
 
 [Apache License 2.0](LICENSE)

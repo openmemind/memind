@@ -432,6 +432,10 @@ mvn -pl memind-evaluation -am -DskipTests spring-boot:run \
 
 欢迎贡献。你可以随时提交 [issue](https://github.com/openmemind/memind/issues) 或发起 pull request。
 
+
+## 社区支持
+- [LINUX DO](https://linux.do/)
+
 ## 许可证
 
 [Apache License 2.0](LICENSE)
