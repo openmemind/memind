@@ -18,11 +18,16 @@ import java.util.List;
 public enum DatabaseDialect {
     SQLITE(
             "db/migration/sqlite/V1__init_store.sql",
-            "db/migration/sqlite/V2__init_text_search.sql"),
-    MYSQL("db/migration/mysql/V1__init_store.sql", "db/migration/mysql/V2__init_text_search.sql"),
+            "db/migration/sqlite/V2__init_text_search.sql",
+            "db/migration/sqlite/V3__multimodal.sql"),
+    MYSQL(
+            "db/migration/mysql/V1__init_store.sql",
+            "db/migration/mysql/V2__init_text_search.sql",
+            "db/migration/mysql/V3__multimodal.sql"),
     POSTGRESQL(
             "db/migration/postgresql/V1__init_store.sql",
-            "db/migration/postgresql/V2__init_text_search.sql");
+            "db/migration/postgresql/V2__init_text_search.sql",
+            "db/migration/postgresql/V3__multimodal.sql");
 
     private final List<String> scriptPaths;
 

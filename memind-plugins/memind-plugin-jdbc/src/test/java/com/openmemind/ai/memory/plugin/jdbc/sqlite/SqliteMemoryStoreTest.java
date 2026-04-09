@@ -23,6 +23,7 @@ import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
+import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
@@ -73,6 +74,9 @@ class SqliteMemoryStoreTest {
         assertThat(tableExists(emptyDataSource, "memory_raw_data")).isTrue();
         assertThat(tableExists(emptyDataSource, "memory_item")).isTrue();
         assertThat(tableExists(emptyDataSource, "memory_insight")).isTrue();
+        assertThat(tableExists(emptyDataSource, "memory_resource")).isTrue();
+        assertThat(columnExists(emptyDataSource, "memory_raw_data", "resource_id")).isTrue();
+        assertThat(columnExists(emptyDataSource, "memory_raw_data", "mime_type")).isTrue();
     }
 
     @Test
@@ -100,6 +104,8 @@ class SqliteMemoryStoreTest {
                         "caption-1",
                         null,
                         Map.of("source", "chat"),
+                        null,
+                        null,
                         BASE_TIME.minusSeconds(300),
                         BASE_TIME.minusSeconds(320),
                         BASE_TIME.minusSeconds(290));
@@ -125,6 +131,8 @@ class SqliteMemoryStoreTest {
                         "caption-2",
                         null,
                         Map.of("source", "updated"),
+                        null,
+                        null,
                         BASE_TIME.minusSeconds(300),
                         BASE_TIME.minusSeconds(280),
                         BASE_TIME.minusSeconds(260));
@@ -166,6 +174,8 @@ class SqliteMemoryStoreTest {
                         "caption-1",
                         null,
                         Map.of("source", "chat"),
+                        null,
+                        null,
                         BASE_TIME.minusSeconds(300),
                         BASE_TIME.minusSeconds(320),
                         BASE_TIME.minusSeconds(290));
@@ -201,6 +211,52 @@ class SqliteMemoryStoreTest {
 
         MemoryRawData legacy = store.getRawData(memoryId, "rd-legacy-segment").orElseThrow();
         assertThat(legacy.segment().runtimeContext()).isNull();
+    }
+
+    @Test
+    void resourceCrudAndAggregateRawDataPersistenceWork() {
+        MemoryResource resource =
+                new MemoryResource(
+                        "res-1",
+                        memoryId.toIdentifier(),
+                        "https://example.com/report.pdf",
+                        "file:///tmp/memind/report.pdf",
+                        "report.pdf",
+                        "application/pdf",
+                        "checksum-1",
+                        2048L,
+                        Map.of("pages", 3),
+                        BASE_TIME.minusSeconds(90));
+        MemoryRawData rawData =
+                new MemoryRawData(
+                        "rd-resource",
+                        memoryId.toIdentifier(),
+                        ContentTypes.DOCUMENT,
+                        "content-resource",
+                        Segment.single("hello multimodal"),
+                        "caption-resource",
+                        null,
+                        Map.of("source", "document"),
+                        "res-1",
+                        "application/pdf",
+                        BASE_TIME,
+                        BASE_TIME.minusSeconds(10),
+                        BASE_TIME.plusSeconds(10));
+
+        store.upsertRawDataWithResources(memoryId, List.of(resource), List.of(rawData));
+
+        assertThat(store.getResource(memoryId, "res-1")).contains(resource);
+        assertThat(store.listResources(memoryId)).containsExactly(resource);
+        assertThat(store.getRawData(memoryId, "rd-resource"))
+                .get()
+                .satisfies(
+                        persisted -> {
+                            assertThat(persisted.resourceId()).isEqualTo("res-1");
+                            assertThat(persisted.mimeType()).isEqualTo("application/pdf");
+                            assertThat(persisted.metadata())
+                                    .containsEntry("resourceId", "res-1")
+                                    .containsEntry("mimeType", "application/pdf");
+                        });
     }
 
     @Test
@@ -457,6 +513,23 @@ class SqliteMemoryStoreTest {
         }
     }
 
+    private boolean columnExists(DataSource targetDataSource, String tableName, String columnName) {
+        try (Connection connection = targetDataSource.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement("PRAGMA table_info(" + tableName + ")")) {
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    if (columnName.equalsIgnoreCase(resultSet.getString("name"))) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private void executeUpdate(String sql, Object... params) {
         try (Connection connection = dataSource.getConnection();
                 PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -504,6 +577,8 @@ class SqliteMemoryStoreTest {
                 "caption-" + id,
                 vectorId,
                 Map.of("raw", id),
+                null,
+                null,
                 createdAt,
                 createdAt.minusSeconds(5),
                 createdAt.plusSeconds(5));

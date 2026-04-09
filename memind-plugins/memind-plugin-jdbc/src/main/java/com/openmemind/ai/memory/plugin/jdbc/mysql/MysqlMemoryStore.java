@@ -22,6 +22,7 @@ import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
+import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
@@ -32,12 +33,16 @@ import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentBoundary;
+import com.openmemind.ai.memory.core.resource.ResourceStore;
+import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
+import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaBootstrap;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JdbcExecutor;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JsonCodec;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -55,7 +60,12 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
 
-public class MysqlMemoryStore implements RawDataOperations, ItemOperations, InsightOperations {
+public class MysqlMemoryStore
+        implements MemoryStore,
+                RawDataOperations,
+                ItemOperations,
+                InsightOperations,
+                ResourceOperations {
 
     private static final TypeReference<Map<String, Object>> OBJECT_MAP_TYPE =
             new TypeReference<>() {};
@@ -67,25 +77,68 @@ public class MysqlMemoryStore implements RawDataOperations, ItemOperations, Insi
 
     private final DataSource dataSource;
     private final JsonCodec jsonHelper;
+    private final ResourceStore resourceStore;
 
     public MysqlMemoryStore(DataSource dataSource) {
-        this(dataSource, true);
+        this(dataSource, null, true);
     }
 
     public MysqlMemoryStore(DataSource dataSource, boolean createIfNotExist) {
-        this(dataSource, JsonCodec.createDefaultObjectMapper(), createIfNotExist);
+        this(dataSource, null, createIfNotExist);
+    }
+
+    public MysqlMemoryStore(
+            DataSource dataSource, ResourceStore resourceStore, boolean createIfNotExist) {
+        this(dataSource, resourceStore, JsonCodec.createDefaultObjectMapper(), createIfNotExist);
     }
 
     private MysqlMemoryStore(
-            DataSource dataSource, ObjectMapper objectMapper, boolean createIfNotExist) {
+            DataSource dataSource,
+            ResourceStore resourceStore,
+            ObjectMapper objectMapper,
+            boolean createIfNotExist) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
         StoreSchemaBootstrap.ensureMysql(this.dataSource, createIfNotExist);
         this.jsonHelper = new JsonCodec(Objects.requireNonNull(objectMapper, "objectMapper"));
+        this.resourceStore = resourceStore;
+    }
+
+    @Override
+    public RawDataOperations rawDataOperations() {
+        return this;
+    }
+
+    @Override
+    public ItemOperations itemOperations() {
+        return this;
+    }
+
+    @Override
+    public InsightOperations insightOperations() {
+        return this;
+    }
+
+    @Override
+    public ResourceOperations resourceOperations() {
+        return this;
+    }
+
+    @Override
+    public ResourceStore resourceStore() {
+        return resourceStore;
     }
 
     @Override
     public void upsertRawData(MemoryId memoryId, List<MemoryRawData> rawDataList) {
-        if (rawDataList == null || rawDataList.isEmpty()) {
+        upsertRawDataWithResources(memoryId, List.of(), rawDataList);
+    }
+
+    @Override
+    public void upsertRawDataWithResources(
+            MemoryId memoryId, List<MemoryResource> resources, List<MemoryRawData> rawDataList) {
+        boolean noResources = resources == null || resources.isEmpty();
+        boolean noRawData = rawDataList == null || rawDataList.isEmpty();
+        if (noResources && noRawData) {
             return;
         }
 
@@ -93,37 +146,57 @@ public class MysqlMemoryStore implements RawDataOperations, ItemOperations, Insi
         JdbcExecutor.inTransaction(
                 dataSource,
                 connection -> {
-                    try (PreparedStatement statement =
-                            connection.prepareStatement(
-                                    """
-                                    INSERT INTO memory_raw_data
-                                        (biz_id, user_id, agent_id, memory_id, type, content_id, segment,
-                                         caption, caption_vector_id, metadata, start_time, end_time,
-                                         created_at, updated_at, deleted)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-                                    ON DUPLICATE KEY UPDATE
-                                        memory_id = VALUES(memory_id),
-                                        type = VALUES(type),
-                                        content_id = VALUES(content_id),
-                                        segment = VALUES(segment),
-                                        caption = VALUES(caption),
-                                        caption_vector_id = VALUES(caption_vector_id),
-                                        metadata = VALUES(metadata),
-                                        start_time = VALUES(start_time),
-                                        end_time = VALUES(end_time),
-                                        created_at = VALUES(created_at),
-                                        updated_at = VALUES(updated_at),
-                                        deleted = 0
-                                    """)) {
-                        Instant now = Instant.now();
-                        for (MemoryRawData rawData : rawDataList) {
-                            bindRawDataUpsert(statement, scope, rawData, now);
-                            statement.addBatch();
-                        }
-                        statement.executeBatch();
-                    }
+                    upsertResources(connection, scope, resources);
+                    upsertRawData(connection, scope, rawDataList);
                     return null;
                 });
+    }
+
+    @Override
+    public void upsertResources(MemoryId memoryId, List<MemoryResource> resources) {
+        if (resources == null || resources.isEmpty()) {
+            return;
+        }
+
+        ScopeContext scope = scopeOf(memoryId);
+        JdbcExecutor.inTransaction(
+                dataSource,
+                connection -> {
+                    upsertResources(connection, scope, resources);
+                    return null;
+                });
+    }
+
+    @Override
+    public Optional<MemoryResource> getResource(MemoryId memoryId, String resourceId) {
+        ScopeContext scope = scopeOf(memoryId);
+        return Optional.ofNullable(
+                JdbcExecutor.queryOne(
+                        dataSource,
+                        """
+                        SELECT * FROM memory_resource
+                        WHERE user_id = ? AND agent_id = ? AND biz_id = ? AND deleted = 0
+                        LIMIT 1
+                        """,
+                        this::mapResource,
+                        scope.userId(),
+                        scope.agentId(),
+                        resourceId));
+    }
+
+    @Override
+    public List<MemoryResource> listResources(MemoryId memoryId) {
+        ScopeContext scope = scopeOf(memoryId);
+        return JdbcExecutor.queryList(
+                dataSource,
+                """
+                SELECT * FROM memory_resource
+                WHERE user_id = ? AND agent_id = ? AND deleted = 0
+                ORDER BY id ASC
+                """,
+                this::mapResource,
+                scope.userId(),
+                scope.agentId());
     }
 
     @Override
@@ -656,6 +729,80 @@ public class MysqlMemoryStore implements RawDataOperations, ItemOperations, Insi
                         group));
     }
 
+    private void upsertRawData(
+            Connection connection, ScopeContext scope, List<MemoryRawData> rawDataList)
+            throws SQLException {
+        if (rawDataList == null || rawDataList.isEmpty()) {
+            return;
+        }
+        try (PreparedStatement statement =
+                connection.prepareStatement(
+                        """
+                        INSERT INTO memory_raw_data
+                            (biz_id, user_id, agent_id, memory_id, type, content_id, segment,
+                             caption, caption_vector_id, metadata, resource_id, mime_type,
+                             start_time, end_time, created_at, updated_at, deleted)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        ON DUPLICATE KEY UPDATE
+                            memory_id = VALUES(memory_id),
+                            type = VALUES(type),
+                            content_id = VALUES(content_id),
+                            segment = VALUES(segment),
+                            caption = VALUES(caption),
+                            caption_vector_id = VALUES(caption_vector_id),
+                            metadata = VALUES(metadata),
+                            resource_id = VALUES(resource_id),
+                            mime_type = VALUES(mime_type),
+                            start_time = VALUES(start_time),
+                            end_time = VALUES(end_time),
+                            created_at = VALUES(created_at),
+                            updated_at = VALUES(updated_at),
+                            deleted = 0
+                        """)) {
+            Instant now = Instant.now();
+            for (MemoryRawData rawData : rawDataList) {
+                bindRawDataUpsert(statement, scope, rawData, now);
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        }
+    }
+
+    private void upsertResources(
+            Connection connection, ScopeContext scope, List<MemoryResource> resources)
+            throws SQLException {
+        if (resources == null || resources.isEmpty()) {
+            return;
+        }
+        try (PreparedStatement statement =
+                connection.prepareStatement(
+                        """
+                        INSERT INTO memory_resource
+                            (biz_id, user_id, agent_id, memory_id, source_uri, storage_uri, file_name,
+                             mime_type, checksum, size_bytes, metadata, created_at, updated_at, deleted)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        ON DUPLICATE KEY UPDATE
+                            memory_id = VALUES(memory_id),
+                            source_uri = VALUES(source_uri),
+                            storage_uri = VALUES(storage_uri),
+                            file_name = VALUES(file_name),
+                            mime_type = VALUES(mime_type),
+                            checksum = VALUES(checksum),
+                            size_bytes = VALUES(size_bytes),
+                            metadata = VALUES(metadata),
+                            created_at = VALUES(created_at),
+                            updated_at = VALUES(updated_at),
+                            deleted = 0
+                        """)) {
+            Instant now = Instant.now();
+            for (MemoryResource resource : resources) {
+                bindResourceUpsert(statement, scope, resource, now);
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        }
+    }
+
     private void bindRawDataUpsert(
             PreparedStatement statement, ScopeContext scope, MemoryRawData rawData, Instant now)
             throws SQLException {
@@ -671,10 +818,30 @@ public class MysqlMemoryStore implements RawDataOperations, ItemOperations, Insi
         statement.setString(8, rawData.caption());
         statement.setString(9, rawData.captionVectorId());
         statement.setString(10, jsonHelper.toJson(rawData.metadata()));
-        setTimestamp(statement, 11, rawData.startTime());
-        setTimestamp(statement, 12, rawData.endTime());
-        setTimestamp(statement, 13, rawData.createdAt() != null ? rawData.createdAt() : now);
-        setTimestamp(statement, 14, now);
+        statement.setString(11, rawData.resourceId());
+        statement.setString(12, rawData.mimeType());
+        setTimestamp(statement, 13, rawData.startTime());
+        setTimestamp(statement, 14, rawData.endTime());
+        setTimestamp(statement, 15, rawData.createdAt() != null ? rawData.createdAt() : now);
+        setTimestamp(statement, 16, now);
+    }
+
+    private void bindResourceUpsert(
+            PreparedStatement statement, ScopeContext scope, MemoryResource resource, Instant now)
+            throws SQLException {
+        statement.setString(1, resource.id());
+        statement.setString(2, scope.userId());
+        statement.setString(3, scope.agentId());
+        statement.setString(4, scope.memoryId());
+        statement.setString(5, resource.sourceUri());
+        statement.setString(6, resource.storageUri());
+        statement.setString(7, resource.fileName());
+        statement.setString(8, resource.mimeType());
+        statement.setString(9, resource.checksum());
+        statement.setObject(10, resource.sizeBytes());
+        statement.setString(11, jsonHelper.toJson(resource.metadata()));
+        setTimestamp(statement, 12, resource.createdAt() != null ? resource.createdAt() : now);
+        setTimestamp(statement, 13, now);
     }
 
     private void bindItemInsert(
@@ -758,9 +925,25 @@ public class MysqlMemoryStore implements RawDataOperations, ItemOperations, Insi
                 resultSet.getString("caption"),
                 resultSet.getString("caption_vector_id"),
                 jsonHelper.fromJson(resultSet.getString("metadata"), OBJECT_MAP_TYPE),
+                resultSet.getString("resource_id"),
+                resultSet.getString("mime_type"),
                 parseInstant(resultSet.getTimestamp("created_at")),
                 parseInstant(resultSet.getTimestamp("start_time")),
                 parseInstant(resultSet.getTimestamp("end_time")));
+    }
+
+    private MemoryResource mapResource(ResultSet resultSet) throws SQLException {
+        return new MemoryResource(
+                resultSet.getString("biz_id"),
+                resultSet.getString("memory_id"),
+                resultSet.getString("source_uri"),
+                resultSet.getString("storage_uri"),
+                resultSet.getString("file_name"),
+                resultSet.getString("mime_type"),
+                resultSet.getString("checksum"),
+                nullableLong(resultSet, "size_bytes"),
+                jsonHelper.fromJson(resultSet.getString("metadata"), OBJECT_MAP_TYPE),
+                parseInstant(resultSet.getTimestamp("created_at")));
     }
 
     private MemoryItem mapItem(ResultSet resultSet) throws SQLException {

@@ -43,7 +43,11 @@ import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.LlmConversationCaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChunker;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TextChunker;
+import com.openmemind.ai.memory.core.extraction.rawdata.processor.AudioContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
+import com.openmemind.ai.memory.core.extraction.rawdata.processor.DocumentContentProcessor;
+import com.openmemind.ai.memory.core.extraction.rawdata.processor.ImageContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
@@ -135,7 +139,10 @@ final class MemoryExtractionAssembler {
                         rawDataLayer,
                         contextCommitDetector,
                         context.pendingConversationBuffer(),
-                        context.recentConversationBuffer());
+                        context.recentConversationBuffer(),
+                        context.options().extraction().rawdata().contentParser(),
+                        context.memoryStore().resourceStore(),
+                        context.options().extraction().rawdata().resourceFetcher());
         return new MemoryExtractionAssembly(pipeline, insightLayer, insightBuildScheduler);
     }
 
@@ -150,6 +157,7 @@ final class MemoryExtractionAssembler {
                         registry.resolve(ChatClientSlot.CONVERSATION_CHUNKER),
                         conversationChunker,
                         promptRegistry);
+        TextChunker textChunker = new TextChunker();
 
         ConversationContentProcessor conversationProcessor =
                 new ConversationContentProcessor(
@@ -163,8 +171,20 @@ final class MemoryExtractionAssembler {
                         new LlmToolCallItemExtractionStrategy(
                                 registry.resolve(ChatClientSlot.TOOL_CALL_EXTRACTION),
                                 promptRegistry));
+        DocumentContentProcessor documentProcessor =
+                new DocumentContentProcessor(
+                        textChunker, options.extraction().rawdata().documentChunking());
+        ImageContentProcessor imageProcessor = new ImageContentProcessor();
+        AudioContentProcessor audioProcessor =
+                new AudioContentProcessor(
+                        textChunker, options.extraction().rawdata().audioChunking());
 
-        return List.of(conversationProcessor, toolCallProcessor);
+        return List.of(
+                conversationProcessor,
+                toolCallProcessor,
+                documentProcessor,
+                imageProcessor,
+                audioProcessor);
     }
 
     private MemoryItemExtractor createMemoryItemExtractor(

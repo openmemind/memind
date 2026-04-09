@@ -21,7 +21,10 @@ import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
+import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import com.openmemind.ai.memory.core.resource.ResourceRef;
+import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
@@ -35,6 +38,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.List;
+import java.util.Map;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -83,11 +87,14 @@ class JdbcPluginAutoConfigurationSqliteTest {
                                     .isInstanceOf(SqliteMemoryStore.class);
                             assertThat(memoryStore.insightOperations())
                                     .isInstanceOf(SqliteMemoryStore.class);
+                            assertThat(memoryStore.resourceOperations())
+                                    .isInstanceOf(SqliteMemoryStore.class);
                             assertThat(tableExists(dataSource, "memory_item")).isTrue();
                             assertThat(tableExists(dataSource, "item_fts")).isTrue();
                             assertThat(tableExists(dataSource, "memory_insight_buffer")).isTrue();
                             assertThat(tableExists(dataSource, "memory_conversation_buffer"))
                                     .isTrue();
+                            assertThat(tableExists(dataSource, "memory_resource")).isTrue();
 
                             executeUpdate(
                                     dataSource,
@@ -171,6 +178,19 @@ class JdbcPluginAutoConfigurationSqliteTest {
                                                     .loadRecent(sessionId, 10))
                                     .extracting(Message::textContent)
                                     .containsExactly("hello", "hi", "next");
+                        });
+    }
+
+    @Test
+    @DisplayName("Wire optional ResourceStore into JDBC-backed MemoryStore")
+    void wiresOptionalResourceStore() {
+        contextRunner
+                .withUserConfiguration(SqliteDataSourceConfig.class, ResourceStoreConfig.class)
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+                            assertThat(context.getBean(MemoryStore.class).resourceStore())
+                                    .isSameAs(context.getBean(ResourceStore.class));
                         });
     }
 
@@ -283,6 +303,40 @@ class JdbcPluginAutoConfigurationSqliteTest {
         @Bean
         MemoryTextSearch customMemoryTextSearch() {
             return (memoryId, query, topK, target) -> Mono.just(List.of());
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class ResourceStoreConfig {
+
+        @Bean
+        ResourceStore resourceStore() {
+            return new ResourceStore() {
+                @Override
+                public Mono<ResourceRef> store(
+                        MemoryId memoryId,
+                        String fileName,
+                        byte[] data,
+                        String mimeType,
+                        Map<String, Object> metadata) {
+                    return Mono.empty();
+                }
+
+                @Override
+                public Mono<byte[]> retrieve(ResourceRef ref) {
+                    return Mono.empty();
+                }
+
+                @Override
+                public Mono<Void> delete(ResourceRef ref) {
+                    return Mono.empty();
+                }
+
+                @Override
+                public Mono<Boolean> exists(ResourceRef ref) {
+                    return Mono.just(false);
+                }
+            };
         }
     }
 }

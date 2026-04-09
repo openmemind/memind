@@ -22,6 +22,7 @@ import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
+import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
@@ -114,6 +115,28 @@ class InMemoryMemoryStoreTest {
                 .containsExactly(10L);
     }
 
+    @Test
+    @DisplayName("resourceOperations upserts and loads resources")
+    void resourceOperationsUpsertsAndLoadsResources() {
+        var store = new InMemoryMemoryStore();
+        var resource =
+                new MemoryResource(
+                        "res-1",
+                        MEMORY_ID.toIdentifier(),
+                        "file:///tmp/report.pdf",
+                        null,
+                        "report.pdf",
+                        "application/pdf",
+                        "abc",
+                        123L,
+                        Map.of("pages", 2),
+                        BASE_TIME);
+
+        store.resourceOperations().upsertResources(MEMORY_ID, List.of(resource));
+
+        assertThat(store.resourceOperations().getResource(MEMORY_ID, "res-1")).contains(resource);
+    }
+
     private static MemoryRawData rawData(
             String id, String caption, String contentId, Map<String, Object> metadata) {
         return new MemoryRawData(
@@ -125,6 +148,8 @@ class InMemoryMemoryStoreTest {
                 caption,
                 null,
                 metadata,
+                null,
+                null,
                 BASE_TIME,
                 BASE_TIME,
                 BASE_TIME.plusSeconds(30));

@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core.builder;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TextChunkingConfig;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
@@ -43,5 +44,15 @@ class MemoryBuildOptionsTest {
 
         assertThat(options.extraction()).isEqualTo(customExtraction);
         assertThat(options.retrieval()).isEqualTo(retrievalDefaults);
+    }
+
+    @Test
+    void rawDataDefaultsExposeDocumentAudioChunkingAndNoParser() {
+        var defaults = RawDataExtractionOptions.defaults();
+
+        assertThat(defaults.documentChunking()).isEqualTo(TextChunkingConfig.DEFAULT);
+        assertThat(defaults.audioChunking()).isEqualTo(TextChunkingConfig.DEFAULT);
+        assertThat(defaults.contentParser()).isNull();
+        assertThat(defaults.resourceFetcher()).isNull();
     }
 }

@@ -43,6 +43,7 @@ import com.openmemind.ai.memory.core.data.ToolCallStats;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
@@ -210,6 +211,94 @@ class DefaultMemoryTest {
                                                     && request.config()
                                                             .language()
                                                             .equals("Chinese")));
+        }
+
+        @Test
+        @DisplayName("extract(request) supports file requests and applies builder defaults")
+        void extractRequestSupportsFileRequestsAndAppliesBuilderDefaults() {
+            var memory =
+                    new DefaultMemory(
+                            extractor,
+                            retriever,
+                            store,
+                            memoryBuffer,
+                            vector,
+                            toolStatsService,
+                            null,
+                            null,
+                            MemoryBuildOptions.builder()
+                                    .extraction(
+                                            new ExtractionOptions(
+                                                    new ExtractionCommonOptions(
+                                                            MemoryScope.AGENT,
+                                                            Duration.ofSeconds(40),
+                                                            "Chinese"),
+                                                    RawDataExtractionOptions.defaults(),
+                                                    ItemExtractionOptions.defaults(),
+                                                    InsightExtractionOptions.defaults()))
+                                    .build());
+            when(extractor.extract(any(ExtractionRequest.class)))
+                    .thenReturn(Mono.just(successResult()));
+
+            StepVerifier.create(
+                            memory.extract(
+                                    ExtractionRequest.file(
+                                            memoryId,
+                                            "report.pdf",
+                                            new byte[] {1, 2, 3},
+                                            "application/pdf")))
+                    .expectNextCount(1)
+                    .verifyComplete();
+
+            verify(extractor)
+                    .extract(
+                            argThat(
+                                    request ->
+                                            request.memoryId().equals(memoryId)
+                                                    && request.fileInput() != null
+                                                    && request.fileInput()
+                                                            .fileName()
+                                                            .equals("report.pdf")
+                                                    && request.fileInput()
+                                                            .mimeType()
+                                                            .equals("application/pdf")
+                                                    && request.config().scope() == MemoryScope.AGENT
+                                                    && request.config()
+                                                            .timeout()
+                                                            .equals(Duration.ofSeconds(40))
+                                                    && request.config()
+                                                            .language()
+                                                            .equals("Chinese")));
+        }
+
+        @Test
+        @DisplayName("extract(request) preserves explicit request config")
+        void extractRequestPreservesExplicitRequestConfig() {
+            var config =
+                    ExtractionConfig.agentOnly()
+                            .withEnableForesight(true)
+                            .withTimeout(Duration.ofSeconds(12))
+                            .withLanguage("Japanese");
+            when(extractor.extract(any(ExtractionRequest.class)))
+                    .thenReturn(Mono.just(successResult()));
+
+            StepVerifier.create(
+                            memind.extract(
+                                    ExtractionRequest.url(
+                                                    memoryId,
+                                                    "https://example.com/report.pdf",
+                                                    "report.pdf",
+                                                    "application/pdf")
+                                            .withConfig(config)))
+                    .expectNextCount(1)
+                    .verifyComplete();
+
+            verify(extractor)
+                    .extract(
+                            argThat(
+                                    request ->
+                                            request.urlInput() != null
+                                                    && request.config().equals(config)));
         }
 
         @Test

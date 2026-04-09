@@ -24,7 +24,10 @@ import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
+import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import com.openmemind.ai.memory.core.resource.ResourceRef;
+import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
@@ -34,6 +37,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import javax.sql.DataSource;
 import org.apache.ibatis.reflection.MetaObject;
 import org.junit.jupiter.api.DisplayName;
@@ -80,6 +84,7 @@ class MemoryStoreAutoConfigurationTest {
                                 assertThat(memoryStore.rawDataOperations()).isNotNull();
                                 assertThat(memoryStore.itemOperations()).isNotNull();
                                 assertThat(memoryStore.insightOperations()).isNotNull();
+                                assertThat(memoryStore.resourceOperations()).isNotNull();
                                 assertThat(context).doesNotHaveBean(InsightBuffer.class);
                                 assertThat(context)
                                         .doesNotHaveBean(PendingConversationBuffer.class);
@@ -93,6 +98,20 @@ class MemoryStoreAutoConfigurationTest {
                                                         .getName())
                                         .isEqualTo(
                                                 "com.openmemind.ai.memory.plugin.store.mybatis.textsearch.sqlite.SqliteFtsTextSearch");
+                            });
+        }
+
+        @Test
+        @DisplayName("Wire optional ResourceStore into MemoryStore when provided")
+        void wiresOptionalResourceStoreWhenProvided() {
+            newContextRunner()
+                    .withUserConfiguration(
+                            ExistingDataSourceConfig.class, ResourceStoreConfig.class)
+                    .run(
+                            context -> {
+                                MemoryStore memoryStore = context.getBean(MemoryStore.class);
+                                assertThat(memoryStore.resourceStore())
+                                        .isSameAs(context.getBean(ResourceStore.class));
                             });
         }
 
@@ -253,6 +272,40 @@ class MemoryStoreAutoConfigurationTest {
         @Bean
         MemoryTextSearch customMemoryTextSearch() {
             return (memoryId, query, topK, target) -> Mono.just(List.of());
+        }
+    }
+
+    @Configuration
+    static class ResourceStoreConfig {
+
+        @Bean
+        ResourceStore resourceStore() {
+            return new ResourceStore() {
+                @Override
+                public Mono<ResourceRef> store(
+                        MemoryId memoryId,
+                        String fileName,
+                        byte[] data,
+                        String mimeType,
+                        Map<String, Object> metadata) {
+                    return Mono.empty();
+                }
+
+                @Override
+                public Mono<byte[]> retrieve(ResourceRef ref) {
+                    return Mono.empty();
+                }
+
+                @Override
+                public Mono<Void> delete(ResourceRef ref) {
+                    return Mono.empty();
+                }
+
+                @Override
+                public Mono<Boolean> exists(ResourceRef ref) {
+                    return Mono.just(false);
+                }
+            };
         }
     }
 }

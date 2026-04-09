@@ -24,6 +24,7 @@ import com.openmemind.ai.memory.core.extraction.context.CommitDetectionInput;
 import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
@@ -35,14 +36,21 @@ import com.openmemind.ai.memory.core.extraction.step.InsightExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.SegmentProcessor;
+import com.openmemind.ai.memory.core.resource.ContentParser;
+import com.openmemind.ai.memory.core.resource.FetchedResource;
+import com.openmemind.ai.memory.core.resource.ResourceFetcher;
+import com.openmemind.ai.memory.core.resource.ResourceRef;
+import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.utils.HashUtils;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,18 +74,15 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
     private final ContextCommitDetector contextCommitDetector;
     private final PendingConversationBuffer pendingConversationBuffer;
     private final RecentConversationBuffer recentConversationBuffer;
+    private final ContentParser contentParser;
+    private final ResourceStore resourceStore;
+    private final ResourceFetcher resourceFetcher;
 
     public MemoryExtractor(
             RawDataExtractStep rawDataStep,
             MemoryItemExtractStep memoryItemStep,
             InsightExtractStep insightStep) {
-        this.rawDataStep = Objects.requireNonNull(rawDataStep, "rawDataStep is required");
-        this.memoryItemStep = Objects.requireNonNull(memoryItemStep, "memoryItemStep is required");
-        this.insightStep = Objects.requireNonNull(insightStep, "insightStep is required");
-        this.segmentProcessor = null;
-        this.contextCommitDetector = null;
-        this.pendingConversationBuffer = null;
-        this.recentConversationBuffer = null;
+        this(rawDataStep, memoryItemStep, insightStep, null, null, null, null, null, null, null);
     }
 
     public MemoryExtractor(
@@ -85,13 +90,16 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
             MemoryItemExtractStep memoryItemStep,
             InsightExtractStep insightStep,
             SegmentProcessor segmentProcessor) {
-        this.rawDataStep = Objects.requireNonNull(rawDataStep, "rawDataStep is required");
-        this.memoryItemStep = Objects.requireNonNull(memoryItemStep, "memoryItemStep is required");
-        this.insightStep = Objects.requireNonNull(insightStep, "insightStep is required");
-        this.segmentProcessor = segmentProcessor;
-        this.contextCommitDetector = null;
-        this.pendingConversationBuffer = null;
-        this.recentConversationBuffer = null;
+        this(
+                rawDataStep,
+                memoryItemStep,
+                insightStep,
+                segmentProcessor,
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     public MemoryExtractor(
@@ -102,6 +110,53 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
             ContextCommitDetector contextCommitDetector,
             PendingConversationBuffer pendingConversationBuffer,
             RecentConversationBuffer recentConversationBuffer) {
+        this(
+                rawDataStep,
+                memoryItemStep,
+                insightStep,
+                segmentProcessor,
+                contextCommitDetector,
+                pendingConversationBuffer,
+                recentConversationBuffer,
+                null,
+                null,
+                null);
+    }
+
+    public MemoryExtractor(
+            RawDataExtractStep rawDataStep,
+            MemoryItemExtractStep memoryItemStep,
+            InsightExtractStep insightStep,
+            SegmentProcessor segmentProcessor,
+            ContextCommitDetector contextCommitDetector,
+            PendingConversationBuffer pendingConversationBuffer,
+            RecentConversationBuffer recentConversationBuffer,
+            ContentParser contentParser,
+            ResourceStore resourceStore) {
+        this(
+                rawDataStep,
+                memoryItemStep,
+                insightStep,
+                segmentProcessor,
+                contextCommitDetector,
+                pendingConversationBuffer,
+                recentConversationBuffer,
+                contentParser,
+                resourceStore,
+                null);
+    }
+
+    public MemoryExtractor(
+            RawDataExtractStep rawDataStep,
+            MemoryItemExtractStep memoryItemStep,
+            InsightExtractStep insightStep,
+            SegmentProcessor segmentProcessor,
+            ContextCommitDetector contextCommitDetector,
+            PendingConversationBuffer pendingConversationBuffer,
+            RecentConversationBuffer recentConversationBuffer,
+            ContentParser contentParser,
+            ResourceStore resourceStore,
+            ResourceFetcher resourceFetcher) {
         this.rawDataStep = Objects.requireNonNull(rawDataStep, "rawDataStep is required");
         this.memoryItemStep = Objects.requireNonNull(memoryItemStep, "memoryItemStep is required");
         this.insightStep = Objects.requireNonNull(insightStep, "insightStep is required");
@@ -109,6 +164,9 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         this.contextCommitDetector = contextCommitDetector;
         this.pendingConversationBuffer = pendingConversationBuffer;
         this.recentConversationBuffer = recentConversationBuffer;
+        this.contentParser = contentParser;
+        this.resourceStore = resourceStore;
+        this.resourceFetcher = resourceFetcher;
     }
 
     /**
@@ -120,26 +178,11 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
     public Mono<ExtractionResult> extract(ExtractionRequest request) {
         Objects.requireNonNull(request, "request is required");
         Objects.requireNonNull(request.memoryId(), "memoryId is required");
-        Objects.requireNonNull(request.content(), "content is required");
 
         var startTime = Instant.now();
 
-        return extractRawData(request)
-                .doOnNext(r -> log.info("RawData completed: segments={}", r.segments().size()))
-                .flatMap(rawResult -> extractMemoryItem(request, rawResult))
-                .doOnNext(
-                        p ->
-                                log.info(
-                                        "MemoryItem completed: newItems={}",
-                                        p.itemResult().newItems().size()))
-                .flatMap(pair -> extractInsight(request, pair))
-                .doOnNext(
-                        t ->
-                                log.info(
-                                        "Insight completed: count={}",
-                                        t.insightResult().totalCount()))
-                .map(triple -> toSuccessResult(request.memoryId(), triple, startTime))
-                .timeout(request.config().timeout())
+        return resolveExtractionRequest(request)
+                .flatMap(resolved -> executeResolvedRequest(resolved, startTime))
                 .onErrorResume(e -> toErrorResult(request.memoryId(), e, startTime));
     }
 
@@ -191,7 +234,8 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         String contentId = HashUtils.sampledSha256(content);
 
         var request =
-                new ExtractionRequest(memoryId, null, ContentTypes.CONVERSATION, Map.of(), config);
+                new ExtractionRequest(
+                        memoryId, null, null, null, ContentTypes.CONVERSATION, Map.of(), config);
 
         return segmentProcessor
                 .processSegment(
@@ -303,6 +347,237 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
     }
 
     private record PendingExtraction(List<Message> messages, Map<String, Object> sealMetadata) {}
+
+    private record ResolvedExtractionRequest(ExtractionRequest request, ResourceRef cleanupRef) {}
+
+    private Mono<ExtractionResult> executeResolvedRequest(
+            ResolvedExtractionRequest resolved, Instant startTime) {
+        var request = resolved.request();
+        Objects.requireNonNull(request.content(), "content is required");
+
+        var rawDataPersisted = new AtomicBoolean(false);
+        return extractRawData(request)
+                .doOnNext(
+                        r -> {
+                            rawDataPersisted.set(true);
+                            log.info("RawData completed: segments={}", r.segments().size());
+                        })
+                .flatMap(rawResult -> extractMemoryItem(request, rawResult))
+                .doOnNext(
+                        p ->
+                                log.info(
+                                        "MemoryItem completed: newItems={}",
+                                        p.itemResult().newItems().size()))
+                .flatMap(pair -> extractInsight(request, pair))
+                .doOnNext(
+                        t ->
+                                log.info(
+                                        "Insight completed: count={}",
+                                        t.insightResult().totalCount()))
+                .map(triple -> toSuccessResult(request.memoryId(), triple, startTime))
+                .timeout(request.config().timeout())
+                .onErrorResume(
+                        e ->
+                                cleanupStoredResourceIfNeeded(
+                                                resolved.cleanupRef(), rawDataPersisted)
+                                        .then(toErrorResult(request.memoryId(), e, startTime)));
+    }
+
+    private Mono<ResolvedExtractionRequest> resolveExtractionRequest(ExtractionRequest request) {
+        if (request.fileInput() != null && request.urlInput() != null) {
+            return Mono.error(
+                    new IllegalArgumentException("fileInput and urlInput cannot both be provided"));
+        }
+        if (request.urlInput() != null) {
+            return resolveUrlExtractionRequest(request);
+        }
+        if (request.fileInput() == null) {
+            return Mono.just(new ResolvedExtractionRequest(request, null));
+        }
+        return resolveFileExtractionRequest(request);
+    }
+
+    private Mono<ResolvedExtractionRequest> resolveFileExtractionRequest(
+            ExtractionRequest request) {
+        if (contentParser == null) {
+            return Mono.error(
+                    new IllegalStateException(
+                            "ContentParser is required for file extraction requests"));
+        }
+
+        RawFileInput fileInput = request.fileInput();
+        if (!contentParser.supportedMimeTypes().contains(fileInput.mimeType())) {
+            return Mono.error(
+                    new IllegalArgumentException(
+                            "Unsupported mimeType for file extraction: " + fileInput.mimeType()));
+        }
+
+        String checksum = HashUtils.sha256(fileInput.data());
+        long sizeBytes = fileInput.data().length;
+        return contentParser
+                .parse(fileInput.data(), fileInput.fileName(), fileInput.mimeType())
+                .switchIfEmpty(
+                        Mono.error(
+                                new IllegalStateException(
+                                        "ContentParser returned no content for file extraction")))
+                .flatMap(
+                        parsedContent -> {
+                            if (resourceStore == null) {
+                                return Mono.just(
+                                        new ResolvedExtractionRequest(
+                                                buildResolvedFileRequest(
+                                                        request,
+                                                        parsedContent,
+                                                        fileInput,
+                                                        checksum,
+                                                        sizeBytes,
+                                                        null),
+                                                null));
+                            }
+                            return resourceStore
+                                    .store(
+                                            request.memoryId(),
+                                            fileInput.fileName(),
+                                            fileInput.data(),
+                                            fileInput.mimeType(),
+                                            Map.of("checksum", checksum, "sizeBytes", sizeBytes))
+                                    .map(
+                                            storedResource ->
+                                                    new ResolvedExtractionRequest(
+                                                            buildResolvedFileRequest(
+                                                                    request,
+                                                                    parsedContent,
+                                                                    fileInput,
+                                                                    checksum,
+                                                                    sizeBytes,
+                                                                    storedResource),
+                                                            storedResource));
+                        });
+    }
+
+    private Mono<ResolvedExtractionRequest> resolveUrlExtractionRequest(ExtractionRequest request) {
+        if (resourceFetcher == null) {
+            return Mono.error(
+                    new IllegalStateException(
+                            "ResourceFetcher is required for URL extraction requests"));
+        }
+
+        RawUrlInput urlInput = request.urlInput();
+        if (!isSupportedSourceUrl(urlInput.sourceUrl())) {
+            return Mono.error(
+                    new IllegalArgumentException(
+                            "Only http/https sourceUrl is supported for URL extraction: "
+                                    + urlInput.sourceUrl()));
+        }
+
+        return resourceFetcher
+                .fetch(
+                        request.memoryId(),
+                        urlInput.sourceUrl(),
+                        urlInput.fileName(),
+                        urlInput.mimeType())
+                .flatMap(
+                        fetchedResource ->
+                                resolveFileExtractionRequest(
+                                        buildFetchedFileRequest(request, fetchedResource)));
+    }
+
+    private ExtractionRequest buildResolvedFileRequest(
+            ExtractionRequest request,
+            RawContent parsedContent,
+            RawFileInput fileInput,
+            String checksum,
+            long sizeBytes,
+            ResourceRef storedResource) {
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        normalized.putAll(request.metadata());
+        normalized.putAll(ExtractionRequest.normalizeMultimodalMetadata(parsedContent));
+
+        String mimeType = resolveMimeType(parsedContent, fileInput.mimeType(), storedResource);
+        if (mimeType != null) {
+            normalized.put("mimeType", mimeType);
+        }
+        normalized.put("fileName", fileInput.fileName());
+        normalized.put("checksum", checksum);
+        normalized.put("sizeBytes", sizeBytes);
+
+        if (storedResource != null) {
+            normalized.put("resourceId", storedResource.id());
+            if (storedResource.storageUri() != null && !storedResource.storageUri().isBlank()) {
+                normalized.put("storageUri", storedResource.storageUri());
+            }
+        } else {
+            normalized.put(
+                    "resourceId",
+                    HashUtils.sampledSha256(
+                            request.memoryId().toIdentifier()
+                                    + "|"
+                                    + fileInput.fileName()
+                                    + "|"
+                                    + checksum));
+        }
+
+        return new ExtractionRequest(
+                request.memoryId(),
+                parsedContent,
+                null,
+                null,
+                parsedContent.contentType(),
+                normalized,
+                request.config());
+    }
+
+    private ExtractionRequest buildFetchedFileRequest(
+            ExtractionRequest request, FetchedResource fetchedResource) {
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        normalized.putAll(request.metadata());
+        normalized.put("sourceUri", fetchedResource.sourceUrl());
+        return new ExtractionRequest(
+                request.memoryId(),
+                null,
+                new RawFileInput(
+                        fetchedResource.fileName(),
+                        fetchedResource.data(),
+                        fetchedResource.mimeType()),
+                null,
+                null,
+                Map.copyOf(normalized),
+                request.config());
+    }
+
+    private String resolveMimeType(
+            RawContent parsedContent, String fallbackMimeType, ResourceRef storedResource) {
+        if (storedResource != null && storedResource.mimeType() != null) {
+            return storedResource.mimeType();
+        }
+        Object value = ExtractionRequest.normalizeMultimodalMetadata(parsedContent).get("mimeType");
+        if (value == null) {
+            return fallbackMimeType;
+        }
+        String contentMimeType = value.toString();
+        return contentMimeType.isBlank() ? fallbackMimeType : contentMimeType;
+    }
+
+    private boolean isSupportedSourceUrl(String sourceUrl) {
+        return sourceUrl.startsWith("http://") || sourceUrl.startsWith("https://");
+    }
+
+    private Mono<Void> cleanupStoredResourceIfNeeded(
+            ResourceRef cleanupRef, AtomicBoolean rawDataPersisted) {
+        if (cleanupRef == null || rawDataPersisted.get()) {
+            return Mono.empty();
+        }
+        return resourceStore
+                .delete(cleanupRef)
+                .onErrorResume(
+                        cleanupError -> {
+                            log.warn(
+                                    "Best-effort resource cleanup failed for {}",
+                                    cleanupRef.storageUri(),
+                                    cleanupError);
+                            return Mono.empty();
+                        });
+    }
 
     private Mono<RawDataResult> extractRawData(ExtractionRequest request) {
         return rawDataStep.extract(

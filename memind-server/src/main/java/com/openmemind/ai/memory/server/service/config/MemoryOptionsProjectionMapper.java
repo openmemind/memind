@@ -198,6 +198,9 @@ public class MemoryOptionsProjectionMapper {
             String currentPath,
             String currentGroup,
             List<OptionDefinition> definitions) {
+        if (value == null) {
+            return;
+        }
         Class<?> type = value.getClass();
         if (!type.isRecord()) {
             definitions.add(
@@ -227,6 +230,9 @@ public class MemoryOptionsProjectionMapper {
 
     private static void collectValues(
             Object value, String currentPath, Map<String, Object> flattened) {
+        if (value == null) {
+            return;
+        }
         Class<?> type = value.getClass();
         if (!type.isRecord()) {
             flattened.put(currentPath, value);

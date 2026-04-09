@@ -21,6 +21,9 @@ public final class ContentTypes {
 
     public static final String CONVERSATION = "CONVERSATION";
     public static final String TOOL_CALL = "TOOL_CALL";
+    public static final String DOCUMENT = "DOCUMENT";
+    public static final String IMAGE = "IMAGE";
+    public static final String AUDIO = "AUDIO";
 
     private ContentTypes() {}
 }

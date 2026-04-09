@@ -41,6 +41,8 @@ public final class RawDataConverter {
         dataObject.setCaption(record.caption());
         dataObject.setCaptionVectorId(record.captionVectorId());
         dataObject.setMetadata(record.metadata());
+        dataObject.setResourceId(record.resourceId());
+        dataObject.setMimeType(record.mimeType());
         dataObject.setCreatedAt(record.createdAt() != null ? record.createdAt() : Instant.now());
         dataObject.setUpdatedAt(Instant.now());
         if (record.segment() != null) {
@@ -65,6 +67,8 @@ public final class RawDataConverter {
                 dataObject.getCaption(),
                 dataObject.getCaptionVectorId(),
                 dataObject.getMetadata(),
+                dataObject.getResourceId(),
+                dataObject.getMimeType(),
                 dataObject.getCreatedAt(),
                 dataObject.getStartTime(),
                 dataObject.getEndTime());

@@ -21,41 +21,70 @@ import javax.sql.DataSource;
 public final class StoreSchemaBootstrap {
 
     private static final String SQLITE_STORE_RESOURCE = "db/jdbc/sqlite/store/V1__init.sql";
+    private static final String SQLITE_MULTIMODAL_RESOURCE =
+            "db/jdbc/sqlite/store/V2__multimodal.sql";
     private static final String MYSQL_STORE_RESOURCE = "db/jdbc/mysql/store/V1__init.sql";
+    private static final String MYSQL_MULTIMODAL_RESOURCE =
+            "db/jdbc/mysql/store/V2__multimodal.sql";
     private static final String POSTGRESQL_STORE_RESOURCE = "db/jdbc/postgresql/store/V1__init.sql";
+    private static final String POSTGRESQL_MULTIMODAL_RESOURCE =
+            "db/jdbc/postgresql/store/V2__multimodal.sql";
 
     private StoreSchemaBootstrap() {}
 
     public static void ensureSqlite(DataSource dataSource, boolean createIfNotExist) {
-        if (hasRequiredSqliteStoreTables(dataSource)) {
-            return;
+        if (!hasRequiredSqliteStoreTables(dataSource)) {
+            if (!createIfNotExist) {
+                throw new JdbcPluginException(
+                        "Missing required SQLite store table: memory_raw_data");
+            }
+            JdbcExecutor.execute(dataSource, "PRAGMA journal_mode = WAL");
+            SqlScriptRunner.execute(dataSource, SQLITE_STORE_RESOURCE);
         }
-        if (!createIfNotExist) {
-            throw new JdbcPluginException("Missing required SQLite store table: memory_raw_data");
-        }
-        JdbcExecutor.execute(dataSource, "PRAGMA journal_mode = WAL");
-        SqlScriptRunner.execute(dataSource, SQLITE_STORE_RESOURCE);
-    }
-
-    public static void ensureMysql(DataSource dataSource, boolean createIfNotExist) {
-        if (hasRequiredMysqlStoreTables(dataSource)) {
-            return;
-        }
-        if (!createIfNotExist) {
-            throw new JdbcPluginException("Missing required MySQL store table: memory_raw_data");
-        }
-        SqlScriptRunner.execute(dataSource, MYSQL_STORE_RESOURCE);
-    }
-
-    public static void ensurePostgresql(DataSource dataSource, boolean createIfNotExist) {
-        if (hasRequiredPostgresqlStoreTables(dataSource)) {
+        if (hasRequiredSqliteMultimodalSchema(dataSource)) {
             return;
         }
         if (!createIfNotExist) {
             throw new JdbcPluginException(
-                    "Missing required PostgreSQL store table: memory_raw_data");
+                    "Missing required SQLite multimodal schema: memory_resource");
         }
-        SqlScriptRunner.execute(dataSource, POSTGRESQL_STORE_RESOURCE);
+        SqlScriptRunner.execute(dataSource, SQLITE_MULTIMODAL_RESOURCE);
+    }
+
+    public static void ensureMysql(DataSource dataSource, boolean createIfNotExist) {
+        if (!hasRequiredMysqlStoreTables(dataSource)) {
+            if (!createIfNotExist) {
+                throw new JdbcPluginException(
+                        "Missing required MySQL store table: memory_raw_data");
+            }
+            SqlScriptRunner.execute(dataSource, MYSQL_STORE_RESOURCE);
+        }
+        if (hasRequiredMysqlMultimodalSchema(dataSource)) {
+            return;
+        }
+        if (!createIfNotExist) {
+            throw new JdbcPluginException(
+                    "Missing required MySQL multimodal schema: memory_resource");
+        }
+        SqlScriptRunner.execute(dataSource, MYSQL_MULTIMODAL_RESOURCE);
+    }
+
+    public static void ensurePostgresql(DataSource dataSource, boolean createIfNotExist) {
+        if (!hasRequiredPostgresqlStoreTables(dataSource)) {
+            if (!createIfNotExist) {
+                throw new JdbcPluginException(
+                        "Missing required PostgreSQL store table: memory_raw_data");
+            }
+            SqlScriptRunner.execute(dataSource, POSTGRESQL_STORE_RESOURCE);
+        }
+        if (hasRequiredPostgresqlMultimodalSchema(dataSource)) {
+            return;
+        }
+        if (!createIfNotExist) {
+            throw new JdbcPluginException(
+                    "Missing required PostgreSQL multimodal schema: memory_resource");
+        }
+        SqlScriptRunner.execute(dataSource, POSTGRESQL_MULTIMODAL_RESOURCE);
     }
 
     private static boolean hasRequiredSqliteStoreTables(DataSource dataSource) {
@@ -66,6 +95,12 @@ public final class StoreSchemaBootstrap {
                 && SchemaVerifier.hasSqliteTable(dataSource, "memory_insight_buffer");
     }
 
+    private static boolean hasRequiredSqliteMultimodalSchema(DataSource dataSource) {
+        return SchemaVerifier.hasSqliteTable(dataSource, "memory_resource")
+                && SchemaVerifier.hasSqliteColumn(dataSource, "memory_raw_data", "resource_id")
+                && SchemaVerifier.hasSqliteColumn(dataSource, "memory_raw_data", "mime_type");
+    }
+
     private static boolean hasRequiredMysqlStoreTables(DataSource dataSource) {
         return SchemaVerifier.hasMysqlTable(dataSource, "memory_raw_data")
                 && SchemaVerifier.hasMysqlTable(dataSource, "memory_item")
@@ -74,11 +109,23 @@ public final class StoreSchemaBootstrap {
                 && SchemaVerifier.hasMysqlTable(dataSource, "memory_insight_buffer");
     }
 
+    private static boolean hasRequiredMysqlMultimodalSchema(DataSource dataSource) {
+        return SchemaVerifier.hasMysqlTable(dataSource, "memory_resource")
+                && SchemaVerifier.hasMysqlColumn(dataSource, "memory_raw_data", "resource_id")
+                && SchemaVerifier.hasMysqlColumn(dataSource, "memory_raw_data", "mime_type");
+    }
+
     private static boolean hasRequiredPostgresqlStoreTables(DataSource dataSource) {
         return SchemaVerifier.hasPostgresqlTable(dataSource, "memory_raw_data")
                 && SchemaVerifier.hasPostgresqlTable(dataSource, "memory_item")
                 && SchemaVerifier.hasPostgresqlTable(dataSource, "memory_insight_type")
                 && SchemaVerifier.hasPostgresqlTable(dataSource, "memory_insight")
                 && SchemaVerifier.hasPostgresqlTable(dataSource, "memory_insight_buffer");
+    }
+
+    private static boolean hasRequiredPostgresqlMultimodalSchema(DataSource dataSource) {
+        return SchemaVerifier.hasPostgresqlTable(dataSource, "memory_resource")
+                && SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_raw_data", "resource_id")
+                && SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_raw_data", "mime_type");
     }
 }

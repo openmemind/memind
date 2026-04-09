@@ -144,6 +144,16 @@ public class DefaultMemory implements Memory {
     // ===== Generic extraction =====
 
     @Override
+    public Mono<ExtractionResult> extract(ExtractionRequest request) {
+        Objects.requireNonNull(request, "request must not be null");
+        var config =
+                ExtractionConfig.defaults().equals(request.config())
+                        ? defaultExtractionConfig()
+                        : request.config();
+        return extractor.extract(request.withConfig(config));
+    }
+
+    @Override
     public Mono<ExtractionResult> extract(MemoryId memoryId, RawContent content) {
         return extract(memoryId, content, defaultExtractionConfig());
     }

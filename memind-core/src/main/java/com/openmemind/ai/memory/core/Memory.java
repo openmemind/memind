@@ -18,6 +18,7 @@ import com.openmemind.ai.memory.core.builder.MemoryBuilder;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.ToolCallStats;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
+import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
 import com.openmemind.ai.memory.core.extraction.context.ContextRequest;
 import com.openmemind.ai.memory.core.extraction.context.ContextWindow;
@@ -30,6 +31,7 @@ import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import reactor.core.publisher.Mono;
 
 /**
@@ -53,6 +55,26 @@ public interface Memory extends AutoCloseable {
     }
 
     // ===== Extraction =====
+
+    /**
+     * Extract memories using a fully constructed extraction request.
+     *
+     * <p>Use this overload for parser-backed file ingestion, downloader-backed URL ingestion,
+     * or when the caller needs to provide request metadata directly.
+     *
+     * @param request extraction request including memory id, payload, and config
+     * @return extraction result
+     */
+    default Mono<ExtractionResult> extract(ExtractionRequest request) {
+        Objects.requireNonNull(request, "request must not be null");
+        if (request.content() == null) {
+            return Mono.error(
+                    new UnsupportedOperationException(
+                            "This Memory implementation does not support file/url extraction"
+                                    + " requests"));
+        }
+        return extract(request.memoryId(), request.content(), request.config());
+    }
 
     /**
      * Extract memories from arbitrary raw content.

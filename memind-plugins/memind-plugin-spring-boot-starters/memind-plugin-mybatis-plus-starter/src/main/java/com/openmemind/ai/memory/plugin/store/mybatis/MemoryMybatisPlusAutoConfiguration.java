@@ -23,10 +23,12 @@ import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerIntercept
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
+import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.plugin.store.mybatis.handler.DefaultDBFieldHandler;
 import com.openmemind.ai.memory.plugin.store.mybatis.initializer.DefaultTaxonomySeeder;
@@ -37,6 +39,7 @@ import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightTypeMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryRawDataMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryResourceMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.schema.DatabaseDialect;
 import com.openmemind.ai.memory.plugin.store.mybatis.schema.DatabaseDialectDetector;
 import com.openmemind.ai.memory.plugin.store.mybatis.textsearch.mysql.MysqlFulltextTextSearch;
@@ -46,6 +49,7 @@ import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 import org.apache.ibatis.annotations.Mapper;
 import org.mybatis.spring.annotation.MapperScan;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -112,24 +116,29 @@ public class MemoryMybatisPlusAutoConfiguration {
         MemoryStore.class,
         RawDataOperations.class,
         ItemOperations.class,
-        InsightOperations.class
+        InsightOperations.class,
+        ResourceOperations.class
     })
     public MybatisPlusMemoryStore mybatisPlusMemoryStore(
             MemoryRawDataMapper rawDataMapper,
             MemoryItemMapper itemMapper,
             MemoryInsightTypeMapper insightTypeMapper,
-            MemoryInsightMapper insightMapper) {
+            MemoryInsightMapper insightMapper,
+            MemoryResourceMapper resourceMapper,
+            ObjectProvider<ResourceStore> resourceStoreProvider) {
         return new MybatisPlusMemoryStore(
-                rawDataMapper, itemMapper, insightTypeMapper, insightMapper);
+                rawDataMapper,
+                itemMapper,
+                insightTypeMapper,
+                insightMapper,
+                resourceMapper,
+                resourceStoreProvider.getIfAvailable());
     }
 
     @Bean
     @ConditionalOnMissingBean(MemoryStore.class)
-    public MemoryStore memoryStore(
-            RawDataOperations rawDataOperations,
-            ItemOperations itemOperations,
-            InsightOperations insightOperations) {
-        return MemoryStore.of(rawDataOperations, itemOperations, insightOperations);
+    public MemoryStore memoryStore(MybatisPlusMemoryStore mybatisPlusMemoryStore) {
+        return mybatisPlusMemoryStore;
     }
 
     @Bean

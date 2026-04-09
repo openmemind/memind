@@ -178,7 +178,9 @@ class MemoryItemUnifiedPromptsTest {
                 .contains("Do NOT use bare pronouns like \"他\", \"她\", \"他们\", or \"自己\"")
                 .contains("If the subject cannot be made explicit from the source text");
         assertThat(result.userPrompt())
-                .contains("<Conversation>")
+                .contains("<SourceText>")
+                .doesNotContain("<Conversation>")
+                .doesNotContain("following conversation")
                 .doesNotContain("## Decision Logic")
                 .doesNotContain("# Extraction Scope");
     }

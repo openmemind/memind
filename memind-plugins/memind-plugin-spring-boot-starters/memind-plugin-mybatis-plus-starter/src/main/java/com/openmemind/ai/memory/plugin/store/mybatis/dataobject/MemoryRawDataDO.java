@@ -43,6 +43,9 @@ public class MemoryRawDataDO extends BaseDO {
     @TableField(typeHandler = JacksonTypeHandler.class)
     private Map<String, Object> metadata;
 
+    private String resourceId;
+    private String mimeType;
+
     @TableField(typeHandler = InstantTypeHandler.class)
     private Instant startTime;
 
@@ -135,6 +138,22 @@ public class MemoryRawDataDO extends BaseDO {
 
     public void setMetadata(Map<String, Object> metadata) {
         this.metadata = metadata;
+    }
+
+    public String getResourceId() {
+        return resourceId;
+    }
+
+    public void setResourceId(String resourceId) {
+        this.resourceId = resourceId;
+    }
+
+    public String getMimeType() {
+        return mimeType;
+    }
+
+    public void setMimeType(String mimeType) {
+        this.mimeType = mimeType;
     }
 
     public Instant getStartTime() {

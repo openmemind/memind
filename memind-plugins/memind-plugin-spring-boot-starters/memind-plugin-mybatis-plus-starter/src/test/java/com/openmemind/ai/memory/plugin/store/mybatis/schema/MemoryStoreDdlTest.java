@@ -37,7 +37,8 @@ class MemoryStoreDdlTest {
                                 .getSqlFiles())
                 .containsExactly(
                         "db/migration/sqlite/V1__init_store.sql",
-                        "db/migration/sqlite/V2__init_text_search.sql");
+                        "db/migration/sqlite/V2__init_text_search.sql",
+                        "db/migration/sqlite/V3__multimodal.sql");
     }
 
     @Test
@@ -50,7 +51,8 @@ class MemoryStoreDdlTest {
                                 .getSqlFiles())
                 .containsExactly(
                         "db/migration/mysql/V1__init_store.sql",
-                        "db/migration/mysql/V2__init_text_search.sql");
+                        "db/migration/mysql/V2__init_text_search.sql",
+                        "db/migration/mysql/V3__multimodal.sql");
     }
 
     @Test
@@ -65,7 +67,8 @@ class MemoryStoreDdlTest {
                                 .getSqlFiles())
                 .containsExactly(
                         "db/migration/postgresql/V1__init_store.sql",
-                        "db/migration/postgresql/V2__init_text_search.sql");
+                        "db/migration/postgresql/V2__init_text_search.sql",
+                        "db/migration/postgresql/V3__multimodal.sql");
     }
 
     private DataSource dataSource(String productName, String url) {

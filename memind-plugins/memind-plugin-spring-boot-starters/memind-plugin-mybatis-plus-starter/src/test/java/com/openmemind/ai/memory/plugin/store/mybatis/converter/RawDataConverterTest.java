@@ -49,15 +49,21 @@ class RawDataConverterTest {
                         "caption",
                         null,
                         Map.of("channel", "chat"),
+                        "res-1",
+                        "text/plain",
                         Instant.parse("2026-03-27T02:18:30Z"),
                         Instant.parse("2026-03-27T02:17:00Z"),
                         Instant.parse("2026-03-27T02:18:00Z"));
 
         var dataObject = RawDataConverter.toDO(memoryId, record);
         assertThat(dataObject.getSegment()).doesNotContainKey("runtimeContext");
+        assertThat(dataObject.getResourceId()).isEqualTo("res-1");
+        assertThat(dataObject.getMimeType()).isEqualTo("text/plain");
 
         var roundTrip = RawDataConverter.toRecord(dataObject);
         assertThat(roundTrip.segment().runtimeContext()).isNull();
+        assertThat(roundTrip.resourceId()).isEqualTo("res-1");
+        assertThat(roundTrip.mimeType()).isEqualTo("text/plain");
     }
 
     @Test
@@ -67,6 +73,8 @@ class RawDataConverterTest {
         dataObject.setMemoryId("user-1:agent-1");
         dataObject.setType(ContentTypes.CONVERSATION);
         dataObject.setContentId("content-legacy");
+        dataObject.setResourceId("res-legacy");
+        dataObject.setMimeType("application/json");
         dataObject.setSegment(
                 Map.of(
                         "content",
@@ -80,5 +88,7 @@ class RawDataConverterTest {
 
         var record = RawDataConverter.toRecord(dataObject);
         assertThat(record.segment().runtimeContext()).isNull();
+        assertThat(record.resourceId()).isEqualTo("res-legacy");
+        assertThat(record.mimeType()).isEqualTo("application/json");
     }
 }

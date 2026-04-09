@@ -31,6 +31,7 @@ import com.openmemind.ai.memory.core.builder.RetrievalOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
 import com.openmemind.ai.memory.core.builder.SufficiencyOptions;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TextChunkingConfig;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.LlmReranker;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
@@ -113,10 +114,14 @@ public class EvaluationMemindConfiguration {
                                 ExtractionCommonOptions.defaults(),
                                 new RawDataExtractionOptions(
                                         RawDataExtractionOptions.defaults().chunking(),
+                                        TextChunkingConfig.DEFAULT,
+                                        TextChunkingConfig.DEFAULT,
                                         new CommitDetectorConfig(
                                                 boundary.getMaxMessages(),
                                                 boundary.getMaxTokens(),
-                                                boundary.getMinMessagesForLlm())),
+                                                boundary.getMinMessagesForLlm()),
+                                        null,
+                                        null),
                                 ItemExtractionOptions.defaults(),
                                 insight))
                 .retrieval(

@@ -14,6 +14,7 @@
 package com.openmemind.ai.memory.plugin.jdbc.autoconfigure;
 
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBuffer;
@@ -35,6 +36,7 @@ import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryStore;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryTextSearch;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteRecentConversationBuffer;
 import javax.sql.DataSource;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -52,21 +54,22 @@ public class JdbcPluginAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(MemoryStore.class)
-    public MemoryStore memoryStore(DataSource dataSource, Environment environment) {
+    public MemoryStore memoryStore(
+            DataSource dataSource,
+            Environment environment,
+            ObjectProvider<ResourceStore> resourceStoreProvider) {
         boolean createIfNotExist =
                 environment.getProperty("memind.store.init-schema", Boolean.class, true);
+        ResourceStore resourceStore = resourceStoreProvider.getIfAvailable();
         return switch (detectDialect(dataSource)) {
             case SQLITE -> {
-                var store = new SqliteMemoryStore(dataSource, createIfNotExist);
-                yield MemoryStore.of(store, store, store);
+                yield new SqliteMemoryStore(dataSource, resourceStore, createIfNotExist);
             }
             case MYSQL -> {
-                var store = new MysqlMemoryStore(dataSource, createIfNotExist);
-                yield MemoryStore.of(store, store, store);
+                yield new MysqlMemoryStore(dataSource, resourceStore, createIfNotExist);
             }
             case POSTGRESQL -> {
-                var store = new PostgresqlMemoryStore(dataSource, createIfNotExist);
-                yield MemoryStore.of(store, store, store);
+                yield new PostgresqlMemoryStore(dataSource, resourceStore, createIfNotExist);
             }
         };
     }

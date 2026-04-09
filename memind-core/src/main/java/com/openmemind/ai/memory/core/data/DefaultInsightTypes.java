@@ -29,6 +29,12 @@ public final class DefaultInsightTypes {
 
     public static final int DEFAULT_TARGET_TOKENS = 600;
 
+    private static final List<String> USER_TEXTUAL_CONTENT_TYPES =
+            List.of(
+                    ContentTypes.CONVERSATION,
+                    ContentTypes.DOCUMENT,
+                    ContentTypes.IMAGE,
+                    ContentTypes.AUDIO);
     private static final List<String> CONVERSATION_ONLY = List.of(ContentTypes.CONVERSATION);
 
     // ── USER BRANCH ──────────────────────────────────────────────────────────
@@ -51,7 +57,7 @@ public final class DefaultInsightTypes {
                 InsightAnalysisMode.BRANCH,
                 null,
                 MemoryScope.USER,
-                CONVERSATION_ONLY);
+                USER_TEXTUAL_CONTENT_TYPES);
     }
 
     public static MemoryInsightType preferences() {
@@ -72,7 +78,7 @@ public final class DefaultInsightTypes {
                 InsightAnalysisMode.BRANCH,
                 null,
                 MemoryScope.USER,
-                CONVERSATION_ONLY);
+                USER_TEXTUAL_CONTENT_TYPES);
     }
 
     public static MemoryInsightType relationships() {
@@ -92,7 +98,7 @@ public final class DefaultInsightTypes {
                 InsightAnalysisMode.BRANCH,
                 null,
                 MemoryScope.USER,
-                CONVERSATION_ONLY);
+                USER_TEXTUAL_CONTENT_TYPES);
     }
 
     public static MemoryInsightType experiences() {
@@ -112,7 +118,7 @@ public final class DefaultInsightTypes {
                 InsightAnalysisMode.BRANCH,
                 null,
                 MemoryScope.USER,
-                CONVERSATION_ONLY);
+                USER_TEXTUAL_CONTENT_TYPES);
     }
 
     public static MemoryInsightType behavior() {
@@ -133,7 +139,7 @@ public final class DefaultInsightTypes {
                 InsightAnalysisMode.BRANCH,
                 null,
                 MemoryScope.USER,
-                CONVERSATION_ONLY);
+                USER_TEXTUAL_CONTENT_TYPES);
     }
 
     // ── AGENT BRANCH ─────────────────────────────────────────────────────────

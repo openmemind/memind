@@ -198,6 +198,8 @@ class OpenMemoryApplicationServiceTest {
                                         "user mentioned coffee",
                                         "vec-1",
                                         Map.of(),
+                                        null,
+                                        null,
                                         Instant.parse("2026-03-31T10:00:00Z"),
                                         Instant.parse("2026-03-31T10:00:00Z"),
                                         Instant.parse("2026-03-31T10:01:00Z"))),

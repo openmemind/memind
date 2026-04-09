@@ -53,6 +53,16 @@ class MemoryOptionsProjectionMapperTest {
         assertThat(rebuilt.retrieval().deep().rawDataEnabled()).isTrue();
     }
 
+    @Test
+    void ignoresNullRuntimeOnlyFieldsFromProjectionDefinitions() {
+        var projection = mapper.toProjection(MemoryBuildOptions.defaults());
+
+        assertThat(projection.values().stream().flatMap(java.util.Collection::stream))
+                .extracting(MemoryOptionItemView::key)
+                .doesNotContain(
+                        "extraction.rawdata.contentParser", "extraction.rawdata.resourceFetcher");
+    }
+
     private static void updateValue(
             Map<String, java.util.List<MemoryOptionItemView>> projection,
             String key,

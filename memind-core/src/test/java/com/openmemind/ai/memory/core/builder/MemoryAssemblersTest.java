@@ -25,16 +25,21 @@ import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TextChunkingConfig;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
+import com.openmemind.ai.memory.core.resource.ContentParser;
+import com.openmemind.ai.memory.core.resource.ResourceFetcher;
+import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
+import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.lang.reflect.Proxy;
@@ -49,6 +54,7 @@ class MemoryAssemblersTest {
     private static final RawDataOperations RAW_DATA_OPERATIONS = proxy(RawDataOperations.class);
     private static final ItemOperations ITEM_OPERATIONS = proxy(ItemOperations.class);
     private static final InsightOperations INSIGHT_OPERATIONS = proxy(InsightOperations.class);
+    private static final ResourceOperations RESOURCE_OPERATIONS = proxy(ResourceOperations.class);
     private static final MemoryTextSearch TEXT_SEARCH = proxy(MemoryTextSearch.class);
     private static final InsightBuffer INSIGHT_BUFFER = proxy(InsightBuffer.class);
     private static final PendingConversationBuffer PENDING_CONVERSATION_BUFFER =
@@ -59,6 +65,9 @@ class MemoryAssemblersTest {
             MemoryBuffer.of(
                     INSIGHT_BUFFER, PENDING_CONVERSATION_BUFFER, RECENT_CONVERSATION_BUFFER);
     private static final MemoryVector MEMORY_VECTOR = proxy(MemoryVector.class);
+    private static final ResourceStore RESOURCE_STORE = proxy(ResourceStore.class);
+    private static final ContentParser CONTENT_PARSER = proxy(ContentParser.class);
+    private static final ResourceFetcher RESOURCE_FETCHER = proxy(ResourceFetcher.class);
     private static final MemoryStore MEMORY_STORE =
             new MemoryStore() {
                 @Override
@@ -74,6 +83,16 @@ class MemoryAssemblersTest {
                 @Override
                 public InsightOperations insightOperations() {
                     return INSIGHT_OPERATIONS;
+                }
+
+                @Override
+                public ResourceOperations resourceOperations() {
+                    return RESOURCE_OPERATIONS;
+                }
+
+                @Override
+                public ResourceStore resourceStore() {
+                    return RESOURCE_STORE;
                 }
             };
     private static final CommitDetectorConfig CUSTOM_COMMIT_DETECTION =
@@ -93,7 +112,11 @@ class MemoryAssemblersTest {
                                                         com.openmemind.ai.memory.core.extraction
                                                                 .rawdata.chunk
                                                                 .ConversationChunkingConfig.DEFAULT,
-                                                        CUSTOM_COMMIT_DETECTION),
+                                                        TextChunkingConfig.DEFAULT,
+                                                        TextChunkingConfig.DEFAULT,
+                                                        CUSTOM_COMMIT_DETECTION,
+                                                        CONTENT_PARSER,
+                                                        RESOURCE_FETCHER),
                                                 ItemExtractionOptions.defaults(),
                                                 new InsightExtractionOptions(
                                                         true, CUSTOM_INSIGHT_BUILD)))
@@ -112,6 +135,16 @@ class MemoryAssemblersTest {
         assertThat(readField(scheduler, "config", InsightBuildConfig.class))
                 .isEqualTo(CUSTOM_INSIGHT_BUILD);
         assertThat(rawDataLayer).isNotNull();
+        assertThat(readField(extractor, "contentParser", ContentParser.class))
+                .isSameAs(CONTENT_PARSER);
+        assertThat(readField(extractor, "resourceStore", ResourceStore.class))
+                .isSameAs(RESOURCE_STORE);
+        assertThat(readField(extractor, "resourceFetcher", ResourceFetcher.class))
+                .isSameAs(RESOURCE_FETCHER);
+
+        @SuppressWarnings("unchecked")
+        var processors = readField(rawDataLayer, "processors", Map.class);
+        assertThat(processors).hasSize(5);
     }
 
     @Test

@@ -57,7 +57,7 @@ public final class MemoryItemUnifiedPrompts {
 
     private static final String OBJECTIVE =
             """
-            You are an expert information extraction analyst. Analyze the conversation and \
+            You are an expert information extraction analyst. Analyze the source text and \
             extract atomic memory items optimized for retrieval.
 
             Extract only self-contained facts with durable retrieval value. Assign the \
@@ -166,11 +166,11 @@ public final class MemoryItemUnifiedPrompts {
 
     private static final String USER_PROMPT_TEMPLATE =
             """
-            Please extract unified memory items from the following conversation:
+            Please extract unified memory items from the following source text:
 
-            <Conversation>
+            <SourceText>
             {{CONVERSATION}}
-            </Conversation>
+            </SourceText>
             """;
 
     // ── Decision Logic & Common Confusions ────────────────────────────────────

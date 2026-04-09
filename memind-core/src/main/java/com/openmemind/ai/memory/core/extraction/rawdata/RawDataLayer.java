@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core.extraction.rawdata;
 import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
+import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
@@ -27,10 +28,12 @@ import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.SegmentProcessor;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.utils.HashUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -90,7 +93,7 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
             Map<String, Object> metadata,
             String language) {
         RawDataInput input = new RawDataInput(memoryId, content, contentType, metadata);
-        return doProcess(input, memoryId, content.getContentId(), language)
+        return process(input, language)
                 .map(
                         result ->
                                 new RawDataResult(
@@ -104,7 +107,11 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
      * @return Processing result
      */
     public Mono<RawDataProcessResult> process(RawDataInput input) {
-        String contentId = input.content().getContentId();
+        return process(input, null);
+    }
+
+    private Mono<RawDataProcessResult> process(RawDataInput input, String language) {
+        String contentId = resolveRawDataContentId(input);
         MemoryId memoryId = input.memoryId();
 
         // Idempotency check
@@ -112,7 +119,7 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
                 memoryStore.rawDataOperations().getRawDataByContentId(memoryId, contentId);
         return existing.map(
                         memoryRawData -> Mono.just(RawDataProcessResult.existing(memoryRawData)))
-                .orElseGet(() -> doProcess(input, memoryId, contentId, null));
+                .orElseGet(() -> doProcess(input, memoryId, contentId, language));
     }
 
     @Override
@@ -240,12 +247,36 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
 
         Instant now = Instant.now();
         List<Message> messages = extractMessages(input);
+        Map<String, Object> requestMetadata = new LinkedHashMap<>();
+        if (input.metadata() != null) {
+            requestMetadata.putAll(input.metadata());
+        }
+
+        Optional<MemoryResource> resolvedResource = resolveResource(memoryId, requestMetadata, now);
+        resolvedResource.ifPresent(
+                resource -> {
+                    requestMetadata.put("resourceId", resource.id());
+                    if (resource.mimeType() != null && !resource.mimeType().isBlank()) {
+                        requestMetadata.put("mimeType", resource.mimeType());
+                    }
+                    if (resource.sourceUri() != null && !resource.sourceUri().isBlank()) {
+                        requestMetadata.put("sourceUri", resource.sourceUri());
+                    }
+                    if (resource.storageUri() != null && !resource.storageUri().isBlank()) {
+                        requestMetadata.put("storageUri", resource.storageUri());
+                    }
+                });
 
         List<MemoryRawData> rawDataList =
                 segments.stream()
                         .map(
                                 segment -> {
                                     Segment durableSegment = segment.withoutRuntimeContext();
+                                    Map<String, Object> mergedMetadata =
+                                            mergeSegmentMetadata(
+                                                    requestMetadata, segment.metadata());
+                                    String resourceId = resolveString(mergedMetadata, "resourceId");
+                                    String mimeType = resolveString(mergedMetadata, "mimeType");
                                     return new MemoryRawData(
                                             UUID.randomUUID().toString(),
                                             memoryId.toIdentifier(),
@@ -253,8 +284,10 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
                                             contentId,
                                             durableSegment,
                                             segment.caption(),
-                                            (String) segment.metadata().get("vectorId"),
-                                            segment.metadata(),
+                                            resolveString(mergedMetadata, "vectorId"),
+                                            mergedMetadata,
+                                            resourceId,
+                                            mimeType,
                                             now,
                                             resolveStartTime(segment, messages, now),
                                             resolveEndTime(segment, messages, now));
@@ -273,15 +306,183 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
                                             getBoundaryStart(segment),
                                             getBoundaryEnd(segment),
                                             rawDataBizId,
-                                            segment.metadata(),
+                                            rawDataList.get(i).metadata(),
                                             segment.runtimeContext());
                                 })
                         .toList();
 
         // Persistence
-        memoryStore.rawDataOperations().upsertRawData(memoryId, rawDataList);
+        memoryStore.upsertRawDataWithResources(
+                memoryId, resolvedResource.map(List::of).orElseGet(List::of), rawDataList);
 
         return new RawDataProcessResult(rawDataList, parsedSegments, false);
+    }
+
+    private String resolveRawDataContentId(RawDataInput input) {
+        String textContentId = input.content().getContentId();
+        String contentType = normalizeContentType(input.contentType());
+        if (!isMultimodal(contentType)) {
+            return textContentId;
+        }
+        String sourceIdentity = resolveSourceIdentity(input.memoryId(), input.metadata());
+        return HashUtils.sampledSha256(
+                contentType
+                        + "|"
+                        + textContentId
+                        + "|"
+                        + (sourceIdentity == null ? "" : sourceIdentity));
+    }
+
+    private String normalizeContentType(String contentType) {
+        return (contentType == null || contentType.isBlank())
+                ? ContentTypes.CONVERSATION
+                : contentType;
+    }
+
+    private boolean isMultimodal(String contentType) {
+        return ContentTypes.DOCUMENT.equals(contentType)
+                || ContentTypes.IMAGE.equals(contentType)
+                || ContentTypes.AUDIO.equals(contentType);
+    }
+
+    private String resolveSourceIdentity(MemoryId memoryId, Map<String, Object> metadata) {
+        String resourceId = resolveResourceId(memoryId, metadata);
+        if (resourceId != null) {
+            return resourceId;
+        }
+        String sourceUri = resolveString(metadata, "sourceUri");
+        if (sourceUri != null) {
+            return sourceUri;
+        }
+        String storageUri = resolveString(metadata, "storageUri");
+        if (storageUri != null) {
+            return storageUri;
+        }
+        String fileName = resolveString(metadata, "fileName");
+        String checksum = resolveString(metadata, "checksum");
+        if (fileName != null && checksum != null) {
+            return fileName + "|" + checksum;
+        }
+        return null;
+    }
+
+    private Optional<MemoryResource> resolveResource(
+            MemoryId memoryId, Map<String, Object> requestMetadata, Instant now) {
+        String resourceId = resolveResourceId(memoryId, requestMetadata);
+        if (resourceId == null) {
+            return Optional.empty();
+        }
+
+        String sourceUri = resolveString(requestMetadata, "sourceUri");
+        String storageUri = resolveString(requestMetadata, "storageUri");
+        String fileName = resolveString(requestMetadata, "fileName");
+        String mimeType = resolveString(requestMetadata, "mimeType");
+        String checksum = resolveString(requestMetadata, "checksum");
+        Long sizeBytes = resolveLong(requestMetadata, "sizeBytes");
+        Map<String, Object> resourceMetadata = new LinkedHashMap<>();
+        requestMetadata.forEach(
+                (key, value) -> {
+                    if (!isProjectedResourceKey(key) && !isSegmentOnlyKey(key)) {
+                        resourceMetadata.put(key, value);
+                    }
+                });
+
+        return Optional.of(
+                new MemoryResource(
+                        resourceId,
+                        memoryId.toIdentifier(),
+                        sourceUri,
+                        storageUri,
+                        fileName,
+                        mimeType,
+                        checksum,
+                        sizeBytes,
+                        resourceMetadata,
+                        now));
+    }
+
+    private String resolveResourceId(MemoryId memoryId, Map<String, Object> metadata) {
+        String explicitResourceId = resolveString(metadata, "resourceId");
+        if (explicitResourceId != null) {
+            return explicitResourceId;
+        }
+        String sourceUri = resolveString(metadata, "sourceUri");
+        if (sourceUri != null) {
+            return HashUtils.sampledSha256(memoryId.toIdentifier() + "|" + sourceUri);
+        }
+        String storageUri = resolveString(metadata, "storageUri");
+        if (storageUri != null) {
+            return HashUtils.sampledSha256(memoryId.toIdentifier() + "|" + storageUri);
+        }
+        String fileName = resolveString(metadata, "fileName");
+        String checksum = resolveString(metadata, "checksum");
+        if (fileName != null && checksum != null) {
+            return HashUtils.sampledSha256(
+                    memoryId.toIdentifier() + "|" + fileName + "|" + checksum);
+        }
+        return null;
+    }
+
+    private Map<String, Object> mergeSegmentMetadata(
+            Map<String, Object> requestMetadata, Map<String, Object> segmentMetadata) {
+        Map<String, Object> merged = new LinkedHashMap<>();
+        if (requestMetadata != null) {
+            merged.putAll(requestMetadata);
+        }
+        if (segmentMetadata != null) {
+            merged.putAll(segmentMetadata);
+        }
+        return Map.copyOf(merged);
+    }
+
+    private boolean isProjectedResourceKey(String key) {
+        return "resourceId".equals(key)
+                || "sourceUri".equals(key)
+                || "storageUri".equals(key)
+                || "fileName".equals(key)
+                || "mimeType".equals(key)
+                || "checksum".equals(key)
+                || "sizeBytes".equals(key);
+    }
+
+    private boolean isSegmentOnlyKey(String key) {
+        return "vectorId".equals(key)
+                || "start_message".equals(key)
+                || "end_message".equals(key)
+                || "startChar".equals(key)
+                || "endChar".equals(key)
+                || "startTime".equals(key)
+                || "endTime".equals(key)
+                || "messages".equals(key);
+    }
+
+    private String resolveString(Map<String, Object> metadata, String key) {
+        if (metadata == null) {
+            return null;
+        }
+        Object value = metadata.get(key);
+        if (value == null) {
+            return null;
+        }
+        String text = value.toString();
+        return text.isBlank() ? null : text;
+    }
+
+    private Long resolveLong(Map<String, Object> metadata, String key) {
+        if (metadata == null) {
+            return null;
+        }
+        Object value = metadata.get(key);
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return Long.parseLong(text);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return null;
     }
 
     private int getBoundaryStart(Segment segment) {

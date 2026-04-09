@@ -58,6 +58,24 @@ public final class HashUtils {
     }
 
     /**
+     * Calculate the SHA-256 hash value of bytes.
+     *
+     * @param content The bytes to calculate the hash for
+     * @return The hash value in hexadecimal format, returns null if the content is null
+     */
+    public static String sha256(byte[] content) {
+        if (content == null) {
+            return null;
+        }
+        try {
+            var digest = MessageDigest.getInstance("SHA-256");
+            return bytesToHex(digest.digest(content));
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 not available", e);
+        }
+    }
+
+    /**
      * Calculate the hash of memory item content (used for deduplication)
      *
      * <p>Generate a 16-bit hex hash based on normalized content

@@ -15,12 +15,25 @@ package com.openmemind.ai.memory.core.builder;
 
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TextChunkingConfig;
+import com.openmemind.ai.memory.core.resource.ContentParser;
+import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 
 public record RawDataExtractionOptions(
-        ConversationChunkingConfig chunking, CommitDetectorConfig commitDetection) {
+        ConversationChunkingConfig chunking,
+        TextChunkingConfig documentChunking,
+        TextChunkingConfig audioChunking,
+        CommitDetectorConfig commitDetection,
+        ContentParser contentParser,
+        ResourceFetcher resourceFetcher) {
 
     public static RawDataExtractionOptions defaults() {
         return new RawDataExtractionOptions(
-                ConversationChunkingConfig.DEFAULT, CommitDetectorConfig.defaults());
+                ConversationChunkingConfig.DEFAULT,
+                TextChunkingConfig.DEFAULT,
+                TextChunkingConfig.DEFAULT,
+                CommitDetectorConfig.defaults(),
+                null,
+                null);
     }
 }

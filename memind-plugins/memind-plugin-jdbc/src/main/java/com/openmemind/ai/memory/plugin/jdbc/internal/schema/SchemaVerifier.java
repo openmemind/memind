@@ -38,6 +38,25 @@ public final class SchemaVerifier {
         }
     }
 
+    public static boolean hasSqliteColumn(
+            DataSource dataSource, String tableName, String columnName) {
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement("PRAGMA table_info(" + tableName + ")")) {
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    if (columnName.equalsIgnoreCase(resultSet.getString("name"))) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        } catch (Exception e) {
+            throw new JdbcPluginException(
+                    "Failed to verify SQLite column existence: " + tableName + "." + columnName, e);
+        }
+    }
+
     public static boolean hasMysqlTable(DataSource dataSource, String tableName) {
         try (Connection connection = dataSource.getConnection();
                 PreparedStatement statement =
@@ -73,6 +92,28 @@ public final class SchemaVerifier {
         } catch (Exception e) {
             throw new JdbcPluginException(
                     "Failed to verify PostgreSQL table existence: " + tableName, e);
+        }
+    }
+
+    public static boolean hasPostgresqlColumn(
+            DataSource dataSource, String tableName, String columnName) {
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                """
+                                SELECT COLUMN_NAME
+                                FROM INFORMATION_SCHEMA.COLUMNS
+                                WHERE TABLE_SCHEMA = current_schema() AND TABLE_NAME = ? AND COLUMN_NAME = ?
+                                """)) {
+            statement.setString(1, tableName);
+            statement.setString(2, columnName);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next();
+            }
+        } catch (Exception e) {
+            throw new JdbcPluginException(
+                    "Failed to verify PostgreSQL column existence: " + tableName + "." + columnName,
+                    e);
         }
     }
 

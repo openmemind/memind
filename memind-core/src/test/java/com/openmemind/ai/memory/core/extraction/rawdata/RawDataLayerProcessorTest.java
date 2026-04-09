@@ -18,29 +18,42 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.data.MemoryRawData;
+import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
+import com.openmemind.ai.memory.core.extraction.rawdata.processor.DocumentContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.insight.InMemoryInsightOperations;
+import com.openmemind.ai.memory.core.store.insight.InsightOperations;
+import com.openmemind.ai.memory.core.store.item.InMemoryItemOperations;
+import com.openmemind.ai.memory.core.store.item.ItemOperations;
+import com.openmemind.ai.memory.core.store.rawdata.InMemoryRawDataOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
+import com.openmemind.ai.memory.core.store.resource.InMemoryResourceOperations;
+import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -56,6 +69,8 @@ class RawDataLayerProcessorTest {
 
     {
         when(store.rawDataOperations()).thenReturn(rawDataOps);
+        when(store.resourceOperations()).thenReturn(mock(ResourceOperations.class));
+        doCallRealMethod().when(store).upsertRawDataWithResources(any(), any(), any());
     }
 
     @Nested
@@ -243,6 +258,8 @@ class RawDataLayerProcessorTest {
                         "caption",
                         "vec-1",
                         Map.of(),
+                        null,
+                        null,
                         Instant.parse("2026-03-27T02:18:00Z"),
                         Instant.parse("2026-03-27T02:17:00Z"),
                         Instant.parse("2026-03-27T02:18:00Z"));
@@ -312,5 +329,225 @@ class RawDataLayerProcessorTest {
                                                         .getFirst()
                                                         .endTime()
                                                         .equals(runtimeContext.observedAt())));
+    }
+
+    @Test
+    @DisplayName(
+            "extract should merge request metadata and persist resolved multimodal resource fields")
+    void extractShouldMergeRequestMetadataAndPersistResolvedMultimodalResourceFields() {
+        var recordingStore = new RecordingMemoryStore();
+        var localVector = mock(MemoryVector.class);
+        var localCaption = mock(CaptionGenerator.class);
+        var documentProcessor = mock(DocumentContentProcessor.class);
+        var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
+        var content =
+                new DocumentContent(
+                        "Report",
+                        "application/pdf",
+                        "document body",
+                        List.of(),
+                        "file:///docs/report.pdf",
+                        Map.of("pageCount", 12));
+        var chunkedSegment =
+                new Segment(
+                        "document body", null, new CharBoundary(0, 13), Map.of("sectionIndex", 0));
+
+        when(documentProcessor.contentClass()).thenReturn(DocumentContent.class);
+        when(documentProcessor.chunk(any(DocumentContent.class)))
+                .thenReturn(Mono.just(List.of(chunkedSegment)));
+        when(documentProcessor.captionGenerator()).thenReturn(localCaption);
+        when(localCaption.generateForSegments(any(), eq("zh-CN")))
+                .thenReturn(Mono.just(List.of(chunkedSegment.withCaption("summary"))));
+        when(localVector.storeBatch(any(), any(), any())).thenReturn(Mono.just(List.of("vec-1")));
+        var layer =
+                new RawDataLayer(
+                        List.of(documentProcessor), localCaption, recordingStore, localVector);
+
+        var result =
+                layer.extract(
+                                memoryId,
+                                content,
+                                content.contentType(),
+                                Map.of(
+                                        "pageCount", 12,
+                                        "sourceUri", "file:///docs/report.pdf",
+                                        "mimeType", "application/pdf",
+                                        "fileName", "report.pdf",
+                                        "channel", "upload"),
+                                "zh-CN")
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.existed()).isFalse();
+        assertThat(recordingStore.lastResources).hasSize(1);
+        assertThat(recordingStore.lastRawData).hasSize(1);
+
+        MemoryResource resource = recordingStore.lastResources.getFirst();
+        assertThat(resource.sourceUri()).isEqualTo("file:///docs/report.pdf");
+        assertThat(resource.fileName()).isEqualTo("report.pdf");
+        assertThat(resource.mimeType()).isEqualTo("application/pdf");
+        assertThat(resource.metadata())
+                .containsEntry("pageCount", 12)
+                .containsEntry("channel", "upload")
+                .doesNotContainKey("vectorId")
+                .doesNotContainKey("sectionIndex");
+
+        var storedRawData = recordingStore.lastRawData.getFirst();
+        assertThat(storedRawData.resourceId()).isEqualTo(resource.id());
+        assertThat(storedRawData.mimeType()).isEqualTo("application/pdf");
+        assertThat(storedRawData.metadata())
+                .containsEntry("pageCount", 12)
+                .containsEntry("channel", "upload")
+                .containsEntry("sectionIndex", 0)
+                .containsEntry("resourceId", resource.id())
+                .containsEntry("mimeType", "application/pdf")
+                .containsEntry("sourceUri", "file:///docs/report.pdf")
+                .containsEntry("vectorId", "vec-1");
+        assertThat(result.segments())
+                .singleElement()
+                .satisfies(
+                        parsedSegment -> {
+                            assertThat(parsedSegment.metadata())
+                                    .containsEntry("pageCount", 12)
+                                    .containsEntry("channel", "upload")
+                                    .containsEntry("sectionIndex", 0)
+                                    .containsEntry("resourceId", resource.id())
+                                    .containsEntry("mimeType", "application/pdf");
+                        });
+    }
+
+    @Test
+    @DisplayName("extract should use source-aware idempotency keys for multimodal content")
+    void extractShouldUseSourceAwareIdempotencyKeysForMultimodalContent() {
+        var recordingStore = new RecordingMemoryStore();
+        var localVector = mock(MemoryVector.class);
+        var localCaption = mock(CaptionGenerator.class);
+        var documentProcessor = mock(DocumentContentProcessor.class);
+        var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
+        var chunkedSegment =
+                new Segment("same text", null, new CharBoundary(0, 9), Map.of("sectionIndex", 0));
+
+        when(documentProcessor.contentClass()).thenReturn(DocumentContent.class);
+        when(documentProcessor.chunk(any(DocumentContent.class)))
+                .thenReturn(Mono.just(List.of(chunkedSegment)));
+        when(documentProcessor.captionGenerator()).thenReturn(localCaption);
+        when(localCaption.generateForSegments(any(), any()))
+                .thenReturn(Mono.just(List.of(chunkedSegment.withCaption("summary"))));
+        when(localVector.storeBatch(any(), any(), any())).thenReturn(Mono.just(List.of("vec-1")));
+        var layer =
+                new RawDataLayer(
+                        List.of(documentProcessor), localCaption, recordingStore, localVector);
+
+        var first =
+                layer.extract(
+                                memoryId,
+                                new DocumentContent(
+                                        "Doc",
+                                        "application/pdf",
+                                        "same text",
+                                        List.of(),
+                                        "file:///docs/a.pdf",
+                                        Map.of()),
+                                "DOCUMENT",
+                                Map.of(
+                                        "sourceUri", "file:///docs/a.pdf",
+                                        "mimeType", "application/pdf"))
+                        .block();
+        var secondSameSource =
+                layer.extract(
+                                memoryId,
+                                new DocumentContent(
+                                        "Doc",
+                                        "application/pdf",
+                                        "same text",
+                                        List.of(),
+                                        "file:///docs/a.pdf",
+                                        Map.of()),
+                                "DOCUMENT",
+                                Map.of(
+                                        "sourceUri", "file:///docs/a.pdf",
+                                        "mimeType", "application/pdf"))
+                        .block();
+        var thirdDifferentSource =
+                layer.extract(
+                                memoryId,
+                                new DocumentContent(
+                                        "Doc",
+                                        "application/pdf",
+                                        "same text",
+                                        List.of(),
+                                        "file:///docs/b.pdf",
+                                        Map.of()),
+                                "DOCUMENT",
+                                Map.of(
+                                        "sourceUri", "file:///docs/b.pdf",
+                                        "mimeType", "application/pdf"))
+                        .block();
+
+        assertThat(first).isNotNull();
+        assertThat(secondSameSource).isNotNull();
+        assertThat(thirdDifferentSource).isNotNull();
+        assertThat(secondSameSource.existed()).isTrue();
+        assertThat(thirdDifferentSource.existed()).isFalse();
+        assertThat(recordingStore.rawDataOperations.listRawData(memoryId)).hasSize(2);
+        assertThat(recordingStore.lookupContentIds).hasSize(3);
+        assertThat(recordingStore.rawDataOperations.listRawData(memoryId))
+                .extracting(MemoryRawData::contentId)
+                .doesNotHaveDuplicates();
+    }
+
+    private static final class RecordingMemoryStore implements MemoryStore {
+
+        private final RecordingRawDataOperations rawDataOperations =
+                new RecordingRawDataOperations();
+        private final ItemOperations itemOperations = new InMemoryItemOperations();
+        private final InsightOperations insightOperations = new InMemoryInsightOperations();
+        private final ResourceOperations resourceOperations = new InMemoryResourceOperations();
+        private List<MemoryResource> lastResources = List.of();
+        private List<MemoryRawData> lastRawData = List.of();
+        private List<String> lookupContentIds = List.of();
+
+        @Override
+        public RawDataOperations rawDataOperations() {
+            return rawDataOperations;
+        }
+
+        @Override
+        public ItemOperations itemOperations() {
+            return itemOperations;
+        }
+
+        @Override
+        public InsightOperations insightOperations() {
+            return insightOperations;
+        }
+
+        @Override
+        public ResourceOperations resourceOperations() {
+            return resourceOperations;
+        }
+
+        @Override
+        public void upsertRawDataWithResources(
+                com.openmemind.ai.memory.core.data.MemoryId memoryId,
+                List<MemoryResource> resources,
+                List<MemoryRawData> rawDataList) {
+            lastResources = resources == null ? List.of() : List.copyOf(resources);
+            lastRawData = rawDataList == null ? List.of() : List.copyOf(rawDataList);
+            MemoryStore.super.upsertRawDataWithResources(memoryId, resources, rawDataList);
+            lookupContentIds = List.copyOf(rawDataOperations.lookupContentIds);
+        }
+    }
+
+    private static final class RecordingRawDataOperations extends InMemoryRawDataOperations {
+
+        private final List<String> lookupContentIds = new ArrayList<>();
+
+        @Override
+        public Optional<MemoryRawData> getRawDataByContentId(
+                com.openmemind.ai.memory.core.data.MemoryId id, String contentId) {
+            lookupContentIds.add(contentId);
+            return super.getRawDataByContentId(id, contentId);
+        }
     }
 }
