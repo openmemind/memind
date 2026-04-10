@@ -29,6 +29,7 @@
 
     <modules>
         <module>memind-plugin-ai-spring-ai</module>
+        <module>memind-plugin-content-parser-document-tika</module>
         <module>memind-plugin-jdbc</module>
         <module>memind-plugin-spring-boot-starters</module>
         <module>memind-plugin-tracing-opentelemetry</module>

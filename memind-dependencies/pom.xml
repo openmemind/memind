@@ -35,6 +35,8 @@
         <mybatis-plus.version>3.5.16</mybatis-plus.version>
         <sqlite-jdbc.version>3.47.1.0</sqlite-jdbc.version>
         <progressbar.version>0.10.1</progressbar.version>
+        <tika.version>3.2.3</tika.version>
+        <pdfbox.version>3.0.4</pdfbox.version>
 
         <spotless.version>3.2.1</spotless.version>
         <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
@@ -196,7 +198,29 @@
                 <version>${progressbar.version}</version>
             </dependency>
 
+            <!-- Apache Tika -->
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-core</artifactId>
+                <version>${tika.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-parsers-standard-package</artifactId>
+                <version>${tika.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.pdfbox</groupId>
+                <artifactId>pdfbox</artifactId>
+                <version>${pdfbox.version}</version>
+            </dependency>
+
             <!-- memind modules -->
+            <dependency>
+                <groupId>com.openmemind.ai</groupId>
+                <artifactId>memind-plugin-content-parser-document-tika</artifactId>
+                <version>${revision}</version>
+            </dependency>
             <dependency>
                 <groupId>com.openmemind.ai</groupId>
                 <artifactId>memind-plugin-tracing-opentelemetry</artifactId>
