@@ -233,6 +233,11 @@
             </dependency>
             <dependency>
                 <groupId>com.openmemind.ai</groupId>
+                <artifactId>memind-plugin-content-parser-document-tika-starter</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.openmemind.ai</groupId>
                 <artifactId>memind-plugin-jdbc-starter</artifactId>
                 <version>${revision}</version>
             </dependency>
