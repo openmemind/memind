@@ -14,12 +14,14 @@
 package com.openmemind.ai.memory.core.extraction;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.result.InsightResult;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
@@ -273,31 +275,13 @@ class MemoryExtractorMultimodalFileTest {
 
     @Test
     void urlRequestShouldFailFastWhenUrlSchemeIsUnsupported() {
-        var extractor =
-                new MemoryExtractor(
-                        (memoryId, content, contentType, metadata) ->
-                                Mono.just(RawDataResult.empty()),
-                        (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
-                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        null,
-                        null,
-                        null,
-                        null,
-                        new RecordingParser(),
-                        null,
-                        new RecordingResourceFetcher());
-
-        var result =
-                extractor
-                        .extract(
+        assertThatThrownBy(
+                        () ->
                                 ExtractionRequest.url(
                                         DefaultMemoryId.of("user-1", "agent-1"),
                                         "ftp://example.com/report.pdf"))
-                        .block();
-
-        assertThat(result).isNotNull();
-        assertThat(result.isFailed()).isTrue();
-        assertThat(result.errorMessage()).contains("http/https");
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("http/https");
     }
 
     @Test
@@ -330,6 +314,33 @@ class MemoryExtractorMultimodalFileTest {
         assertThat(result.errorMessage()).contains("download failed");
     }
 
+    @Test
+    void requestWithoutContentFileOrUrlShouldFailFastDuringResolution() {
+        var extractor =
+                new MemoryExtractor(
+                        (memoryId, content, contentType, metadata) ->
+                                Mono.just(RawDataResult.empty()),
+                        (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
+                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()));
+
+        var result =
+                extractor
+                        .extract(
+                                new ExtractionRequest(
+                                        DefaultMemoryId.of("user-1", "agent-1"),
+                                        null,
+                                        null,
+                                        null,
+                                        ContentTypes.CONVERSATION,
+                                        Map.of(),
+                                        ExtractionConfig.defaults()))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.isFailed()).isTrue();
+        assertThat(result.errorMessage()).contains("content, fileInput, or urlInput is required");
+    }
+
     private static final class RecordingParser implements ContentParser {
 
         private final List<String> calls = new ArrayList<>();
@@ -340,8 +351,7 @@ class MemoryExtractorMultimodalFileTest {
         }
 
         @Override
-        public Mono<com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent> parse(
-                byte[] data, String fileName, String mimeType) {
+        public Mono<RawContent> parse(byte[] data, String fileName, String mimeType) {
             calls.add(fileName + ":" + mimeType + ":" + data.length);
             return Mono.just(
                     new DocumentContent(

@@ -160,6 +160,15 @@ class MemoryAssemblersTest {
                         RetrievalStrategies.SIMPLE, RetrievalStrategies.DEEP_RETRIEVAL);
     }
 
+    @Test
+    void extractionAssemblerFallsBackToDefaultResourceFetcherWhenMissing() {
+        var assembly =
+                new MemoryExtractionAssembler().assemble(context(MemoryBuildOptions.defaults()));
+        var extractor = (MemoryExtractor) assembly.pipeline();
+
+        assertThat(readField(extractor, "resourceFetcher", ResourceFetcher.class)).isNotNull();
+    }
+
     private static MemoryAssemblyContext context(MemoryBuildOptions options) {
         return new MemoryAssemblyContext(
                 new ChatClientRegistry(CHAT_CLIENT, Map.<ChatClientSlot, StructuredChatClient>of()),

@@ -51,6 +51,8 @@ import com.openmemind.ai.memory.core.extraction.rawdata.processor.ImageContentPr
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
+import com.openmemind.ai.memory.core.resource.HttpResourceFetcher;
+import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.utils.IdUtils;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -59,6 +61,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 final class MemoryExtractionAssembler {
+
+    private static final ResourceFetcher DEFAULT_RESOURCE_FETCHER = new HttpResourceFetcher();
 
     MemoryExtractionAssembly assemble(MemoryAssemblyContext context) {
         ChatClientRegistry registry = context.chatClientRegistry();
@@ -142,8 +146,13 @@ final class MemoryExtractionAssembler {
                         context.recentConversationBuffer(),
                         context.options().extraction().rawdata().contentParser(),
                         context.memoryStore().resourceStore(),
-                        context.options().extraction().rawdata().resourceFetcher());
+                        resolveResourceFetcher(context.options()));
         return new MemoryExtractionAssembly(pipeline, insightLayer, insightBuildScheduler);
+    }
+
+    private ResourceFetcher resolveResourceFetcher(MemoryBuildOptions options) {
+        ResourceFetcher configuredFetcher = options.extraction().rawdata().resourceFetcher();
+        return configuredFetcher != null ? configuredFetcher : DEFAULT_RESOURCE_FETCHER;
     }
 
     private List<RawContentProcessor<?>> createProcessors(

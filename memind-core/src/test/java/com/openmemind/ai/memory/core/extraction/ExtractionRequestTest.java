@@ -14,6 +14,7 @@
 package com.openmemind.ai.memory.core.extraction;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
@@ -116,6 +117,17 @@ class ExtractionRequestTest {
         assertThat(request.urlInput().sourceUrl()).isEqualTo("https://example.com/report.pdf");
         assertThat(request.urlInput().fileName()).isEqualTo("report.pdf");
         assertThat(request.urlInput().mimeType()).isEqualTo("application/pdf");
+    }
+
+    @Test
+    void urlFactoryShouldRejectUnsupportedSourceUrlScheme() {
+        assertThatThrownBy(
+                        () ->
+                                ExtractionRequest.url(
+                                        DefaultMemoryId.of("user-1", "agent-1"),
+                                        "ftp://example.com/report.pdf"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Only http/https sourceUrl is supported");
     }
 
     @Test

@@ -384,17 +384,28 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
     }
 
     private Mono<ResolvedExtractionRequest> resolveExtractionRequest(ExtractionRequest request) {
-        if (request.fileInput() != null && request.urlInput() != null) {
+        RawUrlInput urlInput = request.urlInput();
+        RawFileInput fileInput = request.fileInput();
+        if (fileInput != null && urlInput != null) {
             return Mono.error(
                     new IllegalArgumentException("fileInput and urlInput cannot both be provided"));
         }
-        if (request.urlInput() != null) {
+        if (urlInput != null) {
             return resolveUrlExtractionRequest(request);
         }
-        if (request.fileInput() == null) {
-            return Mono.just(new ResolvedExtractionRequest(request, null));
+        if (fileInput != null) {
+            return resolveFileExtractionRequest(request);
         }
-        return resolveFileExtractionRequest(request);
+        return resolveDirectContentRequest(request);
+    }
+
+    private Mono<ResolvedExtractionRequest> resolveDirectContentRequest(ExtractionRequest request) {
+        if (request.content() == null) {
+            return Mono.error(
+                    new IllegalArgumentException(
+                            "Extraction request content, fileInput, or urlInput is required"));
+        }
+        return Mono.just(new ResolvedExtractionRequest(request, null));
     }
 
     private Mono<ResolvedExtractionRequest> resolveFileExtractionRequest(
@@ -463,13 +474,6 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         }
 
         RawUrlInput urlInput = request.urlInput();
-        if (!isSupportedSourceUrl(urlInput.sourceUrl())) {
-            return Mono.error(
-                    new IllegalArgumentException(
-                            "Only http/https sourceUrl is supported for URL extraction: "
-                                    + urlInput.sourceUrl()));
-        }
-
         return resourceFetcher
                 .fetch(
                         request.memoryId(),
@@ -556,10 +560,6 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         }
         String contentMimeType = value.toString();
         return contentMimeType.isBlank() ? fallbackMimeType : contentMimeType;
-    }
-
-    private boolean isSupportedSourceUrl(String sourceUrl) {
-        return sourceUrl.startsWith("http://") || sourceUrl.startsWith("https://");
     }
 
     private Mono<Void> cleanupStoredResourceIfNeeded(

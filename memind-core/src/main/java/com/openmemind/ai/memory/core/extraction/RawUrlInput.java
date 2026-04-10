@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.core.extraction;
 
+import com.openmemind.ai.memory.core.resource.ResourceUrlValidator;
 import java.util.Objects;
 
 /**
@@ -26,6 +27,7 @@ public record RawUrlInput(String sourceUrl, String fileName, String mimeType) {
         if (sourceUrl.isEmpty()) {
             throw new IllegalArgumentException("sourceUrl must not be blank");
         }
+        ResourceUrlValidator.requireSupportedSourceUrl(sourceUrl);
         fileName = normalizeOptional(fileName);
         mimeType = normalizeOptional(mimeType);
     }
