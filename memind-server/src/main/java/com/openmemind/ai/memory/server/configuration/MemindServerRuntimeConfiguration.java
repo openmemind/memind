@@ -19,6 +19,10 @@ import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
+import com.openmemind.ai.memory.core.resource.ContentParser;
+import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
+import com.openmemind.ai.memory.core.resource.DefaultContentParserRegistry;
+import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
@@ -61,13 +65,19 @@ public class MemindServerRuntimeConfiguration {
             ObjectProvider<MemoryBuffer> memoryBufferProvider,
             ObjectProvider<MemoryVector> memoryVectorProvider,
             ObjectProvider<MemoryTextSearch> memoryTextSearch,
-            ObjectProvider<Reranker> reranker) {
+            ObjectProvider<Reranker> reranker,
+            ObjectProvider<ContentParser> contentParserProvider,
+            ObjectProvider<ResourceFetcher> resourceFetcherProvider) {
         return options -> {
             StructuredChatClient structuredChatClient =
                     requireRuntimeDependency(structuredChatClientProvider);
             MemoryStore memoryStore = requireRuntimeDependency(memoryStoreProvider);
             MemoryBuffer memoryBuffer = requireRuntimeDependency(memoryBufferProvider);
             MemoryVector memoryVector = requireRuntimeDependency(memoryVectorProvider);
+            var parsers = contentParserProvider.orderedStream().toList();
+            ContentParserRegistry contentParserRegistry =
+                    parsers.isEmpty() ? null : new DefaultContentParserRegistry(parsers);
+            ResourceFetcher resourceFetcher = resourceFetcherProvider.getIfAvailable();
             var builder =
                     Memory.builder()
                             .chatClient(structuredChatClient)
@@ -76,6 +86,12 @@ public class MemindServerRuntimeConfiguration {
                             .vector(memoryVector)
                             .options(options)
                             .externallyManaged(true);
+            if (contentParserRegistry != null) {
+                builder.contentParserRegistry(contentParserRegistry);
+            }
+            if (resourceFetcher != null) {
+                builder.resourceFetcher(resourceFetcher);
+            }
             MemoryTextSearch textSearch = memoryTextSearch.getIfAvailable();
             if (textSearch != null) {
                 builder.textSearch(textSearch);
