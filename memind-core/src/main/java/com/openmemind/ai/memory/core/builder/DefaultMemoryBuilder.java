@@ -22,6 +22,8 @@ import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
+import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
+import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.stats.DefaultToolStatsService;
 import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -45,6 +47,8 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     private MemoryVector vector;
     private Reranker reranker = new NoopReranker();
     private PromptRegistry promptRegistry = PromptRegistry.EMPTY;
+    private ContentParserRegistry contentParserRegistry;
+    private ResourceFetcher resourceFetcher;
     private MemoryBuildOptions options = MemoryBuildOptions.defaults();
     private boolean externallyManaged;
 
@@ -99,6 +103,19 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     }
 
     @Override
+    public MemoryBuilder contentParserRegistry(ContentParserRegistry contentParserRegistry) {
+        this.contentParserRegistry =
+                Objects.requireNonNull(contentParserRegistry, "contentParserRegistry");
+        return this;
+    }
+
+    @Override
+    public MemoryBuilder resourceFetcher(ResourceFetcher resourceFetcher) {
+        this.resourceFetcher = Objects.requireNonNull(resourceFetcher, "resourceFetcher");
+        return this;
+    }
+
+    @Override
     public MemoryBuilder options(MemoryBuildOptions options) {
         this.options = Objects.requireNonNull(options, "options");
         return this;
@@ -124,7 +141,9 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
                         vector,
                         reranker,
                         promptRegistry,
-                        options);
+                        options,
+                        contentParserRegistry,
+                        resourceFetcher);
         MemoryExtractionAssembly extractionAssembly =
                 new MemoryExtractionAssembler().assemble(context);
         var memoryRetriever = new MemoryRetrievalAssembler().assemble(context);

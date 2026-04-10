@@ -144,15 +144,14 @@ final class MemoryExtractionAssembler {
                         contextCommitDetector,
                         context.pendingConversationBuffer(),
                         context.recentConversationBuffer(),
-                        context.options().extraction().rawdata().contentParser(),
+                        context.contentParserRegistry(),
                         context.memoryStore().resourceStore(),
-                        resolveResourceFetcher(context.options()));
+                        resolveResourceFetcher(context.resourceFetcher()));
         return new MemoryExtractionAssembly(pipeline, insightLayer, insightBuildScheduler);
     }
 
-    private ResourceFetcher resolveResourceFetcher(MemoryBuildOptions options) {
-        ResourceFetcher configuredFetcher = options.extraction().rawdata().resourceFetcher();
-        return configuredFetcher != null ? configuredFetcher : DEFAULT_RESOURCE_FETCHER;
+    private ResourceFetcher resolveResourceFetcher(ResourceFetcher runtimeFetcher) {
+        return runtimeFetcher != null ? runtimeFetcher : DEFAULT_RESOURCE_FETCHER;
     }
 
     private List<RawContentProcessor<?>> createProcessors(

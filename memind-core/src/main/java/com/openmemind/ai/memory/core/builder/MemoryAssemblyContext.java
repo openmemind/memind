@@ -20,6 +20,8 @@ import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
+import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
+import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
@@ -33,7 +35,9 @@ record MemoryAssemblyContext(
         MemoryVector memoryVector,
         Reranker reranker,
         PromptRegistry promptRegistry,
-        MemoryBuildOptions options) {
+        MemoryBuildOptions options,
+        ContentParserRegistry contentParserRegistry,
+        ResourceFetcher resourceFetcher) {
 
     MemoryAssemblyContext {
         Objects.requireNonNull(chatClientRegistry, "chatClientRegistry");

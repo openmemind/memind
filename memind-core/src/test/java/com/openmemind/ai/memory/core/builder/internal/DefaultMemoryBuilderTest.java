@@ -39,6 +39,8 @@ import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptType;
+import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
+import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepRetrievalStrategy;
@@ -180,6 +182,30 @@ class DefaultMemoryBuilderTest {
                                 "structuredChatClient",
                                 StructuredChatClient.class))
                 .isSameAs(queryExpanderClient);
+    }
+
+    @Test
+    void buildRoutesRuntimeRegistryAndFetcherIntoExtractor() {
+        var registry = proxy(ContentParserRegistry.class);
+        var fetcher = proxy(ResourceFetcher.class);
+
+        var memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(CHAT_CLIENT)
+                                .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .contentParserRegistry(registry)
+                                .resourceFetcher(fetcher)
+                                .build();
+
+        var extractor = readField(memory, "extractor", MemoryExtractor.class);
+
+        assertThat(readField(extractor, "contentParserRegistry", ContentParserRegistry.class))
+                .isSameAs(registry);
+        assertThat(readField(extractor, "resourceFetcher", ResourceFetcher.class))
+                .isSameAs(fetcher);
     }
 
     @Test

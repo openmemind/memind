@@ -31,7 +31,7 @@ import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
-import com.openmemind.ai.memory.core.resource.ContentParser;
+import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
@@ -66,7 +66,8 @@ class MemoryAssemblersTest {
                     INSIGHT_BUFFER, PENDING_CONVERSATION_BUFFER, RECENT_CONVERSATION_BUFFER);
     private static final MemoryVector MEMORY_VECTOR = proxy(MemoryVector.class);
     private static final ResourceStore RESOURCE_STORE = proxy(ResourceStore.class);
-    private static final ContentParser CONTENT_PARSER = proxy(ContentParser.class);
+    private static final ContentParserRegistry CONTENT_PARSER_REGISTRY =
+            proxy(ContentParserRegistry.class);
     private static final ResourceFetcher RESOURCE_FETCHER = proxy(ResourceFetcher.class);
     private static final MemoryStore MEMORY_STORE =
             new MemoryStore() {
@@ -114,13 +115,13 @@ class MemoryAssemblersTest {
                                                                 .ConversationChunkingConfig.DEFAULT,
                                                         TextChunkingConfig.DEFAULT,
                                                         TextChunkingConfig.DEFAULT,
-                                                        CUSTOM_COMMIT_DETECTION,
-                                                        CONTENT_PARSER,
-                                                        RESOURCE_FETCHER),
+                                                        CUSTOM_COMMIT_DETECTION),
                                                 ItemExtractionOptions.defaults(),
                                                 new InsightExtractionOptions(
                                                         true, CUSTOM_INSIGHT_BUILD)))
-                                .build());
+                                .build(),
+                        CONTENT_PARSER_REGISTRY,
+                        RESOURCE_FETCHER);
 
         var assembly = new MemoryExtractionAssembler().assemble(context);
         var extractor = (MemoryExtractor) assembly.pipeline();
@@ -135,8 +136,8 @@ class MemoryAssemblersTest {
         assertThat(readField(scheduler, "config", InsightBuildConfig.class))
                 .isEqualTo(CUSTOM_INSIGHT_BUILD);
         assertThat(rawDataLayer).isNotNull();
-        assertThat(readField(extractor, "contentParser", ContentParser.class))
-                .isSameAs(CONTENT_PARSER);
+        assertThat(readField(extractor, "contentParserRegistry", ContentParserRegistry.class))
+                .isSameAs(CONTENT_PARSER_REGISTRY);
         assertThat(readField(extractor, "resourceStore", ResourceStore.class))
                 .isSameAs(RESOURCE_STORE);
         assertThat(readField(extractor, "resourceFetcher", ResourceFetcher.class))
@@ -150,7 +151,8 @@ class MemoryAssemblersTest {
     @Test
     void retrievalAssemblerRegistersBothBuiltInStrategies() {
         var retriever =
-                new MemoryRetrievalAssembler().assemble(context(MemoryBuildOptions.defaults()));
+                new MemoryRetrievalAssembler()
+                        .assemble(context(MemoryBuildOptions.defaults(), null, null));
 
         @SuppressWarnings("unchecked")
         var strategies = readField(retriever, "strategies", Map.class);
@@ -163,13 +165,17 @@ class MemoryAssemblersTest {
     @Test
     void extractionAssemblerFallsBackToDefaultResourceFetcherWhenMissing() {
         var assembly =
-                new MemoryExtractionAssembler().assemble(context(MemoryBuildOptions.defaults()));
+                new MemoryExtractionAssembler()
+                        .assemble(context(MemoryBuildOptions.defaults(), null, null));
         var extractor = (MemoryExtractor) assembly.pipeline();
 
         assertThat(readField(extractor, "resourceFetcher", ResourceFetcher.class)).isNotNull();
     }
 
-    private static MemoryAssemblyContext context(MemoryBuildOptions options) {
+    private static MemoryAssemblyContext context(
+            MemoryBuildOptions options,
+            ContentParserRegistry contentParserRegistry,
+            ResourceFetcher resourceFetcher) {
         return new MemoryAssemblyContext(
                 new ChatClientRegistry(CHAT_CLIENT, Map.<ChatClientSlot, StructuredChatClient>of()),
                 MEMORY_STORE,
@@ -178,7 +184,9 @@ class MemoryAssemblersTest {
                 MEMORY_VECTOR,
                 new NoopReranker(),
                 PromptRegistry.EMPTY,
-                options);
+                options,
+                contentParserRegistry,
+                resourceFetcher);
     }
 
     @SuppressWarnings("unchecked")

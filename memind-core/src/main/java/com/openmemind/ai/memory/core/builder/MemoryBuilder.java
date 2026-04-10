@@ -19,6 +19,8 @@ import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
+import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
+import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
@@ -43,6 +45,10 @@ public interface MemoryBuilder {
     MemoryBuilder reranker(Reranker reranker);
 
     MemoryBuilder promptRegistry(PromptRegistry promptRegistry);
+
+    MemoryBuilder contentParserRegistry(ContentParserRegistry contentParserRegistry);
+
+    MemoryBuilder resourceFetcher(ResourceFetcher resourceFetcher);
 
     MemoryBuilder options(MemoryBuildOptions options);
 

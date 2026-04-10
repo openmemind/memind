@@ -47,12 +47,14 @@ class MemoryBuildOptionsTest {
     }
 
     @Test
-    void rawDataDefaultsExposeDocumentAudioChunkingAndNoParser() {
+    void rawDataDefaultsExposeOnlySerializableFields() {
         var defaults = RawDataExtractionOptions.defaults();
+        var componentNames =
+                java.util.Arrays.stream(RawDataExtractionOptions.class.getRecordComponents())
+                        .map(java.lang.reflect.RecordComponent::getName);
 
         assertThat(defaults.documentChunking()).isEqualTo(TextChunkingConfig.DEFAULT);
         assertThat(defaults.audioChunking()).isEqualTo(TextChunkingConfig.DEFAULT);
-        assertThat(defaults.contentParser()).isNull();
-        assertThat(defaults.resourceFetcher()).isNull();
+        assertThat(componentNames).doesNotContain("contentParser", "resourceFetcher");
     }
 }

@@ -37,6 +37,7 @@ import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.SegmentProcessor;
 import com.openmemind.ai.memory.core.resource.ContentParser;
+import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.FetchedResource;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.resource.ResourceRef;
@@ -75,6 +76,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
     private final PendingConversationBuffer pendingConversationBuffer;
     private final RecentConversationBuffer recentConversationBuffer;
     private final ContentParser contentParser;
+    private final ContentParserRegistry contentParserRegistry;
     private final ResourceStore resourceStore;
     private final ResourceFetcher resourceFetcher;
 
@@ -82,7 +84,18 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
             RawDataExtractStep rawDataStep,
             MemoryItemExtractStep memoryItemStep,
             InsightExtractStep insightStep) {
-        this(rawDataStep, memoryItemStep, insightStep, null, null, null, null, null, null, null);
+        this(
+                rawDataStep,
+                memoryItemStep,
+                insightStep,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     public MemoryExtractor(
@@ -98,6 +111,8 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 null,
                 null,
                 null,
+                (ContentParser) null,
+                (ContentParserRegistry) null,
                 null,
                 null);
     }
@@ -118,6 +133,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 contextCommitDetector,
                 pendingConversationBuffer,
                 recentConversationBuffer,
+                null,
                 null,
                 null,
                 null);
@@ -142,6 +158,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 pendingConversationBuffer,
                 recentConversationBuffer,
                 contentParser,
+                null,
                 resourceStore,
                 null);
     }
@@ -157,6 +174,57 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
             ContentParser contentParser,
             ResourceStore resourceStore,
             ResourceFetcher resourceFetcher) {
+        this(
+                rawDataStep,
+                memoryItemStep,
+                insightStep,
+                segmentProcessor,
+                contextCommitDetector,
+                pendingConversationBuffer,
+                recentConversationBuffer,
+                contentParser,
+                null,
+                resourceStore,
+                resourceFetcher);
+    }
+
+    public MemoryExtractor(
+            RawDataExtractStep rawDataStep,
+            MemoryItemExtractStep memoryItemStep,
+            InsightExtractStep insightStep,
+            SegmentProcessor segmentProcessor,
+            ContextCommitDetector contextCommitDetector,
+            PendingConversationBuffer pendingConversationBuffer,
+            RecentConversationBuffer recentConversationBuffer,
+            ContentParserRegistry contentParserRegistry,
+            ResourceStore resourceStore,
+            ResourceFetcher resourceFetcher) {
+        this(
+                rawDataStep,
+                memoryItemStep,
+                insightStep,
+                segmentProcessor,
+                contextCommitDetector,
+                pendingConversationBuffer,
+                recentConversationBuffer,
+                null,
+                contentParserRegistry,
+                resourceStore,
+                resourceFetcher);
+    }
+
+    private MemoryExtractor(
+            RawDataExtractStep rawDataStep,
+            MemoryItemExtractStep memoryItemStep,
+            InsightExtractStep insightStep,
+            SegmentProcessor segmentProcessor,
+            ContextCommitDetector contextCommitDetector,
+            PendingConversationBuffer pendingConversationBuffer,
+            RecentConversationBuffer recentConversationBuffer,
+            ContentParser contentParser,
+            ContentParserRegistry contentParserRegistry,
+            ResourceStore resourceStore,
+            ResourceFetcher resourceFetcher) {
         this.rawDataStep = Objects.requireNonNull(rawDataStep, "rawDataStep is required");
         this.memoryItemStep = Objects.requireNonNull(memoryItemStep, "memoryItemStep is required");
         this.insightStep = Objects.requireNonNull(insightStep, "insightStep is required");
@@ -165,6 +233,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         this.pendingConversationBuffer = pendingConversationBuffer;
         this.recentConversationBuffer = recentConversationBuffer;
         this.contentParser = contentParser;
+        this.contentParserRegistry = contentParserRegistry;
         this.resourceStore = resourceStore;
         this.resourceFetcher = resourceFetcher;
     }
