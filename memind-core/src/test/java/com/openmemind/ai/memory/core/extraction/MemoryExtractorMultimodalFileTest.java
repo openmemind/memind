@@ -346,6 +346,11 @@ class MemoryExtractorMultimodalFileTest {
         private final List<String> calls = new ArrayList<>();
 
         @Override
+        public String contentType() {
+            return ContentTypes.DOCUMENT;
+        }
+
+        @Override
         public Set<String> supportedMimeTypes() {
             return Set.of("application/pdf");
         }

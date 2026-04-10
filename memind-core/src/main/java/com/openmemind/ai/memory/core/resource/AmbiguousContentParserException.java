@@ -13,22 +13,12 @@
  */
 package com.openmemind.ai.memory.core.resource;
 
-import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
-import java.util.Set;
-import reactor.core.publisher.Mono;
-
 /**
- * Parser implementation that converts raw file bytes into typed {@link RawContent}.
+ * Raised when multiple content parsers match the same input source.
  */
-public interface ContentParser {
+public final class AmbiguousContentParserException extends IllegalStateException {
 
-    String contentType();
-
-    Set<String> supportedMimeTypes();
-
-    default boolean supports(String fileName, String mimeType) {
-        return mimeType != null && supportedMimeTypes().contains(mimeType);
+    public AmbiguousContentParserException(String message) {
+        super(message);
     }
-
-    Mono<RawContent> parse(byte[] data, String fileName, String mimeType);
 }
