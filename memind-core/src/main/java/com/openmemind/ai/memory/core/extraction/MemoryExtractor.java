@@ -479,27 +479,22 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
 
     private Mono<ResolvedExtractionRequest> resolveFileExtractionRequest(
             ExtractionRequest request) {
-        if (contentParser == null) {
+        if (contentParserRegistry == null) {
             return Mono.error(
                     new IllegalStateException(
-                            "ContentParser is required for file extraction requests"));
+                            "ContentParserRegistry is required for file extraction requests"));
         }
 
         RawFileInput fileInput = request.fileInput();
-        if (!contentParser.supportedMimeTypes().contains(fileInput.mimeType())) {
-            return Mono.error(
-                    new IllegalArgumentException(
-                            "Unsupported mimeType for file extraction: " + fileInput.mimeType()));
-        }
-
         String checksum = HashUtils.sha256(fileInput.data());
         long sizeBytes = fileInput.data().length;
-        return contentParser
+        return contentParserRegistry
                 .parse(fileInput.data(), fileInput.fileName(), fileInput.mimeType())
                 .switchIfEmpty(
                         Mono.error(
                                 new IllegalStateException(
-                                        "ContentParser returned no content for file extraction")))
+                                        "ContentParserRegistry returned no content for file"
+                                                + " extraction")))
                 .flatMap(
                         parsedContent -> {
                             if (resourceStore == null) {
@@ -536,6 +531,11 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
     }
 
     private Mono<ResolvedExtractionRequest> resolveUrlExtractionRequest(ExtractionRequest request) {
+        if (contentParserRegistry == null) {
+            return Mono.error(
+                    new IllegalStateException(
+                            "ContentParserRegistry is required for URL extraction requests"));
+        }
         if (resourceFetcher == null) {
             return Mono.error(
                     new IllegalStateException(

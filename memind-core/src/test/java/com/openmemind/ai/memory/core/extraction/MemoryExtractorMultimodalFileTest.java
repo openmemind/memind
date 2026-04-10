@@ -27,11 +27,12 @@ import com.openmemind.ai.memory.core.extraction.result.InsightResult;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
-import com.openmemind.ai.memory.core.resource.ContentParser;
+import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.FetchedResource;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.resource.ResourceRef;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
+import com.openmemind.ai.memory.core.resource.UnsupportedContentSourceException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,7 +45,7 @@ class MemoryExtractorMultimodalFileTest {
 
     @Test
     void fileRequestShouldParseAndStoreBytesBeforeRunningRawDataExtraction() {
-        var parser = new RecordingParser();
+        var parserRegistry = new RecordingRegistry();
         var resourceStore = new RecordingResourceStore();
         var rawDataStep = new RecordingRawDataStep(false);
         var extractor =
@@ -56,7 +57,7 @@ class MemoryExtractorMultimodalFileTest {
                         null,
                         null,
                         null,
-                        parser,
+                        parserRegistry,
                         resourceStore,
                         null);
 
@@ -72,7 +73,7 @@ class MemoryExtractorMultimodalFileTest {
 
         assertThat(result).isNotNull();
         assertThat(result.isSuccess()).isTrue();
-        assertThat(parser.calls).hasSize(1);
+        assertThat(parserRegistry.calls).containsExactly("report.pdf:application/pdf:3");
         assertThat(resourceStore.storedRefs).hasSize(1);
         assertThat(rawDataStep.lastContent).isInstanceOf(DocumentContent.class);
         assertThat(rawDataStep.lastContentType).isEqualTo(ContentTypes.DOCUMENT);
@@ -86,7 +87,7 @@ class MemoryExtractorMultimodalFileTest {
     }
 
     @Test
-    void fileRequestShouldFailFastWhenParserIsMissing() {
+    void fileRequestShouldFailFastWhenParserRegistryIsMissing() {
         var extractor =
                 new MemoryExtractor(
                         (memoryId, content, contentType, metadata) ->
@@ -106,12 +107,12 @@ class MemoryExtractorMultimodalFileTest {
 
         assertThat(result).isNotNull();
         assertThat(result.isFailed()).isTrue();
-        assertThat(result.errorMessage()).contains("ContentParser");
+        assertThat(result.errorMessage()).contains("ContentParserRegistry");
     }
 
     @Test
-    void fileRequestShouldFailFastWhenMimeTypeIsUnsupported() {
-        var parser = new RecordingParser();
+    void fileRequestShouldFailWhenRegistryRejectsSource() {
+        var parserRegistry = new UnsupportedRegistry();
         var extractor =
                 new MemoryExtractor(
                         (memoryId, content, contentType, metadata) ->
@@ -122,7 +123,7 @@ class MemoryExtractorMultimodalFileTest {
                         null,
                         null,
                         null,
-                        parser,
+                        parserRegistry,
                         null,
                         null);
 
@@ -138,13 +139,13 @@ class MemoryExtractorMultimodalFileTest {
 
         assertThat(result).isNotNull();
         assertThat(result.isFailed()).isTrue();
-        assertThat(result.errorMessage()).contains("Unsupported mimeType");
-        assertThat(parser.calls).isEmpty();
+        assertThat(result.errorMessage()).contains("Unsupported source");
+        assertThat(parserRegistry.calls).containsExactly("image.png:image/png:3");
     }
 
     @Test
     void rawDataFailureShouldBestEffortDeleteStoredBytes() {
-        var parser = new RecordingParser();
+        var parserRegistry = new RecordingRegistry();
         var resourceStore = new RecordingResourceStore();
         var extractor =
                 new MemoryExtractor(
@@ -156,7 +157,7 @@ class MemoryExtractorMultimodalFileTest {
                         null,
                         null,
                         null,
-                        parser,
+                        parserRegistry,
                         resourceStore,
                         null);
 
@@ -177,7 +178,7 @@ class MemoryExtractorMultimodalFileTest {
 
     @Test
     void itemFailureAfterRawDataSuccessShouldNotDeleteStoredBytes() {
-        var parser = new RecordingParser();
+        var parserRegistry = new RecordingRegistry();
         var resourceStore = new RecordingResourceStore();
         var rawDataStep = new RecordingRawDataStep(false);
         var extractor =
@@ -190,7 +191,7 @@ class MemoryExtractorMultimodalFileTest {
                         null,
                         null,
                         null,
-                        parser,
+                        parserRegistry,
                         resourceStore,
                         null);
 
@@ -212,7 +213,7 @@ class MemoryExtractorMultimodalFileTest {
     @Test
     void urlRequestShouldFetchParseAndStoreBytesBeforeRunningRawDataExtraction() {
         var fetcher = new RecordingResourceFetcher();
-        var parser = new RecordingParser();
+        var parserRegistry = new RecordingRegistry();
         var resourceStore = new RecordingResourceStore();
         var rawDataStep = new RecordingRawDataStep(false);
         var extractor =
@@ -224,7 +225,7 @@ class MemoryExtractorMultimodalFileTest {
                         null,
                         null,
                         null,
-                        parser,
+                        parserRegistry,
                         resourceStore,
                         fetcher);
 
@@ -239,7 +240,7 @@ class MemoryExtractorMultimodalFileTest {
         assertThat(result).isNotNull();
         assertThat(result.isSuccess()).isTrue();
         assertThat(fetcher.calls).containsExactly("https://example.com/report.pdf");
-        assertThat(parser.calls).hasSize(1);
+        assertThat(parserRegistry.calls).containsExactly("report.pdf:application/pdf:3");
         assertThat(resourceStore.storedRefs).hasSize(1);
         assertThat(rawDataStep.lastContent).isInstanceOf(DocumentContent.class);
         assertThat(rawDataStep.lastContentType).isEqualTo(ContentTypes.DOCUMENT);
@@ -253,12 +254,50 @@ class MemoryExtractorMultimodalFileTest {
 
     @Test
     void urlRequestShouldFailFastWhenFetcherIsMissing() {
+        var parserRegistry = new RecordingRegistry();
+        var extractorWithRegistry =
+                new MemoryExtractor(
+                        (memoryId, content, contentType, metadata) ->
+                                Mono.just(RawDataResult.empty()),
+                        (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
+                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
+                        null,
+                        null,
+                        null,
+                        null,
+                        parserRegistry,
+                        null,
+                        null);
+
+        var result =
+                extractorWithRegistry
+                        .extract(
+                                ExtractionRequest.url(
+                                        DefaultMemoryId.of("user-1", "agent-1"),
+                                        "https://example.com/report.pdf"))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.isFailed()).isTrue();
+        assertThat(result.errorMessage()).contains("ResourceFetcher");
+    }
+
+    @Test
+    void urlRequestShouldFailBeforeDownloadWhenParserRegistryIsMissing() {
+        var fetcher = new RecordingResourceFetcher();
         var extractor =
                 new MemoryExtractor(
                         (memoryId, content, contentType, metadata) ->
                                 Mono.just(RawDataResult.empty()),
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
-                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()));
+                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
+                        null,
+                        null,
+                        null,
+                        null,
+                        (ContentParserRegistry) null,
+                        null,
+                        fetcher);
 
         var result =
                 extractor
@@ -270,7 +309,8 @@ class MemoryExtractorMultimodalFileTest {
 
         assertThat(result).isNotNull();
         assertThat(result.isFailed()).isTrue();
-        assertThat(result.errorMessage()).contains("ResourceFetcher");
+        assertThat(result.errorMessage()).contains("ContentParserRegistry");
+        assertThat(fetcher.calls).isEmpty();
     }
 
     @Test
@@ -296,7 +336,7 @@ class MemoryExtractorMultimodalFileTest {
                         null,
                         null,
                         null,
-                        new RecordingParser(),
+                        new RecordingRegistry(),
                         null,
                         (memoryId, sourceUrl, fileName, mimeType) ->
                                 Mono.error(new IllegalStateException("download failed")));
@@ -341,19 +381,9 @@ class MemoryExtractorMultimodalFileTest {
         assertThat(result.errorMessage()).contains("content, fileInput, or urlInput is required");
     }
 
-    private static final class RecordingParser implements ContentParser {
+    private static final class RecordingRegistry implements ContentParserRegistry {
 
         private final List<String> calls = new ArrayList<>();
-
-        @Override
-        public String contentType() {
-            return ContentTypes.DOCUMENT;
-        }
-
-        @Override
-        public Set<String> supportedMimeTypes() {
-            return Set.of("application/pdf");
-        }
 
         @Override
         public Mono<RawContent> parse(byte[] data, String fileName, String mimeType) {
@@ -366,6 +396,29 @@ class MemoryExtractorMultimodalFileTest {
                             List.of(),
                             null,
                             Map.of("author", "Alice")));
+        }
+
+        @Override
+        public Map<String, Set<String>> supportedMimeTypesByContentType() {
+            return Map.of(ContentTypes.DOCUMENT, Set.of("application/pdf"));
+        }
+    }
+
+    private static final class UnsupportedRegistry implements ContentParserRegistry {
+
+        private final List<String> calls = new ArrayList<>();
+
+        @Override
+        public Mono<RawContent> parse(byte[] data, String fileName, String mimeType) {
+            calls.add(fileName + ":" + mimeType + ":" + data.length);
+            return Mono.error(
+                    new UnsupportedContentSourceException(
+                            "Unsupported source: fileName=" + fileName + ", mimeType=" + mimeType));
+        }
+
+        @Override
+        public Map<String, Set<String>> supportedMimeTypesByContentType() {
+            return Map.of(ContentTypes.DOCUMENT, Set.of("application/pdf"));
         }
     }
 
