@@ -31,5 +31,6 @@
 
     <modules>
         <module>memind-plugin-rawdata-document</module>
+        <module>memind-plugin-rawdata-toolcall</module>
     </modules>
 </project>

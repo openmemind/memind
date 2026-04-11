@@ -11,7 +11,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.extraction.item.strategy;
+package com.openmemind.ai.memory.plugin.rawdata.toolcall.item.strategy;
 
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
@@ -25,6 +25,7 @@ import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.extraction.item.ToolItemPrompts;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -128,7 +129,7 @@ public class LlmToolCallItemExtractionStrategy implements ItemExtractionStrategy
         itemMetadata.put("failCount", String.valueOf(failCount));
         itemMetadata.put("avgDurationMs", avgDurationMs);
         itemMetadata.put("score", String.valueOf(response.score()));
-        var observedAt = LlmItemExtractionStrategy.resolveObservedAt(segment);
+        var observedAt = resolveObservedAt(segment);
 
         return new ExtractedMemoryEntry(
                 response.content(),
@@ -175,5 +176,9 @@ public class LlmToolCallItemExtractionStrategy implements ItemExtractionStrategy
                     .append("\n\n");
         }
         return sb.toString();
+    }
+
+    private static Instant resolveObservedAt(ParsedSegment segment) {
+        return segment.runtimeContext() != null ? segment.runtimeContext().observedAt() : null;
     }
 }

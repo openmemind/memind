@@ -20,23 +20,34 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>com.openmemind.ai</groupId>
-        <artifactId>memind-plugins</artifactId>
+        <artifactId>memind-plugin-spring-boot-starters</artifactId>
         <version>${revision}</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>memind-plugin-spring-boot-starters</artifactId>
-    <packaging>pom</packaging>
-    <name>Memind - Plugin Spring Boot Starters</name>
+    <artifactId>memind-plugin-rawdata-toolcall-starter</artifactId>
+    <name>Memind - ToolCall RawData Starter</name>
 
-    <modules>
-        <module>memind-plugin-ai-spring-ai-starter</module>
-        <module>memind-plugin-content-parser-document-tika-starter</module>
-        <module>memind-plugin-jdbc-starter</module>
-        <module>memind-plugin-mybatis-plus-starter</module>
-        <module>memind-plugin-rawdata-document-starter</module>
-        <module>memind-plugin-rawdata-jackson-starter</module>
-        <module>memind-plugin-rawdata-toolcall-starter</module>
-        <module>memind-plugin-tracing-opentelemetry-starter</module>
-    </modules>
+    <dependencies>
+        <dependency>
+            <groupId>com.openmemind.ai</groupId>
+            <artifactId>memind-plugin-rawdata-jackson-starter</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.openmemind.ai</groupId>
+            <artifactId>memind-plugin-rawdata-toolcall</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>

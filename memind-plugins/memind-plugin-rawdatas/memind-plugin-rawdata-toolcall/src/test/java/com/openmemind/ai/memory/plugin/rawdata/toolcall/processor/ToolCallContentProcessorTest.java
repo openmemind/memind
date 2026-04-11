@@ -11,11 +11,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.extraction.rawdata.processor;
+package com.openmemind.ai.memory.plugin.rawdata.toolcall.processor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
+import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
 import java.time.Instant;
@@ -23,13 +26,13 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
+import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 @DisplayName("ToolCallContentProcessor")
 class ToolCallContentProcessorTest {
 
-    private final ItemExtractionStrategy strategy = Mockito.mock(ItemExtractionStrategy.class);
+    private final ItemExtractionStrategy strategy = new NoopItemExtractionStrategy();
     private final ToolCallContentProcessor processor = new ToolCallContentProcessor(strategy);
 
     @Test
@@ -91,6 +94,17 @@ class ToolCallContentProcessorTest {
             StepVerifier.create(processor.chunk(content))
                     .assertNext(segments -> assertThat(segments).isEmpty())
                     .verifyComplete();
+        }
+    }
+
+    private static final class NoopItemExtractionStrategy implements ItemExtractionStrategy {
+
+        @Override
+        public Mono<List<ExtractedMemoryEntry>> extract(
+                List<ParsedSegment> segments,
+                List<com.openmemind.ai.memory.core.data.MemoryInsightType> insightTypes,
+                ItemExtractionConfig config) {
+            return Mono.just(List.of());
         }
     }
 }

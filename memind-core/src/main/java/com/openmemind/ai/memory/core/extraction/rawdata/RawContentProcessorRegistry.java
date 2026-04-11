@@ -54,6 +54,17 @@ public final class RawContentProcessorRegistry {
                 "No processor registered for: " + content.getClass().getName());
     }
 
+    public boolean supports(Class<? extends RawContent> contentClass) {
+        Class<?> current = Objects.requireNonNull(contentClass, "contentClass");
+        while (current != null && current != Object.class) {
+            if (processors.containsKey(current)) {
+                return true;
+            }
+            current = current.getSuperclass();
+        }
+        return false;
+    }
+
     public List<RawContentProcessor<?>> all() {
         return List.copyOf(processors.values());
     }

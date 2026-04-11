@@ -24,6 +24,7 @@ import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
@@ -157,7 +158,7 @@ class MemoryAssemblersTest {
 
         var processorRegistry =
                 readField(rawDataLayer, "processorRegistry", RawContentProcessorRegistry.class);
-        assertThat(processorRegistry.all()).hasSize(4);
+        assertDefaultCoreProcessors(processorRegistry);
     }
 
     @Test
@@ -205,7 +206,7 @@ class MemoryAssemblersTest {
     }
 
     @Test
-    void extractionAssemblerBuildsOnlyFourProcessorsWithoutExplicitDocumentPlugin() {
+    void extractionAssemblerBuildsOnlyCoreBuiltinProcessorsWithoutExplicitPlugins() {
         var assembly =
                 new MemoryExtractionAssembler()
                         .assemble(context(MemoryBuildOptions.defaults(), null, null, List.of()));
@@ -215,7 +216,7 @@ class MemoryAssemblersTest {
         var processorRegistry =
                 readField(rawDataLayer, "processorRegistry", RawContentProcessorRegistry.class);
 
-        assertThat(processorRegistry.all()).hasSize(4);
+        assertDefaultCoreProcessors(processorRegistry);
     }
 
     static MemoryAssemblyContext context(
@@ -311,5 +312,11 @@ class MemoryAssemblersTest {
             throw new AssertionError(
                     "Failed to read field '" + fieldName + "' from " + target.getClass(), e);
         }
+    }
+
+    private static void assertDefaultCoreProcessors(RawContentProcessorRegistry processorRegistry) {
+        assertThat(processorRegistry.all())
+                .extracting(RawContentProcessor::contentType)
+                .containsExactlyInAnyOrder("CONVERSATION", "IMAGE", "AUDIO");
     }
 }

@@ -11,15 +11,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.extraction.rawdata.processor;
+package com.openmemind.ai.memory.plugin.rawdata.toolcall.processor;
 
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionStrategy;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
-import com.openmemind.ai.memory.core.extraction.rawdata.caption.ToolCallCaptionGenerator;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ToolCallChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.caption.ToolCallCaptionGenerator;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.chunk.ToolCallChunker;
 import java.util.List;
 import java.util.Objects;
 import reactor.core.publisher.Mono;

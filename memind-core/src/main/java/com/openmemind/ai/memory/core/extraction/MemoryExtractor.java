@@ -31,6 +31,7 @@ import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ImageSegmentCompos
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TranscriptSegmentChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.AudioContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ImageContentProcessor;
@@ -82,6 +83,10 @@ import reactor.core.scheduler.Schedulers;
 public class MemoryExtractor implements MemoryExtractionPipeline {
 
     private static final Logger log = LoggerFactory.getLogger(MemoryExtractor.class);
+    private static final String TOOL_CALL_PLUGIN_REQUIRED_MESSAGE =
+            "Tool call extraction requires the rawdata-toolcall plugin. "
+                    + "Register ToolCallRawDataPlugin or add"
+                    + " memind-plugin-rawdata-toolcall-starter.";
 
     private final RawDataExtractStep rawDataStep;
     private final MemoryItemExtractStep memoryItemStep;
@@ -359,7 +364,11 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
 
         var startTime = Instant.now();
 
-        return Mono.defer(() -> resolveExtractionRequest(request))
+        return Mono.defer(
+                        () -> {
+                            ensureToolCallPluginAvailable(request);
+                            return resolveExtractionRequest(request);
+                        })
                 .flatMap(resolved -> executeResolvedRequest(resolved, startTime))
                 .onErrorResume(e -> toErrorResult(request.memoryId(), e, startTime));
     }
@@ -939,6 +948,15 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                     "RawContentProcessorRegistry is required for multimodal validation");
         }
         return rawContentProcessorRegistry;
+    }
+
+    private void ensureToolCallPluginAvailable(ExtractionRequest request) {
+        if (!(request.content() instanceof ToolCallContent)) {
+            return;
+        }
+        if (!processorRegistryRequired().supports(ToolCallContent.class)) {
+            throw new IllegalStateException(TOOL_CALL_PLUGIN_REQUIRED_MESSAGE);
+        }
     }
 
     private <T extends RawContent> T validateWithProcessor(T content) {

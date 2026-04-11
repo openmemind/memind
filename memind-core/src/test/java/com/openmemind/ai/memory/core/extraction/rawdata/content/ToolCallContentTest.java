@@ -20,6 +20,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
 import com.openmemind.ai.memory.core.plugin.CoreBuiltinRawDataPlugin;
+import com.openmemind.ai.memory.core.utils.JsonUtils;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -55,6 +56,28 @@ class ToolCallContentTest {
                 .extracting(
                         ToolCallRecord::toolName, ToolCallRecord::output, ToolCallRecord::status)
                 .containsExactly("search", "ok", "success");
+    }
+
+    @Test
+    void jsonUtilsMapperRoundTripsToolCallWithoutPluginSubtypeRegistration() throws Exception {
+        ToolCallContent content =
+                new ToolCallContent(
+                        List.of(
+                                new ToolCallRecord(
+                                        "search",
+                                        "{}",
+                                        "ok",
+                                        "SUCCESS",
+                                        1L,
+                                        1,
+                                        1,
+                                        "abc",
+                                        Instant.parse("2026-04-12T00:00:00Z"))));
+
+        String json = JsonUtils.mapper().writeValueAsString(content);
+
+        assertThat(JsonUtils.mapper().readValue(json, RawContent.class))
+                .isInstanceOf(ToolCallContent.class);
     }
 
     @Nested

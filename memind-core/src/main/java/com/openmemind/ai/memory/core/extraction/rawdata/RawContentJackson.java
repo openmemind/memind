@@ -17,6 +17,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.NamedType;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -49,7 +50,9 @@ public final class RawContentJackson {
     }
 
     public static List<NamedType> coreNamedTypes() {
-        return List.of(new NamedType(ConversationContent.class, "conversation"));
+        return List.of(
+                new NamedType(ConversationContent.class, "conversation"),
+                new NamedType(ToolCallContent.class, "tool_call"));
     }
 
     public static List<NamedType> pluginNamedTypes(Collection<RawContentTypeRegistrar> registrars) {

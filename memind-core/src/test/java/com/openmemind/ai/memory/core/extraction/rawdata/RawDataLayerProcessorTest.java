@@ -34,7 +34,6 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
-import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
@@ -107,7 +106,8 @@ class RawDataLayerProcessorTest {
                     .thenReturn(Mono.just(List.of()));
             when(convProcessor.captionGenerator()).thenReturn(defaultCaption);
 
-            var toolProcessor = mock(ToolCallContentProcessor.class);
+            @SuppressWarnings("unchecked")
+            RawContentProcessor<ToolCallContent> toolProcessor = mock(RawContentProcessor.class);
             when(toolProcessor.contentClass()).thenReturn(ToolCallContent.class);
 
             var layer =
@@ -141,7 +141,8 @@ class RawDataLayerProcessorTest {
             var convProcessor = mock(ConversationContentProcessor.class);
             when(convProcessor.contentClass()).thenReturn(ConversationContent.class);
 
-            var toolProcessor = mock(ToolCallContentProcessor.class);
+            @SuppressWarnings("unchecked")
+            RawContentProcessor<ToolCallContent> toolProcessor = mock(RawContentProcessor.class);
             when(toolProcessor.contentClass()).thenReturn(ToolCallContent.class);
             when(toolProcessor.chunk(any(ToolCallContent.class))).thenReturn(Mono.just(List.of()));
             when(toolProcessor.captionGenerator()).thenReturn(defaultCaption);

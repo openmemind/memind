@@ -20,6 +20,7 @@ import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import com.openmemind.ai.memory.core.plugin.CoreBuiltinRawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.resource.ContentCapability;
@@ -152,6 +153,13 @@ class RawDataPluginAssemblyTest {
                                                         List.of(first, second))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("plugin_test");
+    }
+
+    @Test
+    void builtinSubtypeRegistrarsDoNotClaimToolCall() {
+        assertThat(new CoreBuiltinRawDataPlugin().typeRegistrars())
+                .flatExtracting(registrar -> registrar.subtypes().keySet())
+                .doesNotContain("tool_call");
     }
 
     private static ContentParser testParser(String parserId) {

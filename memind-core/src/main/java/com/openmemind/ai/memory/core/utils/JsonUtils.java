@@ -40,7 +40,9 @@ public final class JsonUtils {
                         .registerModule(new JavaTimeModule())
                         .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
                         .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
-        RawContentJackson.registerAll(mapper, new CoreBuiltinRawDataPlugin().typeRegistrars());
+        RawContentJackson.registerCoreSubtypes(mapper);
+        RawContentJackson.registerPluginSubtypes(
+                mapper, new CoreBuiltinRawDataPlugin().typeRegistrars());
         return mapper;
     }
 

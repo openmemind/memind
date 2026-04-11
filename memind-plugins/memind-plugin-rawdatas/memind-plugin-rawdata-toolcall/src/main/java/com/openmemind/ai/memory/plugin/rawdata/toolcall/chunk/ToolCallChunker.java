@@ -11,10 +11,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.extraction.rawdata.chunk;
+package com.openmemind.ai.memory.plugin.rawdata.toolcall.chunk;
 
 import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
 import com.openmemind.ai.memory.core.builder.ToolCallChunkingOptions;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TokenAwareSegmentAssembler;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;

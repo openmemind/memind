@@ -13,20 +13,14 @@
  */
 package com.openmemind.ai.memory.core.plugin;
 
-import com.openmemind.ai.memory.core.extraction.item.strategy.LlmToolCallItemExtractionStrategy;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
-import com.openmemind.ai.memory.core.extraction.rawdata.caption.ToolCallCaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ImageSegmentComposer;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ToolCallChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TranscriptSegmentChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.AudioContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ImageContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.AudioContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ImageContentProcessor;
-import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
-import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import java.util.List;
 import java.util.Map;
 
@@ -45,13 +39,6 @@ public final class CoreBuiltinRawDataPlugin implements RawDataPlugin {
     public List<RawContentProcessor<?>> processors(RawDataPluginContext context) {
         var rawdata = context.buildOptions().extraction().rawdata();
         return List.of(
-                new ToolCallContentProcessor(
-                        new ToolCallChunker(rawdata.toolCall()),
-                        new ToolCallCaptionGenerator(),
-                        new LlmToolCallItemExtractionStrategy(
-                                context.chatClientRegistry()
-                                        .resolve(ChatClientSlot.TOOL_CALL_EXTRACTION),
-                                context.promptRegistry())),
                 new ImageContentProcessor(new ImageSegmentComposer(), rawdata.image()),
                 new AudioContentProcessor(new TranscriptSegmentChunker(), rawdata.audio()));
     }
@@ -59,7 +46,6 @@ public final class CoreBuiltinRawDataPlugin implements RawDataPlugin {
     @Override
     public List<RawContentTypeRegistrar> typeRegistrars() {
         return List.of(
-                () -> Map.of("tool_call", ToolCallContent.class),
                 () -> Map.of("image", ImageContent.class),
                 () -> Map.of("audio", AudioContent.class));
     }
