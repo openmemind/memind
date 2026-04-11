@@ -17,7 +17,6 @@ import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.AudioContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ImageContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
@@ -102,14 +101,6 @@ public record ExtractionRequest(
                 content.contentType(),
                 Map.of(),
                 ExtractionConfig.defaults());
-    }
-
-    /**
-     * Create document extraction request with normalized multimodal metadata.
-     */
-    @Deprecated(forRemoval = true)
-    public static ExtractionRequest document(MemoryId memoryId, DocumentContent content) {
-        return of(memoryId, content);
     }
 
     /**

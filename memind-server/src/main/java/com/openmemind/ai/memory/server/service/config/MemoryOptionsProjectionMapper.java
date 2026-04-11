@@ -55,13 +55,13 @@ public class MemoryOptionsProjectionMapper {
                             "Preferred language used by extraction prompts when generating memory"
                                     + " content."),
                     Map.entry(
-                            "extraction.rawdata.chunking.messagesPerChunk",
+                            "extraction.rawdata.conversation.messagesPerChunk",
                             "Chunk size used by fixed-size conversation segmentation."),
                     Map.entry(
-                            "extraction.rawdata.chunking.strategy",
+                            "extraction.rawdata.conversation.strategy",
                             "Conversation segmentation strategy used before raw data extraction."),
                     Map.entry(
-                            "extraction.rawdata.chunking.minMessagesPerSegment",
+                            "extraction.rawdata.conversation.minMessagesPerSegment",
                             "Minimum message count required before LLM-based segmentation can split"
                                     + " a conversation."),
                     Map.entry(
@@ -76,6 +76,10 @@ public class MemoryOptionsProjectionMapper {
                             "extraction.rawdata.commitDetection.minMessagesForLlm",
                             "Minimum buffered messages required before LLM topic-shift commit"
                                     + " detection runs."),
+                    Map.entry(
+                            "extraction.rawdata.vectorBatchSize",
+                            "Maximum number of raw data captions embedded in a single vector batch"
+                                    + " during extraction."),
                     Map.entry(
                             "extraction.item.foresightEnabled",
                             "Whether extraction should synthesize foresight-style item memories."),

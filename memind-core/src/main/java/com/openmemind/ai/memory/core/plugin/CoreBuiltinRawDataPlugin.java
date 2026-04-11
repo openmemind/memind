@@ -18,15 +18,12 @@ import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.ToolCallCaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ImageSegmentComposer;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ProfileAwareDocumentChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ToolCallChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TranscriptSegmentChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.AudioContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ImageContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.AudioContentProcessor;
-import com.openmemind.ai.memory.core.extraction.rawdata.processor.DocumentContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ImageContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
@@ -55,7 +52,6 @@ public final class CoreBuiltinRawDataPlugin implements RawDataPlugin {
                                 context.chatClientRegistry()
                                         .resolve(ChatClientSlot.TOOL_CALL_EXTRACTION),
                                 context.promptRegistry())),
-                new DocumentContentProcessor(new ProfileAwareDocumentChunker(), rawdata.document()),
                 new ImageContentProcessor(new ImageSegmentComposer(), rawdata.image()),
                 new AudioContentProcessor(new TranscriptSegmentChunker(), rawdata.audio()));
     }
@@ -64,7 +60,6 @@ public final class CoreBuiltinRawDataPlugin implements RawDataPlugin {
     public List<RawContentTypeRegistrar> typeRegistrars() {
         return List.of(
                 () -> Map.of("tool_call", ToolCallContent.class),
-                () -> Map.of("document", DocumentContent.class),
                 () -> Map.of("image", ImageContent.class),
                 () -> Map.of("audio", AudioContent.class));
     }

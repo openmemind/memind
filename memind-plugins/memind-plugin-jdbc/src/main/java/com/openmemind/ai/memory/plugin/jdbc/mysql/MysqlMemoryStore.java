@@ -92,7 +92,7 @@ public class MysqlMemoryStore
         this(dataSource, resourceStore, JsonCodec.createDefaultObjectMapper(), createIfNotExist);
     }
 
-    private MysqlMemoryStore(
+    public MysqlMemoryStore(
             DataSource dataSource,
             ResourceStore resourceStore,
             ObjectMapper objectMapper,

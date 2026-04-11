@@ -1,0 +1,3 @@
+com.openmemind.ai.memory.plugin.rawdata.document.autoconfigure.DocumentRawDataAutoConfiguration
+com.openmemind.ai.memory.plugin.rawdata.document.autoconfigure.DocumentNativeTextParserAutoConfiguration
+com.openmemind.ai.memory.plugin.rawdata.document.autoconfigure.DocumentTikaParserAutoConfiguration

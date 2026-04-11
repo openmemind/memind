@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
+import com.openmemind.ai.memory.core.support.TestDocumentContent;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -25,14 +26,15 @@ import org.junit.jupiter.api.Test;
 class RawContentSpiTest {
 
     @Test
-    void documentContentExposesMetadataGovernanceProfileAndCopy() {
+    void testDocumentContentExposesMetadataGovernanceProfileAndCopy() {
         var content =
-                new DocumentContent(
+                new TestDocumentContent(
                         "Guide",
                         "text/markdown",
                         "# title",
-                        List.of(),
                         "file:///tmp/guide.md",
+                        ContentGovernanceType.DOCUMENT_TEXT_LIKE,
+                        BuiltinContentProfiles.DOCUMENT_MARKDOWN,
                         Map.of("author", "alice"));
 
         assertThat(content.contentMetadata()).containsEntry("author", "alice");
@@ -41,8 +43,8 @@ class RawContentSpiTest {
         assertThat(content.directContentProfile())
                 .isEqualTo(BuiltinContentProfiles.DOCUMENT_MARKDOWN);
         assertThat(content.withMetadata(Map.of("parserId", "direct")))
-                .isInstanceOf(DocumentContent.class)
-                .extracting(value -> ((DocumentContent) value).metadata().get("parserId"))
+                .isInstanceOf(TestDocumentContent.class)
+                .extracting(value -> ((TestDocumentContent) value).metadata().get("parserId"))
                 .isEqualTo("direct");
     }
 

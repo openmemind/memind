@@ -19,10 +19,10 @@ import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
+import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.DefaultContentParserRegistry;
-import com.openmemind.ai.memory.core.resource.NativeTextDocumentContentParser;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
@@ -34,7 +34,6 @@ import com.openmemind.ai.memory.server.service.config.MemoryOptionService;
 import com.openmemind.ai.memory.server.service.config.MemoryOptionsCodec;
 import com.openmemind.ai.memory.server.service.config.MemoryOptionsProjectionMapper;
 import com.openmemind.ai.memory.server.service.config.ServerRuntimeConfigRepository;
-import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,6 +69,7 @@ public class MemindServerRuntimeConfiguration {
             ObjectProvider<MemoryTextSearch> memoryTextSearch,
             ObjectProvider<Reranker> reranker,
             ObjectProvider<ContentParser> contentParserProvider,
+            ObjectProvider<RawDataPlugin> rawDataPluginProvider,
             ObjectProvider<ResourceFetcher> resourceFetcherProvider) {
         return options -> {
             StructuredChatClient structuredChatClient =
@@ -92,6 +92,7 @@ public class MemindServerRuntimeConfiguration {
             if (contentParserRegistry != null) {
                 builder.contentParserRegistry(contentParserRegistry);
             }
+            rawDataPluginProvider.orderedStream().forEach(builder::rawDataPlugin);
             if (resourceFetcher != null) {
                 builder.resourceFetcher(resourceFetcher);
             }
@@ -109,16 +110,7 @@ public class MemindServerRuntimeConfiguration {
 
     private static List<ContentParser> resolveContentParsers(
             ObjectProvider<ContentParser> contentParserProvider) {
-        List<ContentParser> resolved =
-                new ArrayList<>(contentParserProvider.orderedStream().toList());
-        boolean hasNativeTextParser =
-                resolved.stream()
-                        .map(ContentParser::parserId)
-                        .anyMatch("document-native-text"::equals);
-        if (!hasNativeTextParser) {
-            resolved.add(0, new NativeTextDocumentContentParser());
-        }
-        return List.copyOf(resolved);
+        return List.copyOf(contentParserProvider.orderedStream().toList());
     }
 
     @Bean

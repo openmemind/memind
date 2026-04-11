@@ -17,8 +17,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.NamedType;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -31,21 +33,37 @@ public final class RawContentJackson {
 
     public static void registerCoreSubtypes(ObjectMapper mapper) {
         Objects.requireNonNull(mapper, "mapper");
-        mapper.registerSubtypes(new NamedType(ConversationContent.class, "conversation"));
+        mapper.registerSubtypes(coreNamedTypes().toArray(NamedType[]::new));
     }
 
     public static void registerPluginSubtypes(
             ObjectMapper mapper, Collection<RawContentTypeRegistrar> registrars) {
         Objects.requireNonNull(mapper, "mapper");
-        for (var entry : pluginSubtypeMappings(registrars).entrySet()) {
-            mapper.registerSubtypes(new NamedType(entry.getValue(), entry.getKey()));
-        }
+        mapper.registerSubtypes(pluginNamedTypes(registrars).toArray(NamedType[]::new));
     }
 
     public static void registerAll(
             ObjectMapper mapper, Collection<RawContentTypeRegistrar> registrars) {
-        registerCoreSubtypes(mapper);
-        registerPluginSubtypes(mapper, registrars);
+        Objects.requireNonNull(mapper, "mapper");
+        mapper.registerSubtypes(allNamedTypes(registrars).toArray(NamedType[]::new));
+    }
+
+    public static List<NamedType> coreNamedTypes() {
+        return List.of(new NamedType(ConversationContent.class, "conversation"));
+    }
+
+    public static List<NamedType> pluginNamedTypes(Collection<RawContentTypeRegistrar> registrars) {
+        List<NamedType> namedTypes = new ArrayList<>();
+        for (var entry : pluginSubtypeMappings(registrars).entrySet()) {
+            namedTypes.add(new NamedType(entry.getValue(), entry.getKey()));
+        }
+        return List.copyOf(namedTypes);
+    }
+
+    public static List<NamedType> allNamedTypes(Collection<RawContentTypeRegistrar> registrars) {
+        List<NamedType> namedTypes = new ArrayList<>(coreNamedTypes());
+        namedTypes.addAll(pluginNamedTypes(registrars));
+        return List.copyOf(namedTypes);
     }
 
     public static Map<String, Class<? extends RawContent>> pluginSubtypeMappings(

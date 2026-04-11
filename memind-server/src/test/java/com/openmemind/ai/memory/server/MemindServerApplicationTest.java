@@ -108,4 +108,55 @@ class MemindServerApplicationTest {
                                         """))
                 .andExpect(status().isOk());
     }
+
+    @Test
+    void extractApiAcceptsBuiltinAndDocumentRawContentViaApplicationObjectMapper()
+            throws Exception {
+        mockMvc.perform(
+                        post("/open/v1/memory/extract")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1",
+                                          "rawContent": {
+                                            "type": "conversation",
+                                            "messages": [
+                                              {
+                                                "role": "USER",
+                                                "content": [
+                                                  {
+                                                    "type": "text",
+                                                    "text": "hello"
+                                                  }
+                                                ],
+                                                "timestamp": "2026-03-31T10:00:00Z"
+                                              }
+                                            ]
+                                          }
+                                        }
+                                        """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(
+                        post("/open/v1/memory/extract")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1",
+                                          "rawContent": {
+                                            "type": "document",
+                                            "title": "Guide",
+                                            "mimeType": "text/plain",
+                                            "parsedText": "hello",
+                                            "sections": [],
+                                            "metadata": {}
+                                          }
+                                        }
+                                        """))
+                .andExpect(status().isOk());
+    }
 }

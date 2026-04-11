@@ -35,8 +35,18 @@
             <version>${revision}</version>
         </dependency>
         <dependency>
+            <groupId>com.openmemind.ai</groupId>
+            <artifactId>memind-plugin-rawdata-document</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.openmemind.ai</groupId>
+            <artifactId>memind-plugin-rawdata-jackson-starter</artifactId>
+            <version>${revision}</version>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter</artifactId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

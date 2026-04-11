@@ -18,13 +18,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.baomidou.mybatisplus.autoconfigure.DdlApplicationRunner;
 import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
+import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.resource.ResourceRef;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
@@ -112,6 +118,25 @@ class MemoryStoreAutoConfigurationTest {
                                 MemoryStore memoryStore = context.getBean(MemoryStore.class);
                                 assertThat(memoryStore.resourceStore())
                                         .isSameAs(context.getBean(ResourceStore.class));
+                            });
+        }
+
+        @Test
+        @DisplayName("Use the application ObjectMapper for JacksonTypeHandler")
+        void usesApplicationObjectMapperForJacksonTypeHandler() {
+            newContextRunner()
+                    .withUserConfiguration(
+                            ExistingDataSourceConfig.class, RawContentObjectMapperConfig.class)
+                    .run(
+                            context -> {
+                                RawContent restored =
+                                        decodeRawContent(
+                                                JacksonTypeHandler.getObjectMapper(),
+                                                "{\"type\":\"test_raw\",\"text\":\"hello"
+                                                        + " mybatis\"}");
+
+                                assertThat(restored).isInstanceOf(TestRawContent.class);
+                                assertThat(restored.toContentString()).isEqualTo("hello mybatis");
                             });
         }
 
@@ -306,6 +331,52 @@ class MemoryStoreAutoConfigurationTest {
                     return Mono.just(false);
                 }
             };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class RawContentObjectMapperConfig {
+
+        @Bean
+        ObjectMapper objectMapper() {
+            ObjectMapper mapper = new ObjectMapper();
+            RawContentJackson.registerCoreSubtypes(mapper);
+            RawContentJackson.registerPluginSubtypes(
+                    mapper, List.of(() -> Map.of("test_raw", TestRawContent.class)));
+            return mapper;
+        }
+    }
+
+    private static final class TestRawContent extends RawContent {
+
+        private final String text;
+
+        @JsonCreator
+        private TestRawContent(@JsonProperty("text") String text) {
+            this.text = text == null ? "" : text;
+        }
+
+        @Override
+        public String contentType() {
+            return "TEST_RAW";
+        }
+
+        @Override
+        public String toContentString() {
+            return text;
+        }
+
+        @Override
+        public String getContentId() {
+            return text;
+        }
+    }
+
+    private static RawContent decodeRawContent(ObjectMapper objectMapper, String json) {
+        try {
+            return objectMapper.readValue(json, RawContent.class);
+        } catch (Exception e) {
+            throw new AssertionError(e);
         }
     }
 }

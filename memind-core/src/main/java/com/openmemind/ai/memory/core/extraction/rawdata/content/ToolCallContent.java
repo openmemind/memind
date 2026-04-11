@@ -38,6 +38,7 @@ public class ToolCallContent extends RawContent {
         this.calls = calls != null ? List.copyOf(calls) : List.of();
     }
 
+    @JsonProperty("calls")
     public List<ToolCallRecord> calls() {
         return calls;
     }

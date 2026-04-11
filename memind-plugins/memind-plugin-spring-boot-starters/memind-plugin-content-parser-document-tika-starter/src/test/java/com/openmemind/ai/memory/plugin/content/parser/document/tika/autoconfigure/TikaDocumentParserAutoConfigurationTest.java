@@ -15,114 +15,60 @@ package com.openmemind.ai.memory.plugin.content.parser.document.tika.autoconfigu
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.resource.ContentParser;
-import com.openmemind.ai.memory.core.resource.SourceDescriptor;
-import com.openmemind.ai.memory.plugin.content.parser.document.tika.TikaDocumentContentParser;
-import java.util.Set;
+import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
+import com.openmemind.ai.memory.plugin.rawdata.jackson.autoconfigure.RawDataJacksonAutoConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 
 class TikaDocumentParserAutoConfigurationTest {
 
     private final ApplicationContextRunner contextRunner =
             new ApplicationContextRunner()
                     .withConfiguration(
-                            AutoConfigurations.of(TikaDocumentParserAutoConfiguration.class));
+                            AutoConfigurations.of(
+                                    RawDataJacksonAutoConfiguration.class,
+                                    TikaDocumentParserAutoConfiguration.class));
 
     @Test
-    void registersDefaultTikaParserWhenEnabled() {
+    void legacyStarterKeepsHistoricalPropertyAndBeanName() {
         contextRunner.run(
                 context -> {
-                    assertThat(context).hasSingleBean(ContentParser.class);
-                    assertThat(context.getBean(ContentParser.class))
-                            .isInstanceOf(TikaDocumentContentParser.class);
+                    assertThat(context).hasSingleBean(RawDataPlugin.class);
+                    assertThat(context.getBeansOfType(ContentParser.class))
+                            .containsKey("tikaDocumentContentParser")
+                            .doesNotContainKey("documentNativeTextContentParser");
                 });
     }
 
     @Test
-    void registersAlongsideUnrelatedContentParser() {
-        contextRunner
-                .withUserConfiguration(CustomParserConfiguration.class)
-                .run(
-                        context -> {
-                            assertThat(context.getBeansOfType(ContentParser.class))
-                                    .hasSize(2)
-                                    .containsKeys(
-                                            "tikaDocumentContentParser", "customContentParser");
-                        });
+    void legacyStarterProvidesDocumentSubtypeThroughSharedRawDataJacksonPath() {
+        contextRunner.run(
+                context -> {
+                    ObjectMapper mapper = context.getBean(ObjectMapper.class);
+
+                    assertThat(
+                                    mapper.readValue(
+                                            """
+                                            {"type":"document","title":"Guide","mimeType":"application/pdf","parsedText":"hello","sections":[],"metadata":{}}
+                                            """,
+                                            RawContent.class))
+                            .isInstanceOf(DocumentContent.class);
+                });
     }
 
     @Test
-    void backsOffWhenUserProvidesNamedTikaDocumentParser() {
-        contextRunner
-                .withUserConfiguration(NamedTikaParserConfiguration.class)
-                .run(
-                        context -> {
-                            assertThat(context.getBeansOfType(ContentParser.class))
-                                    .hasSize(1)
-                                    .containsKey("tikaDocumentContentParser");
-                            assertThat(context.getBean("tikaDocumentContentParser"))
-                                    .isSameAs(
-                                            context.getBean(NamedTikaParserConfiguration.class)
-                                                    .tikaDocumentContentParser);
-                        });
-    }
-
-    @Test
-    void canBeDisabledByProperty() {
+    void legacyStarterStillHonorsOldDisableProperty() {
         contextRunner
                 .withPropertyValues("memind.parser.document.tika.enabled=false")
-                .run(context -> assertThat(context).doesNotHaveBean(ContentParser.class));
-    }
-
-    @Configuration(proxyBeanMethods = false)
-    static class CustomParserConfiguration {
-
-        @Bean
-        ContentParser customContentParser() {
-            return new ContentParser() {
-                @Override
-                public String parserId() {
-                    return "custom-image-parser";
-                }
-
-                @Override
-                public String contentType() {
-                    return ContentTypes.IMAGE;
-                }
-
-                @Override
-                public String contentProfile() {
-                    return "image.caption-ocr";
-                }
-
-                @Override
-                public Set<String> supportedMimeTypes() {
-                    return Set.of("image/png");
-                }
-
-                @Override
-                public reactor.core.publisher.Mono<RawContent> parse(
-                        byte[] data, SourceDescriptor source) {
-                    throw new UnsupportedOperationException("test stub");
-                }
-            };
-        }
-    }
-
-    @Configuration(proxyBeanMethods = false)
-    static class NamedTikaParserConfiguration {
-
-        private final ContentParser tikaDocumentContentParser = new TikaDocumentContentParser();
-
-        @Bean("tikaDocumentContentParser")
-        ContentParser tikaDocumentContentParser() {
-            return tikaDocumentContentParser;
-        }
+                .run(
+                        context -> {
+                            assertThat(context).doesNotHaveBean(RawDataPlugin.class);
+                            assertThat(context.getBeansOfType(ContentParser.class)).isEmpty();
+                        });
     }
 }

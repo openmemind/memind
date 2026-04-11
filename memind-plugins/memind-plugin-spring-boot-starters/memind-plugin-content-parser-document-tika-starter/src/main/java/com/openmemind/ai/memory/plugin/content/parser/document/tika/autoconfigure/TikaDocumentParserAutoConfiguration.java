@@ -13,8 +13,10 @@
  */
 package com.openmemind.ai.memory.plugin.content.parser.document.tika.autoconfigure;
 
+import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.plugin.content.parser.document.tika.TikaDocumentContentParser;
+import com.openmemind.ai.memory.plugin.rawdata.document.plugin.DocumentRawDataPlugin;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -30,7 +32,14 @@ import org.springframework.context.annotation.Bean;
         name = "enabled",
         havingValue = "true",
         matchIfMissing = true)
+@Deprecated(forRemoval = false)
 public class TikaDocumentParserAutoConfiguration {
+
+    @Bean("documentRawDataPlugin")
+    @ConditionalOnMissingBean(name = "documentRawDataPlugin")
+    RawDataPlugin documentRawDataPlugin() {
+        return new DocumentRawDataPlugin();
+    }
 
     @Bean("tikaDocumentContentParser")
     @ConditionalOnMissingBean(name = "tikaDocumentContentParser")

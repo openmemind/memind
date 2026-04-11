@@ -21,9 +21,9 @@ import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.AudioContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ImageContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import com.openmemind.ai.memory.core.support.TestDocumentContent;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -93,15 +93,12 @@ class ExtractionRequestTest {
     }
 
     @Test
-    void deprecatedDirectFactoriesDelegateToOfAndRemainDiscoverable() throws Exception {
+    void coreDocumentConvenienceFactoryIsRemovedWhileImageAndAudioRemainDeprecated()
+            throws Exception {
         var memoryId = DefaultMemoryId.of("user-1", "agent-1");
-        var document = DocumentContent.of("Guide", "text/markdown", "# title");
         var image = ImageContent.of("dashboard screenshot");
         var audio = AudioContent.of("hello world");
 
-        assertThat(ExtractionRequest.document(memoryId, document))
-                .usingRecursiveComparison()
-                .isEqualTo(ExtractionRequest.of(memoryId, document));
         assertThat(ExtractionRequest.image(memoryId, image))
                 .usingRecursiveComparison()
                 .isEqualTo(ExtractionRequest.of(memoryId, image));
@@ -109,11 +106,8 @@ class ExtractionRequestTest {
                 .usingRecursiveComparison()
                 .isEqualTo(ExtractionRequest.of(memoryId, audio));
 
-        assertThat(
-                        ExtractionRequest.class
-                                .getMethod("document", MemoryId.class, DocumentContent.class)
-                                .getAnnotation(Deprecated.class))
-                .isNotNull();
+        assertThat(ExtractionRequest.class.getMethods())
+                .noneMatch(method -> method.getName().equals("document"));
         assertThat(
                         ExtractionRequest.class
                                 .getMethod("image", MemoryId.class, ImageContent.class)
@@ -128,7 +122,7 @@ class ExtractionRequestTest {
 
     @Test
     void ofShouldNormalizeDirectDocumentMetadata() {
-        var content = DocumentContent.of("Notes", "text/markdown", "# title");
+        var content = TestDocumentContent.of("Notes", "text/markdown", "# title");
 
         var request = ExtractionRequest.of(DefaultMemoryId.of("user-1", "agent-1"), content);
 
@@ -144,15 +138,16 @@ class ExtractionRequestTest {
     @Test
     void documentFactoryShouldNotOverrideExplicitParserMetadata() {
         var content =
-                new DocumentContent(
+                new TestDocumentContent(
                         "Binary Export",
                         "application/pdf",
                         "hello",
-                        java.util.List.of(),
                         null,
+                        ContentGovernanceType.DOCUMENT_BINARY,
+                        "document.binary",
                         Map.of("parserId", "document-tika", "contentProfile", "document.binary"));
 
-        var request = ExtractionRequest.document(DefaultMemoryId.of("user-1", "agent-1"), content);
+        var request = ExtractionRequest.of(DefaultMemoryId.of("user-1", "agent-1"), content);
 
         assertThat(request.metadata())
                 .containsEntry("sourceKind", "DIRECT")
@@ -165,15 +160,16 @@ class ExtractionRequestTest {
     @Test
     void documentFactoryShouldNormalizeMetadata() {
         var content =
-                new DocumentContent(
+                new TestDocumentContent(
                         "Report",
                         "application/pdf",
                         "revenue grew",
-                        java.util.List.of(),
                         "file:///tmp/report.pdf",
+                        ContentGovernanceType.DOCUMENT_BINARY,
+                        "document.binary",
                         Map.of("author", "Alice"));
 
-        var request = ExtractionRequest.document(DefaultMemoryId.of("user-1", "agent-1"), content);
+        var request = ExtractionRequest.of(DefaultMemoryId.of("user-1", "agent-1"), content);
 
         assertThat(request.contentType()).isEqualTo(ContentTypes.DOCUMENT);
         assertThat(request.metadata())
@@ -189,15 +185,16 @@ class ExtractionRequestTest {
     @Test
     void documentFactoryShouldPreserveCustomProfileWithinDerivedGovernanceFamily() {
         var content =
-                new DocumentContent(
+                new TestDocumentContent(
                         "Guide",
                         "text/markdown",
                         "# title",
-                        java.util.List.of(),
                         null,
+                        ContentGovernanceType.DOCUMENT_TEXT_LIKE,
+                        "document.markdown",
                         Map.of("contentProfile", "document.custom.markdown"));
 
-        var request = ExtractionRequest.document(DefaultMemoryId.of("user-1", "agent-1"), content);
+        var request = ExtractionRequest.of(DefaultMemoryId.of("user-1", "agent-1"), content);
 
         assertThat(request.metadata())
                 .containsEntry("contentProfile", "document.custom.markdown")
@@ -207,17 +204,18 @@ class ExtractionRequestTest {
     @Test
     void documentFactoryShouldRejectConflictingExplicitGovernanceType() {
         var content =
-                new DocumentContent(
+                new TestDocumentContent(
                         "Guide",
                         "text/markdown",
                         "# title",
-                        java.util.List.of(),
                         null,
+                        ContentGovernanceType.DOCUMENT_TEXT_LIKE,
+                        "document.markdown",
                         Map.of("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name()));
 
         assertThatThrownBy(
                         () ->
-                                ExtractionRequest.document(
+                                ExtractionRequest.of(
                                         DefaultMemoryId.of("user-1", "agent-1"), content))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("governanceType")
@@ -227,17 +225,18 @@ class ExtractionRequestTest {
     @Test
     void documentFactoryShouldRejectBuiltinProfileThatConflictsWithDerivedGovernance() {
         var content =
-                new DocumentContent(
+                new TestDocumentContent(
                         "Guide",
                         "text/markdown",
                         "# title",
-                        java.util.List.of(),
                         null,
+                        ContentGovernanceType.DOCUMENT_TEXT_LIKE,
+                        "document.markdown",
                         Map.of("contentProfile", "document.binary"));
 
         assertThatThrownBy(
                         () ->
-                                ExtractionRequest.document(
+                                ExtractionRequest.of(
                                         DefaultMemoryId.of("user-1", "agent-1"), content))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("contentProfile")

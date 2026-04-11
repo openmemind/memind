@@ -105,7 +105,7 @@ public class SqliteMemoryStore
         this(dataSource, resourceStore, JsonCodec.createDefaultObjectMapper(), createIfNotExist);
     }
 
-    private SqliteMemoryStore(
+    public SqliteMemoryStore(
             DataSource dataSource,
             ResourceStore resourceStore,
             ObjectMapper objectMapper,

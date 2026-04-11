@@ -34,6 +34,8 @@
         <module>memind-plugin-content-parser-document-tika-starter</module>
         <module>memind-plugin-jdbc-starter</module>
         <module>memind-plugin-mybatis-plus-starter</module>
+        <module>memind-plugin-rawdata-document-starter</module>
+        <module>memind-plugin-rawdata-jackson-starter</module>
         <module>memind-plugin-tracing-opentelemetry-starter</module>
     </modules>
 </project>

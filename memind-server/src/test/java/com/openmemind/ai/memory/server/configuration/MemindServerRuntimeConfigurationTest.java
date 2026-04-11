@@ -24,11 +24,14 @@ import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
+import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
+import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.resource.ContentCapability;
 import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
@@ -40,6 +43,7 @@ import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
+import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeFactory;
 import java.lang.reflect.Proxy;
 import java.util.Map;
@@ -53,7 +57,7 @@ import reactor.core.publisher.Mono;
 class MemindServerRuntimeConfigurationTest {
 
     @Test
-    void runtimeFactoryCombinesBuiltInAndPluginDocumentParsers() {
+    void runtimeFactoryUsesProvidedContentParsersWithoutInjectingImplicitDocumentParser() {
         var parser =
                 new ContentParser() {
                     @Override
@@ -114,6 +118,7 @@ class MemindServerRuntimeConfigurationTest {
                         emptyProvider(MemoryTextSearch.class),
                         provider(Reranker.class, new NoopReranker()),
                         provider(ContentParser.class, parser),
+                        emptyProvider(RawDataPlugin.class),
                         provider(ResourceFetcher.class, fetcher));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults());
@@ -124,9 +129,66 @@ class MemindServerRuntimeConfigurationTest {
         assertThat(registry).isNotNull();
         assertThat(registry.capabilities())
                 .extracting(ContentCapability::parserId)
-                .contains("document-native-text", "document-tika");
+                .containsExactly("document-tika");
         assertThat(readField(extractor, "resourceFetcher", ResourceFetcher.class))
                 .isSameAs(fetcher);
+    }
+
+    @Test
+    void runtimeFactoryForwardsRawDataPluginsAlongsideContentParsers() {
+        var plugin = new TestRawDataPlugin();
+        var parser =
+                new ContentParser() {
+                    @Override
+                    public String parserId() {
+                        return "test-document-parser";
+                    }
+
+                    @Override
+                    public String contentType() {
+                        return ContentTypes.DOCUMENT;
+                    }
+
+                    @Override
+                    public String contentProfile() {
+                        return "document.binary";
+                    }
+
+                    @Override
+                    public Set<String> supportedMimeTypes() {
+                        return Set.of("application/pdf");
+                    }
+
+                    @Override
+                    public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
+                        return Mono.error(new UnsupportedOperationException("test stub"));
+                    }
+                };
+        var configuration = new MemindServerRuntimeConfiguration();
+
+        MemoryRuntimeFactory factory =
+                configuration.memoryRuntimeFactory(
+                        provider(StructuredChatClient.class, proxy(StructuredChatClient.class)),
+                        provider(MemoryStore.class, memoryStore()),
+                        provider(MemoryBuffer.class, memoryBuffer()),
+                        provider(MemoryVector.class, proxy(MemoryVector.class)),
+                        emptyProvider(MemoryTextSearch.class),
+                        provider(Reranker.class, new NoopReranker()),
+                        provider(ContentParser.class, parser),
+                        provider(RawDataPlugin.class, plugin),
+                        emptyProvider(ResourceFetcher.class));
+
+        Memory memory = factory.create(MemoryBuildOptions.defaults());
+        var extractor = readField((DefaultMemory) memory, "extractor", MemoryExtractor.class);
+
+        RawContentProcessorRegistry registry =
+                readField(
+                        extractor,
+                        "rawContentProcessorRegistry",
+                        RawContentProcessorRegistry.class);
+
+        assertThat(registry.resolve(new TestRawContent()))
+                .isInstanceOf(TestRawContentProcessor.class);
     }
 
     private static <T> ObjectProvider<T> provider(Class<T> type, T bean) {
@@ -192,6 +254,64 @@ class MemindServerRuntimeConfigurationTest {
                 proxy(InsightBuffer.class),
                 proxy(PendingConversationBuffer.class),
                 proxy(RecentConversationBuffer.class));
+    }
+
+    private static final class TestRawDataPlugin implements RawDataPlugin {
+
+        @Override
+        public String pluginId() {
+            return "test-rawdata-plugin";
+        }
+
+        @Override
+        public java.util.List<RawContentProcessor<?>> processors(RawDataPluginContext context) {
+            return java.util.List.of(new TestRawContentProcessor());
+        }
+
+        @Override
+        public java.util.List<ContentParser> parsers(RawDataPluginContext context) {
+            return java.util.List.of();
+        }
+    }
+
+    private static final class TestRawContentProcessor
+            implements RawContentProcessor<TestRawContent> {
+
+        @Override
+        public String contentType() {
+            return "TEST";
+        }
+
+        @Override
+        public Class<TestRawContent> contentClass() {
+            return TestRawContent.class;
+        }
+
+        @Override
+        public Mono<
+                        java.util.List<
+                                com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment>>
+                chunk(TestRawContent content) {
+            return Mono.just(java.util.List.of());
+        }
+    }
+
+    private static final class TestRawContent extends RawContent {
+
+        @Override
+        public String contentType() {
+            return "TEST";
+        }
+
+        @Override
+        public String toContentString() {
+            return "test";
+        }
+
+        @Override
+        public String getContentId() {
+            return "test";
+        }
     }
 
     @SuppressWarnings("unchecked")

@@ -15,7 +15,11 @@ package com.openmemind.ai.memory.core.extraction.rawdata.content;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
+import com.openmemind.ai.memory.core.plugin.CoreBuiltinRawDataPlugin;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -24,6 +28,34 @@ import org.junit.jupiter.api.Test;
 
 @DisplayName("ToolCallContent Test")
 class ToolCallContentTest {
+
+    private static final ObjectMapper OBJECT_MAPPER = createObjectMapper();
+
+    private static ObjectMapper createObjectMapper() {
+        ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        RawContentJackson.registerAll(mapper, new CoreBuiltinRawDataPlugin().typeRegistrars());
+        return mapper;
+    }
+
+    @Test
+    @DisplayName("Jackson round trip should preserve subtype and records")
+    void jacksonRoundTripPreservesSubtypeAndRecords() throws Exception {
+        var record =
+                new ToolCallRecord(
+                        "search", "{}", "ok", "success", 450L, 100, 50, null, Instant.now());
+        var content = new ToolCallContent(List.of(record));
+
+        String json = OBJECT_MAPPER.writeValueAsString(content);
+        RawContent decoded = OBJECT_MAPPER.readValue(json, RawContent.class);
+
+        assertThat(json).contains("\"type\":\"tool_call\"");
+        assertThat(decoded).isInstanceOf(ToolCallContent.class);
+        assertThat(((ToolCallContent) decoded).calls())
+                .singleElement()
+                .extracting(
+                        ToolCallRecord::toolName, ToolCallRecord::output, ToolCallRecord::status)
+                .containsExactly("search", "ok", "success");
+    }
 
     @Nested
     @DisplayName("toContentString")

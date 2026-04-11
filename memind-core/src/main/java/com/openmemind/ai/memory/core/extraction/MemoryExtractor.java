@@ -28,13 +28,11 @@ import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.item.SegmentBudgetEnforcer;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ImageSegmentComposer;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ProfileAwareDocumentChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TranscriptSegmentChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.AudioContentProcessor;
-import com.openmemind.ai.memory.core.extraction.rawdata.processor.DocumentContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ImageContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
@@ -952,8 +950,6 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
             RawDataExtractionOptions options) {
         return new RawContentProcessorRegistry(
                 List.of(
-                        new DocumentContentProcessor(
-                                new ProfileAwareDocumentChunker(), options.document()),
                         new ImageContentProcessor(new ImageSegmentComposer(), options.image()),
                         new AudioContentProcessor(
                                 new TranscriptSegmentChunker(), options.audio())));

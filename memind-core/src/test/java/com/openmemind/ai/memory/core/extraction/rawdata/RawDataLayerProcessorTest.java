@@ -30,12 +30,10 @@ import com.openmemind.ai.memory.core.data.MemoryRawData;
 import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
-import com.openmemind.ai.memory.core.extraction.rawdata.processor.DocumentContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
@@ -50,6 +48,7 @@ import com.openmemind.ai.memory.core.store.rawdata.InMemoryRawDataOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.InMemoryResourceOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
+import com.openmemind.ai.memory.core.support.TestDocumentContent;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -82,10 +81,10 @@ class RawDataLayerProcessorTest {
         @Test
         @DisplayName("duplicate processor registrations should fail fast")
         void duplicateProcessorRegistrationsFailFast() {
-            var first = mock(DocumentContentProcessor.class);
-            var second = mock(DocumentContentProcessor.class);
-            when(first.contentClass()).thenReturn(DocumentContent.class);
-            when(second.contentClass()).thenReturn(DocumentContent.class);
+            var first = mockTestDocumentProcessor();
+            var second = mockTestDocumentProcessor();
+            when(first.contentClass()).thenReturn(TestDocumentContent.class);
+            when(second.contentClass()).thenReturn(TestDocumentContent.class);
 
             assertThatThrownBy(
                             () ->
@@ -96,7 +95,7 @@ class RawDataLayerProcessorTest {
                                             vector,
                                             64))
                     .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining(DocumentContent.class.getName());
+                    .hasMessageContaining(TestDocumentContent.class.getName());
         }
 
         @Test
@@ -178,17 +177,17 @@ class RawDataLayerProcessorTest {
         @Test
         @DisplayName("Document processor should opt into source-identity-aware content id hashing")
         void sourceIdentityAwareHashingUsesProcessorHook() {
-            var documentProcessor = mock(DocumentContentProcessor.class);
-            when(documentProcessor.contentClass()).thenReturn(DocumentContent.class);
+            var documentProcessor = mockTestDocumentProcessor();
+            when(documentProcessor.contentClass()).thenReturn(TestDocumentContent.class);
             when(documentProcessor.usesSourceIdentity()).thenReturn(true);
-            when(documentProcessor.chunk(any(DocumentContent.class)))
+            when(documentProcessor.chunk(any(TestDocumentContent.class)))
                     .thenReturn(Mono.just(List.of()));
             when(documentProcessor.captionGenerator()).thenReturn(defaultCaption);
             when(defaultCaption.generateForSegments(any(), any())).thenReturn(Mono.just(List.of()));
 
             var layer =
                     new RawDataLayer(List.of(documentProcessor), defaultCaption, store, vector, 64);
-            var content = DocumentContent.of("Report", "text/plain", "hello");
+            var content = TestDocumentContent.of("Report", "text/plain", "hello");
 
             when(rawDataOps.getRawDataByContentId(any(), any())).thenReturn(Optional.empty());
 
@@ -436,23 +435,24 @@ class RawDataLayerProcessorTest {
         var recordingStore = new RecordingMemoryStore();
         var localVector = mock(MemoryVector.class);
         var localCaption = mock(CaptionGenerator.class);
-        var documentProcessor = mock(DocumentContentProcessor.class);
+        var documentProcessor = mockTestDocumentProcessor();
         var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
         var content =
-                new DocumentContent(
+                new TestDocumentContent(
                         "Report",
                         "application/pdf",
                         "document body",
-                        List.of(),
                         "file:///docs/report.pdf",
+                        null,
+                        null,
                         Map.of("pageCount", 12));
         var chunkedSegment =
                 new Segment(
                         "document body", null, new CharBoundary(0, 13), Map.of("sectionIndex", 0));
 
-        when(documentProcessor.contentClass()).thenReturn(DocumentContent.class);
+        when(documentProcessor.contentClass()).thenReturn(TestDocumentContent.class);
         when(documentProcessor.usesSourceIdentity()).thenReturn(true);
-        when(documentProcessor.chunk(any(DocumentContent.class)))
+        when(documentProcessor.chunk(any(TestDocumentContent.class)))
                 .thenReturn(Mono.just(List.of(chunkedSegment)));
         when(documentProcessor.captionGenerator()).thenReturn(localCaption);
         when(localCaption.generateForSegments(any(), eq("zh-CN")))
@@ -521,14 +521,14 @@ class RawDataLayerProcessorTest {
         var recordingStore = new RecordingMemoryStore();
         var localVector = mock(MemoryVector.class);
         var localCaption = mock(CaptionGenerator.class);
-        var documentProcessor = mock(DocumentContentProcessor.class);
+        var documentProcessor = mockTestDocumentProcessor();
         var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
         var chunkedSegment =
                 new Segment("same text", null, new CharBoundary(0, 9), Map.of("sectionIndex", 0));
 
-        when(documentProcessor.contentClass()).thenReturn(DocumentContent.class);
+        when(documentProcessor.contentClass()).thenReturn(TestDocumentContent.class);
         when(documentProcessor.usesSourceIdentity()).thenReturn(true);
-        when(documentProcessor.chunk(any(DocumentContent.class)))
+        when(documentProcessor.chunk(any(TestDocumentContent.class)))
                 .thenReturn(Mono.just(List.of(chunkedSegment)));
         when(documentProcessor.captionGenerator()).thenReturn(localCaption);
         when(localCaption.generateForSegments(any(), any()))
@@ -541,12 +541,13 @@ class RawDataLayerProcessorTest {
         var first =
                 layer.extract(
                                 memoryId,
-                                new DocumentContent(
+                                new TestDocumentContent(
                                         "Doc",
                                         "application/pdf",
                                         "same text",
-                                        List.of(),
                                         "file:///docs/a.pdf",
+                                        null,
+                                        null,
                                         Map.of()),
                                 "DOCUMENT",
                                 Map.of(
@@ -556,12 +557,13 @@ class RawDataLayerProcessorTest {
         var secondSameSource =
                 layer.extract(
                                 memoryId,
-                                new DocumentContent(
+                                new TestDocumentContent(
                                         "Doc",
                                         "application/pdf",
                                         "same text",
-                                        List.of(),
                                         "file:///docs/a.pdf",
+                                        null,
+                                        null,
                                         Map.of()),
                                 "DOCUMENT",
                                 Map.of(
@@ -571,12 +573,13 @@ class RawDataLayerProcessorTest {
         var thirdDifferentSource =
                 layer.extract(
                                 memoryId,
-                                new DocumentContent(
+                                new TestDocumentContent(
                                         "Doc",
                                         "application/pdf",
                                         "same text",
-                                        List.of(),
                                         "file:///docs/b.pdf",
+                                        null,
+                                        null,
                                         Map.of()),
                                 "DOCUMENT",
                                 Map.of(
@@ -603,15 +606,15 @@ class RawDataLayerProcessorTest {
         var recordingStore = new RecordingMemoryStore();
         var localVector = mock(MemoryVector.class);
         var localCaption = mock(CaptionGenerator.class);
-        var documentProcessor = mock(DocumentContentProcessor.class);
+        var documentProcessor = mockTestDocumentProcessor();
         var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
         var first = new Segment("body-1", null, new CharBoundary(0, 6), Map.of("order", 1));
         var second = new Segment("body-2", null, new CharBoundary(7, 13), Map.of("order", 2));
         var third = new Segment("   ", null, new CharBoundary(14, 17), Map.of("order", 3));
 
-        when(documentProcessor.contentClass()).thenReturn(DocumentContent.class);
+        when(documentProcessor.contentClass()).thenReturn(TestDocumentContent.class);
         when(documentProcessor.usesSourceIdentity()).thenReturn(true);
-        when(documentProcessor.chunk(any(DocumentContent.class)))
+        when(documentProcessor.chunk(any(TestDocumentContent.class)))
                 .thenReturn(Mono.just(List.of(first, second, third)));
         when(documentProcessor.captionGenerator()).thenReturn(localCaption);
         when(localCaption.generateForSegments(any(), any()))
@@ -639,7 +642,7 @@ class RawDataLayerProcessorTest {
         var result =
                 layer.extract(
                                 memoryId,
-                                DocumentContent.of("Doc", "text/plain", "body-1\nbody-2"),
+                                TestDocumentContent.of("Doc", "text/plain", "body-1\nbody-2"),
                                 "DOCUMENT",
                                 Map.of())
                         .block();
@@ -662,7 +665,7 @@ class RawDataLayerProcessorTest {
         var recordingStore = new RecordingMemoryStore();
         var localVector = mock(MemoryVector.class);
         var localCaption = mock(CaptionGenerator.class);
-        var documentProcessor = mock(DocumentContentProcessor.class);
+        var documentProcessor = mockTestDocumentProcessor();
         var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
         var segments =
                 List.of(
@@ -671,9 +674,10 @@ class RawDataLayerProcessorTest {
                         new Segment("body-3", null, new CharBoundary(14, 20), Map.of()));
         var failure = new IllegalStateException("batch 2 failed");
 
-        when(documentProcessor.contentClass()).thenReturn(DocumentContent.class);
+        when(documentProcessor.contentClass()).thenReturn(TestDocumentContent.class);
         when(documentProcessor.usesSourceIdentity()).thenReturn(true);
-        when(documentProcessor.chunk(any(DocumentContent.class))).thenReturn(Mono.just(segments));
+        when(documentProcessor.chunk(any(TestDocumentContent.class)))
+                .thenReturn(Mono.just(segments));
         when(documentProcessor.captionGenerator()).thenReturn(localCaption);
         when(localCaption.generateForSegments(any(), any()))
                 .thenReturn(
@@ -705,7 +709,7 @@ class RawDataLayerProcessorTest {
                         () ->
                                 layer.extract(
                                                 memoryId,
-                                                DocumentContent.of(
+                                                TestDocumentContent.of(
                                                         "Doc",
                                                         "text/plain",
                                                         "body-1\nbody-2\nbody-3"),
@@ -729,14 +733,14 @@ class RawDataLayerProcessorTest {
         var failingStore = new FailingMemoryStore(new IllegalStateException("persist failed"));
         var localVector = mock(MemoryVector.class);
         var localCaption = mock(CaptionGenerator.class);
-        var documentProcessor = mock(DocumentContentProcessor.class);
+        var documentProcessor = mockTestDocumentProcessor();
         var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
         var segment = new Segment("body-1", null, new CharBoundary(0, 6), Map.of());
         var cleanupFailure = new IllegalStateException("cleanup failed");
 
-        when(documentProcessor.contentClass()).thenReturn(DocumentContent.class);
+        when(documentProcessor.contentClass()).thenReturn(TestDocumentContent.class);
         when(documentProcessor.usesSourceIdentity()).thenReturn(true);
-        when(documentProcessor.chunk(any(DocumentContent.class)))
+        when(documentProcessor.chunk(any(TestDocumentContent.class)))
                 .thenReturn(Mono.just(List.of(segment)));
         when(documentProcessor.captionGenerator()).thenReturn(localCaption);
         when(localCaption.generateForSegments(any(), any()))
@@ -753,7 +757,8 @@ class RawDataLayerProcessorTest {
                         () ->
                                 layer.extract(
                                                 memoryId,
-                                                DocumentContent.of("Doc", "text/plain", "body-1"),
+                                                TestDocumentContent.of(
+                                                        "Doc", "text/plain", "body-1"),
                                                 "DOCUMENT",
                                                 Map.of())
                                         .block())
@@ -805,6 +810,11 @@ class RawDataLayerProcessorTest {
             MemoryStore.super.upsertRawDataWithResources(memoryId, resources, rawDataList);
             lookupContentIds = List.copyOf(rawDataOperations.lookupContentIds);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static RawContentProcessor<TestDocumentContent> mockTestDocumentProcessor() {
+        return (RawContentProcessor<TestDocumentContent>) mock(RawContentProcessor.class);
     }
 
     private static final class RecordingRawDataOperations extends InMemoryRawDataOperations {

@@ -33,7 +33,8 @@ class MemoryOptionsProjectionMapperTest {
                 .extracting(MemoryOptionItemView::key)
                 .contains(
                         "extraction.common.timeout",
-                        "extraction.rawdata.chunking.messagesPerChunk");
+                        "extraction.rawdata.conversation.messagesPerChunk",
+                        "extraction.rawdata.vectorBatchSize");
         assertThat(projection.get("retrieval"))
                 .extracting(MemoryOptionItemView::key)
                 .contains("retrieval.simple.timeout", "retrieval.advanced.rerank.mode");

@@ -16,9 +16,9 @@ package com.openmemind.ai.memory.plugin.content.parser.document.tika;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
 import com.openmemind.ai.memory.core.resource.SourceDescriptor;
 import com.openmemind.ai.memory.core.resource.SourceKind;
+import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.zip.ZipEntry;

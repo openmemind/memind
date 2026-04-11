@@ -21,7 +21,6 @@ import com.baomidou.mybatisplus.extension.parser.cache.JdkSerialCaffeineJsqlPars
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -30,6 +29,7 @@ import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.plugin.store.mybatis.handler.DefaultDBFieldHandler;
 import com.openmemind.ai.memory.plugin.store.mybatis.initializer.DefaultTaxonomySeeder;
 import com.openmemind.ai.memory.plugin.store.mybatis.initializer.MemoryStoreProperties;
@@ -62,6 +62,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 @AutoConfiguration(
         after = DataSourceAutoConfiguration.class,
+        afterName = "org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration",
         before =
                 MybatisPlusAutoConfiguration
                         .class) // Purpose: to be configured before MyBatis Plus auto-configuration
@@ -85,11 +86,14 @@ public class MemoryMybatisPlusAutoConfiguration {
                 new JdkSerialCaffeineJsqlParseCache(
                         (cache) -> cache.maximumSize(1024).expireAfterWrite(5, TimeUnit.SECONDS)));
 
-        // Register JavaTimeModule to ensure that Java 8 time types such as Instant can be
-        // serialized
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
-        JacksonTypeHandler.setObjectMapper(mapper);
+        JacksonTypeHandler.setObjectMapper(JsonUtils.mapper().copy());
+    }
+
+    public MemoryMybatisPlusAutoConfiguration(ObjectProvider<ObjectMapper> objectMapperProvider) {
+        ObjectMapper objectMapper = objectMapperProvider.getIfAvailable();
+        if (objectMapper != null) {
+            JacksonTypeHandler.setObjectMapper(objectMapper);
+        }
     }
 
     @Bean

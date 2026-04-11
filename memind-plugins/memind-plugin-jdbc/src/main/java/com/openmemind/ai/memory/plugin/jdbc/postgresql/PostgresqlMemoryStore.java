@@ -93,7 +93,7 @@ public class PostgresqlMemoryStore
         this(dataSource, resourceStore, JsonCodec.createDefaultObjectMapper(), createIfNotExist);
     }
 
-    private PostgresqlMemoryStore(
+    public PostgresqlMemoryStore(
             DataSource dataSource,
             ResourceStore resourceStore,
             ObjectMapper objectMapper,

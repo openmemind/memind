@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
@@ -26,6 +27,11 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class RawContentJacksonTest {
+
+    @Test
+    void rawContentBaseDoesNotUseAnnotationDrivenSubtypeRegistration() {
+        assertThat(RawContent.class.getAnnotation(JsonSubTypes.class)).isNull();
+    }
 
     @Test
     void registerCoreSubtypesSupportsConversationDeserializationWithoutPlugins() throws Exception {

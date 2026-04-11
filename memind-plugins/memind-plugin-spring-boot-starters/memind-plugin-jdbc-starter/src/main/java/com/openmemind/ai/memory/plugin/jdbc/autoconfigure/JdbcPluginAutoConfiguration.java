@@ -13,10 +13,12 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.autoconfigure;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBufferAccessor;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlInsightBuffer;
@@ -47,6 +49,7 @@ import org.springframework.core.env.Environment;
 @AutoConfiguration(
         afterName = {
             "org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration",
+            "org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration",
             "com.openmemind.ai.memory.plugin.store.mybatis.MemoryMybatisPlusAutoConfiguration"
         })
 @ConditionalOnBean(DataSource.class)
@@ -57,19 +60,24 @@ public class JdbcPluginAutoConfiguration {
     public MemoryStore memoryStore(
             DataSource dataSource,
             Environment environment,
-            ObjectProvider<ResourceStore> resourceStoreProvider) {
+            ObjectProvider<ResourceStore> resourceStoreProvider,
+            ObjectProvider<ObjectMapper> objectMapperProvider) {
         boolean createIfNotExist =
                 environment.getProperty("memind.store.init-schema", Boolean.class, true);
         ResourceStore resourceStore = resourceStoreProvider.getIfAvailable();
+        ObjectMapper objectMapper = resolveObjectMapper(objectMapperProvider);
         return switch (detectDialect(dataSource)) {
             case SQLITE -> {
-                yield new SqliteMemoryStore(dataSource, resourceStore, createIfNotExist);
+                yield new SqliteMemoryStore(
+                        dataSource, resourceStore, objectMapper, createIfNotExist);
             }
             case MYSQL -> {
-                yield new MysqlMemoryStore(dataSource, resourceStore, createIfNotExist);
+                yield new MysqlMemoryStore(
+                        dataSource, resourceStore, objectMapper, createIfNotExist);
             }
             case POSTGRESQL -> {
-                yield new PostgresqlMemoryStore(dataSource, resourceStore, createIfNotExist);
+                yield new PostgresqlMemoryStore(
+                        dataSource, resourceStore, objectMapper, createIfNotExist);
             }
         };
     }
@@ -131,5 +139,10 @@ public class JdbcPluginAutoConfiguration {
 
     private JdbcDialect detectDialect(DataSource dataSource) {
         return new JdbcDialectDetector().detect(dataSource);
+    }
+
+    private ObjectMapper resolveObjectMapper(ObjectProvider<ObjectMapper> objectMapperProvider) {
+        ObjectMapper objectMapper = objectMapperProvider.getIfAvailable();
+        return objectMapper != null ? objectMapper.copy() : JsonUtils.mapper().copy();
     }
 }

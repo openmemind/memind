@@ -18,14 +18,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
+import com.openmemind.ai.memory.core.plugin.CoreBuiltinRawDataPlugin;
 import com.openmemind.ai.memory.core.utils.HashUtils;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class ImageContentTest {
 
-    private static final ObjectMapper OBJECT_MAPPER =
-            new ObjectMapper().registerModule(new JavaTimeModule());
+    private static final ObjectMapper OBJECT_MAPPER = createObjectMapper();
+
+    private static ObjectMapper createObjectMapper() {
+        ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        RawContentJackson.registerAll(mapper, new CoreBuiltinRawDataPlugin().typeRegistrars());
+        return mapper;
+    }
 
     @Test
     void contentIdShouldTrackVisibleSourceTextIncludingOcr() {

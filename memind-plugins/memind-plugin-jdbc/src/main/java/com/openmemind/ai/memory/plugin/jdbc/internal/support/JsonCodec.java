@@ -15,9 +15,8 @@ package com.openmemind.ai.memory.plugin.jdbc.internal.support;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.openmemind.ai.memory.core.utils.JsonUtils;
 
 public final class JsonCodec {
 
@@ -65,9 +64,6 @@ public final class JsonCodec {
     }
 
     public static ObjectMapper createDefaultObjectMapper() {
-        ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.registerModule(new JavaTimeModule());
-        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-        return objectMapper;
+        return JsonUtils.mapper().copy();
     }
 }

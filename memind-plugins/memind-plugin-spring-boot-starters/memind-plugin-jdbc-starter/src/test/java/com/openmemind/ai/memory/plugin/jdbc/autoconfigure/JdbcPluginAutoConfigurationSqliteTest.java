@@ -15,6 +15,9 @@ package com.openmemind.ai.memory.plugin.jdbc.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
@@ -22,6 +25,8 @@ import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.resource.ResourceRef;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
@@ -29,6 +34,7 @@ import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.textsearch.TextSearchResult;
+import com.openmemind.ai.memory.plugin.jdbc.internal.support.JsonCodec;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryStore;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryTextSearch;
 import java.io.IOException;
@@ -195,6 +201,29 @@ class JdbcPluginAutoConfigurationSqliteTest {
     }
 
     @Test
+    @DisplayName("Use the application ObjectMapper for JDBC JSON codec")
+    void usesApplicationObjectMapperForJdbcJsonCodec() {
+        contextRunner
+                .withUserConfiguration(
+                        SqliteDataSourceConfig.class, RawContentObjectMapperConfig.class)
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+
+                            SqliteMemoryStore store =
+                                    (SqliteMemoryStore) context.getBean(MemoryStore.class);
+                            JsonCodec jsonCodec = readField(store, "jsonHelper", JsonCodec.class);
+                            RawContent restored =
+                                    jsonCodec.fromJson(
+                                            "{\"type\":\"test_raw\",\"text\":\"hello jdbc\"}",
+                                            RawContent.class);
+
+                            assertThat(restored).isInstanceOf(TestRawContent.class);
+                            assertThat(restored.toContentString()).isEqualTo("hello jdbc");
+                        });
+    }
+
+    @Test
     @DisplayName("Seed default insight taxonomy into JDBC-backed memory store")
     void seedsDefaultInsightTaxonomy() {
         contextRunner
@@ -337,6 +366,54 @@ class JdbcPluginAutoConfigurationSqliteTest {
                     return Mono.just(false);
                 }
             };
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class RawContentObjectMapperConfig {
+
+        @Bean
+        ObjectMapper objectMapper() {
+            ObjectMapper mapper = new ObjectMapper();
+            RawContentJackson.registerCoreSubtypes(mapper);
+            RawContentJackson.registerPluginSubtypes(
+                    mapper, List.of(() -> Map.of("test_raw", TestRawContent.class)));
+            return mapper;
+        }
+    }
+
+    private static <T> T readField(Object target, String name, Class<T> type) {
+        try {
+            var field = target.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            return type.cast(field.get(target));
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private static final class TestRawContent extends RawContent {
+
+        private final String text;
+
+        @JsonCreator
+        private TestRawContent(@JsonProperty("text") String text) {
+            this.text = text == null ? "" : text;
+        }
+
+        @Override
+        public String contentType() {
+            return "TEST_RAW";
+        }
+
+        @Override
+        public String toContentString() {
+            return text;
+        }
+
+        @Override
+        public String getContentId() {
+            return text;
         }
     }
 }

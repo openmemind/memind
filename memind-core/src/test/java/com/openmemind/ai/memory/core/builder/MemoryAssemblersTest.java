@@ -157,7 +157,7 @@ class MemoryAssemblersTest {
 
         var processorRegistry =
                 readField(rawDataLayer, "processorRegistry", RawContentProcessorRegistry.class);
-        assertThat(processorRegistry.all()).hasSize(5);
+        assertThat(processorRegistry.all()).hasSize(4);
     }
 
     @Test
@@ -205,7 +205,7 @@ class MemoryAssemblersTest {
     }
 
     @Test
-    void extractionAssemblerStillBuildsFiveProcessorsViaConversationPlusBuiltinPlugin() {
+    void extractionAssemblerBuildsOnlyFourProcessorsWithoutExplicitDocumentPlugin() {
         var assembly =
                 new MemoryExtractionAssembler()
                         .assemble(context(MemoryBuildOptions.defaults(), null, null, List.of()));
@@ -215,7 +215,7 @@ class MemoryAssemblersTest {
         var processorRegistry =
                 readField(rawDataLayer, "processorRegistry", RawContentProcessorRegistry.class);
 
-        assertThat(processorRegistry.all()).hasSize(5);
+        assertThat(processorRegistry.all()).hasSize(4);
     }
 
     static MemoryAssemblyContext context(

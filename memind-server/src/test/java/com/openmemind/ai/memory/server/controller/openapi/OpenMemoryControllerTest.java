@@ -21,6 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.server.domain.memory.request.AddMessageRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.CommitMemoryRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.ExtractMemoryRequest;
@@ -32,6 +33,7 @@ import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -40,7 +42,7 @@ import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 class OpenMemoryControllerTest {
 
     private final StubOpenMemoryApplicationService service = new StubOpenMemoryApplicationService();
-    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    private final ObjectMapper objectMapper = JsonUtils.mapper();
 
     private MockMvc mockMvc;
 
@@ -51,6 +53,7 @@ class OpenMemoryControllerTest {
         this.mockMvc =
                 MockMvcBuilders.standaloneSetup(new OpenMemoryController(service))
                         .setControllerAdvice(new ApiExceptionHandler())
+                        .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                         .setValidator(validator)
                         .build();
     }

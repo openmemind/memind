@@ -16,6 +16,8 @@ package com.openmemind.ai.memory.plugin.jdbc.internal.support;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ImageContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +57,33 @@ class JsonCodecTest {
         List<String> restored = jsonCodec.fromJson(json, new TypeReference<List<String>>() {});
 
         assertThat(restored).containsExactly("alpha", "beta");
+    }
+
+    @Test
+    void defaultCodecRoundTripsBuiltinRawContent() {
+        RawContent payload =
+                new ImageContent(
+                        "image/png",
+                        "dashboard screenshot",
+                        "Total revenue 30%",
+                        "file:///tmp/dashboard.png",
+                        Map.of("width", 1280));
+
+        String json = jsonCodec.toJson(payload);
+        RawContent restored = jsonCodec.fromJson(json, RawContent.class);
+
+        assertThat(restored).isInstanceOf(ImageContent.class);
+        assertThat((ImageContent) restored)
+                .extracting(
+                        ImageContent::mimeType,
+                        ImageContent::description,
+                        ImageContent::ocrText,
+                        ImageContent::sourceUri)
+                .containsExactly(
+                        "image/png",
+                        "dashboard screenshot",
+                        "Total revenue 30%",
+                        "file:///tmp/dashboard.png");
     }
 
     record SamplePayload(String name, Instant createdAt) {}

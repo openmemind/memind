@@ -19,8 +19,8 @@ import static org.assertj.core.groups.Tuple.tuple;
 
 import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import com.openmemind.ai.memory.core.support.TestDocumentContent;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -212,7 +212,8 @@ class ContentParserRegistryTest {
             @Override
             public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
                 return Mono.just(
-                        DocumentContent.of("Report", source.mimeType(), "hello " + contentProfile));
+                        TestDocumentContent.of(
+                                "Report", source.mimeType(), "hello " + contentProfile));
             }
         };
     }

@@ -13,121 +13,58 @@
  */
 package com.openmemind.ai.memory.plugin.content.parser.document.tika;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.core.resource.SourceDescriptor;
-import com.openmemind.ai.memory.core.resource.UnsupportedContentSourceException;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import reactor.core.publisher.Mono;
 
+@Deprecated(forRemoval = false)
 public final class TikaDocumentContentParser implements ContentParser {
 
-    private static final Set<String> SUPPORTED_MIME_TYPES =
-            Set.of(
-                    "application/pdf",
-                    "application/rtf",
-                    "application/msword",
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-
-    private static final Set<String> WEAK_EXTENSIONS = Set.of(".pdf", ".rtf", ".doc", ".docx");
-
-    private final TikaDocumentParserSupport parserSupport = new TikaDocumentParserSupport();
-    private final TikaDocumentMetadataMapper metadataMapper = new TikaDocumentMetadataMapper();
+    private final com.openmemind.ai.memory.plugin.rawdata.document.parser.tika
+                    .TikaDocumentContentParser
+            delegate =
+                    new com.openmemind.ai.memory.plugin.rawdata.document.parser.tika
+                            .TikaDocumentContentParser();
 
     @Override
     public String parserId() {
-        return "document-tika";
+        return delegate.parserId();
     }
 
     @Override
     public String contentType() {
-        return ContentTypes.DOCUMENT;
+        return delegate.contentType();
     }
 
     @Override
     public String contentProfile() {
-        return "document.binary";
+        return delegate.contentProfile();
     }
 
     @Override
     public int priority() {
-        return 50;
+        return delegate.priority();
     }
 
     @Override
     public Set<String> supportedMimeTypes() {
-        return SUPPORTED_MIME_TYPES;
+        return delegate.supportedMimeTypes();
     }
 
     @Override
     public Set<String> supportedExtensions() {
-        return WEAK_EXTENSIONS;
+        return delegate.supportedExtensions();
     }
 
     @Override
     public boolean supports(SourceDescriptor source) {
-        if (source.mimeType() != null && SUPPORTED_MIME_TYPES.contains(source.mimeType())) {
-            return true;
-        }
-        String mimeType = source.mimeType();
-        String fileName = source.fileName();
-        if ((mimeType != null && !"application/octet-stream".equals(mimeType))
-                || fileName == null) {
-            return false;
-        }
-        String lowerCaseFileName = fileName.toLowerCase(Locale.ROOT);
-        return WEAK_EXTENSIONS.stream().anyMatch(lowerCaseFileName::endsWith);
+        return delegate.supports(source);
     }
 
     @Override
     public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
-        if (data == null || data.length == 0) {
-            return Mono.error(new IllegalArgumentException("Document payload must not be empty"));
-        }
-        if (!supports(source)) {
-            return Mono.error(
-                    new UnsupportedContentSourceException("Unsupported source: " + source));
-        }
-        return Mono.fromCallable(
-                () -> {
-                    var parsedDocument =
-                            parserSupport.parse(data, source.fileName(), source.mimeType());
-                    String normalizedText = parserSupport.normalizeText(parsedDocument.text());
-                    Map<String, Object> metadata =
-                            metadataMapper.map(
-                                    parsedDocument.metadata(), parsedDocument.detectedMimeType());
-                    var enrichedMetadata = new LinkedHashMap<>(metadata);
-                    enrichedMetadata.put("parserId", parserId());
-                    enrichedMetadata.put("contentProfile", contentProfile());
-                    if (normalizedText.isBlank() && !hasMeaningfulMetadata(metadata)) {
-                        throw new IllegalStateException("Tika produced no text or metadata");
-                    }
-                    return new DocumentContent(
-                            parserSupport.resolveTitle(
-                                    parsedDocument.metadata(), source.fileName()),
-                            resolvedMimeType(parsedDocument.detectedMimeType(), source.mimeType()),
-                            normalizedText,
-                            List.of(),
-                            source.sourceUrl(),
-                            Map.copyOf(enrichedMetadata));
-                });
-    }
-
-    private static boolean hasMeaningfulMetadata(Map<String, Object> metadata) {
-        return metadata.keySet().stream()
-                .anyMatch(key -> !"parser".equals(key) && !"detectedMimeType".equals(key));
-    }
-
-    private static String resolvedMimeType(String detectedMimeType, String fallbackMimeType) {
-        if (detectedMimeType != null && !detectedMimeType.isBlank()) {
-            return detectedMimeType;
-        }
-        return fallbackMimeType;
+        return delegate.parse(data, source);
     }
 }

@@ -27,10 +27,7 @@ import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ProfileAwareDocumentChunker;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.processor.DocumentContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.result.InsightResult;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
@@ -50,6 +47,8 @@ import com.openmemind.ai.memory.core.resource.SourceDescriptor;
 import com.openmemind.ai.memory.core.resource.SourceKind;
 import com.openmemind.ai.memory.core.resource.SourceTooLargeException;
 import com.openmemind.ai.memory.core.resource.UnsupportedContentSourceException;
+import com.openmemind.ai.memory.core.support.TestDocumentContent;
+import com.openmemind.ai.memory.core.support.TestDocumentProcessor;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -67,14 +66,10 @@ class MemoryExtractorMultimodalFileTest {
         var resourceStore = new RecordingResourceStore();
         var rawDataStep = new RecordingRawDataStep(false);
         var extractor =
-                new MemoryExtractor(
+                extractor(
                         rawDataStep,
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
                         (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        null,
-                        null,
-                        null,
-                        null,
                         parserRegistry,
                         resourceStore,
                         null);
@@ -93,7 +88,7 @@ class MemoryExtractorMultimodalFileTest {
         assertThat(result.isSuccess()).isTrue();
         assertThat(parserRegistry.calls).containsExactly("report.pdf:application/pdf:3");
         assertThat(resourceStore.storedRefs).hasSize(1);
-        assertThat(rawDataStep.lastContent).isInstanceOf(DocumentContent.class);
+        assertThat(rawDataStep.lastContent).isInstanceOf(TestDocumentContent.class);
         assertThat(rawDataStep.lastContentType).isEqualTo(ContentTypes.DOCUMENT);
         assertThat(rawDataStep.lastMetadata)
                 .containsEntry("fileName", "report.pdf")
@@ -112,14 +107,10 @@ class MemoryExtractorMultimodalFileTest {
         var parserRegistry = new CustomProfileRegistry();
         var rawDataStep = new RecordingRawDataStep(false);
         var extractor =
-                new MemoryExtractor(
+                extractor(
                         rawDataStep,
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
                         (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        null,
-                        null,
-                        null,
-                        null,
                         parserRegistry,
                         null,
                         null);
@@ -140,7 +131,7 @@ class MemoryExtractorMultimodalFileTest {
                 .containsEntry("parserId", "document-custom")
                 .containsEntry("contentProfile", "document.pdf.tika")
                 .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name());
-        assertThat(((DocumentContent) rawDataStep.lastContent).metadata())
+        assertThat(((TestDocumentContent) rawDataStep.lastContent).metadata())
                 .containsEntry("parserId", "document-custom")
                 .containsEntry("contentProfile", "document.pdf.tika")
                 .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name());
@@ -150,15 +141,11 @@ class MemoryExtractorMultimodalFileTest {
     void fileRequestShouldRejectParserMetadataGovernanceConflict() {
         var parserRegistry = new ConflictingGovernanceRegistry();
         var extractor =
-                new MemoryExtractor(
+                extractor(
                         (memoryId, content, contentType, metadata) ->
                                 Mono.just(RawDataResult.empty()),
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
                         (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        null,
-                        null,
-                        null,
-                        null,
                         parserRegistry,
                         null,
                         null);
@@ -182,15 +169,11 @@ class MemoryExtractorMultimodalFileTest {
     void fileRequestShouldRejectBuiltinProfileThatConflictsWithCapabilityGovernance() {
         var parserRegistry = new ConflictingBuiltinProfileRegistry();
         var extractor =
-                new MemoryExtractor(
+                extractor(
                         (memoryId, content, contentType, metadata) ->
                                 Mono.just(RawDataResult.empty()),
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
                         (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        null,
-                        null,
-                        null,
-                        null,
                         parserRegistry,
                         null,
                         null);
@@ -213,11 +196,14 @@ class MemoryExtractorMultimodalFileTest {
     @Test
     void fileRequestShouldFailFastWhenParserRegistryIsMissing() {
         var extractor =
-                new MemoryExtractor(
+                extractor(
                         (memoryId, content, contentType, metadata) ->
                                 Mono.just(RawDataResult.empty()),
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
-                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()));
+                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
+                        null,
+                        null,
+                        null);
 
         var result =
                 extractor
@@ -238,15 +224,11 @@ class MemoryExtractorMultimodalFileTest {
     void fileRequestShouldFailWhenRegistryRejectsSource() {
         var parserRegistry = new UnsupportedRegistry();
         var extractor =
-                new MemoryExtractor(
+                extractor(
                         (memoryId, content, contentType, metadata) ->
                                 Mono.just(RawDataResult.empty()),
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
                         (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        null,
-                        null,
-                        null,
-                        null,
                         parserRegistry,
                         null,
                         null);
@@ -272,14 +254,12 @@ class MemoryExtractorMultimodalFileTest {
         var parserRegistry = new OversizedDocumentRegistry();
         var rawDataStep = new RecordingRawDataStep(false);
         var extractor =
-                new MemoryExtractor(
+                extractor(
                         rawDataStep,
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
                         (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        null,
-                        null,
-                        null,
-                        null,
+                        documentProcessorRegistry(
+                                restrictiveDocumentOptions().binaryParsedLimit().maxTokens()),
                         parserRegistry,
                         null,
                         null,
@@ -332,15 +312,18 @@ class MemoryExtractorMultimodalFileTest {
         var processorRegistry =
                 new RawContentProcessorRegistry(
                         List.of(
-                                new DocumentContentProcessor(
-                                        new ProfileAwareDocumentChunker(),
-                                        restrictiveDocumentOptions())));
+                                new TestDocumentProcessor(
+                                        false,
+                                        restrictiveDocumentOptions()
+                                                .binaryParsedLimit()
+                                                .maxTokens())));
         var content =
-                new DocumentContent(
+                new TestDocumentContent(
                         "Manual",
                         "application/pdf",
                         "word ".repeat(200),
-                        List.of(),
+                        null,
+                        null,
                         null,
                         Map.of("contentProfile", "document.binary"));
 
@@ -362,15 +345,11 @@ class MemoryExtractorMultimodalFileTest {
         var parserRegistry = new RecordingRegistry();
         var resourceStore = new RecordingResourceStore();
         var extractor =
-                new MemoryExtractor(
+                extractor(
                         (memoryId, content, contentType, metadata) ->
                                 Mono.error(new IllegalStateException("rawdata failed")),
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
                         (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        null,
-                        null,
-                        null,
-                        null,
                         parserRegistry,
                         resourceStore,
                         null);
@@ -396,15 +375,11 @@ class MemoryExtractorMultimodalFileTest {
         var resourceStore = new RecordingResourceStore();
         var rawDataStep = new RecordingRawDataStep(false);
         var extractor =
-                new MemoryExtractor(
+                extractor(
                         rawDataStep,
                         (memoryId, rawDataResult, config) ->
                                 Mono.error(new IllegalStateException("item failed")),
                         (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        null,
-                        null,
-                        null,
-                        null,
                         parserRegistry,
                         resourceStore,
                         null);
@@ -431,14 +406,10 @@ class MemoryExtractorMultimodalFileTest {
         var resourceStore = new RecordingResourceStore();
         var rawDataStep = new RecordingRawDataStep(false);
         var extractor =
-                new MemoryExtractor(
+                extractor(
                         rawDataStep,
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
                         (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        null,
-                        null,
-                        null,
-                        null,
                         parserRegistry,
                         resourceStore,
                         fetcher);
@@ -456,7 +427,7 @@ class MemoryExtractorMultimodalFileTest {
         assertThat(fetcher.calls).containsExactly("https://example.com/report.pdf");
         assertThat(parserRegistry.calls).containsExactly("report.pdf:application/pdf:3");
         assertThat(resourceStore.storedRefs).hasSize(1);
-        assertThat(rawDataStep.lastContent).isInstanceOf(DocumentContent.class);
+        assertThat(rawDataStep.lastContent).isInstanceOf(TestDocumentContent.class);
         assertThat(rawDataStep.lastContentType).isEqualTo(ContentTypes.DOCUMENT);
         assertThat(rawDataStep.lastMetadata)
                 .containsEntry("fileName", "report.pdf")
@@ -475,15 +446,11 @@ class MemoryExtractorMultimodalFileTest {
         var registry = new RecordingResolutionRegistry();
         var fetcher = new RecordingFetchSessionFetcher("final.pdf", "application/pdf", 300L);
         var extractor =
-                new MemoryExtractor(
+                extractor(
                         (memoryId, content, contentType, metadata) ->
                                 Mono.just(RawDataResult.empty()),
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
                         (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        null,
-                        null,
-                        null,
-                        null,
                         registry,
                         null,
                         fetcher);
@@ -509,15 +476,12 @@ class MemoryExtractorMultimodalFileTest {
         var fetcher =
                 new RecordingFetchSessionFetcher("final.pdf", "application/pdf", 3L * 1024 * 1024);
         var extractor =
-                new MemoryExtractor(
+                extractor(
                         (memoryId, content, contentType, metadata) ->
                                 Mono.just(RawDataResult.empty()),
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
                         (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        null,
-                        null,
-                        null,
-                        null,
+                        documentProcessorRegistry(),
                         registry,
                         null,
                         fetcher,
@@ -542,15 +506,11 @@ class MemoryExtractorMultimodalFileTest {
     void urlRequestShouldFailFastWhenFetcherIsMissing() {
         var parserRegistry = new RecordingRegistry();
         var extractorWithRegistry =
-                new MemoryExtractor(
+                extractor(
                         (memoryId, content, contentType, metadata) ->
                                 Mono.just(RawDataResult.empty()),
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
                         (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        null,
-                        null,
-                        null,
-                        null,
                         parserRegistry,
                         null,
                         null);
@@ -572,15 +532,11 @@ class MemoryExtractorMultimodalFileTest {
     void urlRequestShouldFailBeforeDownloadWhenParserRegistryIsMissing() {
         var fetcher = new RecordingResourceFetcher();
         var extractor =
-                new MemoryExtractor(
+                extractor(
                         (memoryId, content, contentType, metadata) ->
                                 Mono.just(RawDataResult.empty()),
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
                         (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        null,
-                        null,
-                        null,
-                        null,
                         (ContentParserRegistry) null,
                         null,
                         fetcher);
@@ -613,15 +569,11 @@ class MemoryExtractorMultimodalFileTest {
     @Test
     void urlRequestShouldSurfaceFetcherFailure() {
         var extractor =
-                new MemoryExtractor(
+                extractor(
                         (memoryId, content, contentType, metadata) ->
                                 Mono.just(RawDataResult.empty()),
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
                         (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        null,
-                        null,
-                        null,
-                        null,
                         new RecordingRegistry(),
                         null,
                         request -> Mono.error(new IllegalStateException("download failed")));
@@ -642,11 +594,14 @@ class MemoryExtractorMultimodalFileTest {
     @Test
     void requestWithoutContentFileOrUrlShouldFailFastDuringResolution() {
         var extractor =
-                new MemoryExtractor(
+                extractor(
                         (memoryId, content, contentType, metadata) ->
                                 Mono.just(RawDataResult.empty()),
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
-                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()));
+                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
+                        null,
+                        null,
+                        null);
 
         var result =
                 extractor
@@ -670,14 +625,11 @@ class MemoryExtractorMultimodalFileTest {
     void extractorAppliesBudgetBeforeItemExtraction() {
         var itemStep = new RecordingMemoryItemStep();
         var extractor =
-                new MemoryExtractor(
+                extractor(
                         new OversizedRawDataStep(),
                         itemStep,
                         (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        null,
-                        null,
-                        null,
-                        null,
+                        documentProcessorRegistry(),
                         null,
                         null,
                         null,
@@ -687,9 +639,9 @@ class MemoryExtractorMultimodalFileTest {
 
         extractor
                 .extract(
-                        ExtractionRequest.document(
+                        ExtractionRequest.of(
                                 DefaultMemoryId.of("user-1", "agent-1"),
-                                DocumentContent.of(
+                                TestDocumentContent.of(
                                         "Manual",
                                         "application/pdf",
                                         "# Intro\n"
@@ -728,11 +680,12 @@ class MemoryExtractorMultimodalFileTest {
         public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
             calls.add(source.fileName() + ":" + source.mimeType() + ":" + data.length);
             return Mono.just(
-                    new DocumentContent(
+                    new TestDocumentContent(
                             "Report",
                             source.mimeType(),
                             "parsed body",
-                            List.of(),
+                            null,
+                            null,
                             null,
                             Map.of("author", "Alice")));
         }
@@ -752,14 +705,10 @@ class MemoryExtractorMultimodalFileTest {
 
     private MemoryExtractor extractorWithRestrictiveOptions(
             RawDataExtractStep rawDataStep, RawContentProcessorRegistry processorRegistry) {
-        return new MemoryExtractor(
+        return extractor(
                 rawDataStep,
                 (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
                 (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                null,
-                null,
-                null,
-                null,
                 processorRegistry,
                 null,
                 null,
@@ -775,6 +724,60 @@ class MemoryExtractorMultimodalFileTest {
                                 .defaults(),
                         64),
                 ItemExtractionOptions.defaults());
+    }
+
+    private MemoryExtractor extractor(
+            RawDataExtractStep rawDataStep,
+            MemoryItemExtractStep memoryItemStep,
+            com.openmemind.ai.memory.core.extraction.step.InsightExtractStep insightStep,
+            ContentParserRegistry contentParserRegistry,
+            ResourceStore resourceStore,
+            ResourceFetcher resourceFetcher) {
+        return extractor(
+                rawDataStep,
+                memoryItemStep,
+                insightStep,
+                documentProcessorRegistry(),
+                contentParserRegistry,
+                resourceStore,
+                resourceFetcher,
+                RawDataExtractionOptions.defaults(),
+                ItemExtractionOptions.defaults());
+    }
+
+    private MemoryExtractor extractor(
+            RawDataExtractStep rawDataStep,
+            MemoryItemExtractStep memoryItemStep,
+            com.openmemind.ai.memory.core.extraction.step.InsightExtractStep insightStep,
+            RawContentProcessorRegistry processorRegistry,
+            ContentParserRegistry contentParserRegistry,
+            ResourceStore resourceStore,
+            ResourceFetcher resourceFetcher,
+            RawDataExtractionOptions rawDataExtractionOptions,
+            ItemExtractionOptions itemExtractionOptions) {
+        return new MemoryExtractor(
+                rawDataStep,
+                memoryItemStep,
+                insightStep,
+                null,
+                null,
+                null,
+                null,
+                processorRegistry,
+                contentParserRegistry,
+                resourceStore,
+                resourceFetcher,
+                rawDataExtractionOptions,
+                itemExtractionOptions);
+    }
+
+    private RawContentProcessorRegistry documentProcessorRegistry() {
+        return documentProcessorRegistry(Integer.MAX_VALUE);
+    }
+
+    private RawContentProcessorRegistry documentProcessorRegistry(int maxParsedTokens) {
+        return new RawContentProcessorRegistry(
+                List.of(new TestDocumentProcessor(false, maxParsedTokens)));
     }
 
     private com.openmemind.ai.memory.core.builder.DocumentExtractionOptions
@@ -816,7 +819,7 @@ class MemoryExtractorMultimodalFileTest {
 
         @Override
         public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
-            return Mono.just(DocumentContent.of("Report", source.mimeType(), "parsed body"));
+            return Mono.just(TestDocumentContent.of("Report", source.mimeType(), "parsed body"));
         }
 
         @Override
@@ -849,11 +852,12 @@ class MemoryExtractorMultimodalFileTest {
         @Override
         public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
             return Mono.just(
-                    new DocumentContent(
+                    new TestDocumentContent(
                             "Report",
                             source.mimeType(),
                             "parsed body",
-                            List.of(),
+                            null,
+                            null,
                             null,
                             Map.of("contentProfile", "document.pdf.tika")));
         }
@@ -892,11 +896,12 @@ class MemoryExtractorMultimodalFileTest {
         @Override
         public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
             return Mono.just(
-                    new DocumentContent(
+                    new TestDocumentContent(
                             "Report",
                             source.mimeType(),
                             "parsed body",
-                            List.of(),
+                            null,
+                            null,
                             null,
                             Map.of(
                                     "contentProfile",
@@ -931,11 +936,12 @@ class MemoryExtractorMultimodalFileTest {
         @Override
         public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
             return Mono.just(
-                    new DocumentContent(
+                    new TestDocumentContent(
                             "Report",
                             source.mimeType(),
                             "parsed body",
-                            List.of(),
+                            null,
+                            null,
                             null,
                             Map.of("contentProfile", "document.markdown")));
         }
@@ -1000,11 +1006,12 @@ class MemoryExtractorMultimodalFileTest {
         @Override
         public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
             return Mono.just(
-                    new DocumentContent(
+                    new TestDocumentContent(
                             "Report",
                             source.mimeType(),
                             "word ".repeat(300),
-                            List.of(),
+                            null,
+                            null,
                             null,
                             Map.of("contentProfile", "document.binary")));
         }
@@ -1016,7 +1023,7 @@ class MemoryExtractorMultimodalFileTest {
     }
 
     private static RawContent nullParserContent() {
-        return DocumentContent.of("Report", "application/pdf", "parsed body");
+        return TestDocumentContent.of("Report", "application/pdf", "parsed body");
     }
 
     private static com.openmemind.ai.memory.core.resource.ContentParser nullParser() {
