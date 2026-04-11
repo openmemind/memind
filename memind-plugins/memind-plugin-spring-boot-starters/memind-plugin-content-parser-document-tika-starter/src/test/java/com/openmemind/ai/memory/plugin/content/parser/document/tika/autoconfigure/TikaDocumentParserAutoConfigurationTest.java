@@ -15,7 +15,10 @@ package com.openmemind.ai.memory.plugin.content.parser.document.tika.autoconfigu
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.resource.ContentParser;
+import com.openmemind.ai.memory.core.resource.SourceDescriptor;
 import com.openmemind.ai.memory.plugin.content.parser.document.tika.TikaDocumentContentParser;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -84,8 +87,18 @@ class TikaDocumentParserAutoConfigurationTest {
         ContentParser customContentParser() {
             return new ContentParser() {
                 @Override
+                public String parserId() {
+                    return "custom-image-parser";
+                }
+
+                @Override
                 public String contentType() {
-                    return com.openmemind.ai.memory.core.data.ContentTypes.IMAGE;
+                    return ContentTypes.IMAGE;
+                }
+
+                @Override
+                public String contentProfile() {
+                    return "image.caption-ocr";
                 }
 
                 @Override
@@ -94,9 +107,8 @@ class TikaDocumentParserAutoConfigurationTest {
                 }
 
                 @Override
-                public reactor.core.publisher.Mono<
-                                com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent>
-                        parse(byte[] data, String fileName, String mimeType) {
+                public reactor.core.publisher.Mono<RawContent> parse(
+                        byte[] data, SourceDescriptor source) {
                     throw new UnsupportedOperationException("test stub");
                 }
             };

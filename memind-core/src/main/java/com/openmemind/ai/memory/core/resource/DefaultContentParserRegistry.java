@@ -14,14 +14,9 @@
 package com.openmemind.ai.memory.core.resource;
 
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
 import reactor.core.publisher.Mono;
 
 /**
@@ -29,85 +24,88 @@ import reactor.core.publisher.Mono;
  */
 public final class DefaultContentParserRegistry implements ContentParserRegistry {
 
+    private static final Comparator<ContentParser> RESOLUTION_ORDER =
+            Comparator.comparingInt(ContentParser::priority)
+                    .reversed()
+                    .thenComparing(ContentParser::parserId);
+
     private final List<ContentParser> parsers;
-    private final Map<String, Set<String>> supportedMimeTypesByContentType;
+    private final List<ContentCapability> capabilities;
 
     public DefaultContentParserRegistry(List<ContentParser> parsers) {
         this.parsers =
-                Objects.requireNonNull(parsers, "parsers").stream()
-                        .filter(Objects::nonNull)
-                        .toList();
+                List.copyOf(
+                        Objects.requireNonNull(parsers, "parsers").stream()
+                                .filter(Objects::nonNull)
+                                .toList());
         validate(this.parsers);
-        this.supportedMimeTypesByContentType = buildCapabilities(this.parsers);
+        this.capabilities =
+                this.parsers.stream()
+                        .sorted(RESOLUTION_ORDER)
+                        .map(DefaultContentParserRegistry::capabilityOf)
+                        .toList();
     }
 
     @Override
-    public Mono<RawContent> parse(byte[] data, String fileName, String mimeType) {
+    public Mono<ParserResolution> resolve(SourceDescriptor source) {
+        Objects.requireNonNull(source, "source is required");
         List<ContentParser> matches =
-                parsers.stream().filter(parser -> parser.supports(fileName, mimeType)).toList();
+                parsers.stream()
+                        .filter(parser -> parser.supports(source))
+                        .sorted(RESOLUTION_ORDER)
+                        .toList();
         if (matches.isEmpty()) {
             return Mono.error(
-                    new UnsupportedContentSourceException(
-                            "Unsupported source: fileName=" + fileName + ", mimeType=" + mimeType));
+                    new UnsupportedContentSourceException("Unsupported source: " + source));
         }
-        if (matches.size() > 1) {
+        if (matches.size() > 1 && matches.get(0).priority() == matches.get(1).priority()) {
             return Mono.error(
                     new AmbiguousContentParserException(
-                            "Multiple parsers matched fileName="
-                                    + fileName
-                                    + ", mimeType="
-                                    + mimeType
+                            "Ambiguous parsers for "
+                                    + source
                                     + ": "
-                                    + matches.stream()
-                                            .map(ContentParser::contentType)
-                                            .collect(Collectors.joining(", "))));
+                                    + matches.get(0).parserId()
+                                    + ", "
+                                    + matches.get(1).parserId()));
         }
-        return matches.get(0).parse(data, fileName, mimeType);
+        ContentParser parser = matches.get(0);
+        return Mono.just(new ParserResolution(parser, capabilityOf(parser)));
     }
 
     @Override
-    public Map<String, Set<String>> supportedMimeTypesByContentType() {
-        return supportedMimeTypesByContentType;
+    public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
+        return resolve(source).flatMap(resolution -> resolution.parser().parse(data, source));
+    }
+
+    @Override
+    public List<ContentCapability> capabilities() {
+        return capabilities;
     }
 
     private static void validate(List<ContentParser> parsers) {
-        Set<String> contentTypes = new LinkedHashSet<>();
-        Set<String> stableMimeTypes = new LinkedHashSet<>();
+        java.util.Set<String> parserIds = new java.util.LinkedHashSet<>();
         for (ContentParser parser : parsers) {
-            String contentType =
-                    Objects.requireNonNull(parser.contentType(), "parser.contentType()");
-            if (!contentTypes.add(contentType)) {
+            String parserId = Objects.requireNonNull(parser.parserId(), "parser.parserId()");
+            if (!parserIds.add(parserId)) {
                 throw new IllegalStateException(
-                        "Only one parser per contentType is supported in this phase: "
-                                + contentType);
+                        "Duplicate parserId across parsers is not allowed: " + parserId);
             }
-
-            Set<String> mimeTypes =
-                    Objects.requireNonNull(
-                            parser.supportedMimeTypes(), "parser.supportedMimeTypes()");
-            for (String mimeType : mimeTypes) {
-                String normalizedMimeType = Objects.requireNonNull(mimeType, "mimeType");
-                if (!stableMimeTypes.add(normalizedMimeType)) {
-                    throw new IllegalStateException(
-                            "Duplicate stable mimeType across parsers: " + normalizedMimeType);
-                }
-            }
+            Objects.requireNonNull(parser.contentType(), "parser.contentType()");
+            Objects.requireNonNull(parser.contentProfile(), "parser.contentProfile()");
+            Objects.requireNonNull(parser.governanceType(), "parser.governanceType()");
+            Objects.requireNonNull(parser.supportedMimeTypes(), "parser.supportedMimeTypes()");
+            Objects.requireNonNull(parser.supportedExtensions(), "parser.supportedExtensions()");
         }
     }
 
-    private static Map<String, Set<String>> buildCapabilities(List<ContentParser> parsers) {
-        Map<String, Set<String>> grouped = new LinkedHashMap<>();
-        for (ContentParser parser : parsers) {
-            grouped.computeIfAbsent(parser.contentType(), ignored -> new LinkedHashSet<>())
-                    .addAll(parser.supportedMimeTypes());
-        }
-
-        Map<String, Set<String>> capabilities = new LinkedHashMap<>();
-        for (Map.Entry<String, Set<String>> entry : grouped.entrySet()) {
-            capabilities.put(
-                    entry.getKey(),
-                    Collections.unmodifiableSet(new LinkedHashSet<>(entry.getValue())));
-        }
-        return Collections.unmodifiableMap(capabilities);
+    private static ContentCapability capabilityOf(ContentParser parser) {
+        return new ContentCapability(
+                parser.parserId(),
+                parser.contentType(),
+                parser.contentProfile(),
+                parser.governanceType(),
+                parser.supportedMimeTypes(),
+                parser.supportedExtensions(),
+                parser.priority());
     }
 }

@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
+import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.AudioContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ImageContent;
@@ -25,6 +26,42 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class ExtractionRequestTest {
+
+    @Test
+    void ofShouldNormalizeDirectDocumentMetadata() {
+        var content = DocumentContent.of("Notes", "text/markdown", "# title");
+
+        var request = ExtractionRequest.of(DefaultMemoryId.of("user-1", "agent-1"), content);
+
+        assertThat(request.contentType()).isEqualTo(ContentTypes.DOCUMENT);
+        assertThat(request.metadata())
+                .containsEntry("sourceKind", "DIRECT")
+                .containsEntry("parserId", "direct")
+                .containsEntry("contentProfile", "document.markdown")
+                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_TEXT_LIKE.name())
+                .containsEntry("mimeType", "text/markdown");
+    }
+
+    @Test
+    void documentFactoryShouldNotOverrideExplicitParserMetadata() {
+        var content =
+                new DocumentContent(
+                        "Binary Export",
+                        "application/pdf",
+                        "hello",
+                        java.util.List.of(),
+                        null,
+                        Map.of("parserId", "document-tika", "contentProfile", "document.binary"));
+
+        var request = ExtractionRequest.document(DefaultMemoryId.of("user-1", "agent-1"), content);
+
+        assertThat(request.metadata())
+                .containsEntry("sourceKind", "DIRECT")
+                .containsEntry("parserId", "document-tika")
+                .containsEntry("contentProfile", "document.binary")
+                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name())
+                .containsEntry("mimeType", "application/pdf");
+    }
 
     @Test
     void documentFactoryShouldNormalizeMetadata() {
@@ -42,8 +79,70 @@ class ExtractionRequestTest {
         assertThat(request.contentType()).isEqualTo(ContentTypes.DOCUMENT);
         assertThat(request.metadata())
                 .containsEntry("author", "Alice")
+                .containsEntry("sourceKind", "DIRECT")
+                .containsEntry("parserId", "direct")
+                .containsEntry("contentProfile", "document.binary")
+                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name())
                 .containsEntry("mimeType", "application/pdf")
                 .containsEntry("sourceUri", "file:///tmp/report.pdf");
+    }
+
+    @Test
+    void documentFactoryShouldPreserveCustomProfileWithinDerivedGovernanceFamily() {
+        var content =
+                new DocumentContent(
+                        "Guide",
+                        "text/markdown",
+                        "# title",
+                        java.util.List.of(),
+                        null,
+                        Map.of("contentProfile", "document.custom.markdown"));
+
+        var request = ExtractionRequest.document(DefaultMemoryId.of("user-1", "agent-1"), content);
+
+        assertThat(request.metadata())
+                .containsEntry("contentProfile", "document.custom.markdown")
+                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_TEXT_LIKE.name());
+    }
+
+    @Test
+    void documentFactoryShouldRejectConflictingExplicitGovernanceType() {
+        var content =
+                new DocumentContent(
+                        "Guide",
+                        "text/markdown",
+                        "# title",
+                        java.util.List.of(),
+                        null,
+                        Map.of("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name()));
+
+        assertThatThrownBy(
+                        () ->
+                                ExtractionRequest.document(
+                                        DefaultMemoryId.of("user-1", "agent-1"), content))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("governanceType")
+                .hasMessageContaining(ContentGovernanceType.DOCUMENT_TEXT_LIKE.name());
+    }
+
+    @Test
+    void documentFactoryShouldRejectBuiltinProfileThatConflictsWithDerivedGovernance() {
+        var content =
+                new DocumentContent(
+                        "Guide",
+                        "text/markdown",
+                        "# title",
+                        java.util.List.of(),
+                        null,
+                        Map.of("contentProfile", "document.binary"));
+
+        assertThatThrownBy(
+                        () ->
+                                ExtractionRequest.document(
+                                        DefaultMemoryId.of("user-1", "agent-1"), content))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("contentProfile")
+                .hasMessageContaining("document.binary");
     }
 
     @Test
@@ -61,6 +160,10 @@ class ExtractionRequestTest {
         assertThat(request.contentType()).isEqualTo(ContentTypes.IMAGE);
         assertThat(request.metadata())
                 .containsEntry("width", 1280)
+                .containsEntry("sourceKind", "DIRECT")
+                .containsEntry("parserId", "direct")
+                .containsEntry("contentProfile", "image.caption-ocr")
+                .containsEntry("governanceType", ContentGovernanceType.IMAGE_CAPTION_OCR.name())
                 .containsEntry("mimeType", "image/png")
                 .containsEntry("sourceUri", "file:///tmp/dashboard.png");
     }
@@ -79,6 +182,10 @@ class ExtractionRequestTest {
 
         assertThat(request.contentType()).isEqualTo(ContentTypes.AUDIO);
         assertThat(request.metadata())
+                .containsEntry("sourceKind", "DIRECT")
+                .containsEntry("parserId", "direct")
+                .containsEntry("contentProfile", "audio.transcript")
+                .containsEntry("governanceType", ContentGovernanceType.AUDIO_TRANSCRIPT.name())
                 .containsEntry("mimeType", "audio/mpeg")
                 .containsEntry("sourceUri", "file:///tmp/audio.mp3");
     }

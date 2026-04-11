@@ -17,6 +17,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
+import com.openmemind.ai.memory.core.resource.SourceDescriptor;
+import com.openmemind.ai.memory.core.resource.SourceKind;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.zip.ZipEntry;
@@ -28,18 +30,18 @@ class TikaDocumentContentParserTest {
     private final TikaDocumentContentParser parser = new TikaDocumentContentParser();
 
     @Test
-    void parsesPlainTextDocument() {
-        DocumentContent content =
-                (DocumentContent)
-                        parser.parse(
-                                        "hello text".getBytes(StandardCharsets.UTF_8),
-                                        "note.txt",
-                                        "text/plain")
-                                .block();
-
-        assertThat(content.mimeType()).isEqualTo("text/plain");
-        assertThat(content.parsedText()).contains("hello text");
-        assertThat(content.metadata()).containsEntry("parser", "tika");
+    void exposesBinaryDocumentCapability() {
+        assertThat(parser.parserId()).isEqualTo("document-tika");
+        assertThat(parser.contentProfile()).isEqualTo("document.binary");
+        assertThat(parser.priority()).isEqualTo(50);
+        assertThat(parser.supportedMimeTypes())
+                .contains("application/pdf")
+                .doesNotContain("text/plain", "text/markdown", "text/html", "text/csv");
+        assertThat(
+                        parser.supports(
+                                new SourceDescriptor(
+                                        SourceKind.FILE, "note.txt", "text/plain", 9L, null)))
+                .isFalse();
     }
 
     @Test
@@ -50,18 +52,34 @@ class TikaDocumentContentParserTest {
 
         assertThat(content.mimeType()).isEqualTo("application/pdf");
         assertThat(content.parsedText()).contains("Hello PDF");
+        assertThat(content.metadata())
+                .containsEntry("parserId", "document-tika")
+                .containsEntry("contentProfile", "document.binary")
+                .containsEntry("parser", "tika");
     }
 
     @Test
     void parsesDocxDocumentFromOctetStreamByExtension() {
-        assertThat(parser.supports("report.docx", "application/octet-stream")).isTrue();
+        assertThat(
+                        parser.supports(
+                                new SourceDescriptor(
+                                        SourceKind.FILE,
+                                        "report.docx",
+                                        "application/octet-stream",
+                                        128L,
+                                        null)))
+                .isTrue();
 
         DocumentContent content =
                 (DocumentContent)
                         parser.parse(
                                         minimalDocx("Hello DOCX"),
-                                        "report.docx",
-                                        "application/octet-stream")
+                                        new SourceDescriptor(
+                                                SourceKind.FILE,
+                                                "report.docx",
+                                                "application/octet-stream",
+                                                128L,
+                                                null))
                                 .block();
 
         assertThat(content.mimeType())
@@ -69,11 +87,24 @@ class TikaDocumentContentParserTest {
                         "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
         assertThat(content.parsedText()).contains("Hello DOCX");
         assertThat(content.title()).isNotBlank();
+        assertThat(content.metadata())
+                .containsEntry("parserId", "document-tika")
+                .containsEntry("contentProfile", "document.binary");
     }
 
     @Test
     void rejectsEmptyPayload() {
-        assertThatThrownBy(() -> parser.parse(new byte[0], "empty.txt", "text/plain").block())
+        assertThatThrownBy(
+                        () ->
+                                parser.parse(
+                                                new byte[0],
+                                                new SourceDescriptor(
+                                                        SourceKind.FILE,
+                                                        "empty.pdf",
+                                                        "application/pdf",
+                                                        0L,
+                                                        null))
+                                        .block())
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("empty");
     }

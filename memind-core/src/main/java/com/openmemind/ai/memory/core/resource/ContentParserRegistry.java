@@ -14,6 +14,10 @@
 package com.openmemind.ai.memory.core.resource;
 
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import reactor.core.publisher.Mono;
@@ -23,7 +27,36 @@ import reactor.core.publisher.Mono;
  */
 public interface ContentParserRegistry {
 
-    Mono<RawContent> parse(byte[] data, String fileName, String mimeType);
+    Mono<ParserResolution> resolve(SourceDescriptor source);
 
-    Map<String, Set<String>> supportedMimeTypesByContentType();
+    Mono<RawContent> parse(byte[] data, SourceDescriptor source);
+
+    List<ContentCapability> capabilities();
+
+    default Mono<RawContent> parse(byte[] data, String fileName, String mimeType) {
+        return parse(
+                data,
+                new SourceDescriptor(
+                        SourceKind.FILE,
+                        fileName,
+                        mimeType,
+                        data == null ? null : (long) data.length,
+                        null));
+    }
+
+    default Map<String, Set<String>> supportedMimeTypesByContentType() {
+        Map<String, Set<String>> grouped = new LinkedHashMap<>();
+        for (ContentCapability capability : capabilities()) {
+            grouped.computeIfAbsent(capability.contentType(), ignored -> new LinkedHashSet<>())
+                    .addAll(capability.supportedMimeTypes());
+        }
+
+        Map<String, Set<String>> immutable = new LinkedHashMap<>();
+        for (Map.Entry<String, Set<String>> entry : grouped.entrySet()) {
+            immutable.put(
+                    entry.getKey(),
+                    Collections.unmodifiableSet(new LinkedHashSet<>(entry.getValue())));
+        }
+        return Collections.unmodifiableMap(immutable);
+    }
 }

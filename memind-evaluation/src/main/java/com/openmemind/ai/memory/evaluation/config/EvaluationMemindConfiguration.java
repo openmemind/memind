@@ -15,9 +15,12 @@ package com.openmemind.ai.memory.evaluation.config;
 
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.builder.AudioExtractionOptions;
 import com.openmemind.ai.memory.core.builder.DeepRetrievalOptions;
+import com.openmemind.ai.memory.core.builder.DocumentExtractionOptions;
 import com.openmemind.ai.memory.core.builder.ExtractionCommonOptions;
 import com.openmemind.ai.memory.core.builder.ExtractionOptions;
+import com.openmemind.ai.memory.core.builder.ImageExtractionOptions;
 import com.openmemind.ai.memory.core.builder.InsightExtractionOptions;
 import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
@@ -30,8 +33,8 @@ import com.openmemind.ai.memory.core.builder.RetrievalCommonOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
 import com.openmemind.ai.memory.core.builder.SufficiencyOptions;
+import com.openmemind.ai.memory.core.builder.ToolCallChunkingOptions;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TextChunkingConfig;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.LlmReranker;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
@@ -113,15 +116,15 @@ public class EvaluationMemindConfiguration {
                         new ExtractionOptions(
                                 ExtractionCommonOptions.defaults(),
                                 new RawDataExtractionOptions(
-                                        RawDataExtractionOptions.defaults().chunking(),
-                                        TextChunkingConfig.DEFAULT,
-                                        TextChunkingConfig.DEFAULT,
+                                        RawDataExtractionOptions.defaults().conversation(),
+                                        DocumentExtractionOptions.defaults(),
+                                        ImageExtractionOptions.defaults(),
+                                        AudioExtractionOptions.defaults(),
+                                        ToolCallChunkingOptions.defaults(),
                                         new CommitDetectorConfig(
                                                 boundary.getMaxMessages(),
                                                 boundary.getMaxTokens(),
-                                                boundary.getMinMessagesForLlm()),
-                                        null,
-                                        null),
+                                                boundary.getMinMessagesForLlm())),
                                 ItemExtractionOptions.defaults(),
                                 insight))
                 .retrieval(

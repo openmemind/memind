@@ -17,15 +17,25 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * Immutable descriptor returned by a {@link ResourceFetcher}.
+ * Immutable descriptor returned after a fetch session reads the response body.
  */
-public record FetchedResource(String sourceUrl, String fileName, byte[] data, String mimeType) {
+public record FetchedResource(
+        String sourceUrl,
+        String finalUrl,
+        String fileName,
+        byte[] data,
+        String mimeType,
+        long sizeBytes) {
 
     public FetchedResource {
         Objects.requireNonNull(sourceUrl, "sourceUrl is required");
+        Objects.requireNonNull(finalUrl, "finalUrl is required");
         Objects.requireNonNull(fileName, "fileName is required");
         Objects.requireNonNull(data, "data is required");
         Objects.requireNonNull(mimeType, "mimeType is required");
+        if (sizeBytes < 0) {
+            throw new IllegalArgumentException("sizeBytes must be >= 0");
+        }
         data = Arrays.copyOf(data, data.length);
     }
 

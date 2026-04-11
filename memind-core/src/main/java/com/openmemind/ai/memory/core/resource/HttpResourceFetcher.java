@@ -13,7 +13,8 @@
  */
 package com.openmemind.ai.memory.core.resource;
 
-import com.openmemind.ai.memory.core.data.MemoryId;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URLConnection;
 import java.net.URLDecoder;
@@ -22,7 +23,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 import reactor.core.publisher.Mono;
 
 /**
@@ -57,41 +61,112 @@ public class HttpResourceFetcher implements ResourceFetcher {
     }
 
     @Override
-    public Mono<FetchedResource> fetch(
-            MemoryId memoryId, String sourceUrl, String fileName, String mimeType) {
-        Objects.requireNonNull(memoryId, "memoryId is required");
-        Objects.requireNonNull(sourceUrl, "sourceUrl is required");
+    public Mono<FetchSession> open(ResourceFetchRequest request) {
+        Objects.requireNonNull(request, "request is required");
 
-        HttpRequest request =
+        HttpRequest httpRequest =
                 HttpRequest.newBuilder()
-                        .uri(URI.create(sourceUrl))
+                        .uri(URI.create(request.sourceUrl()))
                         .header("Accept", "*/*")
                         .timeout(requestTimeout)
                         .GET()
                         .build();
 
         return Mono.fromFuture(
-                        httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray()))
-                .map(response -> toFetchedResource(sourceUrl, fileName, mimeType, response));
+                        httpClient.sendAsync(
+                                httpRequest, HttpResponse.BodyHandlers.ofInputStream()))
+                .map(response -> toFetchSession(request, response));
     }
 
-    private FetchedResource toFetchedResource(
-            String sourceUrl, String fileName, String mimeType, HttpResponse<byte[]> response) {
+    private FetchSession toFetchSession(
+            ResourceFetchRequest request, HttpResponse<InputStream> response) {
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new IllegalStateException(
                     "Resource download failed: status="
                             + response.statusCode()
                             + ", sourceUrl="
-                            + sourceUrl);
+                            + request.sourceUrl());
         }
 
-        String resolvedFileName = resolveFileName(sourceUrl, fileName, response);
-        String resolvedMimeType = resolveMimeType(resolvedFileName, mimeType, response);
-        return new FetchedResource(sourceUrl, resolvedFileName, response.body(), resolvedMimeType);
+        String sourceUrl = request.sourceUrl();
+        String finalUrl = response.uri() == null ? sourceUrl : response.uri().toString();
+        String resolvedFileName = resolveFileName(sourceUrl, request.requestedFileName(), response);
+        String resolvedMimeType =
+                resolveMimeType(resolvedFileName, request.requestedMimeType(), response);
+        Long declaredContentLength = resolveDeclaredContentLength(response);
+        Map<String, List<String>> responseHeaders = Map.copyOf(response.headers().map());
+        InputStream body = response.body();
+        AtomicBoolean consumed = new AtomicBoolean(false);
+
+        return new FetchSession() {
+            @Override
+            public String sourceUrl() {
+                return sourceUrl;
+            }
+
+            @Override
+            public String finalUrl() {
+                return finalUrl;
+            }
+
+            @Override
+            public int statusCode() {
+                return response.statusCode();
+            }
+
+            @Override
+            public Map<String, List<String>> responseHeaders() {
+                return responseHeaders;
+            }
+
+            @Override
+            public String resolvedFileName() {
+                return resolvedFileName;
+            }
+
+            @Override
+            public String resolvedMimeType() {
+                return resolvedMimeType;
+            }
+
+            @Override
+            public Long declaredContentLength() {
+                return declaredContentLength;
+            }
+
+            @Override
+            public Mono<FetchedResource> readBody(long maxBytes) {
+                if (maxBytes <= 0) {
+                    return Mono.error(new IllegalArgumentException("maxBytes must be positive"));
+                }
+                if (declaredContentLength != null && declaredContentLength > maxBytes) {
+                    return Mono.error(
+                            new SourceTooLargeException(
+                                    "Source exceeds declared byte limit: sourceUrl=%s declared=%d max=%d"
+                                            .formatted(
+                                                    sourceUrl, declaredContentLength, maxBytes)));
+                }
+                if (!consumed.compareAndSet(false, true)) {
+                    return Mono.error(
+                            new IllegalStateException("FetchSession body already consumed"));
+                }
+                return Mono.fromCallable(
+                        () -> {
+                            byte[] data = readBodyBytes(body, maxBytes);
+                            return new FetchedResource(
+                                    sourceUrl,
+                                    finalUrl,
+                                    resolvedFileName,
+                                    data,
+                                    resolvedMimeType,
+                                    data.length);
+                        });
+            }
+        };
     }
 
     private String resolveFileName(
-            String sourceUrl, String requestedFileName, HttpResponse<byte[]> response) {
+            String sourceUrl, String requestedFileName, HttpResponse<?> response) {
         if (requestedFileName != null && !requestedFileName.isBlank()) {
             return requestedFileName;
         }
@@ -117,7 +192,7 @@ public class HttpResourceFetcher implements ResourceFetcher {
     }
 
     private String resolveMimeType(
-            String resolvedFileName, String requestedMimeType, HttpResponse<byte[]> response) {
+            String resolvedFileName, String requestedMimeType, HttpResponse<?> response) {
         if (requestedMimeType != null && !requestedMimeType.isBlank()) {
             return requestedMimeType;
         }
@@ -135,6 +210,40 @@ public class HttpResourceFetcher implements ResourceFetcher {
         return guessedMimeType == null || guessedMimeType.isBlank()
                 ? DEFAULT_MIME_TYPE
                 : guessedMimeType;
+    }
+
+    private Long resolveDeclaredContentLength(HttpResponse<?> response) {
+        return response.headers()
+                .firstValue("Content-Length")
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .map(
+                        value -> {
+                            try {
+                                return Long.parseLong(value);
+                            } catch (NumberFormatException ignored) {
+                                return null;
+                            }
+                        })
+                .orElse(null);
+    }
+
+    private byte[] readBodyBytes(InputStream body, long maxBytes) throws Exception {
+        try (body;
+                var output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            long totalBytes = 0;
+            int read;
+            while ((read = body.read(buffer)) >= 0) {
+                totalBytes += read;
+                if (totalBytes > maxBytes) {
+                    throw new SourceTooLargeException(
+                            "Source exceeds byte limit while reading: max=%d".formatted(maxBytes));
+                }
+                output.write(buffer, 0, read);
+            }
+            return output.toByteArray();
+        }
     }
 
     private String extractFileNameFromContentDisposition(String contentDisposition) {

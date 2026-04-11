@@ -15,12 +15,13 @@ package com.openmemind.ai.memory.core.resource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 
 import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
@@ -29,113 +30,165 @@ import reactor.test.StepVerifier;
 class ContentParserRegistryTest {
 
     @Test
-    void routesToSingleMatchingParser() {
-        ContentParser documentParser =
+    void resolveReturnsHighestPriorityParserForSameContentType() {
+        ContentParser nativeMarkdown =
                 parser(
+                        "document-native-text",
                         ContentTypes.DOCUMENT,
-                        Set.of("application/pdf"),
-                        "report.pdf",
-                        DocumentContent.of("Report", "application/pdf", "hello pdf"));
-        ContentParser imageParser =
+                        "document.markdown",
+                        100,
+                        Set.of("text/markdown"),
+                        Set.of(".md"));
+        ContentParser fallbackDocument =
                 parser(
-                        ContentTypes.IMAGE,
-                        Set.of("image/png"),
-                        "image.png",
-                        new TestRawContent(ContentTypes.IMAGE, "pixel"));
+                        "document-fallback",
+                        ContentTypes.DOCUMENT,
+                        "document.binary",
+                        10,
+                        Set.of("text/markdown", "application/pdf"),
+                        Set.of(".md", ".pdf"));
 
         ContentParserRegistry registry =
-                new DefaultContentParserRegistry(List.of(documentParser, imageParser));
+                new DefaultContentParserRegistry(List.of(fallbackDocument, nativeMarkdown));
 
-        StepVerifier.create(registry.parse(new byte[] {1, 2, 3}, "report.pdf", "application/pdf"))
+        StepVerifier.create(
+                        registry.resolve(
+                                new SourceDescriptor(
+                                        SourceKind.FILE, "notes.md", "text/markdown", 42L, null)))
                 .assertNext(
-                        content -> {
-                            assertThat(content.contentType()).isEqualTo(ContentTypes.DOCUMENT);
-                            assertThat(content.toContentString()).isEqualTo("hello pdf");
+                        resolution -> {
+                            assertThat(resolution.parser().parserId())
+                                    .isEqualTo("document-native-text");
+                            assertThat(resolution.capability().contentProfile())
+                                    .isEqualTo("document.markdown");
+                            assertThat(resolution.capability().governanceType())
+                                    .isEqualTo(ContentGovernanceType.DOCUMENT_TEXT_LIKE);
                         })
                 .verifyComplete();
     }
 
     @Test
-    void rejectsDuplicateStableMimeClaimsAtConstruction() {
-        ContentParser first =
-                parser(
-                        ContentTypes.DOCUMENT,
-                        Set.of("application/pdf"),
-                        "report.pdf",
-                        DocumentContent.of("First", "application/pdf", "one"));
-        ContentParser second =
-                parser(
-                        ContentTypes.IMAGE,
-                        Set.of("application/pdf"),
-                        "image.pdf",
-                        new TestRawContent(ContentTypes.IMAGE, "two"));
-
-        assertThatThrownBy(() -> new DefaultContentParserRegistry(List.of(first, second)))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("application/pdf");
-    }
-
-    @Test
-    void exposesCapabilitiesByContentType() {
-        ContentParser documentParser =
-                parser(
-                        ContentTypes.DOCUMENT,
-                        Set.of("application/pdf", "text/plain"),
-                        "report.pdf",
-                        DocumentContent.of("Report", "application/pdf", "hello"));
-
-        ContentParserRegistry registry = new DefaultContentParserRegistry(List.of(documentParser));
-
-        assertThat(registry.supportedMimeTypesByContentType())
-                .isEqualTo(Map.of(ContentTypes.DOCUMENT, Set.of("application/pdf", "text/plain")));
-    }
-
-    @Test
-    void failsWhenNoParserMatches() {
+    void supportedCapabilitiesIncludeParserIdProfileAndExtensions() {
         ContentParserRegistry registry =
                 new DefaultContentParserRegistry(
                         List.of(
                                 parser(
+                                        "document-native-text",
                                         ContentTypes.DOCUMENT,
-                                        Set.of("application/pdf"),
-                                        "report.pdf",
-                                        DocumentContent.of("Report", "application/pdf", "hello"))));
+                                        "document.text",
+                                        100,
+                                        Set.of("text/plain"),
+                                        Set.of(".txt"))));
 
-        StepVerifier.create(
-                        registry.parse(new byte[] {9}, "unknown.bin", "application/octet-stream"))
-                .verifyError(UnsupportedContentSourceException.class);
+        assertThat(registry.capabilities())
+                .extracting(
+                        ContentCapability::parserId,
+                        ContentCapability::contentProfile,
+                        ContentCapability::governanceType,
+                        ContentCapability::supportedExtensions)
+                .containsExactly(
+                        tuple(
+                                "document-native-text",
+                                "document.text",
+                                ContentGovernanceType.DOCUMENT_TEXT_LIKE,
+                                Set.of(".txt")));
     }
 
     @Test
-    void failsWhenMultipleParsersMatchAtRuntime() {
+    void rejectsDuplicateParserIdAtConstruction() {
         ContentParser first =
                 parser(
+                        "document-parser",
                         ContentTypes.DOCUMENT,
-                        Set.of("application/pdf"),
-                        "report.pdf",
-                        DocumentContent.of("First", "application/pdf", "one"));
+                        "document.text",
+                        100,
+                        Set.of("text/plain"),
+                        Set.of(".txt"));
         ContentParser second =
-                parserWithNoStableMime(
-                        ContentTypes.IMAGE,
-                        "report.pdf",
-                        "application/pdf",
-                        new TestRawContent(ContentTypes.IMAGE, "two"));
+                parser(
+                        "document-parser",
+                        ContentTypes.DOCUMENT,
+                        "document.markdown",
+                        90,
+                        Set.of("text/markdown"),
+                        Set.of(".md"));
+
+        assertThatThrownBy(() -> new DefaultContentParserRegistry(List.of(first, second)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("document-parser");
+    }
+
+    @Test
+    void resolveFailsWhenTopParsersShareSamePriority() {
+        ContentParser first =
+                parser(
+                        "document-markdown-a",
+                        ContentTypes.DOCUMENT,
+                        "document.markdown",
+                        100,
+                        Set.of("text/markdown"),
+                        Set.of(".md"));
+        ContentParser second =
+                parser(
+                        "document-markdown-b",
+                        ContentTypes.DOCUMENT,
+                        "document.markdown",
+                        100,
+                        Set.of("text/markdown"),
+                        Set.of(".md"));
 
         ContentParserRegistry registry = new DefaultContentParserRegistry(List.of(first, second));
 
-        StepVerifier.create(registry.parse(new byte[] {1}, "report.pdf", "application/pdf"))
+        StepVerifier.create(
+                        registry.resolve(
+                                new SourceDescriptor(
+                                        SourceKind.FILE, "notes.md", "text/markdown", 42L, null)))
                 .verifyError(AmbiguousContentParserException.class);
     }
 
+    @Test
+    void registryRejectsNonBuiltinProfileWithoutExplicitGovernanceType() {
+        ContentParser parser =
+                parser(
+                        "document-custom",
+                        ContentTypes.DOCUMENT,
+                        "document.pdf.tika",
+                        100,
+                        Set.of("application/pdf"),
+                        Set.of(".pdf"));
+
+        assertThatThrownBy(() -> new DefaultContentParserRegistry(List.of(parser)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("document.pdf.tika")
+                .hasMessageContaining("governanceType()");
+    }
+
     private static ContentParser parser(
+            String parserId,
             String contentType,
+            String contentProfile,
+            int priority,
             Set<String> mimeTypes,
-            String supportedFileName,
-            RawContent output) {
+            Set<String> extensions) {
         return new ContentParser() {
+            @Override
+            public String parserId() {
+                return parserId;
+            }
+
             @Override
             public String contentType() {
                 return contentType;
+            }
+
+            @Override
+            public String contentProfile() {
+                return contentProfile;
+            }
+
+            @Override
+            public int priority() {
+                return priority;
             }
 
             @Override
@@ -144,69 +197,23 @@ class ContentParserRegistryTest {
             }
 
             @Override
-            public boolean supports(String fileName, String mimeType) {
-                return supportedMimeTypes().contains(mimeType)
-                        && supportedFileName.equals(fileName);
+            public Set<String> supportedExtensions() {
+                return extensions;
             }
 
             @Override
-            public Mono<RawContent> parse(byte[] data, String fileName, String mimeType) {
-                return Mono.just(output);
+            public boolean supports(SourceDescriptor source) {
+                return source.mimeType() != null && supportedMimeTypes().contains(source.mimeType())
+                        || source.fileName() != null
+                                && supportedExtensions().stream()
+                                        .anyMatch(ext -> source.fileName().endsWith(ext));
+            }
+
+            @Override
+            public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
+                return Mono.just(
+                        DocumentContent.of("Report", source.mimeType(), "hello " + contentProfile));
             }
         };
-    }
-
-    private static ContentParser parserWithNoStableMime(
-            String contentType,
-            String supportedFileName,
-            String supportedMimeType,
-            RawContent output) {
-        return new ContentParser() {
-            @Override
-            public String contentType() {
-                return contentType;
-            }
-
-            @Override
-            public Set<String> supportedMimeTypes() {
-                return Set.of();
-            }
-
-            @Override
-            public boolean supports(String fileName, String mimeType) {
-                return supportedMimeType.equals(mimeType) && supportedFileName.equals(fileName);
-            }
-
-            @Override
-            public Mono<RawContent> parse(byte[] data, String fileName, String mimeType) {
-                return Mono.just(output);
-            }
-        };
-    }
-
-    private static final class TestRawContent extends RawContent {
-
-        private final String contentType;
-        private final String value;
-
-        private TestRawContent(String contentType, String value) {
-            this.contentType = contentType;
-            this.value = value;
-        }
-
-        @Override
-        public String contentType() {
-            return contentType;
-        }
-
-        @Override
-        public String toContentString() {
-            return value;
-        }
-
-        @Override
-        public String getContentId() {
-            return value;
-        }
     }
 }

@@ -25,7 +25,6 @@ import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TextChunkingConfig;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
@@ -100,6 +99,7 @@ class MemoryAssemblersTest {
             new CommitDetectorConfig(6, 2048, 4);
     private static final InsightBuildConfig CUSTOM_INSIGHT_BUILD =
             new InsightBuildConfig(7, 5, 3, 2);
+    private static final int CUSTOM_VECTOR_BATCH_SIZE = 17;
 
     @Test
     void extractionAssemblerUsesNestedBuildOptionsForBoundaryAndInsightSchedulers() {
@@ -113,9 +113,12 @@ class MemoryAssemblersTest {
                                                         com.openmemind.ai.memory.core.extraction
                                                                 .rawdata.chunk
                                                                 .ConversationChunkingConfig.DEFAULT,
-                                                        TextChunkingConfig.DEFAULT,
-                                                        TextChunkingConfig.DEFAULT,
-                                                        CUSTOM_COMMIT_DETECTION),
+                                                        DocumentExtractionOptions.defaults(),
+                                                        ImageExtractionOptions.defaults(),
+                                                        AudioExtractionOptions.defaults(),
+                                                        ToolCallChunkingOptions.defaults(),
+                                                        CUSTOM_COMMIT_DETECTION,
+                                                        CUSTOM_VECTOR_BATCH_SIZE),
                                                 ItemExtractionOptions.defaults(),
                                                 new InsightExtractionOptions(
                                                         true, CUSTOM_INSIGHT_BUILD)))
@@ -142,6 +145,12 @@ class MemoryAssemblersTest {
                 .isSameAs(RESOURCE_STORE);
         assertThat(readField(extractor, "resourceFetcher", ResourceFetcher.class))
                 .isSameAs(RESOURCE_FETCHER);
+        assertThat(readField(extractor, "rawDataExtractionOptions", RawDataExtractionOptions.class))
+                .isEqualTo(context.options().extraction().rawdata());
+        assertThat(readField(rawDataLayer, "vectorBatchSize", Integer.class))
+                .isEqualTo(CUSTOM_VECTOR_BATCH_SIZE);
+        assertThat(readField(extractor, "itemExtractionOptions", ItemExtractionOptions.class))
+                .isEqualTo(context.options().extraction().item());
 
         @SuppressWarnings("unchecked")
         var processors = readField(rawDataLayer, "processors", Map.class);

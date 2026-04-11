@@ -83,6 +83,15 @@ public record ExtractionRequest(
      * <p>The content type is derived from {@link RawContent#contentType()}.
      */
     public static ExtractionRequest of(MemoryId memoryId, RawContent content) {
+        if (content instanceof DocumentContent documentContent) {
+            return document(memoryId, documentContent);
+        }
+        if (content instanceof ImageContent imageContent) {
+            return image(memoryId, imageContent);
+        }
+        if (content instanceof AudioContent audioContent) {
+            return audio(memoryId, audioContent);
+        }
         return new ExtractionRequest(
                 memoryId,
                 content,
@@ -97,14 +106,15 @@ public record ExtractionRequest(
      * Create document extraction request with normalized multimodal metadata.
      */
     public static ExtractionRequest document(MemoryId memoryId, DocumentContent content) {
+        var normalizedContent =
+                (DocumentContent) MultimodalMetadataNormalizer.normalizeDirectContent(content);
         return new ExtractionRequest(
                 memoryId,
-                content,
+                normalizedContent,
                 null,
                 null,
                 ContentTypes.DOCUMENT,
-                normalizeMultimodalMetadata(
-                        content.metadata(), content.sourceUri(), content.mimeType()),
+                MultimodalMetadataNormalizer.snapshot(normalizedContent),
                 ExtractionConfig.defaults());
     }
 
@@ -112,14 +122,15 @@ public record ExtractionRequest(
      * Create image extraction request with normalized multimodal metadata.
      */
     public static ExtractionRequest image(MemoryId memoryId, ImageContent content) {
+        var normalizedContent =
+                (ImageContent) MultimodalMetadataNormalizer.normalizeDirectContent(content);
         return new ExtractionRequest(
                 memoryId,
-                content,
+                normalizedContent,
                 null,
                 null,
                 ContentTypes.IMAGE,
-                normalizeMultimodalMetadata(
-                        content.metadata(), content.sourceUri(), content.mimeType()),
+                MultimodalMetadataNormalizer.snapshot(normalizedContent),
                 ExtractionConfig.defaults());
     }
 
@@ -127,14 +138,15 @@ public record ExtractionRequest(
      * Create audio extraction request with normalized multimodal metadata.
      */
     public static ExtractionRequest audio(MemoryId memoryId, AudioContent content) {
+        var normalizedContent =
+                (AudioContent) MultimodalMetadataNormalizer.normalizeDirectContent(content);
         return new ExtractionRequest(
                 memoryId,
-                content,
+                normalizedContent,
                 null,
                 null,
                 ContentTypes.AUDIO,
-                normalizeMultimodalMetadata(
-                        content.metadata(), content.sourceUri(), content.mimeType()),
+                MultimodalMetadataNormalizer.snapshot(normalizedContent),
                 ExtractionConfig.defaults());
     }
 
@@ -221,21 +233,7 @@ public record ExtractionRequest(
     }
 
     static Map<String, Object> normalizeMultimodalMetadata(RawContent content) {
-        if (content instanceof DocumentContent documentContent) {
-            return normalizeMultimodalMetadata(
-                    documentContent.metadata(),
-                    documentContent.sourceUri(),
-                    documentContent.mimeType());
-        }
-        if (content instanceof ImageContent imageContent) {
-            return normalizeMultimodalMetadata(
-                    imageContent.metadata(), imageContent.sourceUri(), imageContent.mimeType());
-        }
-        if (content instanceof AudioContent audioContent) {
-            return normalizeMultimodalMetadata(
-                    audioContent.metadata(), audioContent.sourceUri(), audioContent.mimeType());
-        }
-        return Map.of();
+        return MultimodalMetadataNormalizer.snapshot(content);
     }
 
     static Map<String, Object> normalizeMultimodalMetadata(

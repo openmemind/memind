@@ -13,15 +13,14 @@
  */
 package com.openmemind.ai.memory.core.extraction.rawdata.processor;
 
+import com.openmemind.ai.memory.core.builder.AudioExtractionOptions;
 import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TextChunker;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TextChunkingConfig;
+import com.openmemind.ai.memory.core.extraction.rawdata.caption.AudioCaptionGenerator;
+import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TranscriptSegmentChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.AudioContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.audio.TranscriptSegment;
-import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,13 +32,17 @@ import reactor.core.publisher.Mono;
  */
 public class AudioContentProcessor implements RawContentProcessor<AudioContent> {
 
-    private final TextChunker textChunker;
-    private final TextChunkingConfig chunkingConfig;
+    private final TranscriptSegmentChunker transcriptSegmentChunker;
+    private final AudioExtractionOptions options;
+    private final CaptionGenerator captionGenerator;
 
-    public AudioContentProcessor(TextChunker textChunker, TextChunkingConfig chunkingConfig) {
-        this.textChunker = Objects.requireNonNull(textChunker, "textChunker must not be null");
-        this.chunkingConfig =
-                Objects.requireNonNull(chunkingConfig, "chunkingConfig must not be null");
+    public AudioContentProcessor(
+            TranscriptSegmentChunker transcriptSegmentChunker, AudioExtractionOptions options) {
+        this.transcriptSegmentChunker =
+                Objects.requireNonNull(
+                        transcriptSegmentChunker, "transcriptSegmentChunker must not be null");
+        this.options = Objects.requireNonNull(options, "options must not be null");
+        this.captionGenerator = new AudioCaptionGenerator();
     }
 
     @Override
@@ -54,78 +57,28 @@ public class AudioContentProcessor implements RawContentProcessor<AudioContent> 
 
     @Override
     public Mono<List<Segment>> chunk(AudioContent content) {
-        if (content.segments().isEmpty()) {
-            return Mono.just(textChunker.chunk(content.toContentString(), chunkingConfig));
-        }
-
-        List<Segment> chunks = new ArrayList<>();
-        List<TranscriptSegment> current = new ArrayList<>();
-        int currentLength = 0;
-        int chunkStart = 0;
-        int cursor = 0;
-        for (TranscriptSegment segment : content.segments()) {
-            String text = segment.text() == null ? "" : segment.text();
-            if (text.isBlank()) {
-                continue;
-            }
-            int additional = current.isEmpty() ? text.length() : text.length() + 1;
-            if (!current.isEmpty() && currentLength + additional > chunkingConfig.chunkSize()) {
-                chunks.add(buildTranscriptChunk(current, chunkStart, cursor));
-                chunkStart = cursor + 1;
-                current = new ArrayList<>();
-                currentLength = 0;
-            }
-            current.add(segment);
-            cursor += additional;
-            currentLength += additional;
-        }
-        if (!current.isEmpty()) {
-            chunks.add(buildTranscriptChunk(current, chunkStart, cursor));
-        }
-        return Mono.just(chunks);
+        return Mono.just(
+                transcriptSegmentChunker.chunk(content, options).stream()
+                        .map(segment -> mergeMetadata(segment, content.metadata()))
+                        .toList());
     }
 
-    private Segment buildTranscriptChunk(
-            List<TranscriptSegment> transcriptSegments, int startOffset, int endOffset) {
-        String content =
-                transcriptSegments.stream()
-                        .map(TranscriptSegment::text)
-                        .reduce((a, b) -> a + "\n" + b)
-                        .orElse("");
-        TranscriptSegment first = transcriptSegments.getFirst();
-        TranscriptSegment last = transcriptSegments.getLast();
-        Map<String, Object> metadata = new LinkedHashMap<>();
-        if (first.startTime() != null) {
-            metadata.put("startTime", first.startTime());
+    @Override
+    public CaptionGenerator captionGenerator() {
+        return captionGenerator;
+    }
+
+    private Segment mergeMetadata(Segment segment, Map<String, Object> contentMetadata) {
+        if (contentMetadata == null || contentMetadata.isEmpty()) {
+            return segment;
         }
-        if (last.endTime() != null) {
-            metadata.put("endTime", last.endTime());
-        }
-        String speaker = singleSpeaker(transcriptSegments);
-        if (speaker != null) {
-            metadata.put("speaker", speaker);
-        }
+        Map<String, Object> metadata = new LinkedHashMap<>(contentMetadata);
+        metadata.putAll(segment.metadata());
         return new Segment(
-                content,
-                null,
-                new CharBoundary(startOffset, endOffset),
-                metadata.isEmpty() ? Map.of() : Map.copyOf(metadata));
-    }
-
-    private String singleSpeaker(List<TranscriptSegment> segments) {
-        String speaker = null;
-        for (TranscriptSegment segment : segments) {
-            if (segment.speaker() == null || segment.speaker().isBlank()) {
-                return null;
-            }
-            if (speaker == null) {
-                speaker = segment.speaker();
-                continue;
-            }
-            if (!speaker.equals(segment.speaker())) {
-                return null;
-            }
-        }
-        return speaker;
+                segment.content(),
+                segment.caption(),
+                segment.boundary(),
+                Map.copyOf(metadata),
+                segment.runtimeContext());
     }
 }

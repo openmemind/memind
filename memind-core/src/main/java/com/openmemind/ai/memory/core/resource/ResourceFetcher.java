@@ -13,14 +13,12 @@
  */
 package com.openmemind.ai.memory.core.resource;
 
-import com.openmemind.ai.memory.core.data.MemoryId;
 import reactor.core.publisher.Mono;
 
 /**
- * Optional downloader that converts a remote URL into a fetched resource payload.
+ * Optional downloader that opens a remote URL in two phases: headers first, body later.
  */
 public interface ResourceFetcher {
 
-    Mono<FetchedResource> fetch(
-            MemoryId memoryId, String sourceUrl, String fileName, String mimeType);
+    Mono<FetchSession> open(ResourceFetchRequest request);
 }

@@ -22,6 +22,7 @@ import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.DefaultContentParserRegistry;
+import com.openmemind.ai.memory.core.resource.NativeTextDocumentContentParser;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
@@ -33,6 +34,8 @@ import com.openmemind.ai.memory.server.service.config.MemoryOptionService;
 import com.openmemind.ai.memory.server.service.config.MemoryOptionsCodec;
 import com.openmemind.ai.memory.server.service.config.MemoryOptionsProjectionMapper;
 import com.openmemind.ai.memory.server.service.config.ServerRuntimeConfigRepository;
+import java.util.ArrayList;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -74,7 +77,7 @@ public class MemindServerRuntimeConfiguration {
             MemoryStore memoryStore = requireRuntimeDependency(memoryStoreProvider);
             MemoryBuffer memoryBuffer = requireRuntimeDependency(memoryBufferProvider);
             MemoryVector memoryVector = requireRuntimeDependency(memoryVectorProvider);
-            var parsers = contentParserProvider.orderedStream().toList();
+            List<ContentParser> parsers = resolveContentParsers(contentParserProvider);
             ContentParserRegistry contentParserRegistry =
                     parsers.isEmpty() ? null : new DefaultContentParserRegistry(parsers);
             ResourceFetcher resourceFetcher = resourceFetcherProvider.getIfAvailable();
@@ -102,6 +105,20 @@ public class MemindServerRuntimeConfiguration {
             }
             return builder.build();
         };
+    }
+
+    private static List<ContentParser> resolveContentParsers(
+            ObjectProvider<ContentParser> contentParserProvider) {
+        List<ContentParser> resolved =
+                new ArrayList<>(contentParserProvider.orderedStream().toList());
+        boolean hasNativeTextParser =
+                resolved.stream()
+                        .map(ContentParser::parserId)
+                        .anyMatch("document-native-text"::equals);
+        if (!hasNativeTextParser) {
+            resolved.add(0, new NativeTextDocumentContentParser());
+        }
+        return List.copyOf(resolved);
     }
 
     @Bean

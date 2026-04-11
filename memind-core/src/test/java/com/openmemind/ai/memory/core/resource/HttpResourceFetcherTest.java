@@ -17,6 +17,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.net.Authenticator;
 import java.net.CookieHandler;
 import java.net.ProxySelector;
@@ -40,7 +42,7 @@ import org.junit.jupiter.api.Test;
 class HttpResourceFetcherTest {
 
     @Test
-    void fetchShouldDownloadBytesAndInferFileNameAndMimeType() {
+    void openShouldExposeHeadersBeforeReadingBody() {
         var response =
                 new StubHttpResponse(
                         200,
@@ -48,23 +50,32 @@ class HttpResourceFetcherTest {
                         new byte[] {1, 2, 3},
                         Map.of("Content-Type", List.of("application/pdf")));
 
-        var fetched =
+        var session =
                 new HttpResourceFetcher(new StubHttpClient(response))
-                        .fetch(
-                                DefaultMemoryId.of("user-1", "agent-1"),
-                                "https://example.com/files/report.pdf",
-                                null,
-                                null)
+                        .open(
+                                new ResourceFetchRequest(
+                                        DefaultMemoryId.of("user-1", "agent-1"),
+                                        "https://example.com/files/report.pdf",
+                                        null,
+                                        null))
                         .block();
 
+        assertThat(session).isNotNull();
+        assertThat(session.resolvedFileName()).isEqualTo("report.pdf");
+        assertThat(session.resolvedMimeType()).isEqualTo("application/pdf");
+        assertThat(session.declaredContentLength()).isNull();
+
+        var fetched = session.readBody(1024L).block();
         assertThat(fetched).isNotNull();
         assertThat(fetched.fileName()).isEqualTo("report.pdf");
         assertThat(fetched.mimeType()).isEqualTo("application/pdf");
+        assertThat(fetched.finalUrl()).isEqualTo("https://example.com/files/report.pdf");
+        assertThat(fetched.sizeBytes()).isEqualTo(3L);
         assertThat(fetched.data()).containsExactly((byte) 1, (byte) 2, (byte) 3);
     }
 
     @Test
-    void fetchShouldInferFileNameFromRedirectTarget() {
+    void openShouldInferFileNameFromRedirectTarget() {
         var response =
                 new StubHttpResponse(
                         200,
@@ -72,21 +83,23 @@ class HttpResourceFetcherTest {
                         "payload".getBytes(StandardCharsets.UTF_8),
                         Map.of("Content-Type", List.of("application/pdf")));
 
-        var fetched =
+        var session =
                 new HttpResourceFetcher(new StubHttpClient(response))
-                        .fetch(
-                                DefaultMemoryId.of("user-1", "agent-1"),
-                                "https://example.com/redirect",
-                                null,
-                                null)
+                        .open(
+                                new ResourceFetchRequest(
+                                        DefaultMemoryId.of("user-1", "agent-1"),
+                                        "https://example.com/redirect",
+                                        null,
+                                        null))
                         .block();
 
-        assertThat(fetched).isNotNull();
-        assertThat(fetched.fileName()).isEqualTo("final.pdf");
+        assertThat(session).isNotNull();
+        assertThat(session.resolvedFileName()).isEqualTo("final.pdf");
+        assertThat(session.finalUrl()).isEqualTo("https://example.com/downloads/final.pdf");
     }
 
     @Test
-    void fetchShouldRespectRequestedFileNameAndMimeTypeOverrides() {
+    void openShouldRespectRequestedFileNameAndMimeTypeOverrides() {
         var response =
                 new StubHttpResponse(
                         200,
@@ -94,22 +107,50 @@ class HttpResourceFetcherTest {
                         "hello".getBytes(StandardCharsets.UTF_8),
                         Map.of("Content-Type", List.of("text/plain")));
 
-        var fetched =
+        var session =
                 new HttpResourceFetcher(new StubHttpClient(response))
-                        .fetch(
-                                DefaultMemoryId.of("user-1", "agent-1"),
-                                "https://example.com/files/raw",
-                                "override.bin",
-                                "application/custom")
+                        .open(
+                                new ResourceFetchRequest(
+                                        DefaultMemoryId.of("user-1", "agent-1"),
+                                        "https://example.com/files/raw",
+                                        "override.bin",
+                                        "application/custom"))
                         .block();
 
-        assertThat(fetched).isNotNull();
-        assertThat(fetched.fileName()).isEqualTo("override.bin");
-        assertThat(fetched.mimeType()).isEqualTo("application/custom");
+        assertThat(session).isNotNull();
+        assertThat(session.resolvedFileName()).isEqualTo("override.bin");
+        assertThat(session.resolvedMimeType()).isEqualTo("application/custom");
     }
 
     @Test
-    void fetchShouldFailWhenStatusIsNotSuccessful() {
+    void readBodyShouldRejectWhenBytesExceedBudget() {
+        var response =
+                new StubHttpResponse(
+                        200,
+                        URI.create("https://example.com/report.pdf"),
+                        new byte[] {1, 2, 3, 4},
+                        Map.of(
+                                "Content-Type", List.of("application/pdf"),
+                                "Content-Length", List.of("4096")));
+
+        var session =
+                new HttpResourceFetcher(new StubHttpClient(response))
+                        .open(
+                                new ResourceFetchRequest(
+                                        DefaultMemoryId.of("user-1", "agent-1"),
+                                        "https://example.com/report.pdf",
+                                        null,
+                                        null))
+                        .block();
+
+        assertThat(session).isNotNull();
+        assertThat(session.declaredContentLength()).isEqualTo(4096L);
+        assertThatThrownBy(() -> session.readBody(1024L).block())
+                .isInstanceOf(SourceTooLargeException.class);
+    }
+
+    @Test
+    void openShouldFailWhenStatusIsNotSuccessful() {
         var response =
                 new StubHttpResponse(
                         404,
@@ -120,11 +161,12 @@ class HttpResourceFetcherTest {
         assertThatThrownBy(
                         () ->
                                 new HttpResourceFetcher(new StubHttpClient(response))
-                                        .fetch(
-                                                DefaultMemoryId.of("user-1", "agent-1"),
-                                                "https://example.com/missing",
-                                                null,
-                                                null)
+                                        .open(
+                                                new ResourceFetchRequest(
+                                                        DefaultMemoryId.of("user-1", "agent-1"),
+                                                        "https://example.com/missing",
+                                                        null,
+                                                        null))
                                         .block())
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("status=404");
@@ -132,9 +174,9 @@ class HttpResourceFetcherTest {
 
     private static final class StubHttpClient extends HttpClient {
 
-        private final HttpResponse<byte[]> response;
+        private final HttpResponse<InputStream> response;
 
-        private StubHttpClient(HttpResponse<byte[]> response) {
+        private StubHttpClient(HttpResponse<InputStream> response) {
             this.response = response;
         }
 
@@ -205,18 +247,18 @@ class HttpResourceFetcherTest {
         }
     }
 
-    private static final class StubHttpResponse implements HttpResponse<byte[]> {
+    private static final class StubHttpResponse implements HttpResponse<InputStream> {
 
         private final int statusCode;
         private final URI uri;
-        private final byte[] body;
+        private final InputStream body;
         private final HttpHeaders headers;
 
         private StubHttpResponse(
                 int statusCode, URI uri, byte[] body, Map<String, List<String>> headers) {
             this.statusCode = statusCode;
             this.uri = uri;
-            this.body = body;
+            this.body = new ByteArrayInputStream(body);
             this.headers = HttpHeaders.of(headers, (name, value) -> true);
         }
 
@@ -231,7 +273,7 @@ class HttpResourceFetcherTest {
         }
 
         @Override
-        public Optional<HttpResponse<byte[]>> previousResponse() {
+        public Optional<HttpResponse<InputStream>> previousResponse() {
             return Optional.empty();
         }
 
@@ -241,7 +283,7 @@ class HttpResourceFetcherTest {
         }
 
         @Override
-        public byte[] body() {
+        public InputStream body() {
             return body;
         }
 

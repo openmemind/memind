@@ -41,9 +41,13 @@ import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.LlmConversationCaptionGenerator;
+import com.openmemind.ai.memory.core.extraction.rawdata.caption.ToolCallCaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunker;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ImageSegmentComposer;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChunker;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TextChunker;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ProfileAwareDocumentChunker;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ToolCallChunker;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TranscriptSegmentChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.AudioContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.DocumentContentProcessor;
@@ -78,7 +82,8 @@ final class MemoryExtractionAssembler {
                         processors,
                         captionGenerator,
                         context.memoryStore(),
-                        context.memoryVector());
+                        context.memoryVector(),
+                        context.options().extraction().rawdata().vectorBatchSize());
 
         MemoryItemExtractor itemExtractor =
                 createMemoryItemExtractor(registry, processors, context.promptRegistry());
@@ -146,7 +151,9 @@ final class MemoryExtractionAssembler {
                         context.recentConversationBuffer(),
                         context.contentParserRegistry(),
                         context.memoryStore().resourceStore(),
-                        resolveResourceFetcher(context.resourceFetcher()));
+                        resolveResourceFetcher(context.resourceFetcher()),
+                        context.options().extraction().rawdata(),
+                        context.options().extraction().item());
         return new MemoryExtractionAssembly(pipeline, insightLayer, insightBuildScheduler);
     }
 
@@ -165,27 +172,31 @@ final class MemoryExtractionAssembler {
                         registry.resolve(ChatClientSlot.CONVERSATION_CHUNKER),
                         conversationChunker,
                         promptRegistry);
-        TextChunker textChunker = new TextChunker();
 
         ConversationContentProcessor conversationProcessor =
                 new ConversationContentProcessor(
                         conversationChunker,
                         llmConversationChunker,
-                        options.extraction().rawdata().chunking(),
+                        options.extraction().rawdata().conversation(),
                         captionGenerator,
                         null);
         ToolCallContentProcessor toolCallProcessor =
                 new ToolCallContentProcessor(
+                        new ToolCallChunker(options.extraction().rawdata().toolCall()),
+                        new ToolCallCaptionGenerator(),
                         new LlmToolCallItemExtractionStrategy(
                                 registry.resolve(ChatClientSlot.TOOL_CALL_EXTRACTION),
                                 promptRegistry));
         DocumentContentProcessor documentProcessor =
                 new DocumentContentProcessor(
-                        textChunker, options.extraction().rawdata().documentChunking());
-        ImageContentProcessor imageProcessor = new ImageContentProcessor();
+                        new ProfileAwareDocumentChunker(),
+                        options.extraction().rawdata().document());
+        ImageContentProcessor imageProcessor =
+                new ImageContentProcessor(
+                        new ImageSegmentComposer(), options.extraction().rawdata().image());
         AudioContentProcessor audioProcessor =
                 new AudioContentProcessor(
-                        textChunker, options.extraction().rawdata().audioChunking());
+                        new TranscriptSegmentChunker(), options.extraction().rawdata().audio());
 
         return List.of(
                 conversationProcessor,

@@ -13,7 +13,10 @@
  */
 package com.openmemind.ai.memory.core.resource;
 
+import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
+import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import java.util.Objects;
 import java.util.Set;
 import reactor.core.publisher.Mono;
 
@@ -22,13 +25,53 @@ import reactor.core.publisher.Mono;
  */
 public interface ContentParser {
 
+    String parserId();
+
     String contentType();
 
+    String contentProfile();
+
+    default ContentGovernanceType governanceType() {
+        return BuiltinContentProfiles.governanceTypeOf(contentProfile())
+                .orElseThrow(
+                        () ->
+                                new IllegalStateException(
+                                        "Parser "
+                                                + parserId()
+                                                + " uses non-builtin contentProfile "
+                                                + contentProfile()
+                                                + " and must override governanceType()"));
+    }
+
+    default int priority() {
+        return 0;
+    }
+
     Set<String> supportedMimeTypes();
+
+    default Set<String> supportedExtensions() {
+        return Set.of();
+    }
+
+    default boolean supports(SourceDescriptor source) {
+        Objects.requireNonNull(source, "source is required");
+        return supports(source.fileName(), source.mimeType());
+    }
 
     default boolean supports(String fileName, String mimeType) {
         return mimeType != null && supportedMimeTypes().contains(mimeType);
     }
 
-    Mono<RawContent> parse(byte[] data, String fileName, String mimeType);
+    Mono<RawContent> parse(byte[] data, SourceDescriptor source);
+
+    default Mono<RawContent> parse(byte[] data, String fileName, String mimeType) {
+        return parse(
+                data,
+                new SourceDescriptor(
+                        SourceKind.FILE,
+                        fileName,
+                        mimeType,
+                        data == null ? null : (long) data.length,
+                        null));
+    }
 }

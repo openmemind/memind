@@ -15,12 +15,13 @@ package com.openmemind.ai.memory.core.extraction.rawdata.processor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.builder.DocumentExtractionOptions;
 import com.openmemind.ai.memory.core.data.ContentTypes;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TextChunker;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TextChunkingConfig;
+import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ProfileAwareDocumentChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.document.DocumentSection;
-import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
+import com.openmemind.ai.memory.core.utils.TokenUtils;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -30,34 +31,113 @@ class DocumentContentProcessorTest {
 
     @Test
     void contentTypeShouldBeDocument() {
-        var processor = new DocumentContentProcessor(new TextChunker(), TextChunkingConfig.DEFAULT);
+        var processor =
+                new DocumentContentProcessor(
+                        new ProfileAwareDocumentChunker(), DocumentExtractionOptions.defaults());
 
         assertThat(processor.contentType()).isEqualTo(ContentTypes.DOCUMENT);
         assertThat(processor.supportsInsight()).isTrue();
     }
 
     @Test
-    void shouldChunkParsedTextWhenSectionsAreMissing() {
+    void documentProcessorUsesHeadingAwareChunkingForMarkdownProfile() {
         var processor =
                 new DocumentContentProcessor(
-                        new TextChunker(),
-                        new TextChunkingConfig(12, TextChunkingConfig.ChunkBoundary.LINE));
-        var content = DocumentContent.of("Report", "application/pdf", "alpha\nbeta\ngamma");
+                        new ProfileAwareDocumentChunker(), DocumentExtractionOptions.defaults());
+        var content =
+                new DocumentContent(
+                        "Guide",
+                        "text/markdown",
+                        "# Intro\nhello\n\n## Usage\nworld",
+                        List.of(),
+                        null,
+                        Map.of("contentProfile", "document.markdown"));
 
         StepVerifier.create(processor.chunk(content))
                 .assertNext(
                         segments -> {
                             assertThat(segments).hasSize(2);
-                            assertThat(segments.getFirst().content()).isEqualTo("alpha\nbeta");
-                            assertThat(segments.getFirst().boundary())
-                                    .isInstanceOf(CharBoundary.class);
+                            assertThat(segments.getFirst().content()).contains("# Intro");
+                            assertThat(segments.get(1).content()).contains("## Usage");
+                        })
+                .verifyComplete();
+    }
+
+    @Test
+    void documentProcessorKeepsChunksWithinHardTokenBudget() {
+        var processor =
+                new DocumentContentProcessor(
+                        new ProfileAwareDocumentChunker(), DocumentExtractionOptions.defaults());
+        var content =
+                new DocumentContent(
+                        "Guide",
+                        "text/markdown",
+                        "# Intro\n"
+                                + "word ".repeat(4_000)
+                                + "\n\n## Usage\n"
+                                + "word ".repeat(4_000),
+                        List.of(),
+                        null,
+                        Map.of("contentProfile", "document.markdown"));
+
+        StepVerifier.create(processor.chunk(content))
+                .assertNext(
+                        segments ->
+                                assertThat(segments)
+                                        .allSatisfy(
+                                                segment ->
+                                                        assertThat(
+                                                                        TokenUtils.countTokens(
+                                                                                segment.content()))
+                                                                .isLessThanOrEqualTo(
+                                                                        DocumentExtractionOptions
+                                                                                .defaults()
+                                                                                .textLikeChunking()
+                                                                                .hardMaxTokens())))
+                .verifyComplete();
+    }
+
+    @Test
+    void documentProcessorUsesBinaryChunkingForCustomBinaryProfile() {
+        var processor =
+                new DocumentContentProcessor(
+                        new ProfileAwareDocumentChunker(), DocumentExtractionOptions.defaults());
+        String text = "word ".repeat(1_300);
+        var content =
+                new DocumentContent(
+                        "Manual",
+                        "application/pdf",
+                        text,
+                        List.of(),
+                        null,
+                        Map.of(
+                                "contentProfile",
+                                "document.pdf.tika",
+                                "governanceType",
+                                ContentGovernanceType.DOCUMENT_BINARY.name()));
+
+        StepVerifier.create(processor.chunk(content))
+                .assertNext(
+                        segments -> {
+                            assertThat(segments).hasSize(1);
+                            assertThat(TokenUtils.countTokens(segments.getFirst().content()))
+                                    .isGreaterThan(
+                                            DocumentExtractionOptions.defaults()
+                                                    .textLikeChunking()
+                                                    .hardMaxTokens())
+                                    .isLessThanOrEqualTo(
+                                            DocumentExtractionOptions.defaults()
+                                                    .binaryChunking()
+                                                    .hardMaxTokens());
                         })
                 .verifyComplete();
     }
 
     @Test
     void shouldPreserveSectionMetadataWhenSectionsExist() {
-        var processor = new DocumentContentProcessor(new TextChunker(), TextChunkingConfig.DEFAULT);
+        var processor =
+                new DocumentContentProcessor(
+                        new ProfileAwareDocumentChunker(), DocumentExtractionOptions.defaults());
         var content =
                 new DocumentContent(
                         "Report",

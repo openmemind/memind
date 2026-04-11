@@ -22,15 +22,18 @@ import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
+import com.openmemind.ai.memory.core.resource.ContentCapability;
 import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
+import com.openmemind.ai.memory.core.resource.SourceDescriptor;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
@@ -50,12 +53,27 @@ import reactor.core.publisher.Mono;
 class MemindServerRuntimeConfigurationTest {
 
     @Test
-    void runtimeFactoryInjectsRegistryAndCustomFetcherAtBuildTime() {
+    void runtimeFactoryCombinesBuiltInAndPluginDocumentParsers() {
         var parser =
                 new ContentParser() {
                     @Override
+                    public String parserId() {
+                        return "document-tika";
+                    }
+
+                    @Override
                     public String contentType() {
-                        return com.openmemind.ai.memory.core.data.ContentTypes.DOCUMENT;
+                        return ContentTypes.DOCUMENT;
+                    }
+
+                    @Override
+                    public String contentProfile() {
+                        return "document.binary";
+                    }
+
+                    @Override
+                    public int priority() {
+                        return 50;
                     }
 
                     @Override
@@ -64,11 +82,27 @@ class MemindServerRuntimeConfigurationTest {
                     }
 
                     @Override
-                    public Mono<RawContent> parse(byte[] data, String fileName, String mimeType) {
-                        return Mono.just(DocumentContent.of("Report", mimeType, "parsed"));
+                    public Set<String> supportedExtensions() {
+                        return Set.of(".pdf");
+                    }
+
+                    @Override
+                    public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
+                        return Mono.just(
+                                new DocumentContent(
+                                        "Report",
+                                        source.mimeType(),
+                                        "parsed",
+                                        java.util.List.of(),
+                                        source.sourceUrl(),
+                                        Map.of(
+                                                "parserId",
+                                                parserId(),
+                                                "contentProfile",
+                                                contentProfile())));
                     }
                 };
-        ResourceFetcher fetcher = (memoryId, sourceUrl, fileName, mimeType) -> Mono.empty();
+        ResourceFetcher fetcher = request -> Mono.empty();
         var configuration = new MemindServerRuntimeConfiguration();
 
         MemoryRuntimeFactory factory =
@@ -84,9 +118,13 @@ class MemindServerRuntimeConfigurationTest {
 
         Memory memory = factory.create(MemoryBuildOptions.defaults());
         var extractor = readField((DefaultMemory) memory, "extractor", MemoryExtractor.class);
+        ContentParserRegistry registry =
+                readField(extractor, "contentParserRegistry", ContentParserRegistry.class);
 
-        assertThat(readField(extractor, "contentParserRegistry", ContentParserRegistry.class))
-                .isNotNull();
+        assertThat(registry).isNotNull();
+        assertThat(registry.capabilities())
+                .extracting(ContentCapability::parserId)
+                .contains("document-native-text", "document-tika");
         assertThat(readField(extractor, "resourceFetcher", ResourceFetcher.class))
                 .isSameAs(fetcher);
     }

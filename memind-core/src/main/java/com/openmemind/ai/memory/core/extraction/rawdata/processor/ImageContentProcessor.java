@@ -13,19 +13,41 @@
  */
 package com.openmemind.ai.memory.core.extraction.rawdata.processor;
 
+import com.openmemind.ai.memory.core.builder.ImageExtractionOptions;
 import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
+import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
+import com.openmemind.ai.memory.core.extraction.rawdata.caption.ImageCaptionGenerator;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ImageSegmentComposer;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ImageContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import reactor.core.publisher.Mono;
 
 /**
  * Processor for parsed image content.
  */
 public class ImageContentProcessor implements RawContentProcessor<ImageContent> {
+
+    private final ImageSegmentComposer imageSegmentComposer;
+    private final ImageExtractionOptions options;
+    private final CaptionGenerator captionGenerator;
+
+    public ImageContentProcessor() {
+        this(new ImageSegmentComposer(), ImageExtractionOptions.defaults());
+    }
+
+    public ImageContentProcessor(
+            ImageSegmentComposer imageSegmentComposer, ImageExtractionOptions options) {
+        this.imageSegmentComposer =
+                Objects.requireNonNull(
+                        imageSegmentComposer, "imageSegmentComposer must not be null");
+        this.options = Objects.requireNonNull(options, "options must not be null");
+        this.captionGenerator = new ImageCaptionGenerator();
+    }
 
     @Override
     public Class<ImageContent> contentClass() {
@@ -39,13 +61,28 @@ public class ImageContentProcessor implements RawContentProcessor<ImageContent> 
 
     @Override
     public Mono<List<Segment>> chunk(ImageContent content) {
-        String text = content.toContentString();
         return Mono.just(
-                List.of(
-                        new Segment(
-                                text,
-                                null,
-                                new CharBoundary(0, text.length()),
-                                Map.copyOf(content.metadata()))));
+                imageSegmentComposer.compose(content, options).stream()
+                        .map(segment -> mergeMetadata(segment, content.metadata()))
+                        .toList());
+    }
+
+    @Override
+    public CaptionGenerator captionGenerator() {
+        return captionGenerator;
+    }
+
+    private Segment mergeMetadata(Segment segment, Map<String, Object> contentMetadata) {
+        if (contentMetadata == null || contentMetadata.isEmpty()) {
+            return segment;
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>(contentMetadata);
+        metadata.putAll(segment.metadata());
+        return new Segment(
+                segment.content(),
+                segment.caption(),
+                segment.boundary(),
+                Map.copyOf(metadata),
+                segment.runtimeContext());
     }
 }

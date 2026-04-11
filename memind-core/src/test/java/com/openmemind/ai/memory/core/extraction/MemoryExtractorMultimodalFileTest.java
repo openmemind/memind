@@ -16,9 +16,15 @@ package com.openmemind.ai.memory.core.extraction;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
+import com.openmemind.ai.memory.core.builder.PromptBudgetOptions;
+import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
 import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
+import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
+import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
+import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
@@ -26,13 +32,22 @@ import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.result.InsightResult;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
+import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
+import com.openmemind.ai.memory.core.resource.ContentCapability;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
+import com.openmemind.ai.memory.core.resource.FetchSession;
 import com.openmemind.ai.memory.core.resource.FetchedResource;
+import com.openmemind.ai.memory.core.resource.ParserResolution;
+import com.openmemind.ai.memory.core.resource.ResourceFetchRequest;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.resource.ResourceRef;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
+import com.openmemind.ai.memory.core.resource.SourceDescriptor;
+import com.openmemind.ai.memory.core.resource.SourceKind;
+import com.openmemind.ai.memory.core.resource.SourceTooLargeException;
 import com.openmemind.ai.memory.core.resource.UnsupportedContentSourceException;
+import com.openmemind.ai.memory.core.utils.TokenUtils;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -80,10 +95,116 @@ class MemoryExtractorMultimodalFileTest {
         assertThat(rawDataStep.lastMetadata)
                 .containsEntry("fileName", "report.pdf")
                 .containsEntry("mimeType", "application/pdf")
+                .containsEntry("parserId", "document-test")
+                .containsEntry("contentProfile", "document.binary")
+                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name())
                 .containsEntry("resourceId", "stored-res-1")
                 .containsEntry("storageUri", "file:///stored/report.pdf")
                 .containsEntry("sizeBytes", 3L)
                 .containsEntry("author", "Alice");
+    }
+
+    @Test
+    void fileRequestShouldSupportCustomCapabilityProfileViaGovernanceType() {
+        var parserRegistry = new CustomProfileRegistry();
+        var rawDataStep = new RecordingRawDataStep(false);
+        var extractor =
+                new MemoryExtractor(
+                        rawDataStep,
+                        (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
+                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
+                        null,
+                        null,
+                        null,
+                        null,
+                        parserRegistry,
+                        null,
+                        null);
+
+        var result =
+                extractor
+                        .extract(
+                                ExtractionRequest.file(
+                                        DefaultMemoryId.of("user-1", "agent-1"),
+                                        "report.pdf",
+                                        new byte[] {1, 2, 3},
+                                        "application/pdf"))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(rawDataStep.lastMetadata)
+                .containsEntry("parserId", "document-custom")
+                .containsEntry("contentProfile", "document.pdf.tika")
+                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name());
+        assertThat(((DocumentContent) rawDataStep.lastContent).metadata())
+                .containsEntry("parserId", "document-custom")
+                .containsEntry("contentProfile", "document.pdf.tika")
+                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name());
+    }
+
+    @Test
+    void fileRequestShouldRejectParserMetadataGovernanceConflict() {
+        var parserRegistry = new ConflictingGovernanceRegistry();
+        var extractor =
+                new MemoryExtractor(
+                        (memoryId, content, contentType, metadata) ->
+                                Mono.just(RawDataResult.empty()),
+                        (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
+                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
+                        null,
+                        null,
+                        null,
+                        null,
+                        parserRegistry,
+                        null,
+                        null);
+
+        var result =
+                extractor
+                        .extract(
+                                ExtractionRequest.file(
+                                        DefaultMemoryId.of("user-1", "agent-1"),
+                                        "report.pdf",
+                                        new byte[] {1, 2, 3},
+                                        "application/pdf"))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.isFailed()).isTrue();
+        assertThat(result.errorMessage()).contains("governanceType");
+    }
+
+    @Test
+    void fileRequestShouldRejectBuiltinProfileThatConflictsWithCapabilityGovernance() {
+        var parserRegistry = new ConflictingBuiltinProfileRegistry();
+        var extractor =
+                new MemoryExtractor(
+                        (memoryId, content, contentType, metadata) ->
+                                Mono.just(RawDataResult.empty()),
+                        (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
+                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
+                        null,
+                        null,
+                        null,
+                        null,
+                        parserRegistry,
+                        null,
+                        null);
+
+        var result =
+                extractor
+                        .extract(
+                                ExtractionRequest.file(
+                                        DefaultMemoryId.of("user-1", "agent-1"),
+                                        "report.pdf",
+                                        new byte[] {1, 2, 3},
+                                        "application/pdf"))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.isFailed()).isTrue();
+        assertThat(result.errorMessage()).contains("contentProfile").contains("document.markdown");
     }
 
     @Test
@@ -141,6 +262,65 @@ class MemoryExtractorMultimodalFileTest {
         assertThat(result.isFailed()).isTrue();
         assertThat(result.errorMessage()).contains("Unsupported source");
         assertThat(parserRegistry.calls).containsExactly("image.png:image/png:3");
+    }
+
+    @Test
+    void fileRequestShouldRejectParsedContentThatExceedsConfiguredLimit() {
+        var parserRegistry = new OversizedDocumentRegistry();
+        var rawDataStep = new RecordingRawDataStep(false);
+        var extractor =
+                new MemoryExtractor(
+                        rawDataStep,
+                        (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
+                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
+                        null,
+                        null,
+                        null,
+                        null,
+                        parserRegistry,
+                        null,
+                        null,
+                        new RawDataExtractionOptions(
+                                com.openmemind.ai.memory.core.extraction.rawdata.chunk
+                                        .ConversationChunkingConfig.DEFAULT,
+                                new com.openmemind.ai.memory.core.builder.DocumentExtractionOptions(
+                                        new com.openmemind.ai.memory.core.builder
+                                                .SourceLimitOptions(1024),
+                                        new com.openmemind.ai.memory.core.builder
+                                                .SourceLimitOptions(1024),
+                                        new com.openmemind.ai.memory.core.builder
+                                                .ParsedContentLimitOptions(256, null, null, null),
+                                        new com.openmemind.ai.memory.core.builder
+                                                .ParsedContentLimitOptions(128, null, null, null),
+                                        new com.openmemind.ai.memory.core.builder
+                                                .TokenChunkingOptions(64, 96),
+                                        new com.openmemind.ai.memory.core.builder
+                                                .TokenChunkingOptions(64, 96)),
+                                com.openmemind.ai.memory.core.builder.ImageExtractionOptions
+                                        .defaults(),
+                                com.openmemind.ai.memory.core.builder.AudioExtractionOptions
+                                        .defaults(),
+                                com.openmemind.ai.memory.core.builder.ToolCallChunkingOptions
+                                        .defaults(),
+                                com.openmemind.ai.memory.core.extraction.context
+                                        .CommitDetectorConfig.defaults(),
+                                64),
+                        ItemExtractionOptions.defaults());
+
+        var result =
+                extractor
+                        .extract(
+                                ExtractionRequest.file(
+                                        DefaultMemoryId.of("user-1", "agent-1"),
+                                        "report.pdf",
+                                        new byte[] {1, 2, 3},
+                                        "application/pdf"))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.isFailed()).isTrue();
+        assertThat(result.errorMessage()).contains("document.binary");
+        assertThat(rawDataStep.lastContent).isNull();
     }
 
     @Test
@@ -247,9 +427,81 @@ class MemoryExtractorMultimodalFileTest {
         assertThat(rawDataStep.lastMetadata)
                 .containsEntry("fileName", "report.pdf")
                 .containsEntry("mimeType", "application/pdf")
+                .containsEntry("sourceKind", "URL")
                 .containsEntry("sourceUri", "https://example.com/report.pdf")
+                .containsEntry("parserId", "document-test")
+                .containsEntry("contentProfile", "document.binary")
+                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name())
                 .containsEntry("resourceId", "stored-res-1")
                 .containsEntry("storageUri", "file:///stored/report.pdf");
+    }
+
+    @Test
+    void urlExtractionResolvesBeforeAndAfterHeaders() {
+        var registry = new RecordingResolutionRegistry();
+        var fetcher = new RecordingFetchSessionFetcher("final.pdf", "application/pdf", 300L);
+        var extractor =
+                new MemoryExtractor(
+                        (memoryId, content, contentType, metadata) ->
+                                Mono.just(RawDataResult.empty()),
+                        (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
+                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
+                        null,
+                        null,
+                        null,
+                        null,
+                        registry,
+                        null,
+                        fetcher);
+
+        var result =
+                extractor
+                        .extract(
+                                ExtractionRequest.url(
+                                        DefaultMemoryId.of("user-1", "agent-1"),
+                                        "https://example.com/file"))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(registry.descriptors()).hasSize(2);
+        assertThat(registry.descriptors().get(0).sourceKind()).isEqualTo(SourceKind.URL);
+        assertThat(registry.descriptors().get(1).mimeType()).isEqualTo("application/pdf");
+    }
+
+    @Test
+    void unknownUrlShouldValidateDeclaredLengthAgainstFinalResolvedCapability() {
+        var registry = new RecordingResolutionRegistry();
+        var fetcher =
+                new RecordingFetchSessionFetcher("final.pdf", "application/pdf", 3L * 1024 * 1024);
+        var extractor =
+                new MemoryExtractor(
+                        (memoryId, content, contentType, metadata) ->
+                                Mono.just(RawDataResult.empty()),
+                        (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
+                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
+                        null,
+                        null,
+                        null,
+                        null,
+                        registry,
+                        null,
+                        fetcher,
+                        RawDataExtractionOptions.defaults(),
+                        ItemExtractionOptions.defaults());
+
+        var result =
+                extractor
+                        .extract(
+                                ExtractionRequest.url(
+                                        DefaultMemoryId.of("user-1", "agent-1"),
+                                        "https://example.com/file"))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(registry.descriptors()).hasSize(2);
+        assertThat(registry.descriptors().get(1).mimeType()).isEqualTo("application/pdf");
     }
 
     @Test
@@ -338,8 +590,7 @@ class MemoryExtractorMultimodalFileTest {
                         null,
                         new RecordingRegistry(),
                         null,
-                        (memoryId, sourceUrl, fileName, mimeType) ->
-                                Mono.error(new IllegalStateException("download failed")));
+                        request -> Mono.error(new IllegalStateException("download failed")));
 
         var result =
                 extractor
@@ -381,17 +632,71 @@ class MemoryExtractorMultimodalFileTest {
         assertThat(result.errorMessage()).contains("content, fileInput, or urlInput is required");
     }
 
+    @Test
+    void extractorAppliesBudgetBeforeItemExtraction() {
+        var itemStep = new RecordingMemoryItemStep();
+        var extractor =
+                new MemoryExtractor(
+                        new OversizedRawDataStep(),
+                        itemStep,
+                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        RawDataExtractionOptions.defaults(),
+                        new ItemExtractionOptions(
+                                false, new PromptBudgetOptions(2_048, 400, 400, 200)));
+
+        extractor
+                .extract(
+                        ExtractionRequest.document(
+                                DefaultMemoryId.of("user-1", "agent-1"),
+                                DocumentContent.of(
+                                        "Manual",
+                                        "application/pdf",
+                                        "# Intro\n"
+                                                + "word ".repeat(3_000)
+                                                + "\n\n## Usage\n"
+                                                + "word ".repeat(3_000))))
+                .block();
+
+        assertThat(itemStep.lastRawDataResult()).isNotNull();
+        assertThat(itemStep.lastRawDataResult().segments())
+                .allSatisfy(
+                        segment ->
+                                assertThat(TokenUtils.countTokens(segment.text()))
+                                        .isLessThanOrEqualTo(1_048));
+    }
+
     private static final class RecordingRegistry implements ContentParserRegistry {
 
         private final List<String> calls = new ArrayList<>();
 
         @Override
-        public Mono<RawContent> parse(byte[] data, String fileName, String mimeType) {
-            calls.add(fileName + ":" + mimeType + ":" + data.length);
+        public Mono<ParserResolution> resolve(SourceDescriptor source) {
+            return Mono.just(
+                    new ParserResolution(
+                            nullParser(),
+                            new ContentCapability(
+                                    "document-test",
+                                    ContentTypes.DOCUMENT,
+                                    "document.binary",
+                                    Set.of("application/pdf"),
+                                    Set.of(".pdf"),
+                                    10)));
+        }
+
+        @Override
+        public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
+            calls.add(source.fileName() + ":" + source.mimeType() + ":" + data.length);
             return Mono.just(
                     new DocumentContent(
                             "Report",
-                            mimeType,
+                            source.mimeType(),
                             "parsed body",
                             List.of(),
                             null,
@@ -399,8 +704,171 @@ class MemoryExtractorMultimodalFileTest {
         }
 
         @Override
-        public Map<String, Set<String>> supportedMimeTypesByContentType() {
-            return Map.of(ContentTypes.DOCUMENT, Set.of("application/pdf"));
+        public List<ContentCapability> capabilities() {
+            return List.of(
+                    new ContentCapability(
+                            "document-test",
+                            ContentTypes.DOCUMENT,
+                            "document.binary",
+                            Set.of("application/pdf"),
+                            Set.of(".pdf"),
+                            10));
+        }
+    }
+
+    private static final class RecordingResolutionRegistry implements ContentParserRegistry {
+
+        private final List<SourceDescriptor> descriptors = new ArrayList<>();
+
+        @Override
+        public Mono<ParserResolution> resolve(SourceDescriptor source) {
+            descriptors.add(source);
+            if (source.fileName() == null && source.mimeType() == null) {
+                return Mono.error(
+                        new UnsupportedContentSourceException(
+                                "Unsupported provisional source: " + source.sourceUrl()));
+            }
+            return Mono.just(
+                    new ParserResolution(
+                            nullParser(),
+                            new ContentCapability(
+                                    "document-tika",
+                                    ContentTypes.DOCUMENT,
+                                    "document.binary",
+                                    Set.of("application/pdf"),
+                                    Set.of(".pdf"),
+                                    50)));
+        }
+
+        @Override
+        public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
+            return Mono.just(DocumentContent.of("Report", source.mimeType(), "parsed body"));
+        }
+
+        @Override
+        public List<ContentCapability> capabilities() {
+            return List.of();
+        }
+
+        List<SourceDescriptor> descriptors() {
+            return descriptors;
+        }
+    }
+
+    private static final class CustomProfileRegistry implements ContentParserRegistry {
+
+        @Override
+        public Mono<ParserResolution> resolve(SourceDescriptor source) {
+            return Mono.just(
+                    new ParserResolution(
+                            nullParser(),
+                            new ContentCapability(
+                                    "document-custom",
+                                    ContentTypes.DOCUMENT,
+                                    "document.pdf.tika",
+                                    ContentGovernanceType.DOCUMENT_BINARY,
+                                    Set.of("application/pdf"),
+                                    Set.of(".pdf"),
+                                    10)));
+        }
+
+        @Override
+        public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
+            return Mono.just(
+                    new DocumentContent(
+                            "Report",
+                            source.mimeType(),
+                            "parsed body",
+                            List.of(),
+                            null,
+                            Map.of("contentProfile", "document.pdf.tika")));
+        }
+
+        @Override
+        public List<ContentCapability> capabilities() {
+            return List.of(
+                    new ContentCapability(
+                            "document-custom",
+                            ContentTypes.DOCUMENT,
+                            "document.pdf.tika",
+                            ContentGovernanceType.DOCUMENT_BINARY,
+                            Set.of("application/pdf"),
+                            Set.of(".pdf"),
+                            10));
+        }
+    }
+
+    private static final class ConflictingGovernanceRegistry implements ContentParserRegistry {
+
+        @Override
+        public Mono<ParserResolution> resolve(SourceDescriptor source) {
+            return Mono.just(
+                    new ParserResolution(
+                            nullParser(),
+                            new ContentCapability(
+                                    "document-custom",
+                                    ContentTypes.DOCUMENT,
+                                    "document.pdf.tika",
+                                    ContentGovernanceType.DOCUMENT_BINARY,
+                                    Set.of("application/pdf"),
+                                    Set.of(".pdf"),
+                                    10)));
+        }
+
+        @Override
+        public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
+            return Mono.just(
+                    new DocumentContent(
+                            "Report",
+                            source.mimeType(),
+                            "parsed body",
+                            List.of(),
+                            null,
+                            Map.of(
+                                    "contentProfile",
+                                    "document.pdf.tika",
+                                    "governanceType",
+                                    ContentGovernanceType.DOCUMENT_TEXT_LIKE.name())));
+        }
+
+        @Override
+        public List<ContentCapability> capabilities() {
+            return List.of();
+        }
+    }
+
+    private static final class ConflictingBuiltinProfileRegistry implements ContentParserRegistry {
+
+        @Override
+        public Mono<ParserResolution> resolve(SourceDescriptor source) {
+            return Mono.just(
+                    new ParserResolution(
+                            nullParser(),
+                            new ContentCapability(
+                                    "document-custom",
+                                    ContentTypes.DOCUMENT,
+                                    "document.pdf.tika",
+                                    ContentGovernanceType.DOCUMENT_BINARY,
+                                    Set.of("application/pdf"),
+                                    Set.of(".pdf"),
+                                    10)));
+        }
+
+        @Override
+        public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
+            return Mono.just(
+                    new DocumentContent(
+                            "Report",
+                            source.mimeType(),
+                            "parsed body",
+                            List.of(),
+                            null,
+                            Map.of("contentProfile", "document.markdown")));
+        }
+
+        @Override
+        public List<ContentCapability> capabilities() {
+            return List.of();
         }
     }
 
@@ -409,17 +877,101 @@ class MemoryExtractorMultimodalFileTest {
         private final List<String> calls = new ArrayList<>();
 
         @Override
-        public Mono<RawContent> parse(byte[] data, String fileName, String mimeType) {
-            calls.add(fileName + ":" + mimeType + ":" + data.length);
+        public Mono<ParserResolution> resolve(SourceDescriptor source) {
+            calls.add(source.fileName() + ":" + source.mimeType() + ":" + source.sizeBytes());
             return Mono.error(
-                    new UnsupportedContentSourceException(
-                            "Unsupported source: fileName=" + fileName + ", mimeType=" + mimeType));
+                    new UnsupportedContentSourceException("Unsupported source: " + source));
         }
 
         @Override
-        public Map<String, Set<String>> supportedMimeTypesByContentType() {
-            return Map.of(ContentTypes.DOCUMENT, Set.of("application/pdf"));
+        public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
+            calls.add(source.fileName() + ":" + source.mimeType() + ":" + data.length);
+            return Mono.error(
+                    new UnsupportedContentSourceException(
+                            "Unsupported source: fileName="
+                                    + source.fileName()
+                                    + ", mimeType="
+                                    + source.mimeType()));
         }
+
+        @Override
+        public List<ContentCapability> capabilities() {
+            return List.of(
+                    new ContentCapability(
+                            "document-test",
+                            ContentTypes.DOCUMENT,
+                            "document.binary",
+                            Set.of("application/pdf"),
+                            Set.of(".pdf"),
+                            10));
+        }
+    }
+
+    private static final class OversizedDocumentRegistry implements ContentParserRegistry {
+
+        @Override
+        public Mono<ParserResolution> resolve(SourceDescriptor source) {
+            return Mono.just(
+                    new ParserResolution(
+                            nullParser(),
+                            new ContentCapability(
+                                    "document-test",
+                                    ContentTypes.DOCUMENT,
+                                    "document.binary",
+                                    Set.of("application/pdf"),
+                                    Set.of(".pdf"),
+                                    10)));
+        }
+
+        @Override
+        public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
+            return Mono.just(
+                    new DocumentContent(
+                            "Report",
+                            source.mimeType(),
+                            "word ".repeat(300),
+                            List.of(),
+                            null,
+                            Map.of("contentProfile", "document.binary")));
+        }
+
+        @Override
+        public List<ContentCapability> capabilities() {
+            return List.of();
+        }
+    }
+
+    private static RawContent nullParserContent() {
+        return DocumentContent.of("Report", "application/pdf", "parsed body");
+    }
+
+    private static com.openmemind.ai.memory.core.resource.ContentParser nullParser() {
+        return new com.openmemind.ai.memory.core.resource.ContentParser() {
+            @Override
+            public String parserId() {
+                return "document-test";
+            }
+
+            @Override
+            public String contentType() {
+                return ContentTypes.DOCUMENT;
+            }
+
+            @Override
+            public String contentProfile() {
+                return "document.binary";
+            }
+
+            @Override
+            public Set<String> supportedMimeTypes() {
+                return Set.of("application/pdf");
+            }
+
+            @Override
+            public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
+                return Mono.just(nullParserContent());
+            }
+        };
     }
 
     private static final class RecordingResourceFetcher implements ResourceFetcher {
@@ -427,18 +979,116 @@ class MemoryExtractorMultimodalFileTest {
         private final List<String> calls = new ArrayList<>();
 
         @Override
-        public Mono<FetchedResource> fetch(
-                com.openmemind.ai.memory.core.data.MemoryId memoryId,
+        public Mono<FetchSession> open(ResourceFetchRequest request) {
+            calls.add(request.sourceUrl());
+            return Mono.just(
+                    new TestFetchSession(
+                            request.sourceUrl(),
+                            request.sourceUrl(),
+                            request.requestedFileName() == null
+                                    ? "report.pdf"
+                                    : request.requestedFileName(),
+                            request.requestedMimeType() == null
+                                    ? "application/pdf"
+                                    : request.requestedMimeType(),
+                            3L,
+                            new byte[] {1, 2, 3}));
+        }
+    }
+
+    private static final class RecordingFetchSessionFetcher implements ResourceFetcher {
+
+        private final String fileName;
+        private final String mimeType;
+        private final long declaredContentLength;
+
+        private RecordingFetchSessionFetcher(
+                String fileName, String mimeType, long declaredContentLength) {
+            this.fileName = fileName;
+            this.mimeType = mimeType;
+            this.declaredContentLength = declaredContentLength;
+        }
+
+        @Override
+        public Mono<FetchSession> open(ResourceFetchRequest request) {
+            return Mono.just(
+                    new TestFetchSession(
+                            request.sourceUrl(),
+                            request.sourceUrl(),
+                            fileName,
+                            mimeType,
+                            declaredContentLength,
+                            new byte[] {1, 2, 3}));
+        }
+    }
+
+    private static final class TestFetchSession implements FetchSession {
+
+        private final String sourceUrl;
+        private final String finalUrl;
+        private final String fileName;
+        private final String mimeType;
+        private final long declaredContentLength;
+        private final byte[] body;
+
+        private TestFetchSession(
                 String sourceUrl,
+                String finalUrl,
                 String fileName,
-                String mimeType) {
-            calls.add(sourceUrl);
+                String mimeType,
+                long declaredContentLength,
+                byte[] body) {
+            this.sourceUrl = sourceUrl;
+            this.finalUrl = finalUrl;
+            this.fileName = fileName;
+            this.mimeType = mimeType;
+            this.declaredContentLength = declaredContentLength;
+            this.body = body;
+        }
+
+        @Override
+        public String sourceUrl() {
+            return sourceUrl;
+        }
+
+        @Override
+        public String finalUrl() {
+            return finalUrl;
+        }
+
+        @Override
+        public int statusCode() {
+            return 200;
+        }
+
+        @Override
+        public Map<String, List<String>> responseHeaders() {
+            return Map.of("Content-Type", List.of(mimeType));
+        }
+
+        @Override
+        public String resolvedFileName() {
+            return fileName;
+        }
+
+        @Override
+        public String resolvedMimeType() {
+            return mimeType;
+        }
+
+        @Override
+        public Long declaredContentLength() {
+            return declaredContentLength;
+        }
+
+        @Override
+        public Mono<FetchedResource> readBody(long maxBytes) {
+            if (declaredContentLength > maxBytes) {
+                return Mono.error(new SourceTooLargeException("source too large"));
+            }
             return Mono.just(
                     new FetchedResource(
-                            sourceUrl,
-                            fileName == null ? "report.pdf" : fileName,
-                            new byte[] {1, 2, 3},
-                            mimeType == null ? "application/pdf" : mimeType));
+                            sourceUrl, finalUrl, fileName, body, mimeType, body.length));
         }
     }
 
@@ -538,6 +1188,57 @@ class MemoryExtractorMultimodalFileTest {
                                     new ParsedSegment(
                                             "parsed body", "caption", 0, 11, "raw-1", metadata)),
                             false));
+        }
+    }
+
+    private static final class OversizedRawDataStep implements RawDataExtractStep {
+
+        @Override
+        public Mono<RawDataResult> extract(
+                MemoryId memoryId,
+                RawContent content,
+                String contentType,
+                Map<String, Object> metadata) {
+            return extract(memoryId, content, contentType, metadata, null);
+        }
+
+        @Override
+        public Mono<RawDataResult> extract(
+                MemoryId memoryId,
+                RawContent content,
+                String contentType,
+                Map<String, Object> metadata,
+                String language) {
+            String text =
+                    "# Intro\n" + "word ".repeat(3_000) + "\n\n## Usage\n" + "word ".repeat(3_000);
+            return Mono.just(
+                    new RawDataResult(
+                            List.of(),
+                            List.of(
+                                    new ParsedSegment(
+                                            text,
+                                            "caption",
+                                            0,
+                                            text.length(),
+                                            "raw-1",
+                                            Map.of("contentProfile", "document.markdown"))),
+                            false));
+        }
+    }
+
+    private static final class RecordingMemoryItemStep implements MemoryItemExtractStep {
+
+        private RawDataResult lastRawDataResult;
+
+        @Override
+        public Mono<MemoryItemResult> extract(
+                MemoryId memoryId, RawDataResult rawDataResult, ItemExtractionConfig config) {
+            this.lastRawDataResult = rawDataResult;
+            return Mono.just(MemoryItemResult.empty());
+        }
+
+        RawDataResult lastRawDataResult() {
+            return lastRawDataResult;
         }
     }
 }

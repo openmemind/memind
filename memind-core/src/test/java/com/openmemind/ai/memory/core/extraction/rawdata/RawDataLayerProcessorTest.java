@@ -19,7 +19,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -91,7 +93,11 @@ class RawDataLayerProcessorTest {
 
             var layer =
                     new RawDataLayer(
-                            List.of(convProcessor, toolProcessor), defaultCaption, store, vector);
+                            List.of(convProcessor, toolProcessor),
+                            defaultCaption,
+                            store,
+                            vector,
+                            64);
 
             var content = ConversationContent.builder().addUserMessage("hello").build();
 
@@ -123,7 +129,11 @@ class RawDataLayerProcessorTest {
 
             var layer =
                     new RawDataLayer(
-                            List.of(convProcessor, toolProcessor), defaultCaption, store, vector);
+                            List.of(convProcessor, toolProcessor),
+                            defaultCaption,
+                            store,
+                            vector,
+                            64);
 
             var record =
                     new ToolCallRecord(
@@ -151,7 +161,7 @@ class RawDataLayerProcessorTest {
             var convProcessor = mock(ConversationContentProcessor.class);
             when(convProcessor.contentClass()).thenReturn(ConversationContent.class);
 
-            var layer = new RawDataLayer(List.of(convProcessor), defaultCaption, store, vector);
+            var layer = new RawDataLayer(List.of(convProcessor), defaultCaption, store, vector, 64);
 
             var unknownContent =
                     new RawContent() {
@@ -197,7 +207,7 @@ class RawDataLayerProcessorTest {
                     .thenReturn(Mono.just(List.of()));
             when(convProcessor.captionGenerator()).thenReturn(defaultCaption);
 
-            var layer = new RawDataLayer(List.of(convProcessor), defaultCaption, store, vector);
+            var layer = new RawDataLayer(List.of(convProcessor), defaultCaption, store, vector, 64);
 
             // Create a subclass of ConversationContent
             var subclassContent =
@@ -222,12 +232,50 @@ class RawDataLayerProcessorTest {
 
             verify(convProcessor).chunk(any(ConversationContent.class));
         }
+
+        @Test
+        @DisplayName("Subclass of ConversationContent should reuse the processor caption generator")
+        void subclassReusesProcessorCaptionGenerator() {
+            var processorCaption = mock(CaptionGenerator.class);
+            var convProcessor = mock(ConversationContentProcessor.class);
+            var baseSegment = new Segment("hello", null, new CharBoundary(0, 5), Map.of());
+            when(convProcessor.contentClass()).thenReturn(ConversationContent.class);
+            when(convProcessor.chunk(any(ConversationContent.class)))
+                    .thenReturn(Mono.just(List.of(baseSegment)));
+            when(convProcessor.captionGenerator()).thenReturn(processorCaption);
+
+            var layer = new RawDataLayer(List.of(convProcessor), defaultCaption, store, vector, 64);
+
+            var subclassContent =
+                    new ConversationContent(List.of()) {
+                        @Override
+                        public String getContentId() {
+                            return "subclass-id";
+                        }
+                    };
+
+            when(processorCaption.generateForSegments(any(), any()))
+                    .thenReturn(Mono.just(List.of(baseSegment.withCaption("processor caption"))));
+            when(rawDataOps.getRawDataByContentId(any(), any()))
+                    .thenReturn(java.util.Optional.empty());
+            when(vector.storeBatch(any(), any(), any())).thenReturn(Mono.just(List.of("vec-1")));
+
+            layer.extract(
+                            new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent"),
+                            subclassContent,
+                            "CONVERSATION",
+                            Map.of())
+                    .block();
+
+            verify(processorCaption).generateForSegments(any(), any());
+            verify(defaultCaption, never()).generateForSegments(any(), any());
+        }
     }
 
     @Test
     @DisplayName("processSegment should forward explicit language to caption generation")
     void processSegment_forwards_language_to_caption_generation() {
-        var layer = new RawDataLayer(List.of(), defaultCaption, store, vector);
+        var layer = new RawDataLayer(List.of(), defaultCaption, store, vector, 64);
         var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
         var segment = new Segment("hello", null, new CharBoundary(0, 5), Map.of());
 
@@ -245,7 +293,7 @@ class RawDataLayerProcessorTest {
     @Test
     @DisplayName("processSegment returns existing rawData without vectorizing again")
     void processSegmentReturnsExistingRawDataWithoutVectorizingAgain() {
-        var layer = new RawDataLayer(List.of(), defaultCaption, store, vector);
+        var layer = new RawDataLayer(List.of(), defaultCaption, store, vector, 64);
         var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
         var segment = new Segment("hello", null, new CharBoundary(0, 5), Map.of());
         var existing =
@@ -280,7 +328,7 @@ class RawDataLayerProcessorTest {
     @Test
     @DisplayName("processSegment keeps runtime context transient while using it for rawdata timing")
     void processSegmentKeepsRuntimeContextTransientWhileUsingItForRawdataTiming() {
-        var layer = new RawDataLayer(List.of(), defaultCaption, store, vector);
+        var layer = new RawDataLayer(List.of(), defaultCaption, store, vector, 64);
         var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
         var runtimeContext =
                 new SegmentRuntimeContext(
@@ -361,7 +409,7 @@ class RawDataLayerProcessorTest {
         when(localVector.storeBatch(any(), any(), any())).thenReturn(Mono.just(List.of("vec-1")));
         var layer =
                 new RawDataLayer(
-                        List.of(documentProcessor), localCaption, recordingStore, localVector);
+                        List.of(documentProcessor), localCaption, recordingStore, localVector, 64);
 
         var result =
                 layer.extract(
@@ -436,7 +484,7 @@ class RawDataLayerProcessorTest {
         when(localVector.storeBatch(any(), any(), any())).thenReturn(Mono.just(List.of("vec-1")));
         var layer =
                 new RawDataLayer(
-                        List.of(documentProcessor), localCaption, recordingStore, localVector);
+                        List.of(documentProcessor), localCaption, recordingStore, localVector, 64);
 
         var first =
                 layer.extract(
@@ -496,7 +544,172 @@ class RawDataLayerProcessorTest {
                 .doesNotHaveDuplicates();
     }
 
-    private static final class RecordingMemoryStore implements MemoryStore {
+    @Test
+    @DisplayName(
+            "extract should vectorize using caption first then segment content and skip blank text")
+    void extractShouldVectorizeUsingFirstNonBlankTextSource() {
+        var recordingStore = new RecordingMemoryStore();
+        var localVector = mock(MemoryVector.class);
+        var localCaption = mock(CaptionGenerator.class);
+        var documentProcessor = mock(DocumentContentProcessor.class);
+        var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
+        var first = new Segment("body-1", null, new CharBoundary(0, 6), Map.of("order", 1));
+        var second = new Segment("body-2", null, new CharBoundary(7, 13), Map.of("order", 2));
+        var third = new Segment("   ", null, new CharBoundary(14, 17), Map.of("order", 3));
+
+        when(documentProcessor.contentClass()).thenReturn(DocumentContent.class);
+        when(documentProcessor.chunk(any(DocumentContent.class)))
+                .thenReturn(Mono.just(List.of(first, second, third)));
+        when(documentProcessor.captionGenerator()).thenReturn(localCaption);
+        when(localCaption.generateForSegments(any(), any()))
+                .thenReturn(
+                        Mono.just(
+                                List.of(
+                                        first.withCaption("summary-1"),
+                                        second.withCaption("   "),
+                                        third.withCaption(null))));
+        when(localVector.storeBatch(any(), any(), any()))
+                .thenAnswer(
+                        invocation -> {
+                            @SuppressWarnings("unchecked")
+                            var texts = (List<String>) invocation.getArgument(1);
+                            return Mono.just(
+                                    java.util.stream.IntStream.range(0, texts.size())
+                                            .mapToObj(i -> "vec-" + (i + 1))
+                                            .toList());
+                        });
+
+        var layer =
+                new RawDataLayer(
+                        List.of(documentProcessor), localCaption, recordingStore, localVector, 64);
+
+        var result =
+                layer.extract(
+                                memoryId,
+                                DocumentContent.of("Doc", "text/plain", "body-1\nbody-2"),
+                                "DOCUMENT",
+                                Map.of())
+                        .block();
+
+        assertThat(result).isNotNull();
+        verify(localVector)
+                .storeBatch(
+                        eq(memoryId),
+                        eq(List.of("summary-1", "body-2")),
+                        eq(List.of(Map.of(), Map.of())));
+        assertThat(recordingStore.lastRawData)
+                .extracting(MemoryRawData::captionVectorId)
+                .containsExactly("vec-1", "vec-2", null);
+    }
+
+    @Test
+    @DisplayName(
+            "extract should batch vector writes and cleanup completed batches on later failure")
+    void extractShouldCleanupCompletedVectorBatchesWhenLaterBatchFails() {
+        var recordingStore = new RecordingMemoryStore();
+        var localVector = mock(MemoryVector.class);
+        var localCaption = mock(CaptionGenerator.class);
+        var documentProcessor = mock(DocumentContentProcessor.class);
+        var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
+        var segments =
+                List.of(
+                        new Segment("body-1", null, new CharBoundary(0, 6), Map.of()),
+                        new Segment("body-2", null, new CharBoundary(7, 13), Map.of()),
+                        new Segment("body-3", null, new CharBoundary(14, 20), Map.of()));
+        var failure = new IllegalStateException("batch 2 failed");
+
+        when(documentProcessor.contentClass()).thenReturn(DocumentContent.class);
+        when(documentProcessor.chunk(any(DocumentContent.class))).thenReturn(Mono.just(segments));
+        when(documentProcessor.captionGenerator()).thenReturn(localCaption);
+        when(localCaption.generateForSegments(any(), any()))
+                .thenReturn(
+                        Mono.just(
+                                List.of(
+                                        segments.get(0).withCaption("caption-1"),
+                                        segments.get(1).withCaption("caption-2"),
+                                        segments.get(2).withCaption("caption-3"))));
+        when(localVector.storeBatch(any(), any(), any()))
+                .thenAnswer(
+                        invocation -> {
+                            @SuppressWarnings("unchecked")
+                            var texts = (List<String>) invocation.getArgument(1);
+                            if (texts.equals(List.of("caption-1", "caption-2"))) {
+                                return Mono.just(List.of("vec-1", "vec-2"));
+                            }
+                            if (texts.equals(List.of("caption-3"))) {
+                                return Mono.error(failure);
+                            }
+                            return Mono.error(new AssertionError("unexpected batch: " + texts));
+                        });
+        when(localVector.deleteBatch(memoryId, List.of("vec-1", "vec-2"))).thenReturn(Mono.empty());
+
+        var layer =
+                new RawDataLayer(
+                        List.of(documentProcessor), localCaption, recordingStore, localVector, 2);
+
+        assertThatThrownBy(
+                        () ->
+                                layer.extract(
+                                                memoryId,
+                                                DocumentContent.of(
+                                                        "Doc",
+                                                        "text/plain",
+                                                        "body-1\nbody-2\nbody-3"),
+                                                "DOCUMENT",
+                                                Map.of())
+                                        .block())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("batch 2 failed");
+
+        var inOrder = inOrder(localVector);
+        inOrder.verify(localVector)
+                .storeBatch(eq(memoryId), eq(List.of("caption-1", "caption-2")), any());
+        inOrder.verify(localVector).storeBatch(eq(memoryId), eq(List.of("caption-3")), any());
+        inOrder.verify(localVector).deleteBatch(memoryId, List.of("vec-1", "vec-2"));
+    }
+
+    @Test
+    @DisplayName(
+            "extract should cleanup vectors when persistence fails and suppress cleanup failure")
+    void extractShouldCleanupVectorsWhenPersistenceFails() {
+        var failingStore = new FailingMemoryStore(new IllegalStateException("persist failed"));
+        var localVector = mock(MemoryVector.class);
+        var localCaption = mock(CaptionGenerator.class);
+        var documentProcessor = mock(DocumentContentProcessor.class);
+        var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
+        var segment = new Segment("body-1", null, new CharBoundary(0, 6), Map.of());
+        var cleanupFailure = new IllegalStateException("cleanup failed");
+
+        when(documentProcessor.contentClass()).thenReturn(DocumentContent.class);
+        when(documentProcessor.chunk(any(DocumentContent.class)))
+                .thenReturn(Mono.just(List.of(segment)));
+        when(documentProcessor.captionGenerator()).thenReturn(localCaption);
+        when(localCaption.generateForSegments(any(), any()))
+                .thenReturn(Mono.just(List.of(segment.withCaption("caption-1"))));
+        when(localVector.storeBatch(any(), any(), any())).thenReturn(Mono.just(List.of("vec-1")));
+        when(localVector.deleteBatch(memoryId, List.of("vec-1")))
+                .thenReturn(Mono.error(cleanupFailure));
+
+        var layer =
+                new RawDataLayer(
+                        List.of(documentProcessor), localCaption, failingStore, localVector, 64);
+
+        assertThatThrownBy(
+                        () ->
+                                layer.extract(
+                                                memoryId,
+                                                DocumentContent.of("Doc", "text/plain", "body-1"),
+                                                "DOCUMENT",
+                                                Map.of())
+                                        .block())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("persist failed")
+                .satisfies(
+                        throwable ->
+                                assertThat(throwable.getSuppressed()).contains(cleanupFailure));
+    }
+
+    private static class RecordingMemoryStore implements MemoryStore {
 
         private final RecordingRawDataOperations rawDataOperations =
                 new RecordingRawDataOperations();
@@ -548,6 +761,23 @@ class RawDataLayerProcessorTest {
                 com.openmemind.ai.memory.core.data.MemoryId id, String contentId) {
             lookupContentIds.add(contentId);
             return super.getRawDataByContentId(id, contentId);
+        }
+    }
+
+    private static final class FailingMemoryStore extends RecordingMemoryStore {
+
+        private final RuntimeException failure;
+
+        private FailingMemoryStore(RuntimeException failure) {
+            this.failure = failure;
+        }
+
+        @Override
+        public void upsertRawDataWithResources(
+                com.openmemind.ai.memory.core.data.MemoryId memoryId,
+                List<MemoryResource> resources,
+                List<MemoryRawData> rawDataList) {
+            throw failure;
         }
     }
 }

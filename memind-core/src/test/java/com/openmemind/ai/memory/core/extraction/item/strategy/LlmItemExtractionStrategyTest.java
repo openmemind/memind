@@ -171,6 +171,35 @@ class LlmItemExtractionStrategyTest {
                 .doesNotContainKey("messages");
     }
 
+    @Test
+    @DisplayName("mergeMetadata should preserve prompt-budget audit fields")
+    void mergeMetadataShouldPreservePromptBudgetAuditFields() {
+        var segment =
+                new ParsedSegment(
+                        "text",
+                        null,
+                        0,
+                        1,
+                        "raw-1",
+                        Map.of(
+                                "budgetTruncated",
+                                true,
+                                "truncationReason",
+                                "prompt_budget",
+                                "retainedTokenCount",
+                                100),
+                        null);
+        var item =
+                new MemoryItemExtractionResponse.ExtractedItem(
+                        "fact", 0.9f, null, List.of(), Map.of("source", "llm"), null);
+
+        assertThat(LlmItemExtractionStrategy.mergeMetadata(segment, item))
+                .containsEntry("budgetTruncated", true)
+                .containsEntry("truncationReason", "prompt_budget")
+                .containsEntry("retainedTokenCount", 100)
+                .containsEntry("source", "llm");
+    }
+
     private static ParsedSegment sampleSegment() {
         return new ParsedSegment(
                 "user: I work on Spring Boot services.",

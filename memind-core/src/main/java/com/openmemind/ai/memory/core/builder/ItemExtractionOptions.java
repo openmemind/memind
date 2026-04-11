@@ -13,9 +13,19 @@
  */
 package com.openmemind.ai.memory.core.builder;
 
-public record ItemExtractionOptions(boolean foresightEnabled) {
+import java.util.Objects;
+
+public record ItemExtractionOptions(boolean foresightEnabled, PromptBudgetOptions promptBudget) {
+
+    public ItemExtractionOptions {
+        promptBudget = Objects.requireNonNull(promptBudget, "promptBudget");
+    }
+
+    public ItemExtractionOptions(boolean foresightEnabled) {
+        this(foresightEnabled, PromptBudgetOptions.defaults());
+    }
 
     public static ItemExtractionOptions defaults() {
-        return new ItemExtractionOptions(false);
+        return new ItemExtractionOptions(false, PromptBudgetOptions.defaults());
     }
 }

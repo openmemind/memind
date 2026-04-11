@@ -31,6 +31,7 @@ import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.utils.HashUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -39,6 +40,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.IntStream;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
@@ -53,6 +55,7 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
     private final CaptionGenerator defaultCaptionGenerator;
     private final MemoryStore memoryStore;
     private final MemoryVector vector;
+    private final int vectorBatchSize;
 
     /**
      * Creates a RawDataLayer with a list of content processors.
@@ -67,6 +70,21 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
             CaptionGenerator defaultCaptionGenerator,
             MemoryStore memoryStore,
             MemoryVector vector) {
+        this(
+                processorList,
+                defaultCaptionGenerator,
+                memoryStore,
+                vector,
+                com.openmemind.ai.memory.core.builder.RawDataExtractionOptions
+                        .DEFAULT_VECTOR_BATCH_SIZE);
+    }
+
+    public RawDataLayer(
+            List<RawContentProcessor<?>> processorList,
+            CaptionGenerator defaultCaptionGenerator,
+            MemoryStore memoryStore,
+            MemoryVector vector,
+            int vectorBatchSize) {
         this.processors = new HashMap<>();
         for (var processor : processorList) {
             this.processors.put(processor.contentClass(), processor);
@@ -74,6 +92,10 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
         this.defaultCaptionGenerator = defaultCaptionGenerator;
         this.memoryStore = memoryStore;
         this.vector = vector;
+        if (vectorBatchSize <= 0) {
+            throw new IllegalArgumentException("vectorBatchSize must be > 0");
+        }
+        this.vectorBatchSize = vectorBatchSize;
     }
 
     @Override
@@ -154,15 +176,20 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
         return defaultCaptionGenerator
                 .generateForSegments(List.of(segment), language)
                 .flatMap(segments -> vectorize(memoryId, segments))
-                .map(
-                        segments -> {
-                            RawDataInput input =
-                                    new RawDataInput(memoryId, null, contentType, metadata);
-                            RawDataProcessResult result =
-                                    buildAndPersist(memoryId, input, contentId, segments);
-                            return new RawDataResult(
-                                    result.rawDataList(), result.segments(), result.existed());
-                        });
+                .flatMap(
+                        vectorization ->
+                                persistWithCleanup(
+                                                memoryId,
+                                                new RawDataInput(
+                                                        memoryId, null, contentType, metadata),
+                                                contentId,
+                                                vectorization)
+                                        .map(
+                                                result ->
+                                                        new RawDataResult(
+                                                                result.rawDataList(),
+                                                                result.segments(),
+                                                                result.existed())));
     }
 
     private Mono<RawDataProcessResult> doProcess(
@@ -178,7 +205,9 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
                 // 3. Vectorization
                 .flatMap(segments -> vectorize(memoryId, segments))
                 // 4. Persistence
-                .map(segments -> buildAndPersist(memoryId, input, contentHash, segments));
+                .flatMap(
+                        vectorization ->
+                                persistWithCleanup(memoryId, input, contentHash, vectorization));
     }
 
     @SuppressWarnings("unchecked")
@@ -201,45 +230,146 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
     }
 
     private CaptionGenerator getCaptionGenerator(RawContent content) {
-        var processor = processors.get(content.getClass());
-        if (processor != null) {
-            var gen = processor.captionGenerator();
-            if (gen != null) {
-                return gen;
-            }
+        var processor = getProcessor(content);
+        var gen = processor.captionGenerator();
+        if (gen != null) {
+            return gen;
         }
         return defaultCaptionGenerator;
     }
 
-    private Mono<List<Segment>> vectorize(MemoryId memoryId, List<Segment> segments) {
+    private Mono<VectorizationResult> vectorize(MemoryId memoryId, List<Segment> segments) {
         if (segments.isEmpty()) {
-            return Mono.just(List.of());
+            return Mono.just(new VectorizationResult(List.of(), List.of()));
         }
 
-        List<String> captions =
-                segments.stream().map(s -> s.caption() != null ? s.caption() : "").toList();
+        List<VectorizationCandidate> candidates =
+                IntStream.range(0, segments.size())
+                        .mapToObj(i -> toVectorizationCandidate(i, segments.get(i)))
+                        .filter(candidate -> candidate != null)
+                        .toList();
+        if (candidates.isEmpty()) {
+            return Mono.just(new VectorizationResult(segments, List.of()));
+        }
 
+        List<VectorizedSegment> storedVectors = new ArrayList<>();
+        List<String> storedVectorIds = new ArrayList<>();
+        return Flux.fromIterable(candidates)
+                .buffer(vectorBatchSize)
+                .concatMap(
+                        batch ->
+                                storeVectorBatch(memoryId, batch)
+                                        .doOnNext(
+                                                batchWrites -> {
+                                                    storedVectors.addAll(batchWrites);
+                                                    batchWrites.forEach(
+                                                            write ->
+                                                                    storedVectorIds.add(
+                                                                            write.vectorId()));
+                                                }))
+                .then(
+                        Mono.fromSupplier(
+                                () ->
+                                        new VectorizationResult(
+                                                applyVectorIds(segments, storedVectors),
+                                                List.copyOf(storedVectorIds))))
+                .onErrorResume(
+                        error ->
+                                cleanupVectorIds(memoryId, storedVectorIds, error)
+                                        .then(Mono.error(error)));
+    }
+
+    private Mono<RawDataProcessResult> persistWithCleanup(
+            MemoryId memoryId,
+            RawDataInput input,
+            String contentId,
+            VectorizationResult vectorization) {
+        return Mono.fromCallable(
+                        () -> buildAndPersist(memoryId, input, contentId, vectorization.segments()))
+                .onErrorResume(
+                        error ->
+                                cleanupVectorIds(memoryId, vectorization.vectorIds(), error)
+                                        .then(Mono.error(error)));
+    }
+
+    private VectorizationCandidate toVectorizationCandidate(int index, Segment segment) {
+        String text = resolveVectorText(segment);
+        if (text == null) {
+            return null;
+        }
+        return new VectorizationCandidate(index, text);
+    }
+
+    private String resolveVectorText(Segment segment) {
+        if (segment.caption() != null && !segment.caption().isBlank()) {
+            return segment.caption();
+        }
+        if (segment.content() != null && !segment.content().isBlank()) {
+            return segment.content();
+        }
+        return null;
+    }
+
+    private Mono<List<VectorizedSegment>> storeVectorBatch(
+            MemoryId memoryId, List<VectorizationCandidate> batch) {
+        List<String> texts = batch.stream().map(VectorizationCandidate::text).toList();
         List<Map<String, Object>> metadataList =
-                segments.stream().map(s -> Map.<String, Object>of()).toList();
-
-        return vector.storeBatch(memoryId, captions, metadataList)
+                batch.stream().map(candidate -> Map.<String, Object>of()).toList();
+        return vector.storeBatch(memoryId, texts, metadataList)
                 .map(
-                        vectorIds ->
-                                IntStream.range(0, segments.size())
-                                        .mapToObj(
-                                                i -> {
-                                                    Segment segment = segments.get(i);
-                                                    Map<String, Object> newMetadata =
-                                                            new HashMap<>(segment.metadata());
-                                                    newMetadata.put("vectorId", vectorIds.get(i));
-                                                    return new Segment(
-                                                            segment.content(),
-                                                            segment.caption(),
-                                                            segment.boundary(),
-                                                            newMetadata,
-                                                            segment.runtimeContext());
-                                                })
-                                        .toList());
+                        vectorIds -> {
+                            if (vectorIds.size() != batch.size()) {
+                                throw new IllegalStateException(
+                                        "Vector store returned "
+                                                + vectorIds.size()
+                                                + " ids for "
+                                                + batch.size()
+                                                + " inputs");
+                            }
+                            return IntStream.range(0, batch.size())
+                                    .mapToObj(
+                                            i ->
+                                                    new VectorizedSegment(
+                                                            batch.get(i).index(), vectorIds.get(i)))
+                                    .toList();
+                        });
+    }
+
+    private List<Segment> applyVectorIds(
+            List<Segment> segments, List<VectorizedSegment> vectorizedSegments) {
+        Map<Integer, String> vectorIdsByIndex = new HashMap<>();
+        vectorizedSegments.forEach(write -> vectorIdsByIndex.put(write.index(), write.vectorId()));
+        return IntStream.range(0, segments.size())
+                .mapToObj(
+                        i -> {
+                            Segment segment = segments.get(i);
+                            String vectorId = vectorIdsByIndex.get(i);
+                            if (vectorId == null) {
+                                return segment;
+                            }
+                            Map<String, Object> newMetadata = new HashMap<>(segment.metadata());
+                            newMetadata.put("vectorId", vectorId);
+                            return new Segment(
+                                    segment.content(),
+                                    segment.caption(),
+                                    segment.boundary(),
+                                    newMetadata,
+                                    segment.runtimeContext());
+                        })
+                .toList();
+    }
+
+    private Mono<Void> cleanupVectorIds(
+            MemoryId memoryId, List<String> vectorIds, Throwable originalError) {
+        if (vectorIds.isEmpty()) {
+            return Mono.empty();
+        }
+        return vector.deleteBatch(memoryId, List.copyOf(vectorIds))
+                .onErrorResume(
+                        cleanupError -> {
+                            originalError.addSuppressed(cleanupError);
+                            return Mono.empty();
+                        });
     }
 
     private RawDataProcessResult buildAndPersist(
@@ -533,4 +663,10 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
         }
         return fallback;
     }
+
+    private record VectorizationResult(List<Segment> segments, List<String> vectorIds) {}
+
+    private record VectorizationCandidate(int index, String text) {}
+
+    private record VectorizedSegment(int index, String vectorId) {}
 }

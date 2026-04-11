@@ -14,9 +14,10 @@
 package com.openmemind.ai.memory.core.builder;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TextChunkingConfig;
+import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
@@ -47,14 +48,44 @@ class MemoryBuildOptionsTest {
     }
 
     @Test
-    void rawDataDefaultsExposeOnlySerializableFields() {
+    void rawDataDefaultsExposeTypedMultimodalPolicies() {
         var defaults = RawDataExtractionOptions.defaults();
         var componentNames =
                 java.util.Arrays.stream(RawDataExtractionOptions.class.getRecordComponents())
                         .map(java.lang.reflect.RecordComponent::getName);
 
-        assertThat(defaults.documentChunking()).isEqualTo(TextChunkingConfig.DEFAULT);
-        assertThat(defaults.audioChunking()).isEqualTo(TextChunkingConfig.DEFAULT);
+        assertThat(defaults.document().textLikeSourceLimit().maxBytes())
+                .isEqualTo(2L * 1024 * 1024);
+        assertThat(defaults.document().binarySourceLimit().maxBytes()).isEqualTo(20L * 1024 * 1024);
+        assertThat(defaults.image().parsedLimit().maxTokens()).isEqualTo(4_000);
+        assertThat(defaults.audio().parsedLimit().maxDuration()).hasMinutes(30);
+        assertThat(defaults.toolCall().maxTimeWindow()).hasMinutes(5);
+        assertThat(defaults.vectorBatchSize()).isEqualTo(64);
         assertThat(componentNames).doesNotContain("contentParser", "resourceFetcher");
+    }
+
+    @Test
+    void rawDataOptionsRejectNonPositiveVectorBatchSize() {
+        assertThatThrownBy(
+                        () ->
+                                new RawDataExtractionOptions(
+                                        com.openmemind.ai.memory.core.extraction.rawdata.chunk
+                                                .ConversationChunkingConfig.DEFAULT,
+                                        DocumentExtractionOptions.defaults(),
+                                        ImageExtractionOptions.defaults(),
+                                        AudioExtractionOptions.defaults(),
+                                        ToolCallChunkingOptions.defaults(),
+                                        CommitDetectorConfig.defaults(),
+                                        0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("vectorBatchSize");
+    }
+
+    @Test
+    void itemDefaultsExposePromptBudget() {
+        var defaults = ItemExtractionOptions.defaults();
+
+        assertThat(defaults.promptBudget().maxInputTokens()).isEqualTo(8192);
+        assertThat(defaults.promptBudget().reservedOutputTokens()).isEqualTo(1200);
     }
 }
