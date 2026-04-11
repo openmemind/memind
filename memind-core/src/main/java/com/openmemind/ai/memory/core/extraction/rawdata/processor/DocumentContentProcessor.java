@@ -14,21 +14,26 @@
 package com.openmemind.ai.memory.core.extraction.rawdata.processor;
 
 import com.openmemind.ai.memory.core.builder.DocumentExtractionOptions;
+import com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions;
 import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.ContentGovernanceResolver;
+import com.openmemind.ai.memory.core.extraction.ParsedContentTooLargeException;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ProfileAwareDocumentChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.document.DocumentSection;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.core.utils.TokenUtils;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalInt;
+import java.util.stream.IntStream;
 import reactor.core.publisher.Mono;
 
 /**
@@ -57,6 +62,27 @@ public class DocumentContentProcessor implements RawContentProcessor<DocumentCon
     @Override
     public String contentType() {
         return ContentTypes.DOCUMENT;
+    }
+
+    @Override
+    public boolean usesSourceIdentity() {
+        return true;
+    }
+
+    @Override
+    public void validateParsedContent(DocumentContent content) {
+        String profile = resolveContentProfile(content);
+        ParsedContentLimitOptions limits =
+                resolveGovernanceType(content, profile) == ContentGovernanceType.DOCUMENT_TEXT_LIKE
+                        ? options.textLikeParsedLimit()
+                        : options.binaryParsedLimit();
+        int tokenCount = TokenUtils.countTokens(content.toContentString());
+        if (tokenCount > limits.maxTokens()) {
+            throw new ParsedContentTooLargeException(
+                    "Parsed content exceeds token limit: profile=%s tokens=%d max=%d"
+                            .formatted(profile, tokenCount, limits.maxTokens()));
+        }
+        validateDocumentStructure(profile, content, limits);
     }
 
     @Override
@@ -141,6 +167,59 @@ public class DocumentContentProcessor implements RawContentProcessor<DocumentCon
             return segments;
         }
         return segments.stream().map(segment -> mergeMetadata(segment, contentMetadata)).toList();
+    }
+
+    private void validateDocumentStructure(
+            String profile, DocumentContent content, ParsedContentLimitOptions limits) {
+        if (limits.maxSections() != null && content.sections().size() > limits.maxSections()) {
+            throw new ParsedContentTooLargeException(
+                    "Parsed content exceeds section limit: profile=%s sections=%d max=%d"
+                            .formatted(profile, content.sections().size(), limits.maxSections()));
+        }
+
+        if (limits.maxPages() == null) {
+            return;
+        }
+
+        OptionalInt pageCount = resolvePageCount(content);
+        if (pageCount.isPresent() && pageCount.getAsInt() > limits.maxPages()) {
+            throw new ParsedContentTooLargeException(
+                    "Parsed content exceeds page limit: profile=%s pages=%d max=%d"
+                            .formatted(profile, pageCount.getAsInt(), limits.maxPages()));
+        }
+    }
+
+    private OptionalInt resolvePageCount(DocumentContent content) {
+        Object pageCount = content.metadata().get("pageCount");
+        if (pageCount instanceof Number number && number.intValue() > 0) {
+            return OptionalInt.of(number.intValue());
+        }
+
+        int distinctPages =
+                content.sections().stream()
+                        .map(DocumentSection::metadata)
+                        .map(this::resolveSectionPage)
+                        .flatMapToInt(
+                                page ->
+                                        page.isPresent()
+                                                ? IntStream.of(page.getAsInt())
+                                                : IntStream.empty())
+                        .distinct()
+                        .toArray()
+                        .length;
+        return distinctPages > 0 ? OptionalInt.of(distinctPages) : OptionalInt.empty();
+    }
+
+    private OptionalInt resolveSectionPage(Map<String, Object> metadata) {
+        Object page = metadata.get("page");
+        if (page instanceof Number number && number.intValue() > 0) {
+            return OptionalInt.of(number.intValue());
+        }
+        Object pageNumber = metadata.get("pageNumber");
+        if (pageNumber instanceof Number number && number.intValue() > 0) {
+            return OptionalInt.of(number.intValue());
+        }
+        return OptionalInt.empty();
     }
 
     private Segment mergeMetadata(Segment segment, Map<String, Object> contentMetadata) {

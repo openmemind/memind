@@ -83,14 +83,16 @@ public record ExtractionRequest(
      * <p>The content type is derived from {@link RawContent#contentType()}.
      */
     public static ExtractionRequest of(MemoryId memoryId, RawContent content) {
-        if (content instanceof DocumentContent documentContent) {
-            return document(memoryId, documentContent);
-        }
-        if (content instanceof ImageContent imageContent) {
-            return image(memoryId, imageContent);
-        }
-        if (content instanceof AudioContent audioContent) {
-            return audio(memoryId, audioContent);
+        if (content.directGovernanceType() != null) {
+            var normalizedContent = MultimodalMetadataNormalizer.normalizeDirectContent(content);
+            return new ExtractionRequest(
+                    memoryId,
+                    normalizedContent,
+                    null,
+                    null,
+                    normalizedContent.contentType(),
+                    MultimodalMetadataNormalizer.snapshot(normalizedContent),
+                    ExtractionConfig.defaults());
         }
         return new ExtractionRequest(
                 memoryId,
@@ -105,49 +107,25 @@ public record ExtractionRequest(
     /**
      * Create document extraction request with normalized multimodal metadata.
      */
+    @Deprecated(forRemoval = true)
     public static ExtractionRequest document(MemoryId memoryId, DocumentContent content) {
-        var normalizedContent =
-                (DocumentContent) MultimodalMetadataNormalizer.normalizeDirectContent(content);
-        return new ExtractionRequest(
-                memoryId,
-                normalizedContent,
-                null,
-                null,
-                ContentTypes.DOCUMENT,
-                MultimodalMetadataNormalizer.snapshot(normalizedContent),
-                ExtractionConfig.defaults());
+        return of(memoryId, content);
     }
 
     /**
      * Create image extraction request with normalized multimodal metadata.
      */
+    @Deprecated(forRemoval = true)
     public static ExtractionRequest image(MemoryId memoryId, ImageContent content) {
-        var normalizedContent =
-                (ImageContent) MultimodalMetadataNormalizer.normalizeDirectContent(content);
-        return new ExtractionRequest(
-                memoryId,
-                normalizedContent,
-                null,
-                null,
-                ContentTypes.IMAGE,
-                MultimodalMetadataNormalizer.snapshot(normalizedContent),
-                ExtractionConfig.defaults());
+        return of(memoryId, content);
     }
 
     /**
      * Create audio extraction request with normalized multimodal metadata.
      */
+    @Deprecated(forRemoval = true)
     public static ExtractionRequest audio(MemoryId memoryId, AudioContent content) {
-        var normalizedContent =
-                (AudioContent) MultimodalMetadataNormalizer.normalizeDirectContent(content);
-        return new ExtractionRequest(
-                memoryId,
-                normalizedContent,
-                null,
-                null,
-                ContentTypes.AUDIO,
-                MultimodalMetadataNormalizer.snapshot(normalizedContent),
-                ExtractionConfig.defaults());
+        return of(memoryId, content);
     }
 
     /**

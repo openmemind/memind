@@ -24,11 +24,13 @@ import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
+import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
@@ -42,6 +44,7 @@ import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.lang.reflect.Proxy;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
@@ -152,9 +155,9 @@ class MemoryAssemblersTest {
         assertThat(readField(extractor, "itemExtractionOptions", ItemExtractionOptions.class))
                 .isEqualTo(context.options().extraction().item());
 
-        @SuppressWarnings("unchecked")
-        var processors = readField(rawDataLayer, "processors", Map.class);
-        assertThat(processors).hasSize(5);
+        var processorRegistry =
+                readField(rawDataLayer, "processorRegistry", RawContentProcessorRegistry.class);
+        assertThat(processorRegistry.all()).hasSize(5);
     }
 
     @Test
@@ -181,10 +184,52 @@ class MemoryAssemblersTest {
         assertThat(readField(extractor, "resourceFetcher", ResourceFetcher.class)).isNotNull();
     }
 
-    private static MemoryAssemblyContext context(
+    @Test
+    void extractionAssemblerSharesProcessorRegistryBetweenRawDataLayerAndExtractor() {
+        var assembly =
+                new MemoryExtractionAssembler()
+                        .assemble(context(MemoryBuildOptions.defaults(), null, null));
+        var extractor = (MemoryExtractor) assembly.pipeline();
+        var rawDataLayer = readField(extractor, "rawDataStep", RawDataLayer.class);
+
+        assertThat(
+                        readField(
+                                extractor,
+                                "rawContentProcessorRegistry",
+                                RawContentProcessorRegistry.class))
+                .isSameAs(
+                        readField(
+                                rawDataLayer,
+                                "processorRegistry",
+                                RawContentProcessorRegistry.class));
+    }
+
+    @Test
+    void extractionAssemblerStillBuildsFiveProcessorsViaConversationPlusBuiltinPlugin() {
+        var assembly =
+                new MemoryExtractionAssembler()
+                        .assemble(context(MemoryBuildOptions.defaults(), null, null, List.of()));
+        var extractor = (MemoryExtractor) assembly.pipeline();
+        var rawDataLayer = readField(extractor, "rawDataStep", RawDataLayer.class);
+
+        var processorRegistry =
+                readField(rawDataLayer, "processorRegistry", RawContentProcessorRegistry.class);
+
+        assertThat(processorRegistry.all()).hasSize(5);
+    }
+
+    static MemoryAssemblyContext context(
             MemoryBuildOptions options,
             ContentParserRegistry contentParserRegistry,
             ResourceFetcher resourceFetcher) {
+        return context(options, contentParserRegistry, resourceFetcher, List.of());
+    }
+
+    static MemoryAssemblyContext context(
+            MemoryBuildOptions options,
+            ContentParserRegistry contentParserRegistry,
+            ResourceFetcher resourceFetcher,
+            List<RawDataPlugin> rawDataPlugins) {
         return new MemoryAssemblyContext(
                 new ChatClientRegistry(CHAT_CLIENT, Map.<ChatClientSlot, StructuredChatClient>of()),
                 MEMORY_STORE,
@@ -195,7 +240,8 @@ class MemoryAssemblersTest {
                 PromptRegistry.EMPTY,
                 options,
                 contentParserRegistry,
-                resourceFetcher);
+                resourceFetcher,
+                rawDataPlugins);
     }
 
     @SuppressWarnings("unchecked")
@@ -256,7 +302,7 @@ class MemoryAssemblersTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> T readField(Object target, String fieldName, Class<T> fieldType) {
+    static <T> T readField(Object target, String fieldName, Class<T> fieldType) {
         try {
             var field = target.getClass().getDeclaredField(fieldName);
             field.setAccessible(true);

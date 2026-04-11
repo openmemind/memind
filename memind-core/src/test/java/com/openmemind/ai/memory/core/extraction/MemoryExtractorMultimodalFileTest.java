@@ -26,8 +26,11 @@ import com.openmemind.ai.memory.core.data.MemoryRawData;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ProfileAwareDocumentChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.processor.DocumentContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.result.InsightResult;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
@@ -315,6 +318,37 @@ class MemoryExtractorMultimodalFileTest {
                                         "report.pdf",
                                         new byte[] {1, 2, 3},
                                         "application/pdf"))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.isFailed()).isTrue();
+        assertThat(result.errorMessage()).contains("document.binary");
+        assertThat(rawDataStep.lastContent).isNull();
+    }
+
+    @Test
+    void directDocumentExtractionUsesProcessorValidation() {
+        var rawDataStep = new RecordingRawDataStep(false);
+        var processorRegistry =
+                new RawContentProcessorRegistry(
+                        List.of(
+                                new DocumentContentProcessor(
+                                        new ProfileAwareDocumentChunker(),
+                                        restrictiveDocumentOptions())));
+        var content =
+                new DocumentContent(
+                        "Manual",
+                        "application/pdf",
+                        "word ".repeat(200),
+                        List.of(),
+                        null,
+                        Map.of("contentProfile", "document.binary"));
+
+        var result =
+                extractorWithRestrictiveOptions(rawDataStep, processorRegistry)
+                        .extract(
+                                ExtractionRequest.of(
+                                        DefaultMemoryId.of("user-1", "agent-1"), content))
                         .block();
 
         assertThat(result).isNotNull();
@@ -714,6 +748,46 @@ class MemoryExtractorMultimodalFileTest {
                             Set.of(".pdf"),
                             10));
         }
+    }
+
+    private MemoryExtractor extractorWithRestrictiveOptions(
+            RawDataExtractStep rawDataStep, RawContentProcessorRegistry processorRegistry) {
+        return new MemoryExtractor(
+                rawDataStep,
+                (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
+                (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
+                null,
+                null,
+                null,
+                null,
+                processorRegistry,
+                null,
+                null,
+                null,
+                new RawDataExtractionOptions(
+                        com.openmemind.ai.memory.core.extraction.rawdata.chunk
+                                .ConversationChunkingConfig.DEFAULT,
+                        restrictiveDocumentOptions(),
+                        com.openmemind.ai.memory.core.builder.ImageExtractionOptions.defaults(),
+                        com.openmemind.ai.memory.core.builder.AudioExtractionOptions.defaults(),
+                        com.openmemind.ai.memory.core.builder.ToolCallChunkingOptions.defaults(),
+                        com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig
+                                .defaults(),
+                        64),
+                ItemExtractionOptions.defaults());
+    }
+
+    private com.openmemind.ai.memory.core.builder.DocumentExtractionOptions
+            restrictiveDocumentOptions() {
+        return new com.openmemind.ai.memory.core.builder.DocumentExtractionOptions(
+                new com.openmemind.ai.memory.core.builder.SourceLimitOptions(1024),
+                new com.openmemind.ai.memory.core.builder.SourceLimitOptions(1024),
+                new com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions(
+                        256, null, null, null),
+                new com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions(
+                        128, null, null, null),
+                new com.openmemind.ai.memory.core.builder.TokenChunkingOptions(64, 96),
+                new com.openmemind.ai.memory.core.builder.TokenChunkingOptions(64, 96));
     }
 
     private static final class RecordingResolutionRegistry implements ContentParserRegistry {

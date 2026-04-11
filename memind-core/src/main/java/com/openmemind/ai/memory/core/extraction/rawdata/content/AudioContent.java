@@ -16,6 +16,8 @@ package com.openmemind.ai.memory.core.extraction.rawdata.content;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
+import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.audio.TranscriptSegment;
 import com.openmemind.ai.memory.core.utils.HashUtils;
 import java.util.List;
@@ -65,6 +67,27 @@ public final class AudioContent extends RawContent {
         return HashUtils.sampledSha256(toContentString());
     }
 
+    @Override
+    public Map<String, Object> contentMetadata() {
+        return metadata;
+    }
+
+    @Override
+    public RawContent withMetadata(Map<String, Object> metadata) {
+        return new AudioContent(mimeType, transcript, segments, sourceUri, metadata);
+    }
+
+    @Override
+    public ContentGovernanceType directGovernanceType() {
+        return ContentGovernanceType.AUDIO_TRANSCRIPT;
+    }
+
+    @Override
+    public String directContentProfile() {
+        return BuiltinContentProfiles.AUDIO_TRANSCRIPT;
+    }
+
+    @Override
     @JsonProperty("mimeType")
     public String mimeType() {
         return mimeType;
@@ -80,6 +103,7 @@ public final class AudioContent extends RawContent {
         return segments;
     }
 
+    @Override
     @JsonProperty("sourceUri")
     public String sourceUri() {
         return sourceUri;

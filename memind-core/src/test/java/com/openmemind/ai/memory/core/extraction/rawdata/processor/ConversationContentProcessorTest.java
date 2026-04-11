@@ -23,8 +23,10 @@ import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -53,6 +55,20 @@ class ConversationContentProcessorTest {
     @DisplayName("supportsInsight() should return true")
     void supportsInsightIsTrue() {
         assertThat(processor.supportsInsight()).isTrue();
+    }
+
+    @Test
+    @DisplayName("resolveSegmentStartTime and resolveSegmentEndTime should use message boundaries")
+    void resolvesSegmentTimesFromConversationMessages() {
+        var first = Message.user("hello", Instant.parse("2026-04-11T10:00:00Z"));
+        var second = Message.assistant("hi", Instant.parse("2026-04-11T10:00:10Z"));
+        var content = new ConversationContent(List.of(first, second));
+        var segment = new Segment("hello", null, new MessageBoundary(0, 2), Map.of());
+
+        assertThat(processor.resolveSegmentStartTime(content, segment, Instant.EPOCH))
+                .isEqualTo(first.timestamp());
+        assertThat(processor.resolveSegmentEndTime(content, segment, Instant.EPOCH))
+                .isEqualTo(second.timestamp());
     }
 
     @Nested

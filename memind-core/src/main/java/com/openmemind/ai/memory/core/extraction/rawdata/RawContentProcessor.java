@@ -18,6 +18,7 @@ import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.TruncateCaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import java.time.Instant;
 import java.util.List;
 import reactor.core.publisher.Mono;
 
@@ -48,6 +49,28 @@ public interface RawContentProcessor<T extends RawContent> {
     /** Item extraction strategy. Override to provide custom extraction logic. Returns null to use framework default. */
     default ItemExtractionStrategy itemExtractionStrategy() {
         return null;
+    }
+
+    /** Whether content id hashing should include source identity in addition to the content fingerprint. */
+    default boolean usesSourceIdentity() {
+        return false;
+    }
+
+    /** Validate parsed/direct content before it enters rawdata persistence. */
+    default void validateParsedContent(T content) {}
+
+    default Instant resolveSegmentStartTime(T content, Segment segment, Instant fallback) {
+        if (segment.runtimeContext() != null && segment.runtimeContext().startTime() != null) {
+            return segment.runtimeContext().startTime();
+        }
+        return fallback;
+    }
+
+    default Instant resolveSegmentEndTime(T content, Segment segment, Instant fallback) {
+        if (segment.runtimeContext() != null && segment.runtimeContext().observedAt() != null) {
+            return segment.runtimeContext().observedAt();
+        }
+        return fallback;
     }
 
     /** Whether items from this content type participate in insight building. */

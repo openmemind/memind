@@ -26,9 +26,16 @@ import com.openmemind.ai.memory.core.extraction.context.CommitDetectionInput;
 import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.item.SegmentBudgetEnforcer;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ImageSegmentComposer;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ProfileAwareDocumentChunker;
+import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TranscriptSegmentChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import com.openmemind.ai.memory.core.extraction.rawdata.processor.AudioContentProcessor;
+import com.openmemind.ai.memory.core.extraction.rawdata.processor.DocumentContentProcessor;
+import com.openmemind.ai.memory.core.extraction.rawdata.processor.ImageContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
@@ -91,7 +98,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
     private final ResourceFetcher resourceFetcher;
     private final RawDataExtractionOptions rawDataExtractionOptions;
     private final ItemExtractionOptions itemExtractionOptions;
-    private final ParsedContentLimitValidator parsedContentLimitValidator;
+    private final RawContentProcessorRegistry rawContentProcessorRegistry;
     private final SegmentBudgetEnforcer segmentBudgetEnforcer;
 
     public MemoryExtractor(
@@ -127,6 +134,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 null,
                 null,
                 null,
+                null,
                 (ContentParser) null,
                 (ContentParserRegistry) null,
                 null,
@@ -155,6 +163,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 null,
                 null,
                 null,
+                null,
                 RawDataExtractionOptions.defaults(),
                 ItemExtractionOptions.defaults());
     }
@@ -177,6 +186,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 contextCommitDetector,
                 pendingConversationBuffer,
                 recentConversationBuffer,
+                null,
                 contentParser,
                 null,
                 resourceStore,
@@ -204,6 +214,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 contextCommitDetector,
                 pendingConversationBuffer,
                 recentConversationBuffer,
+                null,
                 contentParser,
                 null,
                 resourceStore,
@@ -231,6 +242,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 contextCommitDetector,
                 pendingConversationBuffer,
                 recentConversationBuffer,
+                null,
                 null,
                 contentParserRegistry,
                 resourceStore,
@@ -261,6 +273,38 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 pendingConversationBuffer,
                 recentConversationBuffer,
                 null,
+                null,
+                contentParserRegistry,
+                resourceStore,
+                resourceFetcher,
+                rawDataExtractionOptions,
+                itemExtractionOptions);
+    }
+
+    public MemoryExtractor(
+            RawDataExtractStep rawDataStep,
+            MemoryItemExtractStep memoryItemStep,
+            InsightExtractStep insightStep,
+            SegmentProcessor segmentProcessor,
+            ContextCommitDetector contextCommitDetector,
+            PendingConversationBuffer pendingConversationBuffer,
+            RecentConversationBuffer recentConversationBuffer,
+            RawContentProcessorRegistry rawContentProcessorRegistry,
+            ContentParserRegistry contentParserRegistry,
+            ResourceStore resourceStore,
+            ResourceFetcher resourceFetcher,
+            RawDataExtractionOptions rawDataExtractionOptions,
+            ItemExtractionOptions itemExtractionOptions) {
+        this(
+                rawDataStep,
+                memoryItemStep,
+                insightStep,
+                segmentProcessor,
+                contextCommitDetector,
+                pendingConversationBuffer,
+                recentConversationBuffer,
+                rawContentProcessorRegistry,
+                null,
                 contentParserRegistry,
                 resourceStore,
                 resourceFetcher,
@@ -276,6 +320,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
             ContextCommitDetector contextCommitDetector,
             PendingConversationBuffer pendingConversationBuffer,
             RecentConversationBuffer recentConversationBuffer,
+            RawContentProcessorRegistry rawContentProcessorRegistry,
             ContentParser contentParser,
             ContentParserRegistry contentParserRegistry,
             ResourceStore resourceStore,
@@ -297,8 +342,10 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 Objects.requireNonNull(rawDataExtractionOptions, "rawDataExtractionOptions");
         this.itemExtractionOptions =
                 Objects.requireNonNull(itemExtractionOptions, "itemExtractionOptions");
-        this.parsedContentLimitValidator =
-                new ParsedContentLimitValidator(this.rawDataExtractionOptions);
+        this.rawContentProcessorRegistry =
+                rawContentProcessorRegistry != null
+                        ? rawContentProcessorRegistry
+                        : createBuiltinProcessorRegistry(this.rawDataExtractionOptions);
         this.segmentBudgetEnforcer = new SegmentBudgetEnforcer();
     }
 
@@ -314,7 +361,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
 
         var startTime = Instant.now();
 
-        return resolveExtractionRequest(request)
+        return Mono.defer(() -> resolveExtractionRequest(request))
                 .flatMap(resolved -> executeResolvedRequest(resolved, startTime))
                 .onErrorResume(e -> toErrorResult(request.memoryId(), e, startTime));
     }
@@ -538,17 +585,16 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                     new IllegalArgumentException(
                             "Extraction request content, fileInput, or urlInput is required"));
         }
-        if (!isMultimodalContent(request.content())) {
-            parsedContentLimitValidator.validate(request.content(), request.metadata());
+        if (request.content().directGovernanceType() == null) {
             return Mono.just(new ResolvedExtractionRequest(request, null));
         }
 
         RawContent normalizedContent =
-                MultimodalMetadataNormalizer.normalizeDirectContent(
-                        request.content(), request.metadata());
+                validateWithProcessor(
+                        MultimodalMetadataNormalizer.normalizeDirectContent(
+                                request.content(), request.metadata()));
         Map<String, Object> normalizedMetadata =
                 ExtractionRequest.normalizeMultimodalMetadata(normalizedContent);
-        parsedContentLimitValidator.validate(normalizedContent, normalizedMetadata);
         ExtractionRequest normalizedRequest =
                 new ExtractionRequest(
                         request.memoryId(),
@@ -598,17 +644,17 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                                     .flatMap(
                                             parsedContent -> {
                                                 RawContent normalizedContent =
-                                                        MultimodalMetadataNormalizer
-                                                                .normalizeParsedContent(
-                                                                        parsedContent,
-                                                                        request.metadata(),
-                                                                        resolution.capability());
+                                                        validateWithProcessor(
+                                                                MultimodalMetadataNormalizer
+                                                                        .normalizeParsedContent(
+                                                                                parsedContent,
+                                                                                request.metadata(),
+                                                                                resolution
+                                                                                        .capability()));
                                                 Map<String, Object> normalizedMetadata =
                                                         ExtractionRequest
                                                                 .normalizeMultimodalMetadata(
                                                                         normalizedContent);
-                                                parsedContentLimitValidator.validate(
-                                                        normalizedContent, normalizedMetadata);
                                                 if (resourceStore == null) {
                                                     return Mono.just(
                                                             new ResolvedExtractionRequest(
@@ -771,22 +817,19 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                                                         .flatMap(
                                                                 parsedContent -> {
                                                                     RawContent normalizedContent =
-                                                                            MultimodalMetadataNormalizer
-                                                                                    .normalizeParsedContent(
-                                                                                            parsedContent,
-                                                                                            request
-                                                                                                    .metadata(),
-                                                                                            finalResolution
-                                                                                                    .capability());
+                                                                            validateWithProcessor(
+                                                                                    MultimodalMetadataNormalizer
+                                                                                            .normalizeParsedContent(
+                                                                                                    parsedContent,
+                                                                                                    request
+                                                                                                            .metadata(),
+                                                                                                    finalResolution
+                                                                                                            .capability()));
                                                                     Map<String, Object>
                                                                             normalizedMetadata =
                                                                                     ExtractionRequest
                                                                                             .normalizeMultimodalMetadata(
                                                                                                     normalizedContent);
-                                                                    parsedContentLimitValidator
-                                                                            .validate(
-                                                                                    normalizedContent,
-                                                                                    normalizedMetadata);
                                                                     return persistFetchedUrlRequest(
                                                                             request,
                                                                             normalizedContent,
@@ -892,16 +935,28 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         }
     }
 
-    private boolean isMultimodalContent(RawContent content) {
-        return content
-                        instanceof
-                        com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent
-                || content
-                        instanceof
-                        com.openmemind.ai.memory.core.extraction.rawdata.content.ImageContent
-                || content
-                        instanceof
-                        com.openmemind.ai.memory.core.extraction.rawdata.content.AudioContent;
+    private RawContentProcessorRegistry processorRegistryRequired() {
+        if (rawContentProcessorRegistry == null) {
+            throw new IllegalStateException(
+                    "RawContentProcessorRegistry is required for multimodal validation");
+        }
+        return rawContentProcessorRegistry;
+    }
+
+    private <T extends RawContent> T validateWithProcessor(T content) {
+        processorRegistryRequired().resolve(content).validateParsedContent(content);
+        return content;
+    }
+
+    private RawContentProcessorRegistry createBuiltinProcessorRegistry(
+            RawDataExtractionOptions options) {
+        return new RawContentProcessorRegistry(
+                List.of(
+                        new DocumentContentProcessor(
+                                new ProfileAwareDocumentChunker(), options.document()),
+                        new ImageContentProcessor(new ImageSegmentComposer(), options.image()),
+                        new AudioContentProcessor(
+                                new TranscriptSegmentChunker(), options.audio())));
     }
 
     private Mono<Void> cleanupStoredResourceIfNeeded(

@@ -18,14 +18,113 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
+import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.AudioContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ImageContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class ExtractionRequestTest {
+
+    @Test
+    void ofShouldNormalizeAnyContentThatDeclaresDirectGovernanceType() {
+        final class CustomContent extends RawContent {
+            private final Map<String, Object> metadata;
+
+            private CustomContent(Map<String, Object> metadata) {
+                this.metadata = Map.copyOf(metadata);
+            }
+
+            @Override
+            public String contentType() {
+                return "CUSTOM";
+            }
+
+            @Override
+            public String toContentString() {
+                return "payload";
+            }
+
+            @Override
+            public String getContentId() {
+                return "custom-id";
+            }
+
+            @Override
+            public Map<String, Object> contentMetadata() {
+                return metadata;
+            }
+
+            @Override
+            public RawContent withMetadata(Map<String, Object> metadata) {
+                return new CustomContent(metadata);
+            }
+
+            @Override
+            public String mimeType() {
+                return "text/plain";
+            }
+
+            @Override
+            public ContentGovernanceType directGovernanceType() {
+                return ContentGovernanceType.DOCUMENT_TEXT_LIKE;
+            }
+
+            @Override
+            public String directContentProfile() {
+                return "custom.text";
+            }
+        }
+
+        RawContent content = new CustomContent(Map.of("x", 1));
+
+        var request = ExtractionRequest.of(DefaultMemoryId.of("user-1", "agent-1"), content);
+
+        assertThat(request.contentType()).isEqualTo("CUSTOM");
+        assertThat(request.metadata())
+                .containsEntry("x", 1)
+                .containsEntry("sourceKind", "DIRECT")
+                .containsEntry("parserId", "direct")
+                .containsEntry("contentProfile", "custom.text")
+                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_TEXT_LIKE.name());
+    }
+
+    @Test
+    void deprecatedDirectFactoriesDelegateToOfAndRemainDiscoverable() throws Exception {
+        var memoryId = DefaultMemoryId.of("user-1", "agent-1");
+        var document = DocumentContent.of("Guide", "text/markdown", "# title");
+        var image = ImageContent.of("dashboard screenshot");
+        var audio = AudioContent.of("hello world");
+
+        assertThat(ExtractionRequest.document(memoryId, document))
+                .usingRecursiveComparison()
+                .isEqualTo(ExtractionRequest.of(memoryId, document));
+        assertThat(ExtractionRequest.image(memoryId, image))
+                .usingRecursiveComparison()
+                .isEqualTo(ExtractionRequest.of(memoryId, image));
+        assertThat(ExtractionRequest.audio(memoryId, audio))
+                .usingRecursiveComparison()
+                .isEqualTo(ExtractionRequest.of(memoryId, audio));
+
+        assertThat(
+                        ExtractionRequest.class
+                                .getMethod("document", MemoryId.class, DocumentContent.class)
+                                .getAnnotation(Deprecated.class))
+                .isNotNull();
+        assertThat(
+                        ExtractionRequest.class
+                                .getMethod("image", MemoryId.class, ImageContent.class)
+                                .getAnnotation(Deprecated.class))
+                .isNotNull();
+        assertThat(
+                        ExtractionRequest.class
+                                .getMethod("audio", MemoryId.class, AudioContent.class)
+                                .getAnnotation(Deprecated.class))
+                .isNotNull();
+    }
 
     @Test
     void ofShouldNormalizeDirectDocumentMetadata() {

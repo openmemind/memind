@@ -16,6 +16,8 @@ package com.openmemind.ai.memory.core.extraction.rawdata.content;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
+import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.utils.HashUtils;
 import java.util.Map;
 
@@ -67,6 +69,27 @@ public final class ImageContent extends RawContent {
         return HashUtils.sampledSha256(toContentString());
     }
 
+    @Override
+    public Map<String, Object> contentMetadata() {
+        return metadata;
+    }
+
+    @Override
+    public RawContent withMetadata(Map<String, Object> metadata) {
+        return new ImageContent(mimeType, description, ocrText, sourceUri, metadata);
+    }
+
+    @Override
+    public ContentGovernanceType directGovernanceType() {
+        return ContentGovernanceType.IMAGE_CAPTION_OCR;
+    }
+
+    @Override
+    public String directContentProfile() {
+        return BuiltinContentProfiles.IMAGE_CAPTION_OCR;
+    }
+
+    @Override
     @JsonProperty("mimeType")
     public String mimeType() {
         return mimeType;
@@ -82,6 +105,7 @@ public final class ImageContent extends RawContent {
         return ocrText;
     }
 
+    @Override
     @JsonProperty("sourceUri")
     public String sourceUri() {
         return sourceUri;

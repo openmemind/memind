@@ -18,9 +18,7 @@ import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
 import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
@@ -32,7 +30,6 @@ import com.openmemind.ai.memory.core.utils.HashUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -51,7 +48,7 @@ import reactor.core.publisher.Mono;
  */
 public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
 
-    private final Map<Class<?>, RawContentProcessor<?>> processors;
+    private final RawContentProcessorRegistry processorRegistry;
     private final CaptionGenerator defaultCaptionGenerator;
     private final MemoryStore memoryStore;
     private final MemoryVector vector;
@@ -85,10 +82,22 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
             MemoryStore memoryStore,
             MemoryVector vector,
             int vectorBatchSize) {
-        this.processors = new HashMap<>();
-        for (var processor : processorList) {
-            this.processors.put(processor.contentClass(), processor);
-        }
+        this(
+                new RawContentProcessorRegistry(processorList),
+                defaultCaptionGenerator,
+                memoryStore,
+                vector,
+                vectorBatchSize);
+    }
+
+    public RawDataLayer(
+            RawContentProcessorRegistry processorRegistry,
+            CaptionGenerator defaultCaptionGenerator,
+            MemoryStore memoryStore,
+            MemoryVector vector,
+            int vectorBatchSize) {
+        this.processorRegistry =
+                java.util.Objects.requireNonNull(processorRegistry, "processorRegistry");
         this.defaultCaptionGenerator = defaultCaptionGenerator;
         this.memoryStore = memoryStore;
         this.vector = vector;
@@ -212,30 +221,12 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
 
     @SuppressWarnings("unchecked")
     private <T extends RawContent> Mono<List<Segment>> chunkContent(T content) {
-        var processor = (RawContentProcessor<T>) getProcessor(content);
-        return processor.chunk(content);
-    }
-
-    private RawContentProcessor<?> getProcessor(RawContent content) {
-        Class<?> cls = content.getClass();
-        while (cls != null && cls != Object.class) {
-            var proc = processors.get(cls);
-            if (proc != null) {
-                return proc;
-            }
-            cls = cls.getSuperclass();
-        }
-        throw new IllegalArgumentException(
-                "No processor registered for: " + content.getClass().getName());
+        return getTypedProcessor(content).chunk(content);
     }
 
     private CaptionGenerator getCaptionGenerator(RawContent content) {
-        var processor = getProcessor(content);
-        var gen = processor.captionGenerator();
-        if (gen != null) {
-            return gen;
-        }
-        return defaultCaptionGenerator;
+        var generator = processorRegistry.resolve(content).captionGenerator();
+        return generator != null ? generator : defaultCaptionGenerator;
     }
 
     private Mono<VectorizationResult> vectorize(MemoryId memoryId, List<Segment> segments) {
@@ -376,7 +367,6 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
             MemoryId memoryId, RawDataInput input, String contentId, List<Segment> segments) {
 
         Instant now = Instant.now();
-        List<Message> messages = extractMessages(input);
         Map<String, Object> requestMetadata = new LinkedHashMap<>();
         if (input.metadata() != null) {
             requestMetadata.putAll(input.metadata());
@@ -419,8 +409,8 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
                                             resourceId,
                                             mimeType,
                                             now,
-                                            resolveStartTime(segment, messages, now),
-                                            resolveEndTime(segment, messages, now));
+                                            resolveStartTime(input, segment, now),
+                                            resolveEndTime(input, segment, now));
                                 })
                         .toList();
 
@@ -450,13 +440,12 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
 
     private String resolveRawDataContentId(RawDataInput input) {
         String textContentId = input.content().getContentId();
-        String contentType = normalizeContentType(input.contentType());
-        if (!isMultimodal(contentType)) {
+        if (!getTypedProcessor(input.content()).usesSourceIdentity()) {
             return textContentId;
         }
         String sourceIdentity = resolveSourceIdentity(input.memoryId(), input.metadata());
         return HashUtils.sampledSha256(
-                contentType
+                normalizeContentType(input.contentType())
                         + "|"
                         + textContentId
                         + "|"
@@ -467,12 +456,6 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
         return (contentType == null || contentType.isBlank())
                 ? ContentTypes.CONVERSATION
                 : contentType;
-    }
-
-    private boolean isMultimodal(String contentType) {
-        return ContentTypes.DOCUMENT.equals(contentType)
-                || ContentTypes.IMAGE.equals(contentType)
-                || ContentTypes.AUDIO.equals(contentType);
     }
 
     private String resolveSourceIdentity(MemoryId memoryId, Map<String, Object> metadata) {
@@ -629,39 +612,30 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
         };
     }
 
-    private List<Message> extractMessages(RawDataInput input) {
-        if (input.content() instanceof ConversationContent cc) {
-            return cc.getMessages();
-        }
-        return Collections.emptyList();
+    private <T extends RawContent> RawContentProcessor<T> getTypedProcessor(T content) {
+        return processorRegistry.resolve(content);
     }
 
-    private Instant resolveStartTime(Segment segment, List<Message> messages, Instant fallback) {
-        if (segment.runtimeContext() != null && segment.runtimeContext().startTime() != null) {
-            return segment.runtimeContext().startTime();
-        }
-        if (segment.boundary() instanceof MessageBoundary mb && !messages.isEmpty()) {
-            int idx = mb.startMessage();
-            if (idx >= 0 && idx < messages.size()) {
-                Instant ts = messages.get(idx).timestamp();
-                return ts != null ? ts : fallback;
+    private Instant resolveStartTime(RawDataInput input, Segment segment, Instant fallback) {
+        if (input.content() == null) {
+            if (segment.runtimeContext() != null && segment.runtimeContext().startTime() != null) {
+                return segment.runtimeContext().startTime();
             }
+            return fallback;
         }
-        return fallback;
+        return getTypedProcessor(input.content())
+                .resolveSegmentStartTime(input.content(), segment, fallback);
     }
 
-    private Instant resolveEndTime(Segment segment, List<Message> messages, Instant fallback) {
-        if (segment.runtimeContext() != null && segment.runtimeContext().observedAt() != null) {
-            return segment.runtimeContext().observedAt();
-        }
-        if (segment.boundary() instanceof MessageBoundary mb && !messages.isEmpty()) {
-            int idx = mb.endMessage() - 1;
-            if (idx >= 0 && idx < messages.size()) {
-                Instant ts = messages.get(idx).timestamp();
-                return ts != null ? ts : fallback;
+    private Instant resolveEndTime(RawDataInput input, Segment segment, Instant fallback) {
+        if (input.content() == null) {
+            if (segment.runtimeContext() != null && segment.runtimeContext().observedAt() != null) {
+                return segment.runtimeContext().observedAt();
             }
+            return fallback;
         }
-        return fallback;
+        return getTypedProcessor(input.content())
+                .resolveSegmentEndTime(input.content(), segment, fallback);
     }
 
     private record VectorizationResult(List<Segment> segments, List<String> vectorIds) {}

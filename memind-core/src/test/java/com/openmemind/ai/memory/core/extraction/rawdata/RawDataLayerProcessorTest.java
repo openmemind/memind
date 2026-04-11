@@ -80,6 +80,26 @@ class RawDataLayerProcessorTest {
     class GetProcessorRouting {
 
         @Test
+        @DisplayName("duplicate processor registrations should fail fast")
+        void duplicateProcessorRegistrationsFailFast() {
+            var first = mock(DocumentContentProcessor.class);
+            var second = mock(DocumentContentProcessor.class);
+            when(first.contentClass()).thenReturn(DocumentContent.class);
+            when(second.contentClass()).thenReturn(DocumentContent.class);
+
+            assertThatThrownBy(
+                            () ->
+                                    new RawDataLayer(
+                                            List.of(first, second),
+                                            defaultCaption,
+                                            store,
+                                            vector,
+                                            64))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining(DocumentContent.class.getName());
+        }
+
+        @Test
         @DisplayName("ConversationContent should route to ConversationContentProcessor")
         void conversationContentUsesConversationProcessor() {
             var convProcessor = mock(ConversationContentProcessor.class);
@@ -153,6 +173,36 @@ class RawDataLayerProcessorTest {
                     .block();
 
             verify(toolProcessor).chunk(any(ToolCallContent.class));
+        }
+
+        @Test
+        @DisplayName("Document processor should opt into source-identity-aware content id hashing")
+        void sourceIdentityAwareHashingUsesProcessorHook() {
+            var documentProcessor = mock(DocumentContentProcessor.class);
+            when(documentProcessor.contentClass()).thenReturn(DocumentContent.class);
+            when(documentProcessor.usesSourceIdentity()).thenReturn(true);
+            when(documentProcessor.chunk(any(DocumentContent.class)))
+                    .thenReturn(Mono.just(List.of()));
+            when(documentProcessor.captionGenerator()).thenReturn(defaultCaption);
+            when(defaultCaption.generateForSegments(any(), any())).thenReturn(Mono.just(List.of()));
+
+            var layer =
+                    new RawDataLayer(List.of(documentProcessor), defaultCaption, store, vector, 64);
+            var content = DocumentContent.of("Report", "text/plain", "hello");
+
+            when(rawDataOps.getRawDataByContentId(any(), any())).thenReturn(Optional.empty());
+
+            layer.extract(
+                            new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent"),
+                            content,
+                            "DOCUMENT",
+                            Map.of("sourceUri", "https://example.com/report.txt"))
+                    .block();
+
+            verify(documentProcessor).usesSourceIdentity();
+            verify(rawDataOps)
+                    .getRawDataByContentId(
+                            any(), argThat(id -> !id.equals(content.getContentId())));
         }
 
         @Test
@@ -401,6 +451,7 @@ class RawDataLayerProcessorTest {
                         "document body", null, new CharBoundary(0, 13), Map.of("sectionIndex", 0));
 
         when(documentProcessor.contentClass()).thenReturn(DocumentContent.class);
+        when(documentProcessor.usesSourceIdentity()).thenReturn(true);
         when(documentProcessor.chunk(any(DocumentContent.class)))
                 .thenReturn(Mono.just(List.of(chunkedSegment)));
         when(documentProcessor.captionGenerator()).thenReturn(localCaption);
@@ -476,6 +527,7 @@ class RawDataLayerProcessorTest {
                 new Segment("same text", null, new CharBoundary(0, 9), Map.of("sectionIndex", 0));
 
         when(documentProcessor.contentClass()).thenReturn(DocumentContent.class);
+        when(documentProcessor.usesSourceIdentity()).thenReturn(true);
         when(documentProcessor.chunk(any(DocumentContent.class)))
                 .thenReturn(Mono.just(List.of(chunkedSegment)));
         when(documentProcessor.captionGenerator()).thenReturn(localCaption);
@@ -558,6 +610,7 @@ class RawDataLayerProcessorTest {
         var third = new Segment("   ", null, new CharBoundary(14, 17), Map.of("order", 3));
 
         when(documentProcessor.contentClass()).thenReturn(DocumentContent.class);
+        when(documentProcessor.usesSourceIdentity()).thenReturn(true);
         when(documentProcessor.chunk(any(DocumentContent.class)))
                 .thenReturn(Mono.just(List.of(first, second, third)));
         when(documentProcessor.captionGenerator()).thenReturn(localCaption);
@@ -619,6 +672,7 @@ class RawDataLayerProcessorTest {
         var failure = new IllegalStateException("batch 2 failed");
 
         when(documentProcessor.contentClass()).thenReturn(DocumentContent.class);
+        when(documentProcessor.usesSourceIdentity()).thenReturn(true);
         when(documentProcessor.chunk(any(DocumentContent.class))).thenReturn(Mono.just(segments));
         when(documentProcessor.captionGenerator()).thenReturn(localCaption);
         when(localCaption.generateForSegments(any(), any()))
@@ -681,6 +735,7 @@ class RawDataLayerProcessorTest {
         var cleanupFailure = new IllegalStateException("cleanup failed");
 
         when(documentProcessor.contentClass()).thenReturn(DocumentContent.class);
+        when(documentProcessor.usesSourceIdentity()).thenReturn(true);
         when(documentProcessor.chunk(any(DocumentContent.class)))
                 .thenReturn(Mono.just(List.of(segment)));
         when(documentProcessor.captionGenerator()).thenReturn(localCaption);

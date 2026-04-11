@@ -14,12 +14,10 @@
 package com.openmemind.ai.memory.core.extraction;
 
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.AudioContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.DocumentContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ImageContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.resource.ContentCapability;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -101,32 +99,7 @@ public final class MultimodalMetadataNormalizer {
     public static RawContent withMetadata(RawContent content, Map<String, Object> metadata) {
         Objects.requireNonNull(content, "content");
         Objects.requireNonNull(metadata, "metadata");
-        if (content instanceof DocumentContent documentContent) {
-            return new DocumentContent(
-                    documentContent.title(),
-                    documentContent.mimeType(),
-                    documentContent.parsedText(),
-                    documentContent.sections(),
-                    documentContent.sourceUri(),
-                    metadata);
-        }
-        if (content instanceof ImageContent imageContent) {
-            return new ImageContent(
-                    imageContent.mimeType(),
-                    imageContent.description(),
-                    imageContent.ocrText(),
-                    imageContent.sourceUri(),
-                    metadata);
-        }
-        if (content instanceof AudioContent audioContent) {
-            return new AudioContent(
-                    audioContent.mimeType(),
-                    audioContent.transcript(),
-                    audioContent.segments(),
-                    audioContent.sourceUri(),
-                    metadata);
-        }
-        return content;
+        return content.withMetadata(metadata);
     }
 
     public static Map<String, Object> snapshot(RawContent content) {
@@ -137,16 +110,7 @@ public final class MultimodalMetadataNormalizer {
     }
 
     private static Map<String, Object> contentMetadata(RawContent content) {
-        if (content instanceof DocumentContent documentContent) {
-            return documentContent.metadata();
-        }
-        if (content instanceof ImageContent imageContent) {
-            return imageContent.metadata();
-        }
-        if (content instanceof AudioContent audioContent) {
-            return audioContent.metadata();
-        }
-        return Map.of();
+        return content.contentMetadata();
     }
 
     private static void putRequestMetadata(
@@ -157,16 +121,8 @@ public final class MultimodalMetadataNormalizer {
     }
 
     private static void putTransportMetadata(Map<String, Object> normalized, RawContent content) {
-        if (content instanceof DocumentContent documentContent) {
-            putIfNotBlank(normalized, "sourceUri", documentContent.sourceUri());
-            putIfNotBlank(normalized, "mimeType", documentContent.mimeType());
-        } else if (content instanceof ImageContent imageContent) {
-            putIfNotBlank(normalized, "sourceUri", imageContent.sourceUri());
-            putIfNotBlank(normalized, "mimeType", imageContent.mimeType());
-        } else if (content instanceof AudioContent audioContent) {
-            putIfNotBlank(normalized, "sourceUri", audioContent.sourceUri());
-            putIfNotBlank(normalized, "mimeType", audioContent.mimeType());
-        }
+        putIfNotBlank(normalized, "sourceUri", content.sourceUri());
+        putIfNotBlank(normalized, "mimeType", content.mimeType());
     }
 
     private static void putContentMetadata(
@@ -233,56 +189,16 @@ public final class MultimodalMetadataNormalizer {
     }
 
     private static ContentGovernanceType deriveDirectGovernanceType(RawContent content) {
-        if (content instanceof DocumentContent documentContent) {
-            String mimeType = documentContent.mimeType();
-            if ("text/markdown".equals(mimeType)
-                    || "text/html".equals(mimeType)
-                    || "text/plain".equals(mimeType)
-                    || "text/csv".equals(mimeType)) {
-                return ContentGovernanceType.DOCUMENT_TEXT_LIKE;
-            }
-            if (mimeType != null && !mimeType.isBlank()) {
-                return ContentGovernanceType.DOCUMENT_BINARY;
-            }
-            return documentContent.sections().isEmpty()
-                    ? ContentGovernanceType.DOCUMENT_TEXT_LIKE
-                    : ContentGovernanceType.DOCUMENT_BINARY;
+        ContentGovernanceType governanceType = content.directGovernanceType();
+        if (governanceType == null) {
+            throw new IllegalArgumentException(
+                    "Unsupported multimodal content: " + content.contentType());
         }
-        if (content instanceof ImageContent) {
-            return ContentGovernanceType.IMAGE_CAPTION_OCR;
-        }
-        if (content instanceof AudioContent) {
-            return ContentGovernanceType.AUDIO_TRANSCRIPT;
-        }
-        throw new IllegalArgumentException(
-                "Unsupported multimodal content: " + content.contentType());
+        return governanceType;
     }
 
     private static String deriveDirectProfile(RawContent content) {
-        if (content instanceof DocumentContent documentContent) {
-            String mimeType = documentContent.mimeType();
-            if ("text/markdown".equals(mimeType)) {
-                return BuiltinContentProfiles.DOCUMENT_MARKDOWN;
-            }
-            if ("text/html".equals(mimeType)) {
-                return BuiltinContentProfiles.DOCUMENT_HTML;
-            }
-            if ("text/plain".equals(mimeType) || "text/csv".equals(mimeType)) {
-                return BuiltinContentProfiles.DOCUMENT_TEXT;
-            }
-            if (mimeType != null && !mimeType.isBlank()) {
-                return BuiltinContentProfiles.DOCUMENT_BINARY;
-            }
-            return documentContent.sections().isEmpty()
-                    ? BuiltinContentProfiles.DOCUMENT_TEXT
-                    : BuiltinContentProfiles.DOCUMENT_BINARY;
-        }
-        if (content instanceof ImageContent) {
-            return BuiltinContentProfiles.IMAGE_CAPTION_OCR;
-        }
-        if (content instanceof AudioContent) {
-            return BuiltinContentProfiles.AUDIO_TRANSCRIPT;
-        }
-        return content.contentType().toLowerCase(java.util.Locale.ROOT);
+        String profile = content.directContentProfile();
+        return profile != null ? profile : content.contentType().toLowerCase(Locale.ROOT);
     }
 }

@@ -15,12 +15,15 @@ package com.openmemind.ai.memory.core.extraction.rawdata.processor;
 
 import com.openmemind.ai.memory.core.builder.ImageExtractionOptions;
 import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
+import com.openmemind.ai.memory.core.extraction.ParsedContentTooLargeException;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.ImageCaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ImageSegmentComposer;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ImageContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.core.utils.TokenUtils;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +63,22 @@ public class ImageContentProcessor implements RawContentProcessor<ImageContent> 
     }
 
     @Override
+    public boolean usesSourceIdentity() {
+        return true;
+    }
+
+    @Override
+    public void validateParsedContent(ImageContent content) {
+        int tokenCount = TokenUtils.countTokens(content.toContentString());
+        int maxTokens = options.parsedLimit().maxTokens();
+        if (tokenCount > maxTokens) {
+            throw new ParsedContentTooLargeException(
+                    "Parsed content exceeds token limit: profile=%s tokens=%d max=%d"
+                            .formatted(resolveProfile(content), tokenCount, maxTokens));
+        }
+    }
+
+    @Override
     public Mono<List<Segment>> chunk(ImageContent content) {
         return Mono.just(
                 imageSegmentComposer.compose(content, options).stream()
@@ -70,6 +89,16 @@ public class ImageContentProcessor implements RawContentProcessor<ImageContent> 
     @Override
     public CaptionGenerator captionGenerator() {
         return captionGenerator;
+    }
+
+    private String resolveProfile(ImageContent content) {
+        Object profile = content.metadata().get("contentProfile");
+        if (profile != null && !profile.toString().isBlank()) {
+            return profile.toString();
+        }
+        return content.directContentProfile() != null
+                ? content.directContentProfile()
+                : BuiltinContentProfiles.IMAGE_CAPTION_OCR;
     }
 
     private Segment mergeMetadata(Segment segment, Map<String, Object> contentMetadata) {

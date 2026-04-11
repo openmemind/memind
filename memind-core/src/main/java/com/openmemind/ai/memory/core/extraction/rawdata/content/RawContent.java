@@ -16,6 +16,8 @@ package com.openmemind.ai.memory.core.extraction.rawdata.content;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
+import java.util.Map;
 
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
 @JsonSubTypes({
@@ -34,4 +36,29 @@ public abstract class RawContent {
     /** Returns the text fingerprint of the content payload. */
     @JsonIgnore
     public abstract String getContentId();
+
+    public Map<String, Object> contentMetadata() {
+        return Map.of();
+    }
+
+    public RawContent withMetadata(Map<String, Object> metadata) {
+        throw new UnsupportedOperationException(
+                getClass().getName() + " must override withMetadata(metadata)");
+    }
+
+    public String mimeType() {
+        return null;
+    }
+
+    public String sourceUri() {
+        return null;
+    }
+
+    public ContentGovernanceType directGovernanceType() {
+        return null;
+    }
+
+    public String directContentProfile() {
+        return null;
+    }
 }

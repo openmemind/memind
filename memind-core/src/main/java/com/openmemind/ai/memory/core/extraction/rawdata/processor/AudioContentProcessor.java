@@ -15,12 +15,17 @@ package com.openmemind.ai.memory.core.extraction.rawdata.processor;
 
 import com.openmemind.ai.memory.core.builder.AudioExtractionOptions;
 import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
+import com.openmemind.ai.memory.core.extraction.ParsedContentTooLargeException;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.AudioCaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TranscriptSegmentChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.AudioContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.audio.TranscriptSegment;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.core.utils.TokenUtils;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,6 +61,31 @@ public class AudioContentProcessor implements RawContentProcessor<AudioContent> 
     }
 
     @Override
+    public boolean usesSourceIdentity() {
+        return true;
+    }
+
+    @Override
+    public void validateParsedContent(AudioContent content) {
+        int tokenCount = TokenUtils.countTokens(content.toContentString());
+        var limit = options.parsedLimit();
+        if (tokenCount > limit.maxTokens()) {
+            throw new ParsedContentTooLargeException(
+                    "Parsed content exceeds token limit: profile=%s tokens=%d max=%d"
+                            .formatted(resolveProfile(content), tokenCount, limit.maxTokens()));
+        }
+
+        Duration duration = resolveAudioDuration(content);
+        if (limit.maxDuration() != null
+                && duration != null
+                && duration.compareTo(limit.maxDuration()) > 0) {
+            throw new ParsedContentTooLargeException(
+                    "Parsed content exceeds duration limit: profile=%s duration=%s max=%s"
+                            .formatted(resolveProfile(content), duration, limit.maxDuration()));
+        }
+    }
+
+    @Override
     public Mono<List<Segment>> chunk(AudioContent content) {
         return Mono.just(
                 transcriptSegmentChunker.chunk(content, options).stream()
@@ -66,6 +96,53 @@ public class AudioContentProcessor implements RawContentProcessor<AudioContent> 
     @Override
     public CaptionGenerator captionGenerator() {
         return captionGenerator;
+    }
+
+    private String resolveProfile(AudioContent content) {
+        Object profile = content.metadata().get("contentProfile");
+        if (profile != null && !profile.toString().isBlank()) {
+            return profile.toString();
+        }
+        return content.directContentProfile() != null
+                ? content.directContentProfile()
+                : BuiltinContentProfiles.AUDIO_TRANSCRIPT;
+    }
+
+    private Duration resolveAudioDuration(AudioContent content) {
+        Object durationSeconds = content.metadata().get("durationSeconds");
+        if (durationSeconds instanceof Number number && number.longValue() > 0) {
+            return Duration.ofSeconds(number.longValue());
+        }
+
+        Object duration = content.metadata().get("duration");
+        if (duration instanceof Duration metadataDuration
+                && !metadataDuration.isNegative()
+                && !metadataDuration.isZero()) {
+            return metadataDuration;
+        }
+
+        if (content.segments().isEmpty()) {
+            return null;
+        }
+
+        Duration firstStart = null;
+        Duration lastEnd = null;
+        for (TranscriptSegment transcriptSegment : content.segments()) {
+            if (transcriptSegment.startTime() != null
+                    && (firstStart == null
+                            || transcriptSegment.startTime().compareTo(firstStart) < 0)) {
+                firstStart = transcriptSegment.startTime();
+            }
+            if (transcriptSegment.endTime() != null
+                    && (lastEnd == null || transcriptSegment.endTime().compareTo(lastEnd) > 0)) {
+                lastEnd = transcriptSegment.endTime();
+            }
+        }
+
+        if (firstStart == null || lastEnd == null || lastEnd.compareTo(firstStart) < 0) {
+            return null;
+        }
+        return lastEnd.minus(firstStart);
     }
 
     private Segment mergeMetadata(Segment segment, Map<String, Object> contentMetadata) {
