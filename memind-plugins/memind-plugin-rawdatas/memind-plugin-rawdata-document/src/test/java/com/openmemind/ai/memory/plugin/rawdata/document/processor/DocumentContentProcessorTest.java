@@ -15,11 +15,11 @@ package com.openmemind.ai.memory.plugin.rawdata.document.processor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.openmemind.ai.memory.core.builder.DocumentExtractionOptions;
 import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import com.openmemind.ai.memory.plugin.rawdata.document.chunk.ProfileAwareDocumentChunker;
+import com.openmemind.ai.memory.plugin.rawdata.document.config.DocumentExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.document.DocumentSection;
 import java.util.List;
@@ -28,6 +28,12 @@ import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;
 
 class DocumentContentProcessorTest {
+
+    @Test
+    void pluginOwnsDocumentExtractionDefaults() {
+        assertThat(DocumentExtractionOptions.defaults().binaryParsedLimit().maxTokens())
+                .isEqualTo(30_000);
+    }
 
     @Test
     void contentTypeShouldBeDocument() {

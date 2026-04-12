@@ -19,7 +19,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.resource.ContentParser;
+import com.openmemind.ai.memory.plugin.rawdata.document.config.DocumentExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
+import com.openmemind.ai.memory.plugin.rawdata.document.plugin.DocumentRawDataPlugin;
 import com.openmemind.ai.memory.plugin.rawdata.jackson.autoconfigure.RawDataJacksonAutoConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -64,6 +66,37 @@ class DocumentRawDataAutoConfigurationTest {
     }
 
     @Test
+    void bindsDocumentExtractionOptionsIntoPluginBean() {
+        contextRunner
+                .withPropertyValues(
+                        "memind.rawdata.document.extraction.binary-source-limit.max-bytes=4096",
+                        "memind.rawdata.document.extraction.binary-chunking.hard-max-tokens=1600")
+                .run(
+                        context -> {
+                            var plugin =
+                                    (DocumentRawDataPlugin)
+                                            context.getBean("documentRawDataPlugin");
+
+                            assertThat(
+                                            readField(
+                                                            plugin,
+                                                            "options",
+                                                            DocumentExtractionOptions.class)
+                                                    .binarySourceLimit()
+                                                    .maxBytes())
+                                    .isEqualTo(4096L);
+                            assertThat(
+                                            readField(
+                                                            plugin,
+                                                            "options",
+                                                            DocumentExtractionOptions.class)
+                                                    .binaryChunking()
+                                                    .hardMaxTokens())
+                                    .isEqualTo(1600);
+                        });
+    }
+
+    @Test
     void canDisableNativeTextParserOnly() {
         contextRunner
                 .withPropertyValues("memind.rawdata.document.native-text-enabled=false")
@@ -94,5 +127,15 @@ class DocumentRawDataAutoConfigurationTest {
                             assertThat(context).doesNotHaveBean(RawDataPlugin.class);
                             assertThat(context.getBeansOfType(ContentParser.class)).isEmpty();
                         });
+    }
+
+    private static <T> T readField(Object target, String name, Class<T> type) {
+        try {
+            var field = target.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            return type.cast(field.get(target));
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
     }
 }

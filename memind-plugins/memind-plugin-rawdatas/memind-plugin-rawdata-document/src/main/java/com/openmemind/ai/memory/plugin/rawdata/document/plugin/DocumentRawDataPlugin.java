@@ -13,18 +13,32 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.document.plugin;
 
+import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
+import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicy;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.document.chunk.ProfileAwareDocumentChunker;
+import com.openmemind.ai.memory.plugin.rawdata.document.config.DocumentExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.document.parser.NativeTextDocumentContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.document.parser.tika.TikaDocumentContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.document.processor.DocumentContentProcessor;
 import java.util.List;
 
 public final class DocumentRawDataPlugin implements RawDataPlugin {
+
+    private final DocumentExtractionOptions options;
+
+    public DocumentRawDataPlugin() {
+        this(DocumentExtractionOptions.defaults());
+    }
+
+    public DocumentRawDataPlugin(DocumentExtractionOptions options) {
+        this.options = options == null ? DocumentExtractionOptions.defaults() : options;
+    }
 
     @Override
     public String pluginId() {
@@ -33,15 +47,25 @@ public final class DocumentRawDataPlugin implements RawDataPlugin {
 
     @Override
     public List<RawContentProcessor<?>> processors(RawDataPluginContext context) {
-        return List.of(
-                new DocumentContentProcessor(
-                        new ProfileAwareDocumentChunker(),
-                        context.buildOptions().extraction().rawdata().document()));
+        return List.of(new DocumentContentProcessor(new ProfileAwareDocumentChunker(), options));
     }
 
     @Override
     public List<ContentParser> parsers(RawDataPluginContext context) {
         return List.of(new NativeTextDocumentContentParser(), new TikaDocumentContentParser());
+    }
+
+    @Override
+    public List<RawDataIngestionPolicy> ingestionPolicies() {
+        return List.of(
+                new RawDataIngestionPolicy(
+                        ContentTypes.DOCUMENT,
+                        java.util.Set.of(ContentGovernanceType.DOCUMENT_TEXT_LIKE),
+                        options.textLikeSourceLimit()),
+                new RawDataIngestionPolicy(
+                        ContentTypes.DOCUMENT,
+                        java.util.Set.of(ContentGovernanceType.DOCUMENT_BINARY),
+                        options.binarySourceLimit()));
     }
 
     @Override

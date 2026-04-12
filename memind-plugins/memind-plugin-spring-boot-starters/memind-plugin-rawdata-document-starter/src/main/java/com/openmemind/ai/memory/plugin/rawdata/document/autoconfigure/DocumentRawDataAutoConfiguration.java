@@ -34,7 +34,7 @@ public class DocumentRawDataAutoConfiguration {
 
     @Bean("documentRawDataPlugin")
     @ConditionalOnMissingBean(name = "documentRawDataPlugin")
-    RawDataPlugin documentRawDataPlugin() {
-        return new DocumentRawDataPlugin();
+    RawDataPlugin documentRawDataPlugin(DocumentRawDataProperties properties) {
+        return new DocumentRawDataPlugin(properties.extractionOptions());
     }
 }

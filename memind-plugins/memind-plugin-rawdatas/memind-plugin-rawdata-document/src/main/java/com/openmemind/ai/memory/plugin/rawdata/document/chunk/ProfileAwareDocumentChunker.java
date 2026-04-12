@@ -13,12 +13,12 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.document.chunk;
 
-import com.openmemind.ai.memory.core.builder.DocumentExtractionOptions;
 import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TokenAwareSegmentAssembler;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.plugin.rawdata.document.config.DocumentExtractionOptions;
 import java.util.List;
 import java.util.Objects;
 

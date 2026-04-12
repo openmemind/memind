@@ -260,8 +260,7 @@ class MemoryExtractorMultimodalFileTest {
                         rawDataStep,
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
                         (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        documentProcessorRegistry(
-                                restrictiveDocumentOptions().binaryParsedLimit().maxTokens()),
+                        documentProcessorRegistry(restrictiveBinaryParsedMaxTokens()),
                         parserRegistry,
                         null,
                         null,
@@ -334,10 +333,7 @@ class MemoryExtractorMultimodalFileTest {
                 new RawContentProcessorRegistry(
                         List.of(
                                 new TestDocumentProcessor(
-                                        false,
-                                        restrictiveDocumentOptions()
-                                                .binaryParsedLimit()
-                                                .maxTokens())));
+                                        false, restrictiveBinaryParsedMaxTokens())));
         var content =
                 new TestDocumentContent(
                         "Manual",
@@ -823,17 +819,8 @@ class MemoryExtractorMultimodalFileTest {
                 List.of(new TestDocumentProcessor(false, maxParsedTokens)));
     }
 
-    private com.openmemind.ai.memory.core.builder.DocumentExtractionOptions
-            restrictiveDocumentOptions() {
-        return new com.openmemind.ai.memory.core.builder.DocumentExtractionOptions(
-                new com.openmemind.ai.memory.core.builder.SourceLimitOptions(1024),
-                new com.openmemind.ai.memory.core.builder.SourceLimitOptions(1024),
-                new com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions(
-                        256, null, null, null),
-                new com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions(
-                        128, null, null, null),
-                new com.openmemind.ai.memory.core.builder.TokenChunkingOptions(64, 96),
-                new com.openmemind.ai.memory.core.builder.TokenChunkingOptions(64, 96));
+    private int restrictiveBinaryParsedMaxTokens() {
+        return 128;
     }
 
     private RawDataIngestionPolicyRegistry defaultDocumentIngestionPolicyRegistry() {

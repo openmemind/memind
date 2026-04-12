@@ -13,14 +13,23 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.document.autoconfigure;
 
+import com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions;
+import com.openmemind.ai.memory.core.builder.SourceLimitOptions;
+import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
+import com.openmemind.ai.memory.plugin.rawdata.document.config.DocumentExtractionOptions;
+import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "memind.rawdata.document")
 public class DocumentRawDataProperties {
 
+    private static final DocumentExtractionOptions DEFAULT_EXTRACTION =
+            DocumentExtractionOptions.defaults();
+
     private boolean enabled = true;
     private boolean nativeTextEnabled = true;
     private boolean tikaEnabled = true;
+    private final DocumentExtractionProperties extraction = new DocumentExtractionProperties();
 
     public boolean isEnabled() {
         return enabled;
@@ -44,5 +53,166 @@ public class DocumentRawDataProperties {
 
     public void setTikaEnabled(boolean tikaEnabled) {
         this.tikaEnabled = tikaEnabled;
+    }
+
+    public DocumentExtractionProperties getExtraction() {
+        return extraction;
+    }
+
+    public DocumentExtractionOptions extractionOptions() {
+        return extraction.toOptions();
+    }
+
+    public static final class DocumentExtractionProperties {
+
+        private final SourceLimitProperties textLikeSourceLimit =
+                new SourceLimitProperties(DEFAULT_EXTRACTION.textLikeSourceLimit());
+        private final SourceLimitProperties binarySourceLimit =
+                new SourceLimitProperties(DEFAULT_EXTRACTION.binarySourceLimit());
+        private final ParsedContentLimitProperties textLikeParsedLimit =
+                new ParsedContentLimitProperties(DEFAULT_EXTRACTION.textLikeParsedLimit());
+        private final ParsedContentLimitProperties binaryParsedLimit =
+                new ParsedContentLimitProperties(DEFAULT_EXTRACTION.binaryParsedLimit());
+        private final TokenChunkingProperties textLikeChunking =
+                new TokenChunkingProperties(DEFAULT_EXTRACTION.textLikeChunking());
+        private final TokenChunkingProperties binaryChunking =
+                new TokenChunkingProperties(DEFAULT_EXTRACTION.binaryChunking());
+
+        public SourceLimitProperties getTextLikeSourceLimit() {
+            return textLikeSourceLimit;
+        }
+
+        public SourceLimitProperties getBinarySourceLimit() {
+            return binarySourceLimit;
+        }
+
+        public ParsedContentLimitProperties getTextLikeParsedLimit() {
+            return textLikeParsedLimit;
+        }
+
+        public ParsedContentLimitProperties getBinaryParsedLimit() {
+            return binaryParsedLimit;
+        }
+
+        public TokenChunkingProperties getTextLikeChunking() {
+            return textLikeChunking;
+        }
+
+        public TokenChunkingProperties getBinaryChunking() {
+            return binaryChunking;
+        }
+
+        DocumentExtractionOptions toOptions() {
+            return new DocumentExtractionOptions(
+                    textLikeSourceLimit.toOptions(),
+                    binarySourceLimit.toOptions(),
+                    textLikeParsedLimit.toOptions(),
+                    binaryParsedLimit.toOptions(),
+                    textLikeChunking.toOptions(),
+                    binaryChunking.toOptions());
+        }
+    }
+
+    public static final class SourceLimitProperties {
+
+        private long maxBytes;
+
+        private SourceLimitProperties(SourceLimitOptions defaults) {
+            this.maxBytes = defaults.maxBytes();
+        }
+
+        public long getMaxBytes() {
+            return maxBytes;
+        }
+
+        public void setMaxBytes(long maxBytes) {
+            this.maxBytes = maxBytes;
+        }
+
+        SourceLimitOptions toOptions() {
+            return new SourceLimitOptions(maxBytes);
+        }
+    }
+
+    public static final class ParsedContentLimitProperties {
+
+        private int maxTokens;
+        private Integer maxSections;
+        private Integer maxPages;
+        private Duration maxDuration;
+
+        private ParsedContentLimitProperties(ParsedContentLimitOptions defaults) {
+            this.maxTokens = defaults.maxTokens();
+            this.maxSections = defaults.maxSections();
+            this.maxPages = defaults.maxPages();
+            this.maxDuration = defaults.maxDuration();
+        }
+
+        public int getMaxTokens() {
+            return maxTokens;
+        }
+
+        public void setMaxTokens(int maxTokens) {
+            this.maxTokens = maxTokens;
+        }
+
+        public Integer getMaxSections() {
+            return maxSections;
+        }
+
+        public void setMaxSections(Integer maxSections) {
+            this.maxSections = maxSections;
+        }
+
+        public Integer getMaxPages() {
+            return maxPages;
+        }
+
+        public void setMaxPages(Integer maxPages) {
+            this.maxPages = maxPages;
+        }
+
+        public Duration getMaxDuration() {
+            return maxDuration;
+        }
+
+        public void setMaxDuration(Duration maxDuration) {
+            this.maxDuration = maxDuration;
+        }
+
+        ParsedContentLimitOptions toOptions() {
+            return new ParsedContentLimitOptions(maxTokens, maxSections, maxPages, maxDuration);
+        }
+    }
+
+    public static final class TokenChunkingProperties {
+
+        private int targetTokens;
+        private int hardMaxTokens;
+
+        private TokenChunkingProperties(TokenChunkingOptions defaults) {
+            this.targetTokens = defaults.targetTokens();
+            this.hardMaxTokens = defaults.hardMaxTokens();
+        }
+
+        public int getTargetTokens() {
+            return targetTokens;
+        }
+
+        public void setTargetTokens(int targetTokens) {
+            this.targetTokens = targetTokens;
+        }
+
+        public int getHardMaxTokens() {
+            return hardMaxTokens;
+        }
+
+        public void setHardMaxTokens(int hardMaxTokens) {
+            this.hardMaxTokens = hardMaxTokens;
+        }
+
+        TokenChunkingOptions toOptions() {
+            return new TokenChunkingOptions(targetTokens, hardMaxTokens);
+        }
     }
 }

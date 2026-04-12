@@ -11,8 +11,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.builder;
+package com.openmemind.ai.memory.plugin.rawdata.document.config;
 
+import com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions;
+import com.openmemind.ai.memory.core.builder.SourceLimitOptions;
+import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
 import java.util.Objects;
 
 /**
