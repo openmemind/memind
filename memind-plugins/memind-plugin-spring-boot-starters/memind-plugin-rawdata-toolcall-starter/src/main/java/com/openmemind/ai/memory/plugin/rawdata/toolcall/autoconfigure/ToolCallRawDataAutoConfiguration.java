@@ -14,8 +14,12 @@
 package com.openmemind.ai.memory.plugin.rawdata.toolcall.autoconfigure;
 
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
+import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.plugin.ToolCallRawDataPlugin;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.stats.DefaultToolCallStatsService;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.stats.ToolCallStatsService;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -36,5 +40,12 @@ public class ToolCallRawDataAutoConfiguration {
     @ConditionalOnMissingBean(name = "toolCallRawDataPlugin")
     RawDataPlugin toolCallRawDataPlugin(ToolCallRawDataProperties properties) {
         return new ToolCallRawDataPlugin(properties.chunkingOptions());
+    }
+
+    @Bean
+    @ConditionalOnBean(MemoryStore.class)
+    @ConditionalOnMissingBean(ToolCallStatsService.class)
+    ToolCallStatsService toolCallStatsService(MemoryStore memoryStore) {
+        return new DefaultToolCallStatsService(memoryStore);
     }
 }

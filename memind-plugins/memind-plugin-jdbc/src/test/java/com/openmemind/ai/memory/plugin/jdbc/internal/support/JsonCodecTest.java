@@ -20,9 +20,12 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.ToolCallRawContentTypeRegistrar;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.content.ToolCallContent;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallRecord;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -65,7 +68,23 @@ class JsonCodecTest {
     }
 
     @Test
-    void defaultCodecRoundTripsCoreRawContent() {
+    void defaultCodecRoundTripsCoreConversationRawContent() {
+        RawContent payload = new ConversationContent(List.of(Message.user("hello")));
+
+        String json = jsonCodec.toJson(payload);
+        RawContent restored = jsonCodec.fromJson(json, RawContent.class);
+
+        assertThat(restored).isInstanceOf(ConversationContent.class);
+        assertThat(restored.toContentString()).contains("hello");
+    }
+
+    @Test
+    void codecRoundTripsToolCallWhenPluginSubtypeIsExplicitlyRegistered() {
+        ObjectMapper mapper = JsonCodec.createDefaultObjectMapper();
+        RawContentJackson.registerCoreSubtypes(mapper);
+        RawContentJackson.registerPluginSubtypes(
+                mapper, List.of(new ToolCallRawContentTypeRegistrar()));
+        JsonCodec codec = new JsonCodec(mapper);
         RawContent payload =
                 new ToolCallContent(
                         List.of(
@@ -80,30 +99,14 @@ class JsonCodecTest {
                                         "abc",
                                         Instant.parse("2026-04-12T00:00:00Z"))));
 
-        String json = jsonCodec.toJson(payload);
-        RawContent restored = jsonCodec.fromJson(json, RawContent.class);
+        String json = codec.toJson(payload);
+        RawContent restored = codec.fromJson(json, RawContent.class);
 
         assertThat(restored).isInstanceOf(ToolCallContent.class);
         assertThat(((ToolCallContent) restored).calls())
                 .singleElement()
                 .extracting(ToolCallRecord::toolName, ToolCallRecord::status)
                 .containsExactly("search", "SUCCESS");
-    }
-
-    @Test
-    void codecRoundTripsPluginOwnedRawContentWhenSubtypeIsExplicitlyRegistered() {
-        ObjectMapper mapper = new ObjectMapper();
-        RawContentJackson.registerCoreSubtypes(mapper);
-        RawContentJackson.registerPluginSubtypes(
-                mapper, List.of(() -> Map.of("test_raw", TestRawContent.class)));
-        JsonCodec codec = new JsonCodec(mapper);
-        RawContent payload = new TestRawContent("dashboard screenshot");
-
-        String json = codec.toJson(payload);
-        RawContent restored = codec.fromJson(json, RawContent.class);
-
-        assertThat(restored).isInstanceOf(TestRawContent.class);
-        assertThat(restored.toContentString()).isEqualTo("dashboard screenshot");
     }
 
     record SamplePayload(String name, Instant createdAt) {}

@@ -36,7 +36,7 @@ public class DefaultMemoryItemExtractor implements MemoryItemExtractor {
 
     /**
      * @param defaultStrategy fallback strategy when no content-type match is found
-     * @param strategies map of content-type key to strategy (e.g. "TOOL_CALL" -> toolCallStrategy)
+     * @param strategies map of content-type key to strategy (e.g. "PLUGIN_IMAGE" -> imageStrategy)
      */
     public DefaultMemoryItemExtractor(
             ItemExtractionStrategy defaultStrategy,

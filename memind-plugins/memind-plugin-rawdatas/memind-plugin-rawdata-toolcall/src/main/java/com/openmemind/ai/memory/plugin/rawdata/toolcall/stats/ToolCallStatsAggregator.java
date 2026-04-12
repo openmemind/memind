@@ -11,19 +11,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.stats;
+package com.openmemind.ai.memory.plugin.rawdata.toolcall.stats;
 
-import com.openmemind.ai.memory.core.data.ToolCallStats;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallRecord;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallStats;
 import java.util.List;
 
 /**
- * Tool call statistics aggregator (pure computation, does not rely on LLM)
- *
+ * Tool call statistics aggregator.
  */
-public final class ToolStatsAggregator {
+public final class ToolCallStatsAggregator {
 
-    private ToolStatsAggregator() {}
+    private ToolCallStatsAggregator() {}
 
     public static ToolCallStats aggregate(List<ToolCallRecord> records, int recentN) {
         if (records.isEmpty()) {
@@ -31,20 +30,24 @@ public final class ToolStatsAggregator {
         }
 
         int total = records.size();
-        var recent =
+        List<ToolCallRecord> recent =
                 records.size() <= recentN
                         ? records
                         : records.subList(records.size() - recentN, records.size());
 
-        long successCount = recent.stream().filter(r -> "success".equals(r.status())).count();
+        long successCount =
+                recent.stream()
+                        .filter(
+                                record ->
+                                        record.status() != null
+                                                && "success".equalsIgnoreCase(record.status()))
+                        .count();
         double successRate = (double) successCount / recent.size();
         double avgTime =
                 recent.stream().mapToDouble(ToolCallRecord::durationMs).average().orElse(0.0);
-        // avgScore approximates per-call LLM evaluation score using successRate
-        // (success=1.0, failure=0.0). Replace with real scores when item metadata is available.
         double avgTokens =
                 recent.stream()
-                        .mapToDouble(r -> r.inputTokens() + r.outputTokens())
+                        .mapToDouble(record -> record.inputTokens() + record.outputTokens())
                         .average()
                         .orElse(0.0);
 

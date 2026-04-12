@@ -11,31 +11,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.extraction.rawdata.content;
+package com.openmemind.ai.memory.plugin.rawdata.toolcall.content;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.utils.HashUtils;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallContentTypes;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallRecord;
 import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Tool call raw content
- *
+ * Tool call raw content.
  */
 public class ToolCallContent extends RawContent {
-
-    @Override
-    public String contentType() {
-        return "TOOL_CALL";
-    }
 
     private final List<ToolCallRecord> calls;
 
     @JsonCreator
     public ToolCallContent(@JsonProperty("calls") List<ToolCallRecord> calls) {
         this.calls = calls != null ? List.copyOf(calls) : List.of();
+    }
+
+    @Override
+    public String contentType() {
+        return ToolCallContentTypes.TOOL_CALL;
     }
 
     @JsonProperty("calls")
@@ -52,7 +53,13 @@ public class ToolCallContent extends RawContent {
     public String getContentId() {
         var combined =
                 calls.stream()
-                        .map(r -> r.toolName() + ":" + r.input() + ":" + r.output())
+                        .map(
+                                record ->
+                                        record.toolName()
+                                                + ":"
+                                                + record.input()
+                                                + ":"
+                                                + record.output())
                         .collect(Collectors.joining("|"));
         return HashUtils.sampledSha256(combined);
     }

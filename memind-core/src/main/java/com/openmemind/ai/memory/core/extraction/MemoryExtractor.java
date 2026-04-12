@@ -29,7 +29,6 @@ import com.openmemind.ai.memory.core.extraction.item.SegmentBudgetEnforcer;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
@@ -80,10 +79,6 @@ import reactor.core.scheduler.Schedulers;
 public class MemoryExtractor implements MemoryExtractionPipeline {
 
     private static final Logger log = LoggerFactory.getLogger(MemoryExtractor.class);
-    private static final String TOOL_CALL_PLUGIN_REQUIRED_MESSAGE =
-            "Tool call extraction requires the rawdata-toolcall plugin. "
-                    + "Register ToolCallRawDataPlugin or add"
-                    + " memind-plugin-rawdata-toolcall-starter.";
 
     private final RawDataExtractStep rawDataStep;
     private final MemoryItemExtractStep memoryItemStep;
@@ -983,11 +978,6 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         RawContent content = request.content();
         if (content == null || content instanceof ConversationContent) {
             return;
-        }
-        if (content instanceof ToolCallContent
-                && (rawContentProcessorRegistry == null
-                        || !rawContentProcessorRegistry.supports(ToolCallContent.class))) {
-            throw new IllegalStateException(TOOL_CALL_PLUGIN_REQUIRED_MESSAGE);
         }
         ensureProcessorRegistered(content);
     }

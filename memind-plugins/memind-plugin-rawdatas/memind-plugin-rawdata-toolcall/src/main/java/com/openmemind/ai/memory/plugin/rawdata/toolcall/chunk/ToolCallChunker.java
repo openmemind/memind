@@ -15,11 +15,11 @@ package com.openmemind.ai.memory.plugin.rawdata.toolcall.chunk;
 
 import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TokenAwareSegmentAssembler;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.config.ToolCallChunkingOptions;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallRecord;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -54,7 +54,7 @@ public class ToolCallChunker {
         for (ToolCallRecord record : records) {
             byTool.computeIfAbsent(
                             record.toolName() != null ? record.toolName() : "unknown",
-                            k -> new ArrayList<>())
+                            key -> new ArrayList<>())
                     .add(record);
         }
 

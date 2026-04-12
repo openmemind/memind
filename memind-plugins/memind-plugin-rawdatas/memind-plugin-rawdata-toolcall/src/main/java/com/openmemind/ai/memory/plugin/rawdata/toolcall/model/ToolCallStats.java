@@ -11,14 +11,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.data;
-
-import java.util.List;
-import java.util.Map;
+package com.openmemind.ai.memory.plugin.rawdata.toolcall.model;
 
 /**
- * Tool usage suggestion retrieval results
- *
+ * Tool call statistics aggregation.
  */
-public record ToolGuidance(
-        List<String> insights, List<String> itemSummaries, Map<String, ToolCallStats> stats) {}
+public record ToolCallStats(
+        int totalCalls,
+        int recentCallsAnalyzed,
+        double successRate,
+        double avgTimeCost,
+        double avgScore,
+        double avgTokenCost) {}

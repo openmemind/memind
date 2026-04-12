@@ -17,12 +17,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
-import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.ToolCallRawContentTypeRegistrar;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.config.ToolCallChunkingOptions;
 import java.time.Duration;
 import java.util.List;
@@ -33,11 +33,10 @@ import reactor.core.publisher.Mono;
 class ToolCallRawDataPluginTest {
 
     @Test
-    void pluginExposesStableIdAndToolCallProcessorOnly() {
+    void pluginExposesStableIdProcessorAndSubtypeRegistrar() {
         RawDataPlugin plugin = new ToolCallRawDataPlugin();
         StructuredChatClient client = new NoopStructuredChatClient();
-        ChatClientRegistry registry =
-                new ChatClientRegistry(client, Map.of(ChatClientSlot.TOOL_CALL_EXTRACTION, client));
+        ChatClientRegistry registry = new ChatClientRegistry(client, Map.of());
         RawDataPluginContext context =
                 new RawDataPluginContext(
                         registry, PromptRegistry.EMPTY, MemoryBuildOptions.defaults());
@@ -47,7 +46,9 @@ class ToolCallRawDataPluginTest {
                 .singleElement()
                 .extracting(processor -> processor.contentType())
                 .isEqualTo("TOOL_CALL");
-        assertThat(plugin.typeRegistrars()).isEmpty();
+        assertThat(plugin.typeRegistrars())
+                .singleElement()
+                .isInstanceOf(ToolCallRawContentTypeRegistrar.class);
     }
 
     @Test

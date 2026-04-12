@@ -11,20 +11,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.stats;
-
-import com.openmemind.ai.memory.core.data.MemoryId;
-import com.openmemind.ai.memory.core.data.ToolCallStats;
-import java.util.Map;
-import reactor.core.publisher.Mono;
+package com.openmemind.ai.memory.plugin.rawdata.toolcall.model;
 
 /**
- * Tool call statistics service
- *
+ * ToolCall content type constants.
  */
-public interface ToolStatsService {
+public final class ToolCallContentTypes {
 
-    Mono<ToolCallStats> getToolStats(MemoryId memoryId, String toolName);
+    public static final String TOOL_CALL = "TOOL_CALL";
 
-    Mono<Map<String, ToolCallStats>> getAllToolStats(MemoryId memoryId);
+    private ToolCallContentTypes() {}
 }

@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.example.java.support;
 
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.builder.MemoryBuilder;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.LlmReranker;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
@@ -23,6 +24,7 @@ import com.openmemind.ai.memory.plugin.ai.spring.SpringAiFileVector;
 import com.openmemind.ai.memory.plugin.ai.spring.SpringAiStructuredChatClient;
 import com.openmemind.ai.memory.plugin.jdbc.JdbcMemoryAccess;
 import com.openmemind.ai.memory.plugin.jdbc.JdbcStore;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.plugin.ToolCallRawDataPlugin;
 import io.micrometer.observation.ObservationRegistry;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -57,7 +59,7 @@ public final class ExampleRuntimeFactory {
             JdbcMemoryAccess jdbc = createJdbcAccess(settings.store());
             EmbeddingModel embeddingModel = createEmbeddingModel(settings.openAi());
 
-            Memory memory =
+            MemoryBuilder memoryBuilder =
                     Memory.builder()
                             .chatClient(createChatClient(settings.openAi()))
                             .store(jdbc.store())
@@ -69,8 +71,11 @@ public final class ExampleRuntimeFactory {
                                                     settings.runtime().vectorStoreFileName()),
                                             embeddingModel))
                             .reranker(createReranker(settings.rerank()))
-                            .options(options)
-                            .build();
+                            .options(options);
+            if ("tool".equalsIgnoreCase(scenario)) {
+                memoryBuilder.rawDataPlugin(new ToolCallRawDataPlugin());
+            }
+            Memory memory = memoryBuilder.build();
 
             return new ExampleRuntime(
                     memory,

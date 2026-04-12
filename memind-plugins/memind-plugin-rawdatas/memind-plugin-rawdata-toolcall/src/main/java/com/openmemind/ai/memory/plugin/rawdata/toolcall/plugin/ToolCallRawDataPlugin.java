@@ -15,9 +15,9 @@ package com.openmemind.ai.memory.plugin.rawdata.toolcall.plugin;
 
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
-import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.ToolCallRawContentTypeRegistrar;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.caption.ToolCallCaptionGenerator;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.chunk.ToolCallChunker;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.config.ToolCallChunkingOptions;
@@ -49,13 +49,12 @@ public final class ToolCallRawDataPlugin implements RawDataPlugin {
                         new ToolCallChunker(options),
                         new ToolCallCaptionGenerator(),
                         new LlmToolCallItemExtractionStrategy(
-                                context.chatClientRegistry()
-                                        .resolve(ChatClientSlot.TOOL_CALL_EXTRACTION),
+                                context.chatClientRegistry().defaultClient(),
                                 context.promptRegistry())));
     }
 
     @Override
     public List<RawContentTypeRegistrar> typeRegistrars() {
-        return List.of();
+        return List.of(new ToolCallRawContentTypeRegistrar());
     }
 }

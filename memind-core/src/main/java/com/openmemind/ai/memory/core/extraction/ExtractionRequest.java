@@ -17,7 +17,6 @@ import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -136,20 +135,6 @@ public record ExtractionRequest(
                 null,
                 Map.of(),
                 ExtractionConfig.defaults());
-    }
-
-    /**
-     * Create tool call extraction request
-     */
-    public static ExtractionRequest toolCall(MemoryId memoryId, ToolCallContent content) {
-        return new ExtractionRequest(
-                memoryId,
-                content,
-                null,
-                null,
-                ContentTypes.TOOL_CALL,
-                Map.of(),
-                ExtractionConfig.agentOnly());
     }
 
     /**

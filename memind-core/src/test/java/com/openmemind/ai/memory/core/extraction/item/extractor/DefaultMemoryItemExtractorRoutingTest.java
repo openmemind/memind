@@ -34,35 +34,37 @@ import reactor.test.StepVerifier;
 @DisplayName("DefaultMemoryItemExtractor routing")
 class DefaultMemoryItemExtractorRoutingTest {
 
+    private static final String PLUGIN_TOOL_CALL = "PLUGIN_TOOL_CALL";
+
     private final ItemExtractionStrategy defaultStrategy = mock(ItemExtractionStrategy.class);
-    private final ItemExtractionStrategy toolCallStrategy = mock(ItemExtractionStrategy.class);
+    private final ItemExtractionStrategy pluginStrategy = mock(ItemExtractionStrategy.class);
 
     @Nested
     @DisplayName("Content type routing")
     class ContentTypeRouting {
 
         @Test
-        @DisplayName("TOOL_CALL contentType should use ToolCallItemExtractionStrategy")
-        void toolCallUsesToolCallStrategy() {
+        @DisplayName("Plugin-owned contentType should use the registered plugin strategy")
+        void pluginOwnedContentUsesPluginStrategy() {
             var extractor =
                     new DefaultMemoryItemExtractor(
-                            defaultStrategy, Map.of(ContentTypes.TOOL_CALL, toolCallStrategy));
+                            defaultStrategy, Map.of(PLUGIN_TOOL_CALL, pluginStrategy));
 
             var config =
                     new ItemExtractionConfig(
                             com.openmemind.ai.memory.core.data.enums.MemoryScope.USER,
-                            ContentTypes.TOOL_CALL,
+                            PLUGIN_TOOL_CALL,
                             false,
                             "en");
 
             List<ExtractedMemoryEntry> expected = List.of();
-            when(toolCallStrategy.extract(any(), any(), any())).thenReturn(Mono.just(expected));
+            when(pluginStrategy.extract(any(), any(), any())).thenReturn(Mono.just(expected));
 
             StepVerifier.create(extractor.extract(List.of(), List.of(), config))
                     .expectNext(expected)
                     .verifyComplete();
 
-            verify(toolCallStrategy).extract(any(), any(), any());
+            verify(pluginStrategy).extract(any(), any(), any());
             verifyNoInteractions(defaultStrategy);
         }
 
@@ -71,7 +73,7 @@ class DefaultMemoryItemExtractorRoutingTest {
         void conversationUsesDefaultStrategy() {
             var extractor =
                     new DefaultMemoryItemExtractor(
-                            defaultStrategy, Map.of(ContentTypes.TOOL_CALL, toolCallStrategy));
+                            defaultStrategy, Map.of(PLUGIN_TOOL_CALL, pluginStrategy));
 
             var config =
                     new ItemExtractionConfig(
@@ -88,7 +90,7 @@ class DefaultMemoryItemExtractorRoutingTest {
                     .verifyComplete();
 
             verify(defaultStrategy).extract(any(), any(), any());
-            verifyNoInteractions(toolCallStrategy);
+            verifyNoInteractions(pluginStrategy);
         }
 
         @Test
@@ -96,7 +98,7 @@ class DefaultMemoryItemExtractorRoutingTest {
         void unknownContentTypeFallsBackToDefault() {
             var extractor =
                     new DefaultMemoryItemExtractor(
-                            defaultStrategy, Map.of(ContentTypes.TOOL_CALL, toolCallStrategy));
+                            defaultStrategy, Map.of(PLUGIN_TOOL_CALL, pluginStrategy));
 
             var config =
                     new ItemExtractionConfig(
@@ -113,7 +115,7 @@ class DefaultMemoryItemExtractorRoutingTest {
                     .verifyComplete();
 
             verify(defaultStrategy).extract(any(), any(), any());
-            verifyNoInteractions(toolCallStrategy);
+            verifyNoInteractions(pluginStrategy);
         }
 
         @Test
@@ -123,11 +125,7 @@ class DefaultMemoryItemExtractorRoutingTest {
             var extractor =
                     new DefaultMemoryItemExtractor(
                             defaultStrategy,
-                            Map.of(
-                                    ContentTypes.TOOL_CALL,
-                                    toolCallStrategy,
-                                    "MY_CUSTOM",
-                                    customStrategy));
+                            Map.of(PLUGIN_TOOL_CALL, pluginStrategy, "MY_CUSTOM", customStrategy));
 
             var config =
                     new ItemExtractionConfig(
@@ -145,7 +143,7 @@ class DefaultMemoryItemExtractorRoutingTest {
 
             verify(customStrategy).extract(any(), any(), any());
             verifyNoInteractions(defaultStrategy);
-            verifyNoInteractions(toolCallStrategy);
+            verifyNoInteractions(pluginStrategy);
         }
     }
 }

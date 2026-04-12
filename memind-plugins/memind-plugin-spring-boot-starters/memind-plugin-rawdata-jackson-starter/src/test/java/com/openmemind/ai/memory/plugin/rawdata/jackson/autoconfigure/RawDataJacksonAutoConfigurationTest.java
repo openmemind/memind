@@ -24,7 +24,6 @@ import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.resource.ContentParser;
@@ -45,7 +44,7 @@ class RawDataJacksonAutoConfigurationTest {
                             AutoConfigurations.of(RawDataJacksonAutoConfiguration.class));
 
     @Test
-    void registersCoreRawContentTypesWithoutPluginStarters() {
+    void registersOnlyCoreRawContentTypesWithoutPluginStarters() {
         contextRunner.run(
                 context -> {
                     ObjectMapper mapper = context.getBean(ObjectMapper.class);
@@ -57,13 +56,15 @@ class RawDataJacksonAutoConfigurationTest {
                                             """,
                                             RawContent.class))
                             .isInstanceOf(ConversationContent.class);
-                    assertThat(
-                                    mapper.readValue(
-                                            """
-                                            {"type":"tool_call","calls":[{"toolName":"search","input":"{}","output":"ok","status":"SUCCESS","durationMs":1,"inputTokens":1,"outputTokens":1,"contentHash":"abc","calledAt":"2026-04-11T00:00:00Z"}]}
-                                            """,
-                                            RawContent.class))
-                            .isInstanceOf(ToolCallContent.class);
+                    assertThatThrownBy(
+                                    () ->
+                                            mapper.readValue(
+                                                    """
+                                                    {"type":"tool_call","calls":[{"toolName":"search","input":"{}","output":"ok","status":"SUCCESS","durationMs":1,"inputTokens":1,"outputTokens":1,"contentHash":"abc","calledAt":"2026-04-11T00:00:00Z"}]}
+                                                    """,
+                                                    RawContent.class))
+                            .isInstanceOf(InvalidTypeIdException.class)
+                            .hasMessageContaining("tool_call");
                 });
     }
 

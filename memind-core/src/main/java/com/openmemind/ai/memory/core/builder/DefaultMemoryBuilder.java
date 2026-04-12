@@ -25,8 +25,6 @@ import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
-import com.openmemind.ai.memory.core.stats.DefaultToolStatsService;
-import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
@@ -161,7 +159,6 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
         MemoryExtractionAssembly extractionAssembly =
                 new MemoryExtractionAssembler().assemble(context);
         var memoryRetriever = new MemoryRetrievalAssembler().assemble(context);
-        ToolStatsService toolStatsService = new DefaultToolStatsService(context.memoryStore());
         AutoCloseable lifecycle =
                 externallyManaged
                         ? lifecycle(extractionAssembly.lifecycle())
@@ -178,7 +175,6 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
                 context.memoryStore(),
                 context.memoryBuffer(),
                 context.memoryVector(),
-                toolStatsService,
                 extractionAssembly.insightLayer(),
                 lifecycle,
                 options);

@@ -20,20 +20,18 @@ import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
 import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.step.InsightExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
-import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-class MemoryExtractorToolCallPluginTest {
+class MemoryExtractorPluginOwnedRawContentTest {
 
     @Test
-    void toolCallExtractionFailsFastWhenToolCallPluginProcessorIsMissing() {
+    void unknownPluginOwnedRawContentUsesGenericMissingProcessorError() {
         RawDataExtractStep rawDataStep = Mockito.mock(RawDataExtractStep.class);
         MemoryItemExtractStep itemStep = Mockito.mock(MemoryItemExtractStep.class);
         InsightExtractStep insightStep = Mockito.mock(InsightExtractStep.class);
@@ -54,28 +52,34 @@ class MemoryExtractorToolCallPluginTest {
                         RawDataExtractionOptions.defaults(),
                         ItemExtractionOptions.defaults());
 
-        ExtractionResult result = extractor.extract(toolCallRequest()).block();
+        ExtractionResult result = extractor.extract(pluginOwnedRequest()).block();
 
         assertThat(result).isNotNull();
         assertThat(result.isFailed()).isTrue();
-        assertThat(result.errorMessage()).contains("rawdata-toolcall");
+        assertThat(result.errorMessage())
+                .contains("No processor registered for raw content type: TEST_PLUGIN");
         verifyNoInteractions(rawDataStep, itemStep, insightStep);
     }
 
-    private static ExtractionRequest toolCallRequest() {
-        return ExtractionRequest.toolCall(
-                DefaultMemoryId.of("u1", "a1"),
-                new ToolCallContent(
-                        List.of(
-                                new ToolCallRecord(
-                                        "search",
-                                        "{}",
-                                        "ok",
-                                        "SUCCESS",
-                                        1L,
-                                        1,
-                                        1,
-                                        "abc",
-                                        Instant.parse("2026-04-12T00:00:00Z")))));
+    private static ExtractionRequest pluginOwnedRequest() {
+        return ExtractionRequest.of(DefaultMemoryId.of("u1", "a1"), new TestPluginContent());
+    }
+
+    private static final class TestPluginContent extends RawContent {
+
+        @Override
+        public String contentType() {
+            return "TEST_PLUGIN";
+        }
+
+        @Override
+        public String toContentString() {
+            return "plugin";
+        }
+
+        @Override
+        public String getContentId() {
+            return "plugin";
+        }
     }
 }

@@ -16,10 +16,8 @@ package com.openmemind.ai.memory.core.utils;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
-import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -27,28 +25,12 @@ class JsonUtilsRawContentTest {
 
     @Test
     void jsonUtilsCanRoundTripCoreRawContent() {
-        RawContent content =
-                new ToolCallContent(
-                        List.of(
-                                new ToolCallRecord(
-                                        "search",
-                                        "{}",
-                                        "ok",
-                                        "SUCCESS",
-                                        1L,
-                                        1,
-                                        1,
-                                        "abc",
-                                        Instant.parse("2026-04-12T00:00:00Z"))));
+        RawContent content = new ConversationContent(List.of());
 
         String json = JsonUtils.toJson(content);
         RawContent decoded = JsonUtils.fromJson(json, RawContent.class);
 
-        assertThat(decoded).isInstanceOf(ToolCallContent.class);
-        assertThat(((ToolCallContent) decoded).calls())
-                .singleElement()
-                .extracting(ToolCallRecord::toolName, ToolCallRecord::status)
-                .containsExactly("search", "SUCCESS");
+        assertThat(decoded).isInstanceOf(ConversationContent.class);
     }
 
     @Test
@@ -57,7 +39,7 @@ class JsonUtilsRawContentTest {
                         () ->
                                 JsonUtils.fromJson(
                                         """
-                                        {"type":"image","description":"chart","metadata":{}}
+                                        {"type":"tool_call","calls":[]}
                                         """,
                                         RawContent.class))
                 .isInstanceOf(JsonUtils.JsonException.class)

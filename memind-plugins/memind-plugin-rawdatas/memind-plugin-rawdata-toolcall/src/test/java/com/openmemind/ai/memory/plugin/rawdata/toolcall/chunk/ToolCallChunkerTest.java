@@ -15,10 +15,10 @@ package com.openmemind.ai.memory.plugin.rawdata.toolcall.chunk;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.config.ToolCallChunkingOptions;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallRecord;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;

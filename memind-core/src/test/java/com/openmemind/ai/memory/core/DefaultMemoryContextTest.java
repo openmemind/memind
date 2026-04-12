@@ -54,7 +54,6 @@ import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
-import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Duration;
@@ -83,7 +82,6 @@ class DefaultMemoryContextTest {
     @Mock MemoryRetriever retriever;
     @Mock MemoryStore memoryStore;
     @Mock MemoryVector vector;
-    @Mock ToolStatsService toolStatsService;
 
     PendingConversationBuffer pendingConversationBuffer;
     RecentConversationBuffer recentConversationBuffer;
@@ -102,7 +100,14 @@ class DefaultMemoryContextTest {
                         recentConversationBuffer);
         memory =
                 new DefaultMemory(
-                        extractor, retriever, memoryStore, memoryBuffer, vector, toolStatsService);
+                        extractor,
+                        retriever,
+                        memoryStore,
+                        memoryBuffer,
+                        vector,
+                        null,
+                        null,
+                        MemoryBuildOptions.defaults());
         memoryId = DefaultMemoryId.of("user1", "agent1");
     }
 
@@ -197,7 +202,6 @@ class DefaultMemoryContextTest {
                             memoryStore,
                             memoryBuffer,
                             vector,
-                            toolStatsService,
                             null,
                             null,
                             MemoryBuildOptions.builder()
@@ -351,7 +355,6 @@ class DefaultMemoryContextTest {
                             memoryStore,
                             memoryBuffer,
                             vector,
-                            toolStatsService,
                             null,
                             null,
                             MemoryBuildOptions.builder()
@@ -438,7 +441,9 @@ class DefaultMemoryContextTest {
                             memoryStore,
                             localMemoryBuffer,
                             vector,
-                            toolStatsService);
+                            null,
+                            null,
+                            MemoryBuildOptions.defaults());
 
             try (var executor = Executors.newFixedThreadPool(2)) {
                 var addMessageFuture =

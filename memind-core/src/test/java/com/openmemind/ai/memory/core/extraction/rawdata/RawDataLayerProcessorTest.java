@@ -31,8 +31,6 @@ import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
@@ -107,12 +105,13 @@ class RawDataLayerProcessorTest {
             when(convProcessor.captionGenerator()).thenReturn(defaultCaption);
 
             @SuppressWarnings("unchecked")
-            RawContentProcessor<ToolCallContent> toolProcessor = mock(RawContentProcessor.class);
-            when(toolProcessor.contentClass()).thenReturn(ToolCallContent.class);
+            RawContentProcessor<TestPluginRawContent> pluginProcessor =
+                    mock(RawContentProcessor.class);
+            when(pluginProcessor.contentClass()).thenReturn(TestPluginRawContent.class);
 
             var layer =
                     new RawDataLayer(
-                            List.of(convProcessor, toolProcessor),
+                            List.of(convProcessor, pluginProcessor),
                             defaultCaption,
                             store,
                             vector,
@@ -136,29 +135,28 @@ class RawDataLayerProcessorTest {
         }
 
         @Test
-        @DisplayName("ToolCallContent should route to ToolCallContentProcessor")
-        void toolCallContentUsesToolCallProcessor() {
+        @DisplayName("Plugin-owned raw content should route to its registered processor")
+        void pluginOwnedContentUsesRegisteredProcessor() {
             var convProcessor = mock(ConversationContentProcessor.class);
             when(convProcessor.contentClass()).thenReturn(ConversationContent.class);
 
             @SuppressWarnings("unchecked")
-            RawContentProcessor<ToolCallContent> toolProcessor = mock(RawContentProcessor.class);
-            when(toolProcessor.contentClass()).thenReturn(ToolCallContent.class);
-            when(toolProcessor.chunk(any(ToolCallContent.class))).thenReturn(Mono.just(List.of()));
-            when(toolProcessor.captionGenerator()).thenReturn(defaultCaption);
+            RawContentProcessor<TestPluginRawContent> pluginProcessor =
+                    mock(RawContentProcessor.class);
+            when(pluginProcessor.contentClass()).thenReturn(TestPluginRawContent.class);
+            when(pluginProcessor.chunk(any(TestPluginRawContent.class)))
+                    .thenReturn(Mono.just(List.of()));
+            when(pluginProcessor.captionGenerator()).thenReturn(defaultCaption);
 
             var layer =
                     new RawDataLayer(
-                            List.of(convProcessor, toolProcessor),
+                            List.of(convProcessor, pluginProcessor),
                             defaultCaption,
                             store,
                             vector,
                             64);
 
-            var record =
-                    new ToolCallRecord(
-                            "search", "{}", "ok", "success", 100L, 10, 5, null, Instant.now());
-            var content = new ToolCallContent(List.of(record));
+            var content = new TestPluginRawContent();
 
             when(defaultCaption.generateForSegments(any(), any())).thenReturn(Mono.just(List.of()));
             when(rawDataOps.getRawDataByContentId(any(), any()))
@@ -168,11 +166,11 @@ class RawDataLayerProcessorTest {
             layer.extract(
                             new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent"),
                             content,
-                            "TOOL_CALL",
+                            "TEST_PLUGIN",
                             java.util.Map.of())
                     .block();
 
-            verify(toolProcessor).chunk(any(ToolCallContent.class));
+            verify(pluginProcessor).chunk(any(TestPluginRawContent.class));
         }
 
         @Test
@@ -816,6 +814,24 @@ class RawDataLayerProcessorTest {
     @SuppressWarnings("unchecked")
     private static RawContentProcessor<TestDocumentContent> mockTestDocumentProcessor() {
         return (RawContentProcessor<TestDocumentContent>) mock(RawContentProcessor.class);
+    }
+
+    private static final class TestPluginRawContent extends RawContent {
+
+        @Override
+        public String contentType() {
+            return "TEST_PLUGIN";
+        }
+
+        @Override
+        public String toContentString() {
+            return "plugin raw content";
+        }
+
+        @Override
+        public String getContentId() {
+            return "plugin-raw-content";
+        }
     }
 
     private static final class RecordingRawDataOperations extends InMemoryRawDataOperations {

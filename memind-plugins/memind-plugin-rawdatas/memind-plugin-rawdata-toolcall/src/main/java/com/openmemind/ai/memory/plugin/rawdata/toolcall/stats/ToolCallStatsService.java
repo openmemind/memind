@@ -11,16 +11,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.data;
+package com.openmemind.ai.memory.plugin.rawdata.toolcall.stats;
+
+import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallStats;
+import java.util.Map;
+import reactor.core.publisher.Mono;
 
 /**
- * Tool call statistics aggregation (pure computation, not LLM)
- *
+ * Query API for ToolCall stats.
  */
-public record ToolCallStats(
-        int totalCalls,
-        int recentCallsAnalyzed,
-        double successRate,
-        double avgTimeCost,
-        double avgScore,
-        double avgTokenCost) {}
+public interface ToolCallStatsService {
+
+    Mono<ToolCallStats> getToolStats(MemoryId memoryId, String toolName);
+
+    Mono<Map<String, ToolCallStats>> getAllToolStats(MemoryId memoryId);
+}

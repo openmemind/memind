@@ -21,7 +21,6 @@ package com.openmemind.ai.memory.core.llm;
  */
 public enum ChatClientSlot {
     ITEM_EXTRACTION,
-    TOOL_CALL_EXTRACTION,
     CONVERSATION_CHUNKER,
     CAPTION_GENERATOR,
     CONTEXT_COMMIT_DETECTOR,

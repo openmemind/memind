@@ -34,6 +34,7 @@ import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallContentTypes;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -121,7 +122,7 @@ class SqliteMemoryStoreTest {
                 new MemoryRawData(
                         "rd-1",
                         memoryId.toIdentifier(),
-                        ContentTypes.TOOL_CALL,
+                        ToolCallContentTypes.TOOL_CALL,
                         "content-1",
                         new Segment(
                                 "updated content",
@@ -140,7 +141,7 @@ class SqliteMemoryStoreTest {
         store.upsertRawData(memoryId, List.of(updated));
 
         MemoryRawData byContent = store.getRawDataByContentId(memoryId, "content-1").orElseThrow();
-        assertThat(byContent.contentType()).isEqualTo(ContentTypes.TOOL_CALL);
+        assertThat(byContent.contentType()).isEqualTo(ToolCallContentTypes.TOOL_CALL);
         assertThat(byContent.caption()).isEqualTo("caption-2");
         assertThat(byContent.segment()).isEqualTo(updated.segment());
         assertThat(store.listRawData(memoryId)).hasSize(1);

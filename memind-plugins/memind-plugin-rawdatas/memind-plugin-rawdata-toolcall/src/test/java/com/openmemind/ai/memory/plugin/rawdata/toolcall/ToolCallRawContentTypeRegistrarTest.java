@@ -11,18 +11,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.data;
+package com.openmemind.ai.memory.plugin.rawdata.toolcall;
 
-/**
- * Well-known content type identifiers.
- * UPPERCASE for backward compatibility with existing database data.
- */
-public final class ContentTypes {
+import static org.assertj.core.api.Assertions.assertThat;
 
-    public static final String CONVERSATION = "CONVERSATION";
-    public static final String DOCUMENT = "DOCUMENT";
-    public static final String IMAGE = "IMAGE";
-    public static final String AUDIO = "AUDIO";
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.content.ToolCallContent;
+import org.junit.jupiter.api.Test;
 
-    private ContentTypes() {}
+class ToolCallRawContentTypeRegistrarTest {
+
+    @Test
+    void registrarExportsToolCallSubtype() {
+        assertThat(new ToolCallRawContentTypeRegistrar().subtypes())
+                .containsEntry("tool_call", ToolCallContent.class);
+    }
 }

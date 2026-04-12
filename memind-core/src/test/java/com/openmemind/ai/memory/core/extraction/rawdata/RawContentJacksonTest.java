@@ -20,9 +20,9 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -46,18 +46,19 @@ class RawContentJacksonTest {
     }
 
     @Test
-    void registerCoreSubtypesSupportsToolCallDeserializationWithoutPluginRegistrars()
-            throws Exception {
+    void registerCoreSubtypesOnlySupportsConversationWithoutPlugins() {
         var mapper = new ObjectMapper().findAndRegisterModules();
         RawContentJackson.registerCoreSubtypes(mapper);
 
-        assertThat(
-                        mapper.readValue(
-                                """
-                                {"type":"tool_call","calls":[{"toolName":"search","input":"{}","output":"ok","status":"SUCCESS","durationMs":1,"inputTokens":1,"outputTokens":1,"contentHash":"abc","calledAt":"2026-04-12T00:00:00Z"}]}
-                                """,
-                                RawContent.class))
-                .isInstanceOf(ToolCallContent.class);
+        assertThatThrownBy(
+                        () ->
+                                mapper.readValue(
+                                        """
+                                        {"type":"tool_call","calls":[]}
+                                        """,
+                                        RawContent.class))
+                .isInstanceOf(InvalidTypeIdException.class)
+                .hasMessageContaining("tool_call");
     }
 
     @Test

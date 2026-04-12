@@ -18,14 +18,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.data.MemoryId;
-import com.openmemind.ai.memory.core.data.ToolCallStats;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
 import com.openmemind.ai.memory.core.extraction.context.ContextRequest;
 import com.openmemind.ai.memory.core.extraction.context.ContextWindow;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
@@ -197,27 +195,6 @@ class ItemDeleteServiceTest {
         @Override
         public Mono<Void> invalidate(MemoryId memoryId) {
             return Mono.empty();
-        }
-
-        @Override
-        public Mono<ExtractionResult> reportToolCall(MemoryId memoryId, ToolCallRecord record) {
-            return unsupported();
-        }
-
-        @Override
-        public Mono<ExtractionResult> reportToolCalls(
-                MemoryId memoryId, List<ToolCallRecord> records) {
-            return unsupported();
-        }
-
-        @Override
-        public Mono<ToolCallStats> getToolStats(MemoryId memoryId, String toolName) {
-            return unsupported();
-        }
-
-        @Override
-        public Mono<Map<String, ToolCallStats>> getAllToolStats(MemoryId memoryId) {
-            return unsupported();
         }
 
         @Override
