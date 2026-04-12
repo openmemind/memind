@@ -31,6 +31,10 @@ public interface RawDataPlugin {
         return List.of();
     }
 
+    default List<RawDataIngestionPolicy> ingestionPolicies() {
+        return List.of();
+    }
+
     default List<RawContentTypeRegistrar> typeRegistrars() {
         return List.of();
     }

@@ -117,10 +117,6 @@ class MemoryAssemblersTest {
                                                         com.openmemind.ai.memory.core.extraction
                                                                 .rawdata.chunk
                                                                 .ConversationChunkingConfig.DEFAULT,
-                                                        DocumentExtractionOptions.defaults(),
-                                                        ImageExtractionOptions.defaults(),
-                                                        AudioExtractionOptions.defaults(),
-                                                        ToolCallChunkingOptions.defaults(),
                                                         CUSTOM_COMMIT_DETECTION,
                                                         CUSTOM_VECTOR_BATCH_SIZE),
                                                 ItemExtractionOptions.defaults(),

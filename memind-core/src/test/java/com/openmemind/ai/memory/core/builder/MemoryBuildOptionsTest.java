@@ -48,20 +48,16 @@ class MemoryBuildOptionsTest {
     }
 
     @Test
-    void rawDataDefaultsExposeTypedMultimodalPolicies() {
+    void rawDataDefaultsExposeOnlySharedCorePolicies() {
         var defaults = RawDataExtractionOptions.defaults();
         var componentNames =
                 java.util.Arrays.stream(RawDataExtractionOptions.class.getRecordComponents())
-                        .map(java.lang.reflect.RecordComponent::getName);
+                        .map(java.lang.reflect.RecordComponent::getName)
+                        .toList();
 
-        assertThat(defaults.document().textLikeSourceLimit().maxBytes())
-                .isEqualTo(2L * 1024 * 1024);
-        assertThat(defaults.document().binarySourceLimit().maxBytes()).isEqualTo(20L * 1024 * 1024);
-        assertThat(defaults.image().parsedLimit().maxTokens()).isEqualTo(4_000);
-        assertThat(defaults.audio().parsedLimit().maxDuration()).hasMinutes(30);
-        assertThat(defaults.toolCall().maxTimeWindow()).hasMinutes(5);
+        assertThat(componentNames)
+                .containsExactly("conversation", "commitDetection", "vectorBatchSize");
         assertThat(defaults.vectorBatchSize()).isEqualTo(64);
-        assertThat(componentNames).doesNotContain("contentParser", "resourceFetcher");
     }
 
     @Test
@@ -71,10 +67,6 @@ class MemoryBuildOptionsTest {
                                 new RawDataExtractionOptions(
                                         com.openmemind.ai.memory.core.extraction.rawdata.chunk
                                                 .ConversationChunkingConfig.DEFAULT,
-                                        DocumentExtractionOptions.defaults(),
-                                        ImageExtractionOptions.defaults(),
-                                        AudioExtractionOptions.defaults(),
-                                        ToolCallChunkingOptions.defaults(),
                                         CommitDetectorConfig.defaults(),
                                         0))
                 .isInstanceOf(IllegalArgumentException.class)

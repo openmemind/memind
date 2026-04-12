@@ -34,6 +34,8 @@ import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
+import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicy;
+import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicyRegistry;
 import com.openmemind.ai.memory.core.resource.ContentCapability;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.FetchSession;
@@ -266,25 +268,6 @@ class MemoryExtractorMultimodalFileTest {
                         new RawDataExtractionOptions(
                                 com.openmemind.ai.memory.core.extraction.rawdata.chunk
                                         .ConversationChunkingConfig.DEFAULT,
-                                new com.openmemind.ai.memory.core.builder.DocumentExtractionOptions(
-                                        new com.openmemind.ai.memory.core.builder
-                                                .SourceLimitOptions(1024),
-                                        new com.openmemind.ai.memory.core.builder
-                                                .SourceLimitOptions(1024),
-                                        new com.openmemind.ai.memory.core.builder
-                                                .ParsedContentLimitOptions(256, null, null, null),
-                                        new com.openmemind.ai.memory.core.builder
-                                                .ParsedContentLimitOptions(128, null, null, null),
-                                        new com.openmemind.ai.memory.core.builder
-                                                .TokenChunkingOptions(64, 96),
-                                        new com.openmemind.ai.memory.core.builder
-                                                .TokenChunkingOptions(64, 96)),
-                                com.openmemind.ai.memory.core.builder.ImageExtractionOptions
-                                        .defaults(),
-                                com.openmemind.ai.memory.core.builder.AudioExtractionOptions
-                                        .defaults(),
-                                com.openmemind.ai.memory.core.builder.ToolCallChunkingOptions
-                                        .defaults(),
                                 com.openmemind.ai.memory.core.extraction.context
                                         .CommitDetectorConfig.defaults(),
                                 64),
@@ -304,6 +287,44 @@ class MemoryExtractorMultimodalFileTest {
         assertThat(result.isFailed()).isTrue();
         assertThat(result.errorMessage()).contains("document.binary");
         assertThat(rawDataStep.lastContent).isNull();
+    }
+
+    @Test
+    void fileRequestShouldRejectOversizedSourceUsingPluginIngestionPolicy() {
+        var parserRegistry = new RecordingResolutionRegistry();
+        var extractor =
+                extractor(
+                        (memoryId, content, contentType, metadata) ->
+                                Mono.just(RawDataResult.empty()),
+                        (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
+                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
+                        documentProcessorRegistry(),
+                        parserRegistry,
+                        null,
+                        null,
+                        new RawDataIngestionPolicyRegistry(
+                                List.of(
+                                        new RawDataIngestionPolicy(
+                                                ContentTypes.DOCUMENT,
+                                                Set.of(ContentGovernanceType.DOCUMENT_BINARY),
+                                                new com.openmemind.ai.memory.core.builder
+                                                        .SourceLimitOptions(2)))),
+                        RawDataExtractionOptions.defaults(),
+                        ItemExtractionOptions.defaults());
+
+        var result =
+                extractor
+                        .extract(
+                                ExtractionRequest.file(
+                                        DefaultMemoryId.of("user-1", "agent-1"),
+                                        "report.pdf",
+                                        new byte[] {1, 2, 3},
+                                        "application/pdf"))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.isFailed()).isTrue();
+        assertThat(result.errorMessage()).contains("Source exceeds byte limit");
     }
 
     @Test
@@ -716,10 +737,6 @@ class MemoryExtractorMultimodalFileTest {
                 new RawDataExtractionOptions(
                         com.openmemind.ai.memory.core.extraction.rawdata.chunk
                                 .ConversationChunkingConfig.DEFAULT,
-                        restrictiveDocumentOptions(),
-                        com.openmemind.ai.memory.core.builder.ImageExtractionOptions.defaults(),
-                        com.openmemind.ai.memory.core.builder.AudioExtractionOptions.defaults(),
-                        com.openmemind.ai.memory.core.builder.ToolCallChunkingOptions.defaults(),
                         com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig
                                 .defaults(),
                         64),
@@ -741,6 +758,7 @@ class MemoryExtractorMultimodalFileTest {
                 contentParserRegistry,
                 resourceStore,
                 resourceFetcher,
+                defaultDocumentIngestionPolicyRegistry(),
                 RawDataExtractionOptions.defaults(),
                 ItemExtractionOptions.defaults());
     }
@@ -755,6 +773,30 @@ class MemoryExtractorMultimodalFileTest {
             ResourceFetcher resourceFetcher,
             RawDataExtractionOptions rawDataExtractionOptions,
             ItemExtractionOptions itemExtractionOptions) {
+        return extractor(
+                rawDataStep,
+                memoryItemStep,
+                insightStep,
+                processorRegistry,
+                contentParserRegistry,
+                resourceStore,
+                resourceFetcher,
+                defaultDocumentIngestionPolicyRegistry(),
+                rawDataExtractionOptions,
+                itemExtractionOptions);
+    }
+
+    private MemoryExtractor extractor(
+            RawDataExtractStep rawDataStep,
+            MemoryItemExtractStep memoryItemStep,
+            com.openmemind.ai.memory.core.extraction.step.InsightExtractStep insightStep,
+            RawContentProcessorRegistry processorRegistry,
+            ContentParserRegistry contentParserRegistry,
+            ResourceStore resourceStore,
+            ResourceFetcher resourceFetcher,
+            RawDataIngestionPolicyRegistry ingestionPolicyRegistry,
+            RawDataExtractionOptions rawDataExtractionOptions,
+            ItemExtractionOptions itemExtractionOptions) {
         return new MemoryExtractor(
                 rawDataStep,
                 memoryItemStep,
@@ -767,6 +809,7 @@ class MemoryExtractorMultimodalFileTest {
                 contentParserRegistry,
                 resourceStore,
                 resourceFetcher,
+                ingestionPolicyRegistry,
                 rawDataExtractionOptions,
                 itemExtractionOptions);
     }
@@ -791,6 +834,21 @@ class MemoryExtractorMultimodalFileTest {
                         128, null, null, null),
                 new com.openmemind.ai.memory.core.builder.TokenChunkingOptions(64, 96),
                 new com.openmemind.ai.memory.core.builder.TokenChunkingOptions(64, 96));
+    }
+
+    private RawDataIngestionPolicyRegistry defaultDocumentIngestionPolicyRegistry() {
+        return new RawDataIngestionPolicyRegistry(
+                List.of(
+                        new RawDataIngestionPolicy(
+                                ContentTypes.DOCUMENT,
+                                Set.of(ContentGovernanceType.DOCUMENT_TEXT_LIKE),
+                                new com.openmemind.ai.memory.core.builder.SourceLimitOptions(
+                                        2L * 1024 * 1024)),
+                        new RawDataIngestionPolicy(
+                                ContentTypes.DOCUMENT,
+                                Set.of(ContentGovernanceType.DOCUMENT_BINARY),
+                                new com.openmemind.ai.memory.core.builder.SourceLimitOptions(
+                                        20L * 1024 * 1024))));
     }
 
     private static final class RecordingResolutionRegistry implements ContentParserRegistry {

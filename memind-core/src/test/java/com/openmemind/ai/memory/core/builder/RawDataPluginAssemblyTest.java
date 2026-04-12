@@ -17,10 +17,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicy;
+import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicyRegistry;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.resource.ContentCapability;
@@ -92,6 +96,60 @@ class RawDataPluginAssemblyTest {
                         MemoryAssemblersTest.readField(
                                 extractor, "contentParserRegistry", ContentParserRegistry.class))
                 .isSameAs(explicitRegistry);
+    }
+
+    @Test
+    void assemblerCollectsPluginOwnedIngestionPolicies() {
+        var plugin =
+                new RawDataPlugin() {
+                    @Override
+                    public String pluginId() {
+                        return "rawdata-test";
+                    }
+
+                    @Override
+                    public List<RawContentProcessor<?>> processors(RawDataPluginContext context) {
+                        return List.of();
+                    }
+
+                    @Override
+                    public List<RawDataIngestionPolicy> ingestionPolicies() {
+                        return List.of(
+                                new RawDataIngestionPolicy(
+                                        ContentTypes.DOCUMENT,
+                                        Set.of(ContentGovernanceType.DOCUMENT_BINARY),
+                                        new SourceLimitOptions(128)));
+                    }
+                };
+        var assembly =
+                new MemoryExtractionAssembler()
+                        .assemble(
+                                MemoryAssemblersTest.context(
+                                        MemoryBuildOptions.defaults(),
+                                        null,
+                                        null,
+                                        List.of(plugin)));
+        var extractor = (MemoryExtractor) assembly.pipeline();
+
+        assertThat(
+                        MemoryAssemblersTest.readField(
+                                extractor,
+                                "ingestionPolicyRegistry",
+                                RawDataIngestionPolicyRegistry.class))
+                .extracting(
+                        registry ->
+                                registry.resolve(
+                                                new ContentCapability(
+                                                        "document-test",
+                                                        ContentTypes.DOCUMENT,
+                                                        "document.binary",
+                                                        ContentGovernanceType.DOCUMENT_BINARY,
+                                                        Set.of("application/pdf"),
+                                                        Set.of(".pdf"),
+                                                        10))
+                                        .sourceLimit()
+                                        .maxBytes())
+                .isEqualTo(128L);
     }
 
     @Test

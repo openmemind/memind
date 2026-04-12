@@ -19,10 +19,6 @@ import java.util.Objects;
 
 public record RawDataExtractionOptions(
         ConversationChunkingConfig conversation,
-        DocumentExtractionOptions document,
-        ImageExtractionOptions image,
-        AudioExtractionOptions audio,
-        ToolCallChunkingOptions toolCall,
         CommitDetectorConfig commitDetection,
         int vectorBatchSize) {
 
@@ -30,10 +26,6 @@ public record RawDataExtractionOptions(
 
     public RawDataExtractionOptions {
         conversation = Objects.requireNonNull(conversation, "conversation");
-        document = Objects.requireNonNull(document, "document");
-        image = Objects.requireNonNull(image, "image");
-        audio = Objects.requireNonNull(audio, "audio");
-        toolCall = Objects.requireNonNull(toolCall, "toolCall");
         commitDetection = Objects.requireNonNull(commitDetection, "commitDetection");
         if (vectorBatchSize <= 0) {
             throw new IllegalArgumentException("vectorBatchSize must be > 0");
@@ -43,10 +35,6 @@ public record RawDataExtractionOptions(
     public static RawDataExtractionOptions defaults() {
         return new RawDataExtractionOptions(
                 ConversationChunkingConfig.DEFAULT,
-                DocumentExtractionOptions.defaults(),
-                ImageExtractionOptions.defaults(),
-                AudioExtractionOptions.defaults(),
-                ToolCallChunkingOptions.defaults(),
                 CommitDetectorConfig.defaults(),
                 DEFAULT_VECTOR_BATCH_SIZE);
     }

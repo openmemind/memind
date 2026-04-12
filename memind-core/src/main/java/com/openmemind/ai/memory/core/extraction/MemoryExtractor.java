@@ -41,6 +41,7 @@ import com.openmemind.ai.memory.core.extraction.step.InsightExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.SegmentProcessor;
+import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicyRegistry;
 import com.openmemind.ai.memory.core.resource.ContentCapability;
 import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
@@ -95,6 +96,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
     private final ContentParserRegistry contentParserRegistry;
     private final ResourceStore resourceStore;
     private final ResourceFetcher resourceFetcher;
+    private final RawDataIngestionPolicyRegistry ingestionPolicyRegistry;
     private final RawDataExtractionOptions rawDataExtractionOptions;
     private final ItemExtractionOptions itemExtractionOptions;
     private final RawContentProcessorRegistry rawContentProcessorRegistry;
@@ -116,6 +118,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 null,
                 null,
                 null,
+                RawDataIngestionPolicyRegistry.empty(),
                 RawDataExtractionOptions.defaults(),
                 ItemExtractionOptions.defaults());
     }
@@ -138,6 +141,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 (ContentParserRegistry) null,
                 null,
                 null,
+                RawDataIngestionPolicyRegistry.empty(),
                 RawDataExtractionOptions.defaults(),
                 ItemExtractionOptions.defaults());
     }
@@ -163,6 +167,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 null,
                 null,
                 null,
+                RawDataIngestionPolicyRegistry.empty(),
                 RawDataExtractionOptions.defaults(),
                 ItemExtractionOptions.defaults());
     }
@@ -190,6 +195,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 null,
                 resourceStore,
                 null,
+                RawDataIngestionPolicyRegistry.empty(),
                 RawDataExtractionOptions.defaults(),
                 ItemExtractionOptions.defaults());
     }
@@ -218,6 +224,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 null,
                 resourceStore,
                 resourceFetcher,
+                RawDataIngestionPolicyRegistry.empty(),
                 RawDataExtractionOptions.defaults(),
                 ItemExtractionOptions.defaults());
     }
@@ -246,6 +253,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 contentParserRegistry,
                 resourceStore,
                 resourceFetcher,
+                RawDataIngestionPolicyRegistry.empty(),
                 RawDataExtractionOptions.defaults(),
                 ItemExtractionOptions.defaults());
     }
@@ -276,6 +284,40 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 contentParserRegistry,
                 resourceStore,
                 resourceFetcher,
+                RawDataIngestionPolicyRegistry.empty(),
+                rawDataExtractionOptions,
+                itemExtractionOptions);
+    }
+
+    public MemoryExtractor(
+            RawDataExtractStep rawDataStep,
+            MemoryItemExtractStep memoryItemStep,
+            InsightExtractStep insightStep,
+            SegmentProcessor segmentProcessor,
+            ContextCommitDetector contextCommitDetector,
+            PendingConversationBuffer pendingConversationBuffer,
+            RecentConversationBuffer recentConversationBuffer,
+            RawContentProcessorRegistry rawContentProcessorRegistry,
+            ContentParserRegistry contentParserRegistry,
+            ResourceStore resourceStore,
+            ResourceFetcher resourceFetcher,
+            RawDataIngestionPolicyRegistry ingestionPolicyRegistry,
+            RawDataExtractionOptions rawDataExtractionOptions,
+            ItemExtractionOptions itemExtractionOptions) {
+        this(
+                rawDataStep,
+                memoryItemStep,
+                insightStep,
+                segmentProcessor,
+                contextCommitDetector,
+                pendingConversationBuffer,
+                recentConversationBuffer,
+                rawContentProcessorRegistry,
+                null,
+                contentParserRegistry,
+                resourceStore,
+                resourceFetcher,
+                ingestionPolicyRegistry,
                 rawDataExtractionOptions,
                 itemExtractionOptions);
     }
@@ -303,10 +345,10 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 pendingConversationBuffer,
                 recentConversationBuffer,
                 rawContentProcessorRegistry,
-                null,
                 contentParserRegistry,
                 resourceStore,
                 resourceFetcher,
+                RawDataIngestionPolicyRegistry.empty(),
                 rawDataExtractionOptions,
                 itemExtractionOptions);
     }
@@ -324,6 +366,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
             ContentParserRegistry contentParserRegistry,
             ResourceStore resourceStore,
             ResourceFetcher resourceFetcher,
+            RawDataIngestionPolicyRegistry ingestionPolicyRegistry,
             RawDataExtractionOptions rawDataExtractionOptions,
             ItemExtractionOptions itemExtractionOptions) {
         this.rawDataStep = Objects.requireNonNull(rawDataStep, "rawDataStep is required");
@@ -337,6 +380,8 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         this.contentParserRegistry = contentParserRegistry;
         this.resourceStore = resourceStore;
         this.resourceFetcher = resourceFetcher;
+        this.ingestionPolicyRegistry =
+                Objects.requireNonNull(ingestionPolicyRegistry, "ingestionPolicyRegistry");
         this.rawDataExtractionOptions =
                 Objects.requireNonNull(rawDataExtractionOptions, "rawDataExtractionOptions");
         this.itemExtractionOptions =
@@ -840,17 +885,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
     }
 
     private long resolveSourceLimit(ContentCapability capability) {
-        return switch (capability.governanceType()) {
-            case DOCUMENT_TEXT_LIKE ->
-                    rawDataExtractionOptions.document().textLikeSourceLimit().maxBytes();
-            case DOCUMENT_BINARY ->
-                    rawDataExtractionOptions.document().binarySourceLimit().maxBytes();
-            case IMAGE_CAPTION_OCR -> rawDataExtractionOptions.image().sourceLimit().maxBytes();
-            case AUDIO_TRANSCRIPT -> rawDataExtractionOptions.audio().sourceLimit().maxBytes();
-            default ->
-                    throw new IllegalArgumentException(
-                            "Unsupported governanceType: " + capability.governanceType());
-        };
+        return ingestionPolicyRegistry.resolve(capability).sourceLimit().maxBytes();
     }
 
     private void validateKnownSourceSize(SourceDescriptor source, long maxBytes) {

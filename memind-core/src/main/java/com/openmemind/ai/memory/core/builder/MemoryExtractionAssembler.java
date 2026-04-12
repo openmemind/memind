@@ -47,6 +47,8 @@ import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChu
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
+import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicy;
+import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicyRegistry;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.resource.ContentParser;
@@ -86,6 +88,8 @@ final class MemoryExtractionAssembler {
         RawContentJackson.pluginSubtypeMappings(
                 plugins.stream().flatMap(plugin -> pluginTypeRegistrars(plugin).stream()).toList());
         RawContentProcessorRegistry processorRegistry = new RawContentProcessorRegistry(processors);
+        RawDataIngestionPolicyRegistry ingestionPolicyRegistry =
+                resolveIngestionPolicyRegistry(plugins);
         ContentParserRegistry effectiveParserRegistry =
                 resolveContentParserRegistry(context, plugins, pluginContext);
         RawDataLayer rawDataLayer =
@@ -164,6 +168,7 @@ final class MemoryExtractionAssembler {
                         effectiveParserRegistry,
                         context.memoryStore().resourceStore(),
                         resolveResourceFetcher(context.resourceFetcher()),
+                        ingestionPolicyRegistry,
                         context.options().extraction().rawdata(),
                         context.options().extraction().item());
         return new MemoryExtractionAssembly(pipeline, insightLayer, insightBuildScheduler);
@@ -222,6 +227,12 @@ final class MemoryExtractionAssembler {
                         plugin.parsers(pluginContext), plugin.pluginId() + ".parsers()"));
     }
 
+    private List<RawDataIngestionPolicy> pluginIngestionPolicies(RawDataPlugin plugin) {
+        return List.copyOf(
+                Objects.requireNonNull(
+                        plugin.ingestionPolicies(), plugin.pluginId() + ".ingestionPolicies()"));
+    }
+
     private List<com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar>
             pluginTypeRegistrars(RawDataPlugin plugin) {
         return List.copyOf(
@@ -242,6 +253,17 @@ final class MemoryExtractionAssembler {
                         .flatMap(plugin -> pluginParsers(plugin, pluginContext).stream())
                         .toList();
         return pluginParsers.isEmpty() ? null : new DefaultContentParserRegistry(pluginParsers);
+    }
+
+    private RawDataIngestionPolicyRegistry resolveIngestionPolicyRegistry(
+            List<RawDataPlugin> plugins) {
+        List<RawDataIngestionPolicy> policies =
+                plugins.stream()
+                        .flatMap(plugin -> pluginIngestionPolicies(plugin).stream())
+                        .toList();
+        return policies.isEmpty()
+                ? RawDataIngestionPolicyRegistry.empty()
+                : new RawDataIngestionPolicyRegistry(policies);
     }
 
     private MemoryItemExtractor createMemoryItemExtractor(
