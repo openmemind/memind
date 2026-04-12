@@ -18,10 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
-import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.AudioContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ImageContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.support.TestDocumentContent;
 import java.util.Map;
@@ -93,31 +90,13 @@ class ExtractionRequestTest {
     }
 
     @Test
-    void coreDocumentConvenienceFactoryIsRemovedWhileImageAndAudioRemainDeprecated()
-            throws Exception {
-        var memoryId = DefaultMemoryId.of("user-1", "agent-1");
-        var image = ImageContent.of("dashboard screenshot");
-        var audio = AudioContent.of("hello world");
-
-        assertThat(ExtractionRequest.image(memoryId, image))
-                .usingRecursiveComparison()
-                .isEqualTo(ExtractionRequest.of(memoryId, image));
-        assertThat(ExtractionRequest.audio(memoryId, audio))
-                .usingRecursiveComparison()
-                .isEqualTo(ExtractionRequest.of(memoryId, audio));
-
+    void coreDocumentImageAndAudioConvenienceFactoriesAreRemoved() {
         assertThat(ExtractionRequest.class.getMethods())
-                .noneMatch(method -> method.getName().equals("document"));
-        assertThat(
-                        ExtractionRequest.class
-                                .getMethod("image", MemoryId.class, ImageContent.class)
-                                .getAnnotation(Deprecated.class))
-                .isNotNull();
-        assertThat(
-                        ExtractionRequest.class
-                                .getMethod("audio", MemoryId.class, AudioContent.class)
-                                .getAnnotation(Deprecated.class))
-                .isNotNull();
+                .noneMatch(
+                        method ->
+                                method.getName().equals("document")
+                                        || method.getName().equals("image")
+                                        || method.getName().equals("audio"));
     }
 
     @Test
@@ -243,52 +222,6 @@ class ExtractionRequestTest {
                 .hasMessageContaining("document.binary");
     }
 
-    @Test
-    void imageFactoryShouldNormalizeMimeTypeAndSourceUri() {
-        var content =
-                new ImageContent(
-                        "image/png",
-                        "dashboard screenshot",
-                        "total revenue 30%",
-                        "file:///tmp/dashboard.png",
-                        Map.of("width", 1280));
-
-        var request = ExtractionRequest.image(DefaultMemoryId.of("user-1", "agent-1"), content);
-
-        assertThat(request.contentType()).isEqualTo(ContentTypes.IMAGE);
-        assertThat(request.metadata())
-                .containsEntry("width", 1280)
-                .containsEntry("sourceKind", "DIRECT")
-                .containsEntry("parserId", "direct")
-                .containsEntry("contentProfile", "image.caption-ocr")
-                .containsEntry("governanceType", ContentGovernanceType.IMAGE_CAPTION_OCR.name())
-                .containsEntry("mimeType", "image/png")
-                .containsEntry("sourceUri", "file:///tmp/dashboard.png");
-    }
-
-    @Test
-    void audioFactoryShouldNormalizeMimeTypeAndKeepEmptyMetadataSafe() {
-        var content =
-                new AudioContent(
-                        "audio/mpeg",
-                        "hello world",
-                        java.util.List.of(),
-                        "file:///tmp/audio.mp3",
-                        Map.of());
-
-        var request = ExtractionRequest.audio(DefaultMemoryId.of("user-1", "agent-1"), content);
-
-        assertThat(request.contentType()).isEqualTo(ContentTypes.AUDIO);
-        assertThat(request.metadata())
-                .containsEntry("sourceKind", "DIRECT")
-                .containsEntry("parserId", "direct")
-                .containsEntry("contentProfile", "audio.transcript")
-                .containsEntry("governanceType", ContentGovernanceType.AUDIO_TRANSCRIPT.name())
-                .containsEntry("mimeType", "audio/mpeg")
-                .containsEntry("sourceUri", "file:///tmp/audio.mp3");
-    }
-
-    @Test
     void fileFactoryShouldPopulateRawFileInputAndDefensivelyCopyBytes() {
         var bytes = new byte[] {1, 2, 3};
 

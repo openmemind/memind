@@ -17,10 +17,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
-import com.openmemind.ai.memory.core.plugin.CoreBuiltinRawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
-import java.util.ArrayList;
 import java.util.List;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.config.BeanPostProcessor;
@@ -72,12 +70,10 @@ public class RawDataJacksonAutoConfiguration {
 
     private static List<RawContentTypeRegistrar> collectRegistrars(
             ObjectProvider<RawDataPlugin> rawDataPluginProvider) {
-        List<RawContentTypeRegistrar> registrars =
-                new ArrayList<>(new CoreBuiltinRawDataPlugin().typeRegistrars());
-        rawDataPluginProvider
+        return rawDataPluginProvider
                 .orderedStream()
-                .forEach(plugin -> registrars.addAll(plugin.typeRegistrars()));
-        return List.copyOf(registrars);
+                .flatMap(plugin -> plugin.typeRegistrars().stream())
+                .toList();
     }
 
     private static final class RawDataObjectMapperBeanPostProcessor implements BeanPostProcessor {

@@ -14,38 +14,53 @@
 package com.openmemind.ai.memory.core.utils;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ImageContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
-import java.util.Map;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
+import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class JsonUtilsRawContentTest {
 
     @Test
-    void jsonUtilsCanRoundTripBuiltinRawContent() {
+    void jsonUtilsCanRoundTripCoreRawContent() {
         RawContent content =
-                new ImageContent(
-                        "image/png",
-                        "dashboard screenshot",
-                        "Total Revenue 30%",
-                        "file:///tmp/dashboard.png",
-                        Map.of("width", 1280));
+                new ToolCallContent(
+                        List.of(
+                                new ToolCallRecord(
+                                        "search",
+                                        "{}",
+                                        "ok",
+                                        "SUCCESS",
+                                        1L,
+                                        1,
+                                        1,
+                                        "abc",
+                                        Instant.parse("2026-04-12T00:00:00Z"))));
 
         String json = JsonUtils.toJson(content);
         RawContent decoded = JsonUtils.fromJson(json, RawContent.class);
 
-        assertThat(decoded).isInstanceOf(ImageContent.class);
-        assertThat((ImageContent) decoded)
-                .extracting(
-                        ImageContent::mimeType,
-                        ImageContent::description,
-                        ImageContent::ocrText,
-                        ImageContent::sourceUri)
-                .containsExactly(
-                        "image/png",
-                        "dashboard screenshot",
-                        "Total Revenue 30%",
-                        "file:///tmp/dashboard.png");
+        assertThat(decoded).isInstanceOf(ToolCallContent.class);
+        assertThat(((ToolCallContent) decoded).calls())
+                .singleElement()
+                .extracting(ToolCallRecord::toolName, ToolCallRecord::status)
+                .containsExactly("search", "SUCCESS");
+    }
+
+    @Test
+    void jsonUtilsRejectsUnknownPluginOwnedRawContentWithoutExplicitSubtypeRegistration() {
+        assertThatThrownBy(
+                        () ->
+                                JsonUtils.fromJson(
+                                        """
+                                        {"type":"image","description":"chart","metadata":{}}
+                                        """,
+                                        RawContent.class))
+                .isInstanceOf(JsonUtils.JsonException.class)
+                .hasMessageContaining("RawContent");
     }
 }

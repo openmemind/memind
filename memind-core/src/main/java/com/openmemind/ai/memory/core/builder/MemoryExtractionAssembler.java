@@ -47,7 +47,6 @@ import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChu
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
-import com.openmemind.ai.memory.core.plugin.CoreBuiltinRawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.resource.ContentParser;
@@ -197,9 +196,7 @@ final class MemoryExtractionAssembler {
     }
 
     private List<RawDataPlugin> resolvePlugins(MemoryAssemblyContext context) {
-        List<RawDataPlugin> plugins = new ArrayList<>();
-        plugins.add(new CoreBuiltinRawDataPlugin());
-        plugins.addAll(context.rawDataPlugins());
+        List<RawDataPlugin> plugins = new ArrayList<>(context.rawDataPlugins());
 
         Set<String> pluginIds = new LinkedHashSet<>();
         for (RawDataPlugin plugin : plugins) {

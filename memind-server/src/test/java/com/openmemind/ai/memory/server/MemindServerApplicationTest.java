@@ -88,6 +88,12 @@ class MemindServerApplicationTest {
                 .isNotNull();
         assertThat(applicationContext.getBeanProvider(MemoryVector.class).getIfAvailable())
                 .isNotNull();
+        assertThat(applicationContext.containsBean("audioRawDataPlugin")).isTrue();
+        assertThat(applicationContext.getBean("audioRawDataPlugin"))
+                .isInstanceOf(RawDataPlugin.class);
+        assertThat(applicationContext.containsBean("imageRawDataPlugin")).isTrue();
+        assertThat(applicationContext.getBean("imageRawDataPlugin"))
+                .isInstanceOf(RawDataPlugin.class);
         assertThat(applicationContext.containsBean("toolCallRawDataPlugin")).isTrue();
         assertThat(applicationContext.getBean("toolCallRawDataPlugin"))
                 .isInstanceOf(RawDataPlugin.class);
@@ -114,8 +120,9 @@ class MemindServerApplicationTest {
     }
 
     @Test
-    void extractApiAcceptsBuiltinAndDocumentRawContentViaApplicationObjectMapper()
-            throws Exception {
+    void
+            extractApiAcceptsPluginOwnedImageAudioDocumentAndToolCallRawContentViaApplicationObjectMapper()
+                    throws Exception {
         mockMvc.perform(
                         post("/open/v1/memory/extract")
                                 .contentType(APPLICATION_JSON)
@@ -138,6 +145,44 @@ class MemindServerApplicationTest {
                                                 "timestamp": "2026-03-31T10:00:00Z"
                                               }
                                             ]
+                                          }
+                                        }
+                                        """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(
+                        post("/open/v1/memory/extract")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1",
+                                          "rawContent": {
+                                            "type": "audio",
+                                            "mimeType": "audio/mpeg",
+                                            "transcript": "team sync summary",
+                                            "segments": [],
+                                            "metadata": {}
+                                          }
+                                        }
+                                        """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(
+                        post("/open/v1/memory/extract")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1",
+                                          "rawContent": {
+                                            "type": "image",
+                                            "mimeType": "image/png",
+                                            "description": "dashboard screenshot",
+                                            "ocrText": "total revenue 30%",
+                                            "metadata": {}
                                           }
                                         }
                                         """))

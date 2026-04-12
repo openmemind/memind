@@ -206,7 +206,7 @@ class MemoryAssemblersTest {
     }
 
     @Test
-    void extractionAssemblerBuildsOnlyCoreBuiltinProcessorsWithoutExplicitPlugins() {
+    void extractionAssemblerBuildsOnlyConversationProcessorWithoutExplicitPlugins() {
         var assembly =
                 new MemoryExtractionAssembler()
                         .assemble(context(MemoryBuildOptions.defaults(), null, null, List.of()));
@@ -317,6 +317,6 @@ class MemoryAssemblersTest {
     private static void assertDefaultCoreProcessors(RawContentProcessorRegistry processorRegistry) {
         assertThat(processorRegistry.all())
                 .extracting(RawContentProcessor::contentType)
-                .containsExactlyInAnyOrder("CONVERSATION", "IMAGE", "AUDIO");
+                .containsExactly("CONVERSATION");
     }
 }

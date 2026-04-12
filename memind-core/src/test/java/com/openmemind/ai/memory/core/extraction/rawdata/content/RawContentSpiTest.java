@@ -19,7 +19,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.support.TestDocumentContent;
-import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -48,49 +47,6 @@ class RawContentSpiTest {
                 .isEqualTo("direct");
     }
 
-    @Test
-    void imageContentExposesMetadataGovernanceProfileAndCopy() {
-        var content =
-                new ImageContent(
-                        "image/png",
-                        "chart screenshot",
-                        "Q1 revenue",
-                        "file:///tmp/chart.png",
-                        Map.of("width", 1280));
-
-        assertThat(content.contentMetadata()).containsEntry("width", 1280);
-        assertThat(content.directGovernanceType())
-                .isEqualTo(ContentGovernanceType.IMAGE_CAPTION_OCR);
-        assertThat(content.directContentProfile())
-                .isEqualTo(BuiltinContentProfiles.IMAGE_CAPTION_OCR);
-        assertThat(content.withMetadata(Map.of("parserId", "vision")))
-                .isInstanceOf(ImageContent.class)
-                .extracting(value -> ((ImageContent) value).metadata().get("parserId"))
-                .isEqualTo("vision");
-    }
-
-    @Test
-    void audioContentExposesMetadataGovernanceProfileAndCopy() {
-        var content =
-                new AudioContent(
-                        "audio/mpeg",
-                        "hello world",
-                        List.of(),
-                        "file:///tmp/audio.mp3",
-                        Map.of("durationSeconds", 12));
-
-        assertThat(content.contentMetadata()).containsEntry("durationSeconds", 12);
-        assertThat(content.directGovernanceType())
-                .isEqualTo(ContentGovernanceType.AUDIO_TRANSCRIPT);
-        assertThat(content.directContentProfile())
-                .isEqualTo(BuiltinContentProfiles.AUDIO_TRANSCRIPT);
-        assertThat(content.withMetadata(Map.of("parserId", "whisper")))
-                .isInstanceOf(AudioContent.class)
-                .extracting(value -> ((AudioContent) value).metadata().get("parserId"))
-                .isEqualTo("whisper");
-    }
-
-    @Test
     void baseRawContentWithMetadataFailsFastWhenNotOverridden() {
         var content = ConversationContent.builder().addUserMessage("hello").build();
 

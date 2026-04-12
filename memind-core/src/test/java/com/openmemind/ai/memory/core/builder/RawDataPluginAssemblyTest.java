@@ -14,13 +14,13 @@
 package com.openmemind.ai.memory.core.builder;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
-import com.openmemind.ai.memory.core.plugin.CoreBuiltinRawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.resource.ContentCapability;
@@ -113,10 +113,10 @@ class RawDataPluginAssemblyTest {
     }
 
     @Test
-    void duplicateBuiltinAndUserPluginIdsFailFastDuringAssembly() {
-        var conflicting = new TestPlugin("core-builtin-rawdata", List.of(), List.of());
+    void assemblerDoesNotReserveRemovedCoreBuiltinPluginId() {
+        var formerlyBuiltin = new TestPlugin("core-builtin-rawdata", List.of(), List.of());
 
-        assertThatThrownBy(
+        assertThatCode(
                         () ->
                                 new MemoryExtractionAssembler()
                                         .assemble(
@@ -124,9 +124,8 @@ class RawDataPluginAssemblyTest {
                                                         MemoryBuildOptions.defaults(),
                                                         null,
                                                         null,
-                                                        List.of(conflicting))))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("core-builtin-rawdata");
+                                                        List.of(formerlyBuiltin))))
+                .doesNotThrowAnyException();
     }
 
     @Test
@@ -156,10 +155,21 @@ class RawDataPluginAssemblyTest {
     }
 
     @Test
-    void builtinSubtypeRegistrarsDoNotClaimToolCall() {
-        assertThat(new CoreBuiltinRawDataPlugin().typeRegistrars())
-                .flatExtracting(registrar -> registrar.subtypes().keySet())
-                .doesNotContain("tool_call");
+    void duplicateUserPluginIdsStillFailFastDuringAssembly() {
+        var first = new TestPlugin("user-plugin", List.of(), List.of());
+        var second = new TestPlugin("user-plugin", List.of(), List.of());
+
+        assertThatThrownBy(
+                        () ->
+                                new MemoryExtractionAssembler()
+                                        .assemble(
+                                                MemoryAssemblersTest.context(
+                                                        MemoryBuildOptions.defaults(),
+                                                        null,
+                                                        null,
+                                                        List.of(first, second))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("user-plugin");
     }
 
     private static ContentParser testParser(String parserId) {

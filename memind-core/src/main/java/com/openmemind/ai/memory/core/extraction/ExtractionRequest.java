@@ -15,9 +15,7 @@ package com.openmemind.ai.memory.core.extraction;
 
 import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.MemoryId;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.AudioContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ImageContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
@@ -101,22 +99,6 @@ public record ExtractionRequest(
                 content.contentType(),
                 Map.of(),
                 ExtractionConfig.defaults());
-    }
-
-    /**
-     * Create image extraction request with normalized multimodal metadata.
-     */
-    @Deprecated(forRemoval = true)
-    public static ExtractionRequest image(MemoryId memoryId, ImageContent content) {
-        return of(memoryId, content);
-    }
-
-    /**
-     * Create audio extraction request with normalized multimodal metadata.
-     */
-    @Deprecated(forRemoval = true)
-    public static ExtractionRequest audio(MemoryId memoryId, AudioContent content) {
-        return of(memoryId, content);
     }
 
     /**

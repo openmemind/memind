@@ -30,6 +30,8 @@
     <name>Memind - RawData Plugins</name>
 
     <modules>
+        <module>memind-plugin-rawdata-audio</module>
+        <module>memind-plugin-rawdata-image</module>
         <module>memind-plugin-rawdata-document</module>
         <module>memind-plugin-rawdata-toolcall</module>
     </modules>

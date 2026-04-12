@@ -20,7 +20,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
-import com.openmemind.ai.memory.core.plugin.CoreBuiltinRawDataPlugin;
 import java.util.List;
 import java.util.Map;
 
@@ -41,8 +40,6 @@ public final class JsonUtils {
                         .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
                         .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
         RawContentJackson.registerCoreSubtypes(mapper);
-        RawContentJackson.registerPluginSubtypes(
-                mapper, new CoreBuiltinRawDataPlugin().typeRegistrars());
         return mapper;
     }
 

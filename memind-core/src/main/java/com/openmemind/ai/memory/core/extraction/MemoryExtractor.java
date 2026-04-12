@@ -27,14 +27,10 @@ import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.item.SegmentBudgetEnforcer;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ImageSegmentComposer;
-import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TranscriptSegmentChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
-import com.openmemind.ai.memory.core.extraction.rawdata.processor.AudioContentProcessor;
-import com.openmemind.ai.memory.core.extraction.rawdata.processor.ImageContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
@@ -345,10 +341,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 Objects.requireNonNull(rawDataExtractionOptions, "rawDataExtractionOptions");
         this.itemExtractionOptions =
                 Objects.requireNonNull(itemExtractionOptions, "itemExtractionOptions");
-        this.rawContentProcessorRegistry =
-                rawContentProcessorRegistry != null
-                        ? rawContentProcessorRegistry
-                        : createBuiltinProcessorRegistry(this.rawDataExtractionOptions);
+        this.rawContentProcessorRegistry = rawContentProcessorRegistry;
         this.segmentBudgetEnforcer = new SegmentBudgetEnforcer();
     }
 
@@ -366,7 +359,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
 
         return Mono.defer(
                         () -> {
-                            ensureToolCallPluginAvailable(request);
+                            ensureDirectContentProcessorAvailable(request);
                             return resolveExtractionRequest(request);
                         })
                 .flatMap(resolved -> executeResolvedRequest(resolved, startTime))
@@ -942,35 +935,39 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         }
     }
 
-    private RawContentProcessorRegistry processorRegistryRequired() {
+    private RawContentProcessorRegistry processorRegistryRequired(RawContent content) {
         if (rawContentProcessorRegistry == null) {
             throw new IllegalStateException(
-                    "RawContentProcessorRegistry is required for multimodal validation");
+                    "RawContentProcessorRegistry is required for raw content type: "
+                            + content.contentType());
         }
         return rawContentProcessorRegistry;
     }
 
-    private void ensureToolCallPluginAvailable(ExtractionRequest request) {
-        if (!(request.content() instanceof ToolCallContent)) {
+    private void ensureDirectContentProcessorAvailable(ExtractionRequest request) {
+        RawContent content = request.content();
+        if (content == null || content instanceof ConversationContent) {
             return;
         }
-        if (!processorRegistryRequired().supports(ToolCallContent.class)) {
+        if (content instanceof ToolCallContent
+                && (rawContentProcessorRegistry == null
+                        || !rawContentProcessorRegistry.supports(ToolCallContent.class))) {
             throw new IllegalStateException(TOOL_CALL_PLUGIN_REQUIRED_MESSAGE);
+        }
+        ensureProcessorRegistered(content);
+    }
+
+    private void ensureProcessorRegistered(RawContent content) {
+        if (!processorRegistryRequired(content).supports(content.getClass())) {
+            throw new IllegalStateException(
+                    "No processor registered for raw content type: " + content.contentType());
         }
     }
 
     private <T extends RawContent> T validateWithProcessor(T content) {
-        processorRegistryRequired().resolve(content).validateParsedContent(content);
+        ensureProcessorRegistered(content);
+        processorRegistryRequired(content).resolve(content).validateParsedContent(content);
         return content;
-    }
-
-    private RawContentProcessorRegistry createBuiltinProcessorRegistry(
-            RawDataExtractionOptions options) {
-        return new RawContentProcessorRegistry(
-                List.of(
-                        new ImageContentProcessor(new ImageSegmentComposer(), options.image()),
-                        new AudioContentProcessor(
-                                new TranscriptSegmentChunker(), options.audio())));
     }
 
     private Mono<Void> cleanupStoredResourceIfNeeded(

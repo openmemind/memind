@@ -19,7 +19,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
-import com.openmemind.ai.memory.core.plugin.CoreBuiltinRawDataPlugin;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
 import java.time.Instant;
 import java.util.List;
@@ -34,7 +33,7 @@ class ToolCallContentTest {
 
     private static ObjectMapper createObjectMapper() {
         ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        RawContentJackson.registerAll(mapper, new CoreBuiltinRawDataPlugin().typeRegistrars());
+        RawContentJackson.registerCoreSubtypes(mapper);
         return mapper;
     }
 

@@ -14,15 +14,15 @@
 package com.openmemind.ai.memory.plugin.rawdata.jackson.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.AudioContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ImageContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
@@ -45,25 +45,11 @@ class RawDataJacksonAutoConfigurationTest {
                             AutoConfigurations.of(RawDataJacksonAutoConfiguration.class));
 
     @Test
-    void registersBuiltinRawContentTypesWithoutPluginStarters() {
+    void registersCoreRawContentTypesWithoutPluginStarters() {
         contextRunner.run(
                 context -> {
                     ObjectMapper mapper = context.getBean(ObjectMapper.class);
 
-                    assertThat(
-                                    mapper.readValue(
-                                            """
-                                            {"type":"image","mimeType":"image/png","description":"cover","metadata":{}}
-                                            """,
-                                            RawContent.class))
-                            .isInstanceOf(ImageContent.class);
-                    assertThat(
-                                    mapper.readValue(
-                                            """
-                                            {"type":"audio","mimeType":"audio/mpeg","transcript":"hello","segments":[],"metadata":{}}
-                                            """,
-                                            RawContent.class))
-                            .isInstanceOf(AudioContent.class);
                     assertThat(
                                     mapper.readValue(
                                             """
@@ -79,6 +65,22 @@ class RawDataJacksonAutoConfigurationTest {
                                             RawContent.class))
                             .isInstanceOf(ToolCallContent.class);
                 });
+    }
+
+    @Test
+    void doesNotDeserializePluginOwnedRawContentWithoutMatchingPluginBean() {
+        contextRunner.run(
+                context ->
+                        assertThatThrownBy(
+                                        () ->
+                                                context.getBean(ObjectMapper.class)
+                                                        .readValue(
+                                                                """
+                                                                {"type":"test_raw","text":"hello","metadata":{}}
+                                                                """,
+                                                                RawContent.class))
+                                .isInstanceOf(InvalidTypeIdException.class)
+                                .hasMessageContaining("test_raw"));
     }
 
     @Test

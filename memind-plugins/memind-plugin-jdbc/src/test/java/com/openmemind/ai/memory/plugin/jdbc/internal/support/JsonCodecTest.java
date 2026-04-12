@@ -15,9 +15,14 @@ package com.openmemind.ai.memory.plugin.jdbc.internal.support;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ImageContent;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -60,31 +65,76 @@ class JsonCodecTest {
     }
 
     @Test
-    void defaultCodecRoundTripsBuiltinRawContent() {
+    void defaultCodecRoundTripsCoreRawContent() {
         RawContent payload =
-                new ImageContent(
-                        "image/png",
-                        "dashboard screenshot",
-                        "Total revenue 30%",
-                        "file:///tmp/dashboard.png",
-                        Map.of("width", 1280));
+                new ToolCallContent(
+                        List.of(
+                                new ToolCallRecord(
+                                        "search",
+                                        "{}",
+                                        "ok",
+                                        "SUCCESS",
+                                        1L,
+                                        1,
+                                        1,
+                                        "abc",
+                                        Instant.parse("2026-04-12T00:00:00Z"))));
 
         String json = jsonCodec.toJson(payload);
         RawContent restored = jsonCodec.fromJson(json, RawContent.class);
 
-        assertThat(restored).isInstanceOf(ImageContent.class);
-        assertThat((ImageContent) restored)
-                .extracting(
-                        ImageContent::mimeType,
-                        ImageContent::description,
-                        ImageContent::ocrText,
-                        ImageContent::sourceUri)
-                .containsExactly(
-                        "image/png",
-                        "dashboard screenshot",
-                        "Total revenue 30%",
-                        "file:///tmp/dashboard.png");
+        assertThat(restored).isInstanceOf(ToolCallContent.class);
+        assertThat(((ToolCallContent) restored).calls())
+                .singleElement()
+                .extracting(ToolCallRecord::toolName, ToolCallRecord::status)
+                .containsExactly("search", "SUCCESS");
+    }
+
+    @Test
+    void codecRoundTripsPluginOwnedRawContentWhenSubtypeIsExplicitlyRegistered() {
+        ObjectMapper mapper = new ObjectMapper();
+        RawContentJackson.registerCoreSubtypes(mapper);
+        RawContentJackson.registerPluginSubtypes(
+                mapper, List.of(() -> Map.of("test_raw", TestRawContent.class)));
+        JsonCodec codec = new JsonCodec(mapper);
+        RawContent payload = new TestRawContent("dashboard screenshot");
+
+        String json = codec.toJson(payload);
+        RawContent restored = codec.fromJson(json, RawContent.class);
+
+        assertThat(restored).isInstanceOf(TestRawContent.class);
+        assertThat(restored.toContentString()).isEqualTo("dashboard screenshot");
     }
 
     record SamplePayload(String name, Instant createdAt) {}
+
+    private static final class TestRawContent extends RawContent {
+
+        private final String text;
+
+        @JsonCreator
+        private TestRawContent(@JsonProperty("text") String text) {
+            this.text = text == null ? "" : text;
+        }
+
+        @JsonProperty("text")
+        private String text() {
+            return text;
+        }
+
+        @Override
+        public String contentType() {
+            return "TEST_RAW";
+        }
+
+        @Override
+        public String toContentString() {
+            return text;
+        }
+
+        @Override
+        public String getContentId() {
+            return text;
+        }
+    }
 }
