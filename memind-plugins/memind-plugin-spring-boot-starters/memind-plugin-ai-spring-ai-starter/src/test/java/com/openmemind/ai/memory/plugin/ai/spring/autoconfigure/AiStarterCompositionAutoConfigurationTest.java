@@ -22,7 +22,7 @@ import com.openmemind.ai.memory.core.buffer.InMemoryConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.InMemoryInsightBuffer;
 import com.openmemind.ai.memory.core.buffer.InMemoryRecentConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
-import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
+import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
@@ -74,7 +74,7 @@ class AiStarterCompositionAutoConfigurationTest {
                             assertThat(context).hasSingleBean(MemoryVector.class);
                             assertThat(context.getBean(MemoryVector.class))
                                     .isInstanceOf(SpringAiMemoryVector.class);
-                            assertThat(context).doesNotHaveBean(MemoryExtractionPipeline.class);
+                            assertThat(context).doesNotHaveBean(MemoryExtractor.class);
                             assertThat(context).doesNotHaveBean(MemoryRetriever.class);
                             assertThat(context).doesNotHaveBean(Memory.class);
                         });
@@ -91,7 +91,7 @@ class AiStarterCompositionAutoConfigurationTest {
                             assertThat(context).hasSingleBean(StructuredChatClient.class);
                             assertThat(context).hasSingleBean(MemoryVector.class);
                             assertThat(context).doesNotHaveBean(MemoryRetriever.class);
-                            assertThat(context).doesNotHaveBean(MemoryExtractionPipeline.class);
+                            assertThat(context).doesNotHaveBean(MemoryExtractor.class);
                             assertThat(context).doesNotHaveBean(Memory.class);
                         });
     }
@@ -106,7 +106,7 @@ class AiStarterCompositionAutoConfigurationTest {
                             assertThat(context).hasNotFailed();
                             assertThat(context).doesNotHaveBean(StructuredChatClient.class);
                             assertThat(context).doesNotHaveBean(MemoryVector.class);
-                            assertThat(context).doesNotHaveBean(MemoryExtractionPipeline.class);
+                            assertThat(context).doesNotHaveBean(MemoryExtractor.class);
                             assertThat(context).doesNotHaveBean(MemoryRetriever.class);
                             assertThat(context).doesNotHaveBean(Memory.class);
                         });

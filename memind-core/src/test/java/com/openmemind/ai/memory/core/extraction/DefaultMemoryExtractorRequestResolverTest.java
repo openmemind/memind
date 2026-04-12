@@ -16,35 +16,48 @@ package com.openmemind.ai.memory.core.extraction;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
 import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
-import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.extraction.step.InsightExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
-import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import reactor.core.publisher.Mono;
 
-class MemoryExtractorPluginOwnedRawContentTest {
+class DefaultMemoryExtractorRequestResolverTest {
 
     @Test
-    void pluginOwnedRawContentWithoutRegisteredProcessorStillFlowsThroughRawDataStep() {
+    void extractShouldDelegateRequestResolutionToInjectedResolver() {
         RawDataExtractStep rawDataStep = Mockito.mock(RawDataExtractStep.class);
         MemoryItemExtractStep itemStep = Mockito.mock(MemoryItemExtractStep.class);
         InsightExtractStep insightStep = Mockito.mock(InsightExtractStep.class);
+        ExtractionRequestResolver requestResolver = Mockito.mock(ExtractionRequestResolver.class);
+
+        var memoryId = DefaultMemoryId.of("u1", "a1");
+        var content = new TestPluginContent();
+        when(requestResolver.resolve(any()))
+                .thenReturn(
+                        Mono.just(
+                                new ResolvedExtractionRequest(
+                                        memoryId,
+                                        content,
+                                        "TEST_PLUGIN",
+                                        Map.of("resolved", true),
+                                        ExtractionConfig.defaults(),
+                                        null)));
         when(rawDataStep.extract(any(), any(), eq("TEST_PLUGIN"), any(), any()))
                 .thenReturn(Mono.just(RawDataResult.empty()));
 
-        MemoryExtractor extractor =
-                new MemoryExtractor(
+        var extractor =
+                new DefaultMemoryExtractor(
                         rawDataStep,
                         itemStep,
                         insightStep,
@@ -52,23 +65,16 @@ class MemoryExtractorPluginOwnedRawContentTest {
                         null,
                         null,
                         null,
-                        new RawContentProcessorRegistry(List.of()),
-                        null,
-                        null,
-                        null,
+                        requestResolver,
                         RawDataExtractionOptions.defaults(),
                         ItemExtractionOptions.defaults());
 
-        ExtractionResult result = extractor.extract(pluginOwnedRequest()).block();
+        var result = extractor.extract(ExtractionRequest.text(memoryId, "ignored")).block();
 
         assertThat(result).isNotNull();
         assertThat(result.isSuccess()).isTrue();
-        Mockito.verify(rawDataStep).extract(any(), any(), eq("TEST_PLUGIN"), any(), any());
-        verifyNoInteractions(itemStep, insightStep);
-    }
-
-    private static ExtractionRequest pluginOwnedRequest() {
-        return ExtractionRequest.of(DefaultMemoryId.of("u1", "a1"), new TestPluginContent());
+        verify(requestResolver).resolve(any());
+        verify(rawDataStep).extract(any(), any(), eq("TEST_PLUGIN"), any(), any());
     }
 
     private static final class TestPluginContent extends RawContent {

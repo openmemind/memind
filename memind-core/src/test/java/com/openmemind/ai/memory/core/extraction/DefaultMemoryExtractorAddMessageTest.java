@@ -53,8 +53,8 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("MemoryExtractor#addMessage")
-class MemoryExtractorAddMessageTest {
+@DisplayName("DefaultMemoryExtractor#addMessage")
+class DefaultMemoryExtractorAddMessageTest {
 
     @Mock RawDataExtractStep rawDataStep;
     @Mock MemoryItemExtractStep memoryItemStep;
@@ -64,13 +64,13 @@ class MemoryExtractorAddMessageTest {
     @Mock PendingConversationBuffer pendingBufferStore;
     @Mock RecentConversationBuffer recentBufferStore;
 
-    MemoryExtractor extractor;
+    DefaultMemoryExtractor extractor;
     MemoryId memoryId;
 
     @BeforeEach
     void setUp() {
         extractor =
-                new MemoryExtractor(
+                new DefaultMemoryExtractor(
                         rawDataStep,
                         memoryItemStep,
                         insightStep,
@@ -154,8 +154,8 @@ class MemoryExtractorAddMessageTest {
             pendingStore.append("user1:agent1", existing);
             recentStore.append("user1:agent1", existing);
 
-            MemoryExtractor localExtractor =
-                    new MemoryExtractor(
+            DefaultMemoryExtractor localExtractor =
+                    new DefaultMemoryExtractor(
                             unusedRawDataStep(),
                             unusedMemoryItemStep(),
                             unusedInsightStep(),
@@ -188,8 +188,8 @@ class MemoryExtractorAddMessageTest {
             var extractionStarted = new CountDownLatch(1);
             var releaseExtraction = new CountDownLatch(1);
 
-            MemoryExtractor localExtractor =
-                    new MemoryExtractor(
+            DefaultMemoryExtractor localExtractor =
+                    new DefaultMemoryExtractor(
                             unusedRawDataStep(),
                             unusedMemoryItemStep(),
                             unusedInsightStep(),
@@ -322,8 +322,8 @@ class MemoryExtractorAddMessageTest {
         void assistant_messages_do_not_get_lost_under_concurrency() throws Exception {
             var pendingStore = new SlowSnapshotConversationBuffer();
             var recentStore = new InMemoryRecentConversationBuffer();
-            MemoryExtractor localExtractor =
-                    new MemoryExtractor(
+            DefaultMemoryExtractor localExtractor =
+                    new DefaultMemoryExtractor(
                             unusedRawDataStep(),
                             unusedMemoryItemStep(),
                             unusedInsightStep(),

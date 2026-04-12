@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
-import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
+import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
@@ -69,7 +69,7 @@ class RawDataPluginAssemblyTest {
                                         null,
                                         null,
                                         List.of(plugin)));
-        var extractor = (MemoryExtractor) assembly.pipeline();
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
 
         ContentParserRegistry registry =
                 MemoryAssemblersTest.readField(
@@ -108,7 +108,7 @@ class RawDataPluginAssemblyTest {
                                         null,
                                         null,
                                         List.of(plugin)));
-        var extractor = (MemoryExtractor) assembly.pipeline();
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
 
         ContentParserRegistry registry =
                 MemoryAssemblersTest.readField(
@@ -138,7 +138,7 @@ class RawDataPluginAssemblyTest {
                                         explicitRegistry,
                                         null,
                                         List.of(plugin)));
-        var extractor = (MemoryExtractor) assembly.pipeline();
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
 
         assertThat(
                         MemoryAssemblersTest.readField(
@@ -177,7 +177,7 @@ class RawDataPluginAssemblyTest {
                                         null,
                                         null,
                                         List.of(plugin)));
-        var extractor = (MemoryExtractor) assembly.pipeline();
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
 
         assertThat(
                         MemoryAssemblersTest.readField(

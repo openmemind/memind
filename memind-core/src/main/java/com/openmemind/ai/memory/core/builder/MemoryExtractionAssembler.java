@@ -13,8 +13,8 @@
  */
 package com.openmemind.ai.memory.core.builder;
 
-import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
+import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
@@ -152,8 +152,8 @@ final class MemoryExtractionAssembler {
                         context.options().extraction().rawdata().commitDetection(),
                         registry.resolve(ChatClientSlot.CONTEXT_COMMIT_DETECTOR),
                         context.promptRegistry());
-        MemoryExtractionPipeline pipeline =
-                new MemoryExtractor(
+        MemoryExtractor pipeline =
+                new DefaultMemoryExtractor(
                         rawDataLayer,
                         memoryItemLayer,
                         insightLayer,

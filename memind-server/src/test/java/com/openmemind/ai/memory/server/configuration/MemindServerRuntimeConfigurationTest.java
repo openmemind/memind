@@ -24,7 +24,7 @@ import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.data.ContentTypes;
-import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
+import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
@@ -134,7 +134,7 @@ class MemindServerRuntimeConfigurationTest {
                         provider(ResourceFetcher.class, fetcher));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults());
-        var extractor = readField((DefaultMemory) memory, "extractor", MemoryExtractor.class);
+        var extractor = readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
         ContentParserRegistry registry =
                 readField(extractor, "contentParserRegistry", ContentParserRegistry.class);
 
@@ -191,7 +191,7 @@ class MemindServerRuntimeConfigurationTest {
                         emptyProvider(ResourceFetcher.class));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults());
-        var extractor = readField((DefaultMemory) memory, "extractor", MemoryExtractor.class);
+        var extractor = readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
 
         RawContentProcessorRegistry registry =
                 readField(
@@ -230,7 +230,7 @@ class MemindServerRuntimeConfigurationTest {
                         emptyProvider(ResourceFetcher.class));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults());
-        var extractor = readField((DefaultMemory) memory, "extractor", MemoryExtractor.class);
+        var extractor = readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
         ContentParserRegistry registry =
                 readField(extractor, "contentParserRegistry", ContentParserRegistry.class);
 

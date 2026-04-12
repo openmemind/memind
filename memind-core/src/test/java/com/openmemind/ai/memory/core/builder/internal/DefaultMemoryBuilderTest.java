@@ -29,7 +29,7 @@ import com.openmemind.ai.memory.core.builder.RetrievalAdvancedOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalCommonOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
-import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
+import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.item.MemoryItemLayer;
 import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItemExtractor;
@@ -160,7 +160,7 @@ class DefaultMemoryBuilderTest {
                                 .vector(MEMORY_VECTOR)
                                 .build();
 
-        var extractor = readField(memory, "extractor", MemoryExtractor.class);
+        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
         var memoryItemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
         var itemExtractor =
                 readField(memoryItemLayer, "extractor", DefaultMemoryItemExtractor.class);
@@ -200,7 +200,7 @@ class DefaultMemoryBuilderTest {
                                 .resourceFetcher(fetcher)
                                 .build();
 
-        var extractor = readField(memory, "extractor", MemoryExtractor.class);
+        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
 
         assertThat(readField(extractor, "contentParserRegistry", ContentParserRegistry.class))
                 .isSameAs(registry);
@@ -225,7 +225,7 @@ class DefaultMemoryBuilderTest {
                                 .promptRegistry(promptRegistry)
                                 .build();
 
-        var extractor = readField(memory, "extractor", MemoryExtractor.class);
+        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
         var contextCommitDetector =
                 readField(extractor, "contextCommitDetector", LlmContextCommitDetector.class);
         var extractionPromptRegistry =

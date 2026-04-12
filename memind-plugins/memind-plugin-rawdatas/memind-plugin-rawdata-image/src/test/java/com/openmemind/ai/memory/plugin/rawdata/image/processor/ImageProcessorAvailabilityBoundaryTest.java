@@ -18,13 +18,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
 import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
+import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
-import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.step.InsightExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
+import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicyRegistry;
 import com.openmemind.ai.memory.plugin.rawdata.image.content.ImageContent;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -48,8 +49,8 @@ class ImageProcessorAvailabilityBoundaryTest {
                 (memoryId, memoryItemResult) ->
                         Mono.error(new AssertionError("insightStep should not be called"));
 
-        MemoryExtractor extractor =
-                new MemoryExtractor(
+        DefaultMemoryExtractor extractor =
+                new DefaultMemoryExtractor(
                         rawDataStep,
                         itemStep,
                         insightStep,
@@ -61,6 +62,7 @@ class ImageProcessorAvailabilityBoundaryTest {
                         null,
                         null,
                         null,
+                        RawDataIngestionPolicyRegistry.empty(),
                         RawDataExtractionOptions.defaults(),
                         ItemExtractionOptions.defaults());
 

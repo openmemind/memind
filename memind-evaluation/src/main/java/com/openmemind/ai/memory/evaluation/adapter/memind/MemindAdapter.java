@@ -221,7 +221,7 @@ public class MemindAdapter {
     }
 
     /**
-     * Stream processing of conversation messages, triggering boundary detection and automatic segmentation extraction through MemoryExtractor#addMessage.
+     * Stream processing of conversation messages, triggering boundary detection and automatic segmentation extraction through DefaultMemoryExtractor#addMessage.
      * After all messages are processed, flush the remaining messages in the buffer.
      * In dual perspective, distinguish USER/ASSISTANT roles by mainUserId, in single perspective unified as USER.
      */
@@ -264,7 +264,7 @@ public class MemindAdapter {
     }
 
     /**
-     * CHUNK mode: pass all messages to MemoryExtractor#extract at once, going through the complete three-stage extraction process (RawData → MemoryItem → Insight).
+     * CHUNK mode: pass all messages to DefaultMemoryExtractor#extract at once, going through the complete three-stage extraction process (RawData → MemoryItem → Insight).
      * In dual perspective, distinguish USER/ASSISTANT roles by mainUserId, in single perspective unified as USER.
      */
     private Mono<AddResult> extractChunkedForSpeaker(AddRequest req, String mainUserId) {

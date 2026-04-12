@@ -13,12 +13,12 @@
  */
 package com.openmemind.ai.memory.core.builder;
 
-import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
+import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
 import java.util.Objects;
 
 record MemoryExtractionAssembly(
-        MemoryExtractionPipeline pipeline, InsightLayer insightLayer, AutoCloseable lifecycle) {
+        MemoryExtractor pipeline, InsightLayer insightLayer, AutoCloseable lifecycle) {
 
     MemoryExtractionAssembly {
         Objects.requireNonNull(pipeline, "pipeline");

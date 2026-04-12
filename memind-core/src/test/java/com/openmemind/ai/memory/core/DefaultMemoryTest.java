@@ -45,7 +45,7 @@ import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
-import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
+import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.result.InsightResult;
@@ -83,7 +83,7 @@ import reactor.test.StepVerifier;
 @DisplayName("DefaultMemory Test")
 class DefaultMemoryTest {
 
-    @Mock private MemoryExtractor extractor;
+    @Mock private DefaultMemoryExtractor extractor;
     @Mock private MemoryRetriever retriever;
     @Mock private MemoryStore store;
     @Mock private MemoryBuffer memoryBuffer;

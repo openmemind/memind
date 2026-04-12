@@ -15,7 +15,7 @@ package com.openmemind.ai.memory.plugin.tracing.otel.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
+import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassifier;
 import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicator;
@@ -30,19 +30,9 @@ import com.openmemind.ai.memory.core.retrieval.sufficiency.SufficiencyGate;
 import com.openmemind.ai.memory.core.retrieval.tier.InsightTypeRouter;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.tracing.NoopMemoryObserver;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightExtractStep;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightGenerator;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightGroupClassifier;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightTypeRouter;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryExtractionPipeline;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryItemDeduplicator;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryItemExtractStep;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryRetriever;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingRawDataExtractStep;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingReranker;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingRetrievalStrategy;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingSufficiencyGate;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingTypedQueryExpander;
+import com.openmemind.ai.memory.core.tracing.decorator.*;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryExtractor;
+
 import java.lang.reflect.Proxy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -88,11 +78,11 @@ class TracingBeanPostProcessorTest {
                 createProcessor(new TestMemoryObserver());
 
         @Test
-        @DisplayName("wraps MemoryExtractionPipeline")
+        @DisplayName("wraps MemoryExtractor")
         void wrapsExtractionPipeline() {
-            var bean = proxy(MemoryExtractionPipeline.class);
+            var bean = proxy(MemoryExtractor.class);
             var result = processor.postProcessAfterInitialization(bean, "test");
-            assertThat(result).isInstanceOf(TracingMemoryExtractionPipeline.class);
+            assertThat(result).isInstanceOf(TracingMemoryExtractor.class);
         }
 
         @Test
@@ -194,7 +184,7 @@ class TracingBeanPostProcessorTest {
         @Test
         @DisplayName("does not double-wrap already wrapped bean")
         void doesNotDoubleWrap() {
-            var delegate = proxy(MemoryExtractionPipeline.class);
+            var delegate = proxy(MemoryExtractor.class);
             var alreadyWrapped = processor.postProcessAfterInitialization(delegate, "first");
             var result = processor.postProcessAfterInitialization(alreadyWrapped, "second");
             assertThat(result).isSameAs(alreadyWrapped);

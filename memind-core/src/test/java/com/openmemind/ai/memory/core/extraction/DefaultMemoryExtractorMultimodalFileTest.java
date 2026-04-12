@@ -60,7 +60,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
-class MemoryExtractorMultimodalFileTest {
+class DefaultMemoryExtractorMultimodalFileTest {
 
     private static final String IMAGE_TYPE = "IMAGE";
     private static final String AUDIO_TYPE = "AUDIO";
@@ -905,7 +905,7 @@ class MemoryExtractorMultimodalFileTest {
         };
     }
 
-    private MemoryExtractor extractorWithRestrictiveOptions(
+    private DefaultMemoryExtractor extractorWithRestrictiveOptions(
             RawDataExtractStep rawDataStep, RawContentProcessorRegistry processorRegistry) {
         return extractor(
                 rawDataStep,
@@ -924,7 +924,7 @@ class MemoryExtractorMultimodalFileTest {
                 ItemExtractionOptions.defaults());
     }
 
-    private MemoryExtractor extractor(
+    private DefaultMemoryExtractor extractor(
             RawDataExtractStep rawDataStep,
             MemoryItemExtractStep memoryItemStep,
             com.openmemind.ai.memory.core.extraction.step.InsightExtractStep insightStep,
@@ -944,7 +944,7 @@ class MemoryExtractorMultimodalFileTest {
                 ItemExtractionOptions.defaults());
     }
 
-    private MemoryExtractor extractor(
+    private DefaultMemoryExtractor extractor(
             RawDataExtractStep rawDataStep,
             MemoryItemExtractStep memoryItemStep,
             com.openmemind.ai.memory.core.extraction.step.InsightExtractStep insightStep,
@@ -967,7 +967,7 @@ class MemoryExtractorMultimodalFileTest {
                 itemExtractionOptions);
     }
 
-    private MemoryExtractor extractor(
+    private DefaultMemoryExtractor extractor(
             RawDataExtractStep rawDataStep,
             MemoryItemExtractStep memoryItemStep,
             com.openmemind.ai.memory.core.extraction.step.InsightExtractStep insightStep,
@@ -978,7 +978,7 @@ class MemoryExtractorMultimodalFileTest {
             RawDataIngestionPolicyRegistry ingestionPolicyRegistry,
             RawDataExtractionOptions rawDataExtractionOptions,
             ItemExtractionOptions itemExtractionOptions) {
-        return new MemoryExtractor(
+        return new DefaultMemoryExtractor(
                 rawDataStep,
                 memoryItemStep,
                 insightStep,

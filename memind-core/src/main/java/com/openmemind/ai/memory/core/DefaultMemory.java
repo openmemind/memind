@@ -24,7 +24,7 @@ import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
-import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
+import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.ContextRequest;
 import com.openmemind.ai.memory.core.extraction.context.ContextWindow;
 import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
@@ -56,7 +56,7 @@ import reactor.core.publisher.Mono;
 /**
  * Memory default implementation
  *
- * <p>Internally combines MemoryExtractionPipeline + MemoryRetriever + MemoryStore,
+ * <p>Internally combines MemoryExtractor + MemoryRetriever + MemoryStore,
  * unifying all memory operations into a single facade.
  *
  */
@@ -64,7 +64,7 @@ public class DefaultMemory implements Memory {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultMemory.class);
 
-    private final MemoryExtractionPipeline extractor;
+    private final MemoryExtractor extractor;
     private final MemoryRetriever retriever;
     private final MemoryStore memoryStore;
     private final MemoryBuffer memoryBuffer;
@@ -75,7 +75,7 @@ public class DefaultMemory implements Memory {
     private final AtomicBoolean closed = new AtomicBoolean();
 
     public DefaultMemory(
-            MemoryExtractionPipeline extractor,
+            MemoryExtractor extractor,
             MemoryRetriever retriever,
             MemoryStore memoryStore,
             MemoryBuffer memoryBuffer,

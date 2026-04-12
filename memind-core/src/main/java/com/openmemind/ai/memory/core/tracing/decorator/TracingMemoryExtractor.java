@@ -17,7 +17,7 @@ import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
-import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
+import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.tracing.MemoryAttributes;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
@@ -27,17 +27,17 @@ import java.util.Map;
 import reactor.core.publisher.Mono;
 
 /**
- * A decorator that adds observability to {@link MemoryExtractionPipeline}.
+ * A decorator that adds observability to {@link MemoryExtractor}.
  *
  * <p>All extraction methods are wrapped by the observer to record spans and attributes.
  */
-public class TracingMemoryExtractionPipeline extends TracingSupport
-        implements MemoryExtractionPipeline {
+public class TracingMemoryExtractor extends TracingSupport
+        implements MemoryExtractor {
 
-    private final MemoryExtractionPipeline delegate;
+    private final MemoryExtractor delegate;
 
-    public TracingMemoryExtractionPipeline(
-            MemoryExtractionPipeline delegate, MemoryObserver observer) {
+    public TracingMemoryExtractor(
+            MemoryExtractor delegate, MemoryObserver observer) {
         super(observer);
         this.delegate = delegate;
     }

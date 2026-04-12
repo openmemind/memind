@@ -40,9 +40,9 @@ import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
-import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.ContextRequest;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
@@ -78,7 +78,8 @@ import reactor.test.StepVerifier;
 @DisplayName("DefaultMemory — getContext / commit")
 class DefaultMemoryContextTest {
 
-    @Mock MemoryExtractionPipeline extractor;
+    @Mock
+    MemoryExtractor extractor;
     @Mock MemoryRetriever retriever;
     @Mock MemoryStore memoryStore;
     @Mock MemoryVector vector;
@@ -406,7 +407,7 @@ class DefaultMemoryContextTest {
             localRecentConversationBuffer.append("user1:agent1", existing);
 
             var localExtractor =
-                    new MemoryExtractor(
+                    new DefaultMemoryExtractor(
                             (mid, content, contentType, metadata) ->
                                     Mono.fromCallable(
                                             () -> {

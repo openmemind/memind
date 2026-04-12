@@ -19,7 +19,7 @@ import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
-import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
+import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
@@ -127,7 +127,7 @@ class MemoryAssemblersTest {
                         RESOURCE_FETCHER);
 
         var assembly = new MemoryExtractionAssembler().assemble(context);
-        var extractor = (MemoryExtractor) assembly.pipeline();
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
         var rawDataLayer = readField(extractor, "rawDataStep", RawDataLayer.class);
         var boundaryDetector =
                 readField(extractor, "contextCommitDetector", LlmContextCommitDetector.class);
@@ -176,7 +176,7 @@ class MemoryAssemblersTest {
         var assembly =
                 new MemoryExtractionAssembler()
                         .assemble(context(MemoryBuildOptions.defaults(), null, null));
-        var extractor = (MemoryExtractor) assembly.pipeline();
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
 
         assertThat(readField(extractor, "resourceFetcher", ResourceFetcher.class)).isNotNull();
     }
@@ -186,7 +186,7 @@ class MemoryAssemblersTest {
         var assembly =
                 new MemoryExtractionAssembler()
                         .assemble(context(MemoryBuildOptions.defaults(), null, null));
-        var extractor = (MemoryExtractor) assembly.pipeline();
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
         var rawDataLayer = readField(extractor, "rawDataStep", RawDataLayer.class);
 
         assertThat(
@@ -206,7 +206,7 @@ class MemoryAssemblersTest {
         var assembly =
                 new MemoryExtractionAssembler()
                         .assemble(context(MemoryBuildOptions.defaults(), null, null, List.of()));
-        var extractor = (MemoryExtractor) assembly.pipeline();
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
         var rawDataLayer = readField(extractor, "rawDataStep", RawDataLayer.class);
 
         var processorRegistry =
