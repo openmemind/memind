@@ -20,6 +20,8 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.plugin.rawdata.jackson.autoconfigure.RawDataJacksonAutoConfiguration;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.config.ToolCallChunkingOptions;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.plugin.ToolCallRawDataPlugin;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -50,6 +52,35 @@ class ToolCallRawDataAutoConfigurationTest {
     }
 
     @Test
+    void bindsToolCallChunkingOptionsIntoPluginBean() {
+        contextRunner
+                .withPropertyValues(
+                        "memind.rawdata.toolcall.chunking.hard-max-tokens=1800",
+                        "memind.rawdata.toolcall.chunking.max-time-window=PT2M")
+                .run(
+                        context -> {
+                            var plugin =
+                                    (ToolCallRawDataPlugin)
+                                            context.getBean("toolCallRawDataPlugin");
+
+                            assertThat(
+                                            readField(
+                                                            plugin,
+                                                            "options",
+                                                            ToolCallChunkingOptions.class)
+                                                    .hardMaxTokens())
+                                    .isEqualTo(1800);
+                            assertThat(
+                                            readField(
+                                                            plugin,
+                                                            "options",
+                                                            ToolCallChunkingOptions.class)
+                                                    .maxTimeWindow())
+                                    .hasMinutes(2);
+                        });
+    }
+
+    @Test
     void disablingStarterRemovesPluginBeanButNotToolCallJsonCompatibility() {
         contextRunner
                 .withPropertyValues("memind.rawdata.toolcall.enabled=false")
@@ -65,5 +96,15 @@ class ToolCallRawDataAutoConfigurationTest {
                                                     RawContent.class))
                                     .isInstanceOf(ToolCallContent.class);
                         });
+    }
+
+    private static <T> T readField(Object target, String name, Class<T> type) {
+        try {
+            var field = target.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            return type.cast(field.get(target));
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
     }
 }

@@ -18,7 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
+import com.openmemind.ai.memory.plugin.rawdata.audio.config.AudioExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.audio.content.AudioContent;
+import com.openmemind.ai.memory.plugin.rawdata.audio.plugin.AudioRawDataPlugin;
 import com.openmemind.ai.memory.plugin.rawdata.jackson.autoconfigure.RawDataJacksonAutoConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -59,9 +61,48 @@ class AudioRawDataAutoConfigurationTest {
     }
 
     @Test
+    void bindsAudioExtractionOptionsIntoPluginBean() {
+        contextRunner
+                .withPropertyValues(
+                        "memind.rawdata.audio.extraction.source-limit.max-bytes=4096",
+                        "memind.rawdata.audio.extraction.chunking.hard-max-tokens=1200")
+                .run(
+                        context -> {
+                            var plugin = (AudioRawDataPlugin) context.getBean("audioRawDataPlugin");
+
+                            assertThat(
+                                            readField(
+                                                            plugin,
+                                                            "options",
+                                                            AudioExtractionOptions.class)
+                                                    .sourceLimit()
+                                                    .maxBytes())
+                                    .isEqualTo(4096L);
+                            assertThat(
+                                            readField(
+                                                            plugin,
+                                                            "options",
+                                                            AudioExtractionOptions.class)
+                                                    .chunking()
+                                                    .hardMaxTokens())
+                                    .isEqualTo(1200);
+                        });
+    }
+
+    @Test
     void backsOffCompletelyWhenAudioStarterDisabled() {
         contextRunner
                 .withPropertyValues("memind.rawdata.audio.enabled=false")
                 .run(context -> assertThat(context).doesNotHaveBean(RawDataPlugin.class));
+    }
+
+    private static <T> T readField(Object target, String name, Class<T> type) {
+        try {
+            var field = target.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            return type.cast(field.get(target));
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
     }
 }

@@ -29,4 +29,13 @@ class EvaluationMemindConfigurationTest {
         assertThat(options.extraction().rawdata().vectorBatchSize())
                 .isEqualTo(RawDataExtractionOptions.DEFAULT_VECTOR_BATCH_SIZE);
     }
+
+    @Test
+    void evaluationConfigurationBuildsTrimmedRawDataExtractionOptions() {
+        var options = configuration.memoryBuildOptions(new EvaluationProperties());
+
+        assertThat(options.extraction().rawdata())
+                .extracting(RawDataExtractionOptions::vectorBatchSize)
+                .isEqualTo(64);
+    }
 }

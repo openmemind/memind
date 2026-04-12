@@ -19,10 +19,12 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 
 @AutoConfiguration
 @ConditionalOnClass(ImageRawDataPlugin.class)
+@EnableConfigurationProperties(ImageRawDataProperties.class)
 @ConditionalOnProperty(
         prefix = "memind.rawdata.image",
         name = "enabled",
@@ -32,7 +34,7 @@ public class ImageRawDataAutoConfiguration {
 
     @Bean("imageRawDataPlugin")
     @ConditionalOnMissingBean(name = "imageRawDataPlugin")
-    RawDataPlugin imageRawDataPlugin() {
-        return new ImageRawDataPlugin();
+    RawDataPlugin imageRawDataPlugin(ImageRawDataProperties properties) {
+        return new ImageRawDataPlugin(properties.extractionOptions());
     }
 }

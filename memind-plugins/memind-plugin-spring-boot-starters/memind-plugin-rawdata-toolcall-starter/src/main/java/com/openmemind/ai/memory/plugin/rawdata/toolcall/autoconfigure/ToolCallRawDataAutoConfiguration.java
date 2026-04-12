@@ -19,10 +19,12 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 
 @AutoConfiguration
 @ConditionalOnClass(ToolCallRawDataPlugin.class)
+@EnableConfigurationProperties(ToolCallRawDataProperties.class)
 @ConditionalOnProperty(
         prefix = "memind.rawdata.toolcall",
         name = "enabled",
@@ -32,7 +34,7 @@ public class ToolCallRawDataAutoConfiguration {
 
     @Bean("toolCallRawDataPlugin")
     @ConditionalOnMissingBean(name = "toolCallRawDataPlugin")
-    RawDataPlugin toolCallRawDataPlugin() {
-        return new ToolCallRawDataPlugin();
+    RawDataPlugin toolCallRawDataPlugin(ToolCallRawDataProperties properties) {
+        return new ToolCallRawDataPlugin(properties.chunkingOptions());
     }
 }

@@ -114,10 +114,6 @@ public class EvaluationMemindConfiguration {
                                 ExtractionCommonOptions.defaults(),
                                 new RawDataExtractionOptions(
                                         defaultRawData.conversation(),
-                                        defaultRawData.document(),
-                                        defaultRawData.image(),
-                                        defaultRawData.audio(),
-                                        defaultRawData.toolCall(),
                                         new CommitDetectorConfig(
                                                 boundary.getMaxMessages(),
                                                 boundary.getMaxTokens(),
