@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core.builder;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 
 import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
@@ -75,6 +76,50 @@ class RawDataPluginAssemblyTest {
         assertThat(registry.capabilities())
                 .extracting(ContentCapability::parserId)
                 .contains("document-test");
+    }
+
+    @Test
+    void assemblerBuildsDefaultRegistryFromPluginParsersAcrossMultipleModalities() {
+        var plugin =
+                new TestPlugin(
+                        "multimodal-plugin",
+                        List.of(
+                                testParser(
+                                        "image-vision",
+                                        ContentTypes.IMAGE,
+                                        "image.caption-ocr",
+                                        Set.of("image/png"),
+                                        Set.of(".png")),
+                                testParser(
+                                        "audio-transcription",
+                                        ContentTypes.AUDIO,
+                                        "audio.transcript",
+                                        Set.of("audio/mpeg"),
+                                        Set.of(".mp3"))),
+                        List.of());
+        var assembly =
+                new MemoryExtractionAssembler()
+                        .assemble(
+                                MemoryAssemblersTest.context(
+                                        MemoryBuildOptions.defaults(),
+                                        null,
+                                        null,
+                                        List.of(plugin)));
+        var extractor = (MemoryExtractor) assembly.pipeline();
+
+        ContentParserRegistry registry =
+                MemoryAssemblersTest.readField(
+                        extractor, "contentParserRegistry", ContentParserRegistry.class);
+
+        assertThat(registry).isInstanceOf(DefaultContentParserRegistry.class);
+        assertThat(registry.capabilities())
+                .extracting(
+                        ContentCapability::parserId,
+                        ContentCapability::contentType,
+                        ContentCapability::contentProfile)
+                .containsExactlyInAnyOrder(
+                        tuple("image-vision", ContentTypes.IMAGE, "image.caption-ocr"),
+                        tuple("audio-transcription", ContentTypes.AUDIO, "audio.transcript"));
     }
 
     @Test
@@ -231,6 +276,20 @@ class RawDataPluginAssemblyTest {
     }
 
     private static ContentParser testParser(String parserId) {
+        return testParser(
+                parserId,
+                ContentTypes.DOCUMENT,
+                "document.binary",
+                Set.of("application/pdf"),
+                Set.of(".pdf"));
+    }
+
+    private static ContentParser testParser(
+            String parserId,
+            String contentType,
+            String contentProfile,
+            Set<String> supportedMimeTypes,
+            Set<String> supportedExtensions) {
         return new ContentParser() {
             @Override
             public String parserId() {
@@ -239,23 +298,29 @@ class RawDataPluginAssemblyTest {
 
             @Override
             public String contentType() {
-                return "DOCUMENT";
+                return contentType;
             }
 
             @Override
             public String contentProfile() {
-                return "document.binary";
+                return contentProfile;
             }
 
             @Override
             public Set<String> supportedMimeTypes() {
-                return Set.of("application/pdf");
+                return supportedMimeTypes;
+            }
+
+            @Override
+            public Set<String> supportedExtensions() {
+                return supportedExtensions;
             }
 
             @Override
             public boolean supports(SourceDescriptor source) {
                 return source.sourceKind() == SourceKind.FILE
-                        && "application/pdf".equals(source.mimeType());
+                        && source.mimeType() != null
+                        && supportedMimeTypes.contains(source.mimeType());
             }
 
             @Override

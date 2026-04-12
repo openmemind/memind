@@ -78,6 +78,13 @@ class AudioRawDataPluginTest {
                         });
     }
 
+    @Test
+    void pluginDoesNotExposeParserDirectly() {
+        var plugin = new AudioRawDataPlugin(AudioExtractionOptions.defaults());
+
+        assertThat(plugin.parsers(pluginContext())).isEmpty();
+    }
+
     private static RawDataPluginContext pluginContext() {
         return new RawDataPluginContext(
                 new ChatClientRegistry(noopClient(), Map.of()),

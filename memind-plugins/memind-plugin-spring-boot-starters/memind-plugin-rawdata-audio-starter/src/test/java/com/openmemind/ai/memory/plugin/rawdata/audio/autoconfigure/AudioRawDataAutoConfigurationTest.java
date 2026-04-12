@@ -96,6 +96,19 @@ class AudioRawDataAutoConfigurationTest {
                 .run(context -> assertThat(context).doesNotHaveBean(RawDataPlugin.class));
     }
 
+    @Test
+    void parserDisabledStillRegistersPlugin() {
+        contextRunner
+                .withPropertyValues("memind.rawdata.audio.parser-enabled=false")
+                .run(
+                        context -> {
+                            var plugin = (AudioRawDataPlugin) context.getBean("audioRawDataPlugin");
+
+                            assertThat(context).hasSingleBean(RawDataPlugin.class);
+                            assertThat(plugin).isNotNull();
+                        });
+    }
+
     private static <T> T readField(Object target, String name, Class<T> type) {
         try {
             var field = target.getClass().getDeclaredField(name);

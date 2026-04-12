@@ -26,6 +26,7 @@ import com.openmemind.ai.memory.core.data.MemoryRawData;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
@@ -289,6 +290,39 @@ class MemoryExtractorMultimodalFileTest {
     }
 
     @Test
+    void fileRequestParsesImageViaParserRegistry() {
+        var rawDataStep = new RecordingRawDataStep(false);
+        var extractor =
+                extractor(
+                        rawDataStep,
+                        (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
+                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
+                        imageProcessorRegistry(),
+                        imageParserRegistry(),
+                        null,
+                        null,
+                        RawDataExtractionOptions.defaults(),
+                        ItemExtractionOptions.defaults());
+
+        var result =
+                extractor
+                        .extract(
+                                ExtractionRequest.file(
+                                        DefaultMemoryId.of("user-1", "agent-1"),
+                                        "chart.png",
+                                        new byte[] {1, 2, 3},
+                                        "image/png"))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(rawDataStep.lastContentType).isEqualTo(ContentTypes.IMAGE);
+        assertThat(rawDataStep.lastMetadata)
+                .containsEntry("parserId", "image-vision")
+                .containsEntry("contentProfile", "image.caption-ocr");
+    }
+
+    @Test
     void fileRequestShouldRejectOversizedSourceUsingPluginIngestionPolicy() {
         var parserRegistry = new RecordingResolutionRegistry();
         var extractor =
@@ -456,6 +490,37 @@ class MemoryExtractorMultimodalFileTest {
                 .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name())
                 .containsEntry("resourceId", "stored-res-1")
                 .containsEntry("storageUri", "file:///stored/report.pdf");
+    }
+
+    @Test
+    void urlRequestParsesAudioViaParserRegistry() {
+        var rawDataStep = new RecordingRawDataStep(false);
+        var extractor =
+                extractor(
+                        rawDataStep,
+                        (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
+                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
+                        audioProcessorRegistry(),
+                        audioParserRegistry(),
+                        null,
+                        new RecordingFetchSessionFetcher("clip.mp3", "audio/mpeg", 3L),
+                        RawDataExtractionOptions.defaults(),
+                        ItemExtractionOptions.defaults());
+
+        var result =
+                extractor
+                        .extract(
+                                ExtractionRequest.url(
+                                        DefaultMemoryId.of("user-1", "agent-1"),
+                                        "https://example.com/clip.mp3"))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(rawDataStep.lastContentType).isEqualTo(ContentTypes.AUDIO);
+        assertThat(rawDataStep.lastMetadata)
+                .containsEntry("parserId", "audio-transcription")
+                .containsEntry("contentProfile", "audio.transcript");
     }
 
     @Test
@@ -720,6 +785,141 @@ class MemoryExtractorMultimodalFileTest {
         }
     }
 
+    private static ContentParserRegistry imageParserRegistry() {
+        return new ContentParserRegistry() {
+            @Override
+            public Mono<ParserResolution> resolve(SourceDescriptor source) {
+                return Mono.just(
+                        new ParserResolution(
+                                testImageParser(),
+                                new ContentCapability(
+                                        "image-vision",
+                                        ContentTypes.IMAGE,
+                                        "image.caption-ocr",
+                                        Set.of("image/png"),
+                                        Set.of(".png"),
+                                        50)));
+            }
+
+            @Override
+            public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
+                return testImageParser().parse(data, source);
+            }
+
+            @Override
+            public List<ContentCapability> capabilities() {
+                return List.of();
+            }
+        };
+    }
+
+    private static ContentParserRegistry audioParserRegistry() {
+        return new ContentParserRegistry() {
+            @Override
+            public Mono<ParserResolution> resolve(SourceDescriptor source) {
+                return Mono.just(
+                        new ParserResolution(
+                                testAudioParser(),
+                                new ContentCapability(
+                                        "audio-transcription",
+                                        ContentTypes.AUDIO,
+                                        "audio.transcript",
+                                        Set.of("audio/mpeg"),
+                                        Set.of(".mp3"),
+                                        50)));
+            }
+
+            @Override
+            public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
+                return testAudioParser().parse(data, source);
+            }
+
+            @Override
+            public List<ContentCapability> capabilities() {
+                return List.of();
+            }
+        };
+    }
+
+    private static com.openmemind.ai.memory.core.resource.ContentParser testImageParser() {
+        return new com.openmemind.ai.memory.core.resource.ContentParser() {
+            @Override
+            public String parserId() {
+                return "image-vision";
+            }
+
+            @Override
+            public String contentType() {
+                return ContentTypes.IMAGE;
+            }
+
+            @Override
+            public String contentProfile() {
+                return "image.caption-ocr";
+            }
+
+            @Override
+            public Set<String> supportedMimeTypes() {
+                return Set.of("image/png");
+            }
+
+            @Override
+            public Set<String> supportedExtensions() {
+                return Set.of(".png");
+            }
+
+            @Override
+            public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
+                return Mono.just(
+                        new TestImageContent(
+                                "image/png",
+                                "A revenue chart",
+                                "Q1 revenue grew 42%",
+                                source.sourceUrl(),
+                                Map.of("provider", "test")));
+            }
+        };
+    }
+
+    private static com.openmemind.ai.memory.core.resource.ContentParser testAudioParser() {
+        return new com.openmemind.ai.memory.core.resource.ContentParser() {
+            @Override
+            public String parserId() {
+                return "audio-transcription";
+            }
+
+            @Override
+            public String contentType() {
+                return ContentTypes.AUDIO;
+            }
+
+            @Override
+            public String contentProfile() {
+                return "audio.transcript";
+            }
+
+            @Override
+            public Set<String> supportedMimeTypes() {
+                return Set.of("audio/mpeg");
+            }
+
+            @Override
+            public Set<String> supportedExtensions() {
+                return Set.of(".mp3");
+            }
+
+            @Override
+            public Mono<RawContent> parse(byte[] data, SourceDescriptor source) {
+                return Mono.just(
+                        new TestAudioContent(
+                                "audio/mpeg",
+                                "Speaker one said hello",
+                                source.sourceUrl(),
+                                Map.of("provider", "test")));
+            }
+        };
+    }
+
     private MemoryExtractor extractorWithRestrictiveOptions(
             RawDataExtractStep rawDataStep, RawContentProcessorRegistry processorRegistry) {
         return extractor(
@@ -814,9 +1014,53 @@ class MemoryExtractorMultimodalFileTest {
         return documentProcessorRegistry(Integer.MAX_VALUE);
     }
 
+    private RawContentProcessorRegistry imageProcessorRegistry() {
+        return new RawContentProcessorRegistry(List.of(new TestImageProcessor()));
+    }
+
+    private RawContentProcessorRegistry audioProcessorRegistry() {
+        return new RawContentProcessorRegistry(List.of(new TestAudioProcessor()));
+    }
+
     private RawContentProcessorRegistry documentProcessorRegistry(int maxParsedTokens) {
         return new RawContentProcessorRegistry(
                 List.of(new TestDocumentProcessor(false, maxParsedTokens)));
+    }
+
+    private static final class TestImageProcessor implements RawContentProcessor<TestImageContent> {
+
+        @Override
+        public String contentType() {
+            return ContentTypes.IMAGE;
+        }
+
+        @Override
+        public Class<TestImageContent> contentClass() {
+            return TestImageContent.class;
+        }
+
+        @Override
+        public Mono<List<Segment>> chunk(TestImageContent content) {
+            return Mono.just(List.of(Segment.single(content.toContentString())));
+        }
+    }
+
+    private static final class TestAudioProcessor implements RawContentProcessor<TestAudioContent> {
+
+        @Override
+        public String contentType() {
+            return ContentTypes.AUDIO;
+        }
+
+        @Override
+        public Class<TestAudioContent> contentClass() {
+            return TestAudioContent.class;
+        }
+
+        @Override
+        public Mono<List<Segment>> chunk(TestAudioContent content) {
+            return Mono.just(List.of(Segment.single(content.toContentString())));
+        }
     }
 
     private int restrictiveBinaryParsedMaxTokens() {
@@ -835,7 +1079,17 @@ class MemoryExtractorMultimodalFileTest {
                                 ContentTypes.DOCUMENT,
                                 Set.of(ContentGovernanceType.DOCUMENT_BINARY),
                                 new com.openmemind.ai.memory.core.builder.SourceLimitOptions(
-                                        20L * 1024 * 1024))));
+                                        20L * 1024 * 1024)),
+                        new RawDataIngestionPolicy(
+                                ContentTypes.IMAGE,
+                                Set.of(ContentGovernanceType.IMAGE_CAPTION_OCR),
+                                new com.openmemind.ai.memory.core.builder.SourceLimitOptions(
+                                        10L * 1024 * 1024)),
+                        new RawDataIngestionPolicy(
+                                ContentTypes.AUDIO,
+                                Set.of(ContentGovernanceType.AUDIO_TRANSCRIPT),
+                                new com.openmemind.ai.memory.core.builder.SourceLimitOptions(
+                                        25L * 1024 * 1024))));
     }
 
     private static final class RecordingResolutionRegistry implements ContentParserRegistry {
@@ -1069,6 +1323,142 @@ class MemoryExtractorMultimodalFileTest {
 
     private static RawContent nullParserContent() {
         return TestDocumentContent.of("Report", "application/pdf", "parsed body");
+    }
+
+    private static final class TestImageContent extends RawContent {
+
+        private final String mimeType;
+        private final String description;
+        private final String ocrText;
+        private final String sourceUri;
+        private final Map<String, Object> metadata;
+
+        private TestImageContent(
+                String mimeType,
+                String description,
+                String ocrText,
+                String sourceUri,
+                Map<String, Object> metadata) {
+            this.mimeType = mimeType;
+            this.description = description;
+            this.ocrText = ocrText;
+            this.sourceUri = sourceUri;
+            this.metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+        }
+
+        @Override
+        public String contentType() {
+            return ContentTypes.IMAGE;
+        }
+
+        @Override
+        public String toContentString() {
+            if (ocrText == null || ocrText.isBlank()) {
+                return description == null ? "" : description;
+            }
+            return description == null || description.isBlank()
+                    ? ocrText
+                    : description + "\n" + ocrText;
+        }
+
+        @Override
+        public String getContentId() {
+            return "image:" + toContentString();
+        }
+
+        @Override
+        public Map<String, Object> contentMetadata() {
+            return metadata;
+        }
+
+        @Override
+        public RawContent withMetadata(Map<String, Object> metadata) {
+            return new TestImageContent(mimeType, description, ocrText, sourceUri, metadata);
+        }
+
+        @Override
+        public String mimeType() {
+            return mimeType;
+        }
+
+        @Override
+        public String sourceUri() {
+            return sourceUri;
+        }
+
+        @Override
+        public ContentGovernanceType directGovernanceType() {
+            return ContentGovernanceType.IMAGE_CAPTION_OCR;
+        }
+
+        @Override
+        public String directContentProfile() {
+            return "image.caption-ocr";
+        }
+    }
+
+    private static final class TestAudioContent extends RawContent {
+
+        private final String mimeType;
+        private final String transcript;
+        private final String sourceUri;
+        private final Map<String, Object> metadata;
+
+        private TestAudioContent(
+                String mimeType,
+                String transcript,
+                String sourceUri,
+                Map<String, Object> metadata) {
+            this.mimeType = mimeType;
+            this.transcript = transcript;
+            this.sourceUri = sourceUri;
+            this.metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+        }
+
+        @Override
+        public String contentType() {
+            return ContentTypes.AUDIO;
+        }
+
+        @Override
+        public String toContentString() {
+            return transcript == null ? "" : transcript;
+        }
+
+        @Override
+        public String getContentId() {
+            return "audio:" + toContentString();
+        }
+
+        @Override
+        public Map<String, Object> contentMetadata() {
+            return metadata;
+        }
+
+        @Override
+        public RawContent withMetadata(Map<String, Object> metadata) {
+            return new TestAudioContent(mimeType, transcript, sourceUri, metadata);
+        }
+
+        @Override
+        public String mimeType() {
+            return mimeType;
+        }
+
+        @Override
+        public String sourceUri() {
+            return sourceUri;
+        }
+
+        @Override
+        public ContentGovernanceType directGovernanceType() {
+            return ContentGovernanceType.AUDIO_TRANSCRIPT;
+        }
+
+        @Override
+        public String directContentProfile() {
+            return "audio.transcript";
+        }
     }
 
     private static com.openmemind.ai.memory.core.resource.ContentParser nullParser() {

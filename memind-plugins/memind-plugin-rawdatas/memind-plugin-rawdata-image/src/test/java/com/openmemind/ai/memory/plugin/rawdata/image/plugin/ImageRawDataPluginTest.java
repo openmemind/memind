@@ -78,6 +78,13 @@ class ImageRawDataPluginTest {
                         });
     }
 
+    @Test
+    void pluginDoesNotExposeParserDirectly() {
+        var plugin = new ImageRawDataPlugin(ImageExtractionOptions.defaults());
+
+        assertThat(plugin.parsers(pluginContext())).isEmpty();
+    }
+
     private static RawDataPluginContext pluginContext() {
         return new RawDataPluginContext(
                 new ChatClientRegistry(noopClient(), Map.of()),

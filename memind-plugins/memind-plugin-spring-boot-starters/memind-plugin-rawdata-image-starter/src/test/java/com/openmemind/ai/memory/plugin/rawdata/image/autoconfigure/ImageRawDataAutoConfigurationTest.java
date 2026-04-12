@@ -95,6 +95,19 @@ class ImageRawDataAutoConfigurationTest {
                 .run(context -> assertThat(context).doesNotHaveBean(RawDataPlugin.class));
     }
 
+    @Test
+    void parserDisabledStillRegistersPlugin() {
+        contextRunner
+                .withPropertyValues("memind.rawdata.image.parser-enabled=false")
+                .run(
+                        context -> {
+                            var plugin = (ImageRawDataPlugin) context.getBean("imageRawDataPlugin");
+
+                            assertThat(context).hasSingleBean(RawDataPlugin.class);
+                            assertThat(plugin).isNotNull();
+                        });
+    }
+
     private static <T> T readField(Object target, String name, Class<T> type) {
         try {
             var field = target.getClass().getDeclaredField(name);

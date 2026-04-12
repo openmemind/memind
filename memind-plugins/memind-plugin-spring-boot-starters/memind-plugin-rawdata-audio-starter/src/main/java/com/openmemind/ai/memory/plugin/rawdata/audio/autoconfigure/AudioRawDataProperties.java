@@ -27,6 +27,7 @@ public class AudioRawDataProperties {
             AudioExtractionOptions.defaults();
 
     private boolean enabled = true;
+    private boolean parserEnabled = true;
     private final AudioExtractionProperties extraction = new AudioExtractionProperties();
 
     public boolean isEnabled() {
@@ -35,6 +36,14 @@ public class AudioRawDataProperties {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public boolean isParserEnabled() {
+        return parserEnabled;
+    }
+
+    public void setParserEnabled(boolean parserEnabled) {
+        this.parserEnabled = parserEnabled;
     }
 
     public AudioExtractionProperties getExtraction() {

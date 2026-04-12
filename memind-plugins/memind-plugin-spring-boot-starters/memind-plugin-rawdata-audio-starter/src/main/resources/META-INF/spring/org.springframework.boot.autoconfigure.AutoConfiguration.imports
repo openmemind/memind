@@ -1,1 +1,2 @@
 com.openmemind.ai.memory.plugin.rawdata.audio.autoconfigure.AudioRawDataAutoConfiguration
+com.openmemind.ai.memory.plugin.rawdata.audio.autoconfigure.AudioTranscriptionParserAutoConfiguration

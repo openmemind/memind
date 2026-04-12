@@ -14,6 +14,7 @@
 package com.openmemind.ai.memory.server.configuration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.groups.Tuple.tuple;
 
 import com.openmemind.ai.memory.core.DefaultMemory;
 import com.openmemind.ai.memory.core.Memory;
@@ -43,12 +44,23 @@ import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
+import com.openmemind.ai.memory.plugin.rawdata.audio.parser.TranscriptionAudioContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
+import com.openmemind.ai.memory.plugin.rawdata.image.parser.VisionImageContentParser;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeFactory;
 import java.lang.reflect.Proxy;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.audio.transcription.AudioTranscription;
+import org.springframework.ai.audio.transcription.AudioTranscriptionPrompt;
+import org.springframework.ai.audio.transcription.AudioTranscriptionResponse;
+import org.springframework.ai.audio.transcription.TranscriptionModel;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import reactor.core.publisher.Flux;
@@ -191,9 +203,109 @@ class MemindServerRuntimeConfigurationTest {
                 .isInstanceOf(TestRawContentProcessor.class);
     }
 
+    @Test
+    void runtimeFactoryCollectsImageAndAudioParserBeansFromSpringContext() {
+        ContentParser imageParser =
+                new VisionImageContentParser(
+                        chatModel(
+                                """
+                                {"description":"chart","ocrText":"Q1 revenue","metadata":{"provider":"test"}}
+                                """));
+        ContentParser audioParser =
+                new TranscriptionAudioContentParser(transcriptionModel("speaker one said hello"));
+        var configuration = new MemindServerRuntimeConfiguration();
+
+        MemoryRuntimeFactory factory =
+                configuration.memoryRuntimeFactory(
+                        provider(StructuredChatClient.class, proxy(StructuredChatClient.class)),
+                        provider(MemoryStore.class, memoryStore()),
+                        provider(MemoryBuffer.class, memoryBuffer()),
+                        provider(MemoryVector.class, proxy(MemoryVector.class)),
+                        emptyProvider(MemoryTextSearch.class),
+                        provider(Reranker.class, new NoopReranker()),
+                        provider(
+                                ContentParser.class,
+                                Map.of("imageParser", imageParser, "audioParser", audioParser)),
+                        emptyProvider(RawDataPlugin.class),
+                        emptyProvider(ResourceFetcher.class));
+
+        Memory memory = factory.create(MemoryBuildOptions.defaults());
+        var extractor = readField((DefaultMemory) memory, "extractor", MemoryExtractor.class);
+        ContentParserRegistry registry =
+                readField(extractor, "contentParserRegistry", ContentParserRegistry.class);
+
+        assertThat(registry).isNotNull();
+        assertThat(registry.capabilities())
+                .extracting(
+                        ContentCapability::parserId,
+                        ContentCapability::contentType,
+                        ContentCapability::contentProfile)
+                .containsExactlyInAnyOrder(
+                        tuple("image-vision", ContentTypes.IMAGE, "image.caption-ocr"),
+                        tuple("audio-transcription", ContentTypes.AUDIO, "audio.transcript"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ChatModel chatModel(String responseText) {
+        ChatResponse response =
+                new ChatResponse(
+                        java.util.List.of(new Generation(new AssistantMessage(responseText))));
+        return (ChatModel)
+                Proxy.newProxyInstance(
+                        MemindServerRuntimeConfigurationTest.class.getClassLoader(),
+                        new Class<?>[] {ChatModel.class},
+                        (proxy, method, args) ->
+                                switch (method.getName()) {
+                                    case "call" -> {
+                                        if (args.length == 1 && args[0] instanceof Prompt) {
+                                            yield response;
+                                        }
+                                        throw new UnsupportedOperationException(method.getName());
+                                    }
+                                    case "toString" -> "FakeChatModel";
+                                    case "hashCode" -> System.identityHashCode(proxy);
+                                    case "equals" -> proxy == args[0];
+                                    default ->
+                                            throw new UnsupportedOperationException(
+                                                    method.getName());
+                                });
+    }
+
+    @SuppressWarnings("unchecked")
+    private static TranscriptionModel transcriptionModel(String transcript) {
+        AudioTranscriptionResponse response =
+                new AudioTranscriptionResponse(new AudioTranscription(transcript));
+        return (TranscriptionModel)
+                Proxy.newProxyInstance(
+                        MemindServerRuntimeConfigurationTest.class.getClassLoader(),
+                        new Class<?>[] {TranscriptionModel.class},
+                        (proxy, method, args) ->
+                                switch (method.getName()) {
+                                    case "call" -> {
+                                        if (args.length == 1
+                                                && args[0] instanceof AudioTranscriptionPrompt) {
+                                            yield response;
+                                        }
+                                        throw new UnsupportedOperationException(method.getName());
+                                    }
+                                    case "toString" -> "FakeTranscriptionModel";
+                                    case "hashCode" -> System.identityHashCode(proxy);
+                                    case "equals" -> proxy == args[0];
+                                    default ->
+                                            throw new UnsupportedOperationException(
+                                                    method.getName());
+                                });
+    }
+
     private static <T> ObjectProvider<T> provider(Class<T> type, T bean) {
         var beanFactory = new StaticListableBeanFactory();
         beanFactory.addBean("bean", bean);
+        return beanFactory.getBeanProvider(type);
+    }
+
+    private static <T> ObjectProvider<T> provider(Class<T> type, Map<String, T> beans) {
+        var beanFactory = new StaticListableBeanFactory();
+        beans.forEach(beanFactory::addBean);
         return beanFactory.getBeanProvider(type);
     }
 

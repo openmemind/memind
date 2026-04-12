@@ -26,6 +26,7 @@ public class ImageRawDataProperties {
             ImageExtractionOptions.defaults();
 
     private boolean enabled = true;
+    private boolean parserEnabled = true;
     private final ImageExtractionProperties extraction = new ImageExtractionProperties();
 
     public boolean isEnabled() {
@@ -34,6 +35,14 @@ public class ImageRawDataProperties {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public boolean isParserEnabled() {
+        return parserEnabled;
+    }
+
+    public void setParserEnabled(boolean parserEnabled) {
+        this.parserEnabled = parserEnabled;
     }
 
     public ImageExtractionProperties getExtraction() {
