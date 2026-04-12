@@ -13,15 +13,30 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.audio.plugin;
 
+import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
+import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicy;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.plugin.rawdata.audio.chunk.TranscriptSegmentChunker;
+import com.openmemind.ai.memory.plugin.rawdata.audio.config.AudioExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.audio.processor.AudioContentProcessor;
 import java.util.List;
+import java.util.Set;
 
 public final class AudioRawDataPlugin implements RawDataPlugin {
+
+    private final AudioExtractionOptions options;
+
+    public AudioRawDataPlugin() {
+        this(AudioExtractionOptions.defaults());
+    }
+
+    public AudioRawDataPlugin(AudioExtractionOptions options) {
+        this.options = options == null ? AudioExtractionOptions.defaults() : options;
+    }
 
     @Override
     public String pluginId() {
@@ -30,10 +45,16 @@ public final class AudioRawDataPlugin implements RawDataPlugin {
 
     @Override
     public List<RawContentProcessor<?>> processors(RawDataPluginContext context) {
+        return List.of(new AudioContentProcessor(new TranscriptSegmentChunker(), options));
+    }
+
+    @Override
+    public List<RawDataIngestionPolicy> ingestionPolicies() {
         return List.of(
-                new AudioContentProcessor(
-                        new TranscriptSegmentChunker(),
-                        context.buildOptions().extraction().rawdata().audio()));
+                new RawDataIngestionPolicy(
+                        ContentTypes.AUDIO,
+                        Set.of(ContentGovernanceType.AUDIO_TRANSCRIPT),
+                        options.sourceLimit()));
     }
 
     @Override

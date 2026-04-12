@@ -16,6 +16,10 @@ package com.openmemind.ai.memory.plugin.rawdata.audio.plugin;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions;
+import com.openmemind.ai.memory.core.builder.SourceLimitOptions;
+import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
+import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
@@ -23,8 +27,10 @@ import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
+import com.openmemind.ai.memory.plugin.rawdata.audio.config.AudioExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.audio.content.AudioContent;
 import com.openmemind.ai.memory.plugin.rawdata.audio.processor.AudioContentProcessor;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -48,6 +54,30 @@ class AudioRawDataPluginTest {
                                 assertThat(mappings).containsEntry("audio", AudioContent.class));
     }
 
+    @Test
+    void pluginUsesInjectedAudioExtractionOptions() {
+        var options =
+                new AudioExtractionOptions(
+                        new SourceLimitOptions(8192),
+                        new ParsedContentLimitOptions(999, null, null, Duration.ofMinutes(10)),
+                        new TokenChunkingOptions(333, 444));
+        var plugin = new AudioRawDataPlugin(options);
+
+        assertThat(
+                        readField(plugin, "options", AudioExtractionOptions.class)
+                                .parsedLimit()
+                                .maxTokens())
+                .isEqualTo(999);
+        assertThat(plugin.ingestionPolicies())
+                .singleElement()
+                .satisfies(
+                        policy -> {
+                            assertThat(policy.governanceTypes())
+                                    .containsExactly(ContentGovernanceType.AUDIO_TRANSCRIPT);
+                            assertThat(policy.sourceLimit().maxBytes()).isEqualTo(8192L);
+                        });
+    }
+
     private static RawDataPluginContext pluginContext() {
         return new RawDataPluginContext(
                 new ChatClientRegistry(noopClient(), Map.of()),
@@ -67,5 +97,15 @@ class AudioRawDataPluginTest {
                 return Mono.error(new UnsupportedOperationException("not used by this test"));
             }
         };
+    }
+
+    private static <T> T readField(Object target, String name, Class<T> type) {
+        try {
+            var field = target.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            return type.cast(field.get(target));
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
     }
 }

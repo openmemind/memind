@@ -14,12 +14,12 @@
 package com.openmemind.ai.memory.plugin.rawdata.toolcall.chunk;
 
 import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
-import com.openmemind.ai.memory.core.builder.ToolCallChunkingOptions;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TokenAwareSegmentAssembler;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.config.ToolCallChunkingOptions;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;

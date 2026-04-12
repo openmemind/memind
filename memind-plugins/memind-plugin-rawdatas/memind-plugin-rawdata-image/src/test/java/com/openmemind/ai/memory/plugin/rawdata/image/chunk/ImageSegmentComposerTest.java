@@ -16,8 +16,8 @@ package com.openmemind.ai.memory.plugin.rawdata.image.chunk;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.openmemind.ai.memory.core.builder.ImageExtractionOptions;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.plugin.rawdata.image.config.ImageExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.image.content.ImageContent;
 import java.util.Map;
 import org.junit.jupiter.api.Test;

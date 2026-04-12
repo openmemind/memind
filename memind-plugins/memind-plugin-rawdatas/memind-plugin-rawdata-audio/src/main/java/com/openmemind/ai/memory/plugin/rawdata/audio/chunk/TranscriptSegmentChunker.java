@@ -13,11 +13,11 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.audio.chunk;
 
-import com.openmemind.ai.memory.core.builder.AudioExtractionOptions;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TokenAwareSegmentAssembler;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
+import com.openmemind.ai.memory.plugin.rawdata.audio.config.AudioExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.audio.content.AudioContent;
 import com.openmemind.ai.memory.plugin.rawdata.audio.content.audio.TranscriptSegment;
 import java.time.Duration;

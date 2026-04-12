@@ -11,33 +11,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.builder;
+package com.openmemind.ai.memory.plugin.rawdata.audio.config;
 
+import com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions;
+import com.openmemind.ai.memory.core.builder.SourceLimitOptions;
+import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
+import java.time.Duration;
 import java.util.Objects;
 
 /**
- * Governance options for image ingestion.
+ * Governance options for audio ingestion.
  */
-public record ImageExtractionOptions(
+public record AudioExtractionOptions(
         SourceLimitOptions sourceLimit,
         ParsedContentLimitOptions parsedLimit,
-        TokenChunkingOptions chunking,
-        int captionOcrMergeMaxTokens) {
+        TokenChunkingOptions chunking) {
 
-    public ImageExtractionOptions {
+    public AudioExtractionOptions {
         sourceLimit = Objects.requireNonNull(sourceLimit, "sourceLimit");
         parsedLimit = Objects.requireNonNull(parsedLimit, "parsedLimit");
         chunking = Objects.requireNonNull(chunking, "chunking");
-        if (captionOcrMergeMaxTokens < 0) {
-            throw new IllegalArgumentException("captionOcrMergeMaxTokens must be >= 0");
-        }
     }
 
-    public static ImageExtractionOptions defaults() {
-        return new ImageExtractionOptions(
-                new SourceLimitOptions(10L * 1024 * 1024),
-                new ParsedContentLimitOptions(4_000, null, null, null),
-                new TokenChunkingOptions(800, 1200),
-                400);
+    public static AudioExtractionOptions defaults() {
+        return new AudioExtractionOptions(
+                new SourceLimitOptions(25L * 1024 * 1024),
+                new ParsedContentLimitOptions(18_000, null, null, Duration.ofMinutes(30)),
+                new TokenChunkingOptions(800, 1000));
     }
 }

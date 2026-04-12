@@ -23,6 +23,8 @@ import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.config.ToolCallChunkingOptions;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -48,6 +50,15 @@ class ToolCallRawDataPluginTest {
         assertThat(plugin.typeRegistrars()).isEmpty();
     }
 
+    @Test
+    void pluginUsesInjectedToolCallChunkingOptions() {
+        var options = new ToolCallChunkingOptions(120, 160, Duration.ofMinutes(2));
+        var plugin = new ToolCallRawDataPlugin(options);
+
+        assertThat(readField(plugin, "options", ToolCallChunkingOptions.class).maxTimeWindow())
+                .isEqualTo(Duration.ofMinutes(2));
+    }
+
     private static final class NoopStructuredChatClient implements StructuredChatClient {
 
         @Override
@@ -58,6 +69,16 @@ class ToolCallRawDataPluginTest {
         @Override
         public <T> Mono<T> call(List<ChatMessage> messages, Class<T> responseType) {
             return Mono.error(new UnsupportedOperationException("Not used in this test"));
+        }
+    }
+
+    private static <T> T readField(Object target, String name, Class<T> type) {
+        try {
+            var field = target.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            return type.cast(field.get(target));
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
         }
     }
 }

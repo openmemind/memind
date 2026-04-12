@@ -20,11 +20,22 @@ import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.caption.ToolCallCaptionGenerator;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.chunk.ToolCallChunker;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.config.ToolCallChunkingOptions;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.item.strategy.LlmToolCallItemExtractionStrategy;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.processor.ToolCallContentProcessor;
 import java.util.List;
 
 public final class ToolCallRawDataPlugin implements RawDataPlugin {
+
+    private final ToolCallChunkingOptions options;
+
+    public ToolCallRawDataPlugin() {
+        this(ToolCallChunkingOptions.defaults());
+    }
+
+    public ToolCallRawDataPlugin(ToolCallChunkingOptions options) {
+        this.options = options == null ? ToolCallChunkingOptions.defaults() : options;
+    }
 
     @Override
     public String pluginId() {
@@ -35,8 +46,7 @@ public final class ToolCallRawDataPlugin implements RawDataPlugin {
     public List<RawContentProcessor<?>> processors(RawDataPluginContext context) {
         return List.of(
                 new ToolCallContentProcessor(
-                        new ToolCallChunker(
-                                context.buildOptions().extraction().rawdata().toolCall()),
+                        new ToolCallChunker(options),
                         new ToolCallCaptionGenerator(),
                         new LlmToolCallItemExtractionStrategy(
                                 context.chatClientRegistry()
