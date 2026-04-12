@@ -17,7 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
@@ -48,7 +47,7 @@ class ImageContentTest {
                         "file:///tmp/dashboard.png",
                         Map.of("width", 1280));
 
-        assertThat(content.contentType()).isEqualTo(ContentTypes.IMAGE);
+        assertThat(content.contentType()).isEqualTo(ImageContent.TYPE);
         assertThat(content.toContentString())
                 .isEqualTo("A screenshot of the dashboard\nTotal Revenue 30%");
         assertThat(content.getContentId())

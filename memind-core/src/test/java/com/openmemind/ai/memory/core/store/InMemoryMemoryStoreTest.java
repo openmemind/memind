@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.store;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryId;
@@ -40,6 +41,17 @@ class InMemoryMemoryStoreTest {
 
     private static final MemoryId MEMORY_ID = DefaultMemoryId.of("user-1", "agent-1");
     private static final Instant BASE_TIME = Instant.parse("2026-03-21T00:00:00Z");
+
+    @Test
+    @DisplayName("constructor bootstraps default insight taxonomy once")
+    void constructorBootstrapsDefaultInsightTaxonomyOnce() {
+        var store = new InMemoryMemoryStore();
+
+        assertThat(store.insightOperations().listInsightTypes())
+                .extracting(MemoryInsightType::name)
+                .containsExactlyInAnyOrderElementsOf(
+                        DefaultInsightTypes.all().stream().map(MemoryInsightType::name).toList());
+    }
 
     @Test
     @DisplayName("upsertRawData replaces an existing record")
@@ -80,10 +92,14 @@ class InMemoryMemoryStoreTest {
         store.insightOperations()
                 .upsertInsightTypes(List.of(insightType(1L, "profile"), insightType(2L, "agent")));
 
-        assertThat(store.insightOperations().getInsightType("profile")).isPresent();
+        assertThat(store.insightOperations().getInsightType("profile"))
+                .get()
+                .extracting(MemoryInsightType::description)
+                .isEqualTo("description-profile");
+        assertThat(store.insightOperations().getInsightType("agent")).isPresent();
         assertThat(store.insightOperations().listInsightTypes())
                 .extracting(MemoryInsightType::name)
-                .containsExactlyInAnyOrder("profile", "agent");
+                .contains("profile", "agent");
     }
 
     @Test
@@ -168,8 +184,7 @@ class InMemoryMemoryStoreTest {
                 BASE_TIME,
                 InsightAnalysisMode.BRANCH,
                 null,
-                MemoryScope.USER,
-                List.of("conversation"));
+                MemoryScope.USER);
     }
 
     private static MemoryItem item(Long id) {

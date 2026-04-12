@@ -19,7 +19,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
@@ -30,6 +29,7 @@ import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicato
 import com.openmemind.ai.memory.core.extraction.item.extractor.MemoryItemExtractor;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
@@ -83,7 +83,11 @@ class MemoryItemLayerRuntimeContextTest {
                                 null));
         var config =
                 new ItemExtractionConfig(
-                        MemoryScope.USER, ContentTypes.CONVERSATION, false, "zh-CN");
+                        MemoryScope.USER,
+                        ConversationContent.TYPE,
+                        MemoryCategory.userCategories(),
+                        false,
+                        "zh-CN");
         var entry =
                 new ExtractedMemoryEntry(
                         "hello",

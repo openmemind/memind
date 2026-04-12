@@ -16,10 +16,10 @@ package com.openmemind.ai.memory.core.extraction.item;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.builder.PromptBudgetOptions;
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
+import com.openmemind.ai.memory.core.support.TestDocumentContent;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import java.util.List;
 import java.util.Map;
@@ -45,7 +45,7 @@ class SegmentBudgetEnforcerTest {
         var config =
                 new ItemExtractionConfig(
                         MemoryScope.USER,
-                        ContentTypes.DOCUMENT,
+                        TestDocumentContent.TYPE,
                         false,
                         "English",
                         PromptBudgetOptions.defaults());
@@ -79,7 +79,7 @@ class SegmentBudgetEnforcerTest {
         var config =
                 new ItemExtractionConfig(
                         MemoryScope.USER,
-                        ContentTypes.DOCUMENT,
+                        TestDocumentContent.TYPE,
                         false,
                         "English",
                         new PromptBudgetOptions(1_800, 200, 200, 200));

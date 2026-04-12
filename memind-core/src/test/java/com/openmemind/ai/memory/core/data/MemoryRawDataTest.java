@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core.data;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.core.support.TestDocumentContent;
 import java.time.Instant;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -31,7 +32,7 @@ class MemoryRawDataTest {
                 new MemoryRawData(
                         "raw-1",
                         "user-1:agent-1",
-                        ContentTypes.DOCUMENT,
+                        TestDocumentContent.TYPE,
                         "content-1",
                         Segment.single("hello"),
                         "caption",
@@ -67,7 +68,7 @@ class MemoryRawDataTest {
                 new MemoryRawData(
                         "raw-1",
                         "user-1:agent-1",
-                        ContentTypes.DOCUMENT,
+                        TestDocumentContent.TYPE,
                         "content-1",
                         Segment.single("hello"),
                         "caption",

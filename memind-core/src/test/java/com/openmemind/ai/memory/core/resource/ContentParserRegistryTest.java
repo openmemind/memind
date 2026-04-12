@@ -17,7 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.support.TestDocumentContent;
@@ -34,7 +33,7 @@ class ContentParserRegistryTest {
         ContentParser nativeMarkdown =
                 parser(
                         "document-native-text",
-                        ContentTypes.DOCUMENT,
+                        TestDocumentContent.TYPE,
                         "document.markdown",
                         100,
                         Set.of("text/markdown"),
@@ -42,7 +41,7 @@ class ContentParserRegistryTest {
         ContentParser fallbackDocument =
                 parser(
                         "document-fallback",
-                        ContentTypes.DOCUMENT,
+                        TestDocumentContent.TYPE,
                         "document.binary",
                         10,
                         Set.of("text/markdown", "application/pdf"),
@@ -74,7 +73,7 @@ class ContentParserRegistryTest {
                         List.of(
                                 parser(
                                         "document-native-text",
-                                        ContentTypes.DOCUMENT,
+                                        TestDocumentContent.TYPE,
                                         "document.text",
                                         100,
                                         Set.of("text/plain"),
@@ -99,7 +98,7 @@ class ContentParserRegistryTest {
         ContentParser first =
                 parser(
                         "document-parser",
-                        ContentTypes.DOCUMENT,
+                        TestDocumentContent.TYPE,
                         "document.text",
                         100,
                         Set.of("text/plain"),
@@ -107,7 +106,7 @@ class ContentParserRegistryTest {
         ContentParser second =
                 parser(
                         "document-parser",
-                        ContentTypes.DOCUMENT,
+                        TestDocumentContent.TYPE,
                         "document.markdown",
                         90,
                         Set.of("text/markdown"),
@@ -123,7 +122,7 @@ class ContentParserRegistryTest {
         ContentParser first =
                 parser(
                         "document-markdown-a",
-                        ContentTypes.DOCUMENT,
+                        TestDocumentContent.TYPE,
                         "document.markdown",
                         100,
                         Set.of("text/markdown"),
@@ -131,7 +130,7 @@ class ContentParserRegistryTest {
         ContentParser second =
                 parser(
                         "document-markdown-b",
-                        ContentTypes.DOCUMENT,
+                        TestDocumentContent.TYPE,
                         "document.markdown",
                         100,
                         Set.of("text/markdown"),
@@ -151,7 +150,7 @@ class ContentParserRegistryTest {
         ContentParser parser =
                 parser(
                         "document-custom",
-                        ContentTypes.DOCUMENT,
+                        TestDocumentContent.TYPE,
                         "document.pdf.tika",
                         100,
                         Set.of("application/pdf"),

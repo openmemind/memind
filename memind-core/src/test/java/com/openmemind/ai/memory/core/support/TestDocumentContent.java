@@ -15,7 +15,6 @@ package com.openmemind.ai.memory.core.support;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
@@ -26,6 +25,8 @@ import java.util.Map;
  * Test-only document-like RawContent used to decouple core tests from plugin document types.
  */
 public final class TestDocumentContent extends RawContent {
+
+    public static final String TYPE = "DOCUMENT";
 
     private final String title;
     private final String mimeType;
@@ -65,7 +66,7 @@ public final class TestDocumentContent extends RawContent {
 
     @Override
     public String contentType() {
-        return ContentTypes.DOCUMENT;
+        return TYPE;
     }
 
     @Override

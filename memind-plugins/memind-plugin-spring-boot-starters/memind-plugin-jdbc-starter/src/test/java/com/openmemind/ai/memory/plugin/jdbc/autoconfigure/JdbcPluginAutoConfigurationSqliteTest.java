@@ -48,8 +48,6 @@ import java.util.Map;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.ApplicationRunner;
-import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
@@ -224,17 +222,14 @@ class JdbcPluginAutoConfigurationSqliteTest {
     }
 
     @Test
-    @DisplayName("Seed default insight taxonomy into JDBC-backed memory store")
-    void seedsDefaultInsightTaxonomy() {
+    @DisplayName("Expose default taxonomy after first JDBC store bootstrap without runtime seeder")
+    void exposesDefaultTaxonomyWithoutRuntimeSeeder() {
         contextRunner
                 .withUserConfiguration(SqliteDataSourceConfig.class)
                 .run(
                         context -> {
                             assertThat(context).hasNotFailed();
-                            assertThat(context).hasSingleBean(ApplicationRunner.class);
-
-                            context.getBean(ApplicationRunner.class)
-                                    .run(new DefaultApplicationArguments(new String[0]));
+                            assertThat(context).doesNotHaveBean("defaultTaxonomySeeder");
 
                             MemoryStore memoryStore = context.getBean(MemoryStore.class);
 

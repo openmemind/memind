@@ -15,9 +15,9 @@ package com.openmemind.ai.memory.plugin.store.mybatis.converter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
@@ -35,7 +35,7 @@ class RawDataConverterTest {
                 new MemoryRawData(
                         "raw-1",
                         memoryId.toIdentifier(),
-                        ContentTypes.CONVERSATION,
+                        ConversationContent.TYPE,
                         "content-1",
                         new Segment(
                                 "hello",
@@ -71,7 +71,7 @@ class RawDataConverterTest {
         var dataObject = new MemoryRawDataDO();
         dataObject.setBizId("raw-legacy");
         dataObject.setMemoryId("user-1:agent-1");
-        dataObject.setType(ContentTypes.CONVERSATION);
+        dataObject.setType(ConversationContent.TYPE);
         dataObject.setContentId("content-legacy");
         dataObject.setResourceId("res-legacy");
         dataObject.setMimeType("application/json");

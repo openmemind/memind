@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.core.extraction.insight;
 
-import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
@@ -139,7 +138,8 @@ public class InsightLayer implements InsightExtractStep {
 
         var insightTypes = memoryStore.insightOperations().listInsightTypes();
         if (insightTypes.isEmpty()) {
-            insightTypes = DefaultInsightTypes.all();
+            scheduler.drainRootTasks(memoryId, 5, TimeUnit.MINUTES);
+            return;
         }
 
         var branchTypes =
@@ -175,8 +175,7 @@ public class InsightLayer implements InsightExtractStep {
         if (!result.resolvedInsightTypes().isEmpty()) {
             return result.resolvedInsightTypes();
         }
-        var stored = memoryStore.insightOperations().listInsightTypes();
-        return stored.isEmpty() ? DefaultInsightTypes.all() : stored;
+        return memoryStore.insightOperations().listInsightTypes();
     }
 
     // ===== Group by InsightType =====
@@ -203,10 +202,6 @@ public class InsightLayer implements InsightExtractStep {
             for (String insightTypeName : resolveExplicitInsightTypes(item, insightTypes)) {
                 var insightType = typeByName.get(insightTypeName);
                 if (insightType == null) {
-                    continue;
-                }
-                if (insightType.acceptContentTypes() != null
-                        && !insightType.acceptContentTypes().contains(item.contentType())) {
                     continue;
                 }
                 grouped.computeIfAbsent(insightType, ignored -> new ArrayList<>()).add(item);

@@ -161,6 +161,26 @@ class MemoryStoreAutoConfigurationTest {
 
         @Test
         @DisplayName(
+                "Do not register runtime taxonomy seeder when schema initialization is enabled")
+        void doesNotRegisterDefaultTaxonomySeederBean() {
+            new ApplicationContextRunner()
+                    .withConfiguration(
+                            AutoConfigurations.of(
+                                    MemorySchemaAutoConfiguration.class,
+                                    MemoryMybatisPlusAutoConfiguration.class,
+                                    MybatisPlusAutoConfiguration.class))
+                    .withPropertyValues(
+                            "memind.store.init-schema=true", "mybatis.lazy-initialization=true")
+                    .withUserConfiguration(FileBackedDataSourceConfig.class)
+                    .run(
+                            context -> {
+                                assertThat(context).hasNotFailed();
+                                assertThat(context).doesNotHaveBean("defaultTaxonomySeeder");
+                            });
+        }
+
+        @Test
+        @DisplayName(
                 "Persist active conversation buffer and historical message count when schema is"
                         + " initialized")
         void persistsConversationBufferStateWhenSchemaInitialized() {
@@ -262,7 +282,7 @@ class MemoryStoreAutoConfigurationTest {
     static class FileBackedDataSourceConfig {
         @Bean
         DataSource dataSource() throws IOException {
-            Path dbPath = Files.createTempFile("memind-mybatis-plus-", ".db");
+            Path dbPath = Files.createTempFile("memind-mybatis-store-", ".db");
             SQLiteDataSource dataSource = new SQLiteDataSource();
             dataSource.setUrl("jdbc:sqlite:" + dbPath);
             return dataSource;

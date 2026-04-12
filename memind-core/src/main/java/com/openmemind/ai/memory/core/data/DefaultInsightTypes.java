@@ -29,14 +29,6 @@ public final class DefaultInsightTypes {
 
     public static final int DEFAULT_TARGET_TOKENS = 600;
 
-    private static final List<String> USER_TEXTUAL_CONTENT_TYPES =
-            List.of(
-                    ContentTypes.CONVERSATION,
-                    ContentTypes.DOCUMENT,
-                    ContentTypes.IMAGE,
-                    ContentTypes.AUDIO);
-    private static final List<String> CONVERSATION_ONLY = List.of(ContentTypes.CONVERSATION);
-
     // ── USER BRANCH ──────────────────────────────────────────────────────────
 
     public static MemoryInsightType identity() {
@@ -56,8 +48,7 @@ public final class DefaultInsightTypes {
                 null,
                 InsightAnalysisMode.BRANCH,
                 null,
-                MemoryScope.USER,
-                USER_TEXTUAL_CONTENT_TYPES);
+                MemoryScope.USER);
     }
 
     public static MemoryInsightType preferences() {
@@ -77,8 +68,7 @@ public final class DefaultInsightTypes {
                 null,
                 InsightAnalysisMode.BRANCH,
                 null,
-                MemoryScope.USER,
-                USER_TEXTUAL_CONTENT_TYPES);
+                MemoryScope.USER);
     }
 
     public static MemoryInsightType relationships() {
@@ -97,8 +87,7 @@ public final class DefaultInsightTypes {
                 null,
                 InsightAnalysisMode.BRANCH,
                 null,
-                MemoryScope.USER,
-                USER_TEXTUAL_CONTENT_TYPES);
+                MemoryScope.USER);
     }
 
     public static MemoryInsightType experiences() {
@@ -117,8 +106,7 @@ public final class DefaultInsightTypes {
                 null,
                 InsightAnalysisMode.BRANCH,
                 null,
-                MemoryScope.USER,
-                USER_TEXTUAL_CONTENT_TYPES);
+                MemoryScope.USER);
     }
 
     public static MemoryInsightType behavior() {
@@ -138,8 +126,7 @@ public final class DefaultInsightTypes {
                 null,
                 InsightAnalysisMode.BRANCH,
                 null,
-                MemoryScope.USER,
-                USER_TEXTUAL_CONTENT_TYPES);
+                MemoryScope.USER);
     }
 
     // ── AGENT BRANCH ─────────────────────────────────────────────────────────
@@ -159,8 +146,7 @@ public final class DefaultInsightTypes {
                 null,
                 InsightAnalysisMode.BRANCH,
                 null,
-                MemoryScope.AGENT,
-                List.of(ContentTypes.CONVERSATION));
+                MemoryScope.AGENT);
     }
 
     public static MemoryInsightType playbooks() {
@@ -177,8 +163,7 @@ public final class DefaultInsightTypes {
                 null,
                 InsightAnalysisMode.BRANCH,
                 null,
-                MemoryScope.AGENT,
-                List.of(ContentTypes.CONVERSATION));
+                MemoryScope.AGENT);
     }
 
     public static MemoryInsightType resolutions() {
@@ -195,8 +180,7 @@ public final class DefaultInsightTypes {
                 null,
                 InsightAnalysisMode.BRANCH,
                 null,
-                MemoryScope.AGENT,
-                List.of(ContentTypes.CONVERSATION));
+                MemoryScope.AGENT);
     }
 
     // ── ROOT ─────────────────────────────────────────────────────────────────
@@ -217,8 +201,7 @@ public final class DefaultInsightTypes {
                 null,
                 InsightAnalysisMode.ROOT,
                 null,
-                MemoryScope.USER,
-                null);
+                MemoryScope.USER);
     }
 
     public static MemoryInsightType interaction() {
@@ -237,8 +220,7 @@ public final class DefaultInsightTypes {
                 null,
                 InsightAnalysisMode.ROOT,
                 null,
-                MemoryScope.USER,
-                null);
+                MemoryScope.USER);
     }
 
     public static List<MemoryInsightType> all() {

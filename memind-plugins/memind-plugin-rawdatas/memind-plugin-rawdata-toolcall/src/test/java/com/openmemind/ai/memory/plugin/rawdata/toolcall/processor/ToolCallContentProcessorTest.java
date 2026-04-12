@@ -38,7 +38,7 @@ class ToolCallContentProcessorTest {
     @Test
     @DisplayName("contentType() should return TOOL_CALL")
     void contentTypeIsToolCall() {
-        assertThat(processor.contentType()).isEqualTo("TOOL_CALL");
+        assertThat(processor.contentType()).isEqualTo(ToolCallContent.TYPE);
     }
 
     @Test

@@ -15,10 +15,10 @@ package com.openmemind.ai.memory.plugin.rawdata.audio.support;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
+import com.openmemind.ai.memory.core.extraction.source.DirectContentSource;
 import com.openmemind.ai.memory.plugin.rawdata.audio.content.AudioContent;
 import java.util.List;
 import java.util.Map;
@@ -46,7 +46,9 @@ class AudioExtractionRequestsTest {
         var request =
                 AudioExtractionRequests.audio(DefaultMemoryId.of("user-1", "agent-1"), content);
 
-        assertThat(request.contentType()).isEqualTo(ContentTypes.AUDIO);
+        assertThat(request.source()).isInstanceOf(DirectContentSource.class);
+        assertThat(request.content()).isSameAs(((DirectContentSource) request.source()).content());
+        assertThat(request.content().contentType()).isEqualTo(AudioContent.TYPE);
         assertThat(request.metadata())
                 .containsEntry("sourceKind", "DIRECT")
                 .containsEntry("parserId", "direct")

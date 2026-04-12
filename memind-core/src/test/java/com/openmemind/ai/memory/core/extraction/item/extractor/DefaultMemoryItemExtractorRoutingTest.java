@@ -19,10 +19,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionStrategy;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -78,7 +78,7 @@ class DefaultMemoryItemExtractorRoutingTest {
             var config =
                     new ItemExtractionConfig(
                             com.openmemind.ai.memory.core.data.enums.MemoryScope.USER,
-                            ContentTypes.CONVERSATION,
+                            ConversationContent.TYPE,
                             false,
                             "en");
 

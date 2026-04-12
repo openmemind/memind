@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.audio.plugin;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
@@ -22,6 +21,7 @@ import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.plugin.rawdata.audio.chunk.TranscriptSegmentChunker;
 import com.openmemind.ai.memory.plugin.rawdata.audio.config.AudioExtractionOptions;
+import com.openmemind.ai.memory.plugin.rawdata.audio.content.AudioContent;
 import com.openmemind.ai.memory.plugin.rawdata.audio.processor.AudioContentProcessor;
 import java.util.List;
 import java.util.Set;
@@ -52,7 +52,7 @@ public final class AudioRawDataPlugin implements RawDataPlugin {
     public List<RawDataIngestionPolicy> ingestionPolicies() {
         return List.of(
                 new RawDataIngestionPolicy(
-                        ContentTypes.AUDIO,
+                        AudioContent.TYPE,
                         Set.of(ContentGovernanceType.AUDIO_TRANSCRIPT),
                         options.sourceLimit()));
     }

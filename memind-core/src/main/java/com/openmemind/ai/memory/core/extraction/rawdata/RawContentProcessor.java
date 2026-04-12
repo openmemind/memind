@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.core.extraction.rawdata;
 
+import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionStrategy;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.TruncateCaptionGenerator;
@@ -49,6 +50,11 @@ public interface RawContentProcessor<T extends RawContent> {
     /** Item extraction strategy. Override to provide custom extraction logic. Returns null to use framework default. */
     default ItemExtractionStrategy itemExtractionStrategy() {
         return null;
+    }
+
+    /** Memory categories this content type is allowed to emit during item extraction. */
+    default java.util.Set<MemoryCategory> allowedCategories() {
+        return MemoryCategory.userCategories();
     }
 
     /** Whether content id hashing should include source identity in addition to the content fingerprint. */

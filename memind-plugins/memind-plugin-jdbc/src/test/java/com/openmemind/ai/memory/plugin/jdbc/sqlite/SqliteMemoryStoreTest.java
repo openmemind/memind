@@ -16,7 +16,7 @@ package com.openmemind.ai.memory.plugin.jdbc.sqlite;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
@@ -30,11 +30,12 @@ import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeConfig;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
-import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallContentTypes;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.content.ToolCallContent;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -52,6 +53,7 @@ import org.sqlite.SQLiteDataSource;
 class SqliteMemoryStoreTest {
 
     private static final Instant BASE_TIME = Instant.parse("2026-03-22T00:00:00Z");
+    private static final String DOCUMENT_TYPE = "DOCUMENT";
 
     @TempDir Path tempDir;
 
@@ -95,7 +97,7 @@ class SqliteMemoryStoreTest {
                 new MemoryRawData(
                         "rd-1",
                         memoryId.toIdentifier(),
-                        ContentTypes.CONVERSATION,
+                        ConversationContent.TYPE,
                         "content-1",
                         new Segment(
                                 "hello world",
@@ -122,7 +124,7 @@ class SqliteMemoryStoreTest {
                 new MemoryRawData(
                         "rd-1",
                         memoryId.toIdentifier(),
-                        ToolCallContentTypes.TOOL_CALL,
+                        ToolCallContent.TYPE,
                         "content-1",
                         new Segment(
                                 "updated content",
@@ -141,7 +143,7 @@ class SqliteMemoryStoreTest {
         store.upsertRawData(memoryId, List.of(updated));
 
         MemoryRawData byContent = store.getRawDataByContentId(memoryId, "content-1").orElseThrow();
-        assertThat(byContent.contentType()).isEqualTo(ToolCallContentTypes.TOOL_CALL);
+        assertThat(byContent.contentType()).isEqualTo(ToolCallContent.TYPE);
         assertThat(byContent.caption()).isEqualTo("caption-2");
         assertThat(byContent.segment()).isEqualTo(updated.segment());
         assertThat(store.listRawData(memoryId)).hasSize(1);
@@ -161,7 +163,7 @@ class SqliteMemoryStoreTest {
                 new MemoryRawData(
                         "rd-runtime",
                         memoryId.toIdentifier(),
-                        ContentTypes.CONVERSATION,
+                        ConversationContent.TYPE,
                         "content-runtime",
                         new Segment(
                                 "hello world",
@@ -204,7 +206,7 @@ class SqliteMemoryStoreTest {
                 memoryId.userId(),
                 memoryId.agentId(),
                 memoryId.toIdentifier(),
-                ContentTypes.CONVERSATION,
+                ConversationContent.TYPE,
                 "content-legacy-segment",
                 legacySegmentJson,
                 "legacy caption",
@@ -232,7 +234,7 @@ class SqliteMemoryStoreTest {
                 new MemoryRawData(
                         "rd-resource",
                         memoryId.toIdentifier(),
-                        ContentTypes.DOCUMENT,
+                        DOCUMENT_TYPE,
                         "content-resource",
                         Segment.single("hello multimodal"),
                         "caption-resource",
@@ -292,7 +294,7 @@ class SqliteMemoryStoreTest {
                 memoryId.userId(),
                 memoryId.agentId(),
                 memoryId.toIdentifier(),
-                ContentTypes.CONVERSATION,
+                ConversationContent.TYPE,
                 "content-legacy",
                 "legacy caption");
 
@@ -345,7 +347,7 @@ class SqliteMemoryStoreTest {
                         "stable profile fact",
                         MemoryScope.USER,
                         MemoryCategory.PROFILE,
-                        ContentTypes.CONVERSATION,
+                        ConversationContent.TYPE,
                         "vec-103",
                         "rd-103",
                         "hash-103",
@@ -381,8 +383,7 @@ class SqliteMemoryStoreTest {
                         BASE_TIME.minusSeconds(10),
                         InsightAnalysisMode.BRANCH,
                         InsightTreeConfig.defaults(),
-                        MemoryScope.USER,
-                        null);
+                        MemoryScope.USER);
 
         MemoryInsightType updated =
                 new MemoryInsightType(
@@ -397,8 +398,7 @@ class SqliteMemoryStoreTest {
                         BASE_TIME,
                         InsightAnalysisMode.ROOT,
                         new InsightTreeConfig(4, 3, 2, 900),
-                        MemoryScope.USER,
-                        null);
+                        MemoryScope.USER);
 
         store.upsertInsightTypes(List.of(initial));
         store.upsertInsightTypes(List.of(updated));
@@ -413,7 +413,8 @@ class SqliteMemoryStoreTest {
         assertThat(fetched.scope()).isEqualTo(MemoryScope.USER);
         assertThat(store.listInsightTypes())
                 .extracting(MemoryInsightType::name)
-                .containsExactly("profile");
+                .containsExactlyInAnyOrderElementsOf(
+                        DefaultInsightTypes.all().stream().map(MemoryInsightType::name).toList());
     }
 
     @Test
@@ -568,7 +569,7 @@ class SqliteMemoryStoreTest {
         return new MemoryRawData(
                 id,
                 memoryId.toIdentifier(),
-                ContentTypes.CONVERSATION,
+                ConversationContent.TYPE,
                 contentId,
                 new Segment(
                         "content-" + id,
@@ -593,7 +594,7 @@ class SqliteMemoryStoreTest {
                 content,
                 MemoryScope.USER,
                 MemoryCategory.PROFILE,
-                ContentTypes.CONVERSATION,
+                ConversationContent.TYPE,
                 vectorId,
                 rawDataId,
                 contentHash,

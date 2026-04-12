@@ -86,7 +86,6 @@ class BranchAggregationPromptsTest {
                 null,
                 InsightAnalysisMode.BRANCH,
                 null,
-                null,
                 null);
     }
 

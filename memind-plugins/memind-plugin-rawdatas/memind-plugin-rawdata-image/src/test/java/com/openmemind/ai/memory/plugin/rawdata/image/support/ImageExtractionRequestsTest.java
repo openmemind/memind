@@ -15,10 +15,10 @@ package com.openmemind.ai.memory.plugin.rawdata.image.support;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
+import com.openmemind.ai.memory.core.extraction.source.DirectContentSource;
 import com.openmemind.ai.memory.plugin.rawdata.image.content.ImageContent;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -49,7 +49,9 @@ class ImageExtractionRequestsTest {
         var request =
                 ImageExtractionRequests.image(DefaultMemoryId.of("user-1", "agent-1"), content);
 
-        assertThat(request.contentType()).isEqualTo(ContentTypes.IMAGE);
+        assertThat(request.source()).isInstanceOf(DirectContentSource.class);
+        assertThat(request.content()).isSameAs(((DirectContentSource) request.source()).content());
+        assertThat(request.content().contentType()).isEqualTo(ImageContent.TYPE);
         assertThat(request.metadata())
                 .containsEntry("width", 1280)
                 .containsEntry("sourceKind", "DIRECT")

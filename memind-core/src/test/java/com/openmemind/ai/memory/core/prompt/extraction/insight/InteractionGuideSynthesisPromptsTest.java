@@ -85,7 +85,6 @@ class InteractionGuideSynthesisPromptsTest {
                 null,
                 InsightAnalysisMode.ROOT,
                 null,
-                null,
                 null);
     }
 }

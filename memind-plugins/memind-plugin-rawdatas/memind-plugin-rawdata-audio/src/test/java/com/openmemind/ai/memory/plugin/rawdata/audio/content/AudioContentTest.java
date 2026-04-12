@@ -17,7 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
@@ -50,7 +49,7 @@ class AudioContentTest {
                         "file:///tmp/meeting.mp3",
                         Map.of("durationSeconds", 3));
 
-        assertThat(content.contentType()).isEqualTo(ContentTypes.AUDIO);
+        assertThat(content.contentType()).isEqualTo(AudioContent.TYPE);
         assertThat(content.toContentString()).isEqualTo("Hello everyone, thanks for joining.");
         assertThat(content.getContentId())
                 .isEqualTo(HashUtils.sampledSha256("Hello everyone, thanks for joining."));

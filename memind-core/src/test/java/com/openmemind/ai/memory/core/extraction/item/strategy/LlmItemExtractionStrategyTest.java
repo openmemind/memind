@@ -15,22 +15,23 @@ package com.openmemind.ai.memory.core.extraction.item.strategy;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.item.support.ForesightExtractionResponse;
 import com.openmemind.ai.memory.core.extraction.item.support.MemoryItemExtractionResponse;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptType;
+import com.openmemind.ai.memory.core.support.TestDocumentContent;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -53,13 +54,18 @@ class LlmItemExtractionStrategyTest {
                                 PromptType.MEMORY_ITEM_UNIFIED,
                                 "Custom unified extraction instruction")
                         .build();
-        var strategy = new LlmItemExtractionStrategy(client, Set.of(), registry);
+        var strategy = new LlmItemExtractionStrategy(client, registry);
 
         StepVerifier.create(
                         strategy.extract(
                                 List.of(sampleSegment()),
                                 List.of(),
-                                ItemExtractionConfig.defaults()))
+                                new ItemExtractionConfig(
+                                        MemoryScope.USER,
+                                        ConversationContent.TYPE,
+                                        MemoryCategory.userCategories(),
+                                        false,
+                                        "English")))
                 .expectNext(List.of())
                 .verifyComplete();
 
@@ -86,10 +92,14 @@ class LlmItemExtractionStrategyTest {
                 InMemoryPromptRegistry.builder()
                         .override(PromptType.FORESIGHT, "Custom foresight instruction")
                         .build();
-        var strategy = new LlmItemExtractionStrategy(client, Set.of(), registry);
+        var strategy = new LlmItemExtractionStrategy(client, registry);
         var config =
                 new ItemExtractionConfig(
-                        MemoryScope.USER, ContentTypes.CONVERSATION, true, "English");
+                        MemoryScope.USER,
+                        ConversationContent.TYPE,
+                        MemoryCategory.userCategories(),
+                        true,
+                        "English");
 
         StepVerifier.create(strategy.extract(List.of(sampleSegment()), List.of(), config))
                 .expectNext(List.of())
@@ -103,6 +113,33 @@ class LlmItemExtractionStrategyTest {
                                                         .content()
                                                         .contains("Custom foresight instruction")))
                 .isTrue();
+    }
+
+    @Test
+    @DisplayName("extract should render category context from config allowedCategories")
+    void extractShouldRenderCategoryContextFromConfigAllowedCategories() {
+        var client =
+                new FakeStructuredChatClient(
+                        new MemoryItemExtractionResponse(List.of()),
+                        new ForesightExtractionResponse(List.of()));
+        var strategy =
+                new LlmItemExtractionStrategy(client, InMemoryPromptRegistry.builder().build());
+        var config =
+                new ItemExtractionConfig(
+                        MemoryScope.USER,
+                        TestDocumentContent.TYPE,
+                        MemoryCategory.userCategories(),
+                        false,
+                        "English");
+
+        StepVerifier.create(strategy.extract(List.of(sampleSegment()), List.of(), config))
+                .expectNext(List.of())
+                .verifyComplete();
+
+        assertThat(client.allMessages()).hasSize(1);
+        assertThat(client.allMessages().getFirst().getFirst().content()).contains("[USER Scope]");
+        assertThat(client.allMessages().getFirst().getFirst().content())
+                .doesNotContain("[AGENT Scope]");
     }
 
     @Test

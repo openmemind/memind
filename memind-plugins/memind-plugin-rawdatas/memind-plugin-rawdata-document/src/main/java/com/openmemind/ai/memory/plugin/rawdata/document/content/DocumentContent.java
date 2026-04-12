@@ -15,7 +15,6 @@ package com.openmemind.ai.memory.plugin.rawdata.document.content;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
@@ -28,6 +27,8 @@ import java.util.Map;
  * Parsed document raw content.
  */
 public final class DocumentContent extends RawContent {
+
+    public static final String TYPE = "DOCUMENT";
 
     private final String title;
     private final String mimeType;
@@ -58,7 +59,7 @@ public final class DocumentContent extends RawContent {
 
     @Override
     public String contentType() {
-        return ContentTypes.DOCUMENT;
+        return TYPE;
     }
 
     @Override

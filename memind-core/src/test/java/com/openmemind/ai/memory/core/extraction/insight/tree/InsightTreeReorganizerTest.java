@@ -804,8 +804,7 @@ class InsightTreeReorganizerTest {
                 Instant.now(),
                 InsightAnalysisMode.BRANCH,
                 null,
-                scope,
-                null);
+                scope);
     }
 
     private MemoryInsightType createRootInsightType(String name) {
@@ -825,8 +824,7 @@ class InsightTreeReorganizerTest {
                 Instant.now(),
                 InsightAnalysisMode.ROOT,
                 null,
-                scope,
-                null);
+                scope);
     }
 
     @Nested

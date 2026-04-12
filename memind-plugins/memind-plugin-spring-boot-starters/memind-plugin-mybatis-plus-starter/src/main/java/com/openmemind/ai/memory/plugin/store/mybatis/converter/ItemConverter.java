@@ -13,12 +13,12 @@
  */
 package com.openmemind.ai.memory.plugin.store.mybatis.converter;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryItemDO;
 import java.time.Instant;
 
@@ -36,7 +36,7 @@ public final class ItemConverter {
         dataObject.setScope(record.scope() != null ? record.scope().name() : null);
         dataObject.setCategory(record.category() != null ? record.category().name() : null);
         dataObject.setRawDataType(
-                record.contentType() != null ? record.contentType() : ContentTypes.CONVERSATION);
+                record.contentType() != null ? record.contentType() : ConversationContent.TYPE);
         dataObject.setVectorId(record.vectorId());
         dataObject.setRawDataId(record.rawDataId());
         dataObject.setContentHash(record.contentHash());
@@ -72,7 +72,7 @@ public final class ItemConverter {
 
     private static String parseContentType(String value) {
         if (value == null || value.isBlank()) {
-            return ContentTypes.CONVERSATION;
+            return ConversationContent.TYPE;
         }
         return value;
     }

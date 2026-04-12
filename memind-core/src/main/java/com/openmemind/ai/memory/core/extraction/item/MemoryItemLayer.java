@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.core.extraction.item;
 
-import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
@@ -56,14 +55,13 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
     private final MemoryVector vector;
     private final IdUtils.SnowflakeIdGenerator idGenerator;
     private final LlmSelfVerificationStep selfVerificationStep; // nullable
-    private final Set<MemoryCategory> categories; // nullable, null = all
 
     public MemoryItemLayer(
             MemoryItemExtractor extractor,
             MemoryItemDeduplicator deduplicator,
             MemoryStore memoryStore,
             MemoryVector vector) {
-        this(extractor, deduplicator, memoryStore, vector, IdUtils.snowflake(), null, null);
+        this(extractor, deduplicator, memoryStore, vector, IdUtils.snowflake(), null);
     }
 
     public MemoryItemLayer(
@@ -78,8 +76,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 memoryStore,
                 vector,
                 IdUtils.snowflake(),
-                selfVerificationStep,
-                null);
+                selfVerificationStep);
     }
 
     public MemoryItemLayer(
@@ -89,24 +86,12 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
             MemoryVector vector,
             IdUtils.SnowflakeIdGenerator idGenerator,
             LlmSelfVerificationStep selfVerificationStep) {
-        this(extractor, deduplicator, memoryStore, vector, idGenerator, selfVerificationStep, null);
-    }
-
-    public MemoryItemLayer(
-            MemoryItemExtractor extractor,
-            MemoryItemDeduplicator deduplicator,
-            MemoryStore memoryStore,
-            MemoryVector vector,
-            IdUtils.SnowflakeIdGenerator idGenerator,
-            LlmSelfVerificationStep selfVerificationStep,
-            Set<MemoryCategory> categories) {
         this.extractor = extractor;
         this.deduplicator = deduplicator;
         this.memoryStore = memoryStore;
         this.vector = vector;
         this.idGenerator = idGenerator;
         this.selfVerificationStep = selfVerificationStep;
-        this.categories = categories;
     }
 
     @Override
@@ -118,7 +103,10 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
         // Phase 1: LLM extraction + filtering
         return extractor
                 .extract(rawDataResult.segments(), resolvedInsightTypes, config)
-                .map(entries -> filterEntries(entries, resolvedInsightTypes))
+                .map(
+                        entries ->
+                                filterEntries(
+                                        entries, resolvedInsightTypes, config.allowedCategories()))
                 // SelfVerification (optional)
                 .flatMap(
                         entries ->
@@ -126,7 +114,12 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                                         entries,
                                         rawDataResult.segments(),
                                         resolvedInsightTypes,
+                                        config.allowedCategories(),
                                         config.language()))
+                .map(
+                        entries ->
+                                filterEntries(
+                                        entries, resolvedInsightTypes, config.allowedCategories()))
                 // Phase 2: deduplication
                 .flatMap(entries -> deduplicator.deduplicate(memoryId, entries))
                 .map(DeduplicationResult::newEntries)
@@ -144,7 +137,9 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
     // ===== Phase 1: filtering + normalization =====
 
     private List<ExtractedMemoryEntry> filterEntries(
-            List<ExtractedMemoryEntry> entries, List<MemoryInsightType> resolvedInsightTypes) {
+            List<ExtractedMemoryEntry> entries,
+            List<MemoryInsightType> resolvedInsightTypes,
+            java.util.Set<MemoryCategory> allowedCategories) {
         if (entries.isEmpty()) {
             return entries;
         }
@@ -159,6 +154,8 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 .filter(entry -> entry.content() != null && !entry.content().isBlank())
                 // insightTypes normalization
                 .map(entry -> entryWithNormalizedInsightTypes(entry, allowedInsightTypes))
+                .map(entry -> entryWithValidatedCategory(entry, allowedCategories))
+                .filter(entry -> entry != null)
                 // In-batch deduplication (keep the one with the highest confidence)
                 .collect(Collectors.groupingBy(ExtractedMemoryEntry::content))
                 .values()
@@ -204,12 +201,25 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 entry.category());
     }
 
+    private ExtractedMemoryEntry entryWithValidatedCategory(
+            ExtractedMemoryEntry entry, java.util.Set<MemoryCategory> allowedCategories) {
+        if (entry.category() == null || allowedCategories == null) {
+            return entry;
+        }
+        return MemoryCategory.byName(entry.category())
+                        .filter(allowedCategories::contains)
+                        .isPresent()
+                ? entry
+                : null;
+    }
+
     // ===== SelfVerification (optional) =====
 
     private Mono<List<ExtractedMemoryEntry>> applySelfVerification(
             List<ExtractedMemoryEntry> entries,
             List<ParsedSegment> segments,
             List<MemoryInsightType> insightTypes,
+            java.util.Set<MemoryCategory> allowedCategories,
             String language) {
         if (selfVerificationStep == null) {
             return Mono.just(entries);
@@ -233,7 +243,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                         referenceTime,
                         insightTypes,
                         userName,
-                        categories,
+                        allowedCategories,
                         language,
                         observedAt)
                 .map(
@@ -354,8 +364,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
     }
 
     private List<MemoryInsightType> resolveInsightTypes() {
-        List<MemoryInsightType> fromStore = memoryStore.insightOperations().listInsightTypes();
-        return fromStore.isEmpty() ? DefaultInsightTypes.all() : fromStore;
+        return memoryStore.insightOperations().listInsightTypes();
     }
 
     private String normalizeKey(String key) {

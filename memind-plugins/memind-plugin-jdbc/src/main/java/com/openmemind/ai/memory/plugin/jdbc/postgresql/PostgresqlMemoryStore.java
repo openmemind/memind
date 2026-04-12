@@ -15,7 +15,7 @@ package com.openmemind.ai.memory.plugin.jdbc.postgresql;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
@@ -29,6 +29,7 @@ import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeConfig;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
@@ -40,6 +41,7 @@ import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaBootstrap;
+import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaInitResult;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JdbcExecutor;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JsonCodec;
 import java.sql.Connection;
@@ -99,9 +101,13 @@ public class PostgresqlMemoryStore
             ObjectMapper objectMapper,
             boolean createIfNotExist) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
-        StoreSchemaBootstrap.ensurePostgresql(this.dataSource, createIfNotExist);
         this.jsonHelper = new JsonCodec(Objects.requireNonNull(objectMapper, "objectMapper"));
         this.resourceStore = resourceStore;
+        StoreSchemaInitResult initResult =
+                StoreSchemaBootstrap.ensurePostgresql(this.dataSource, createIfNotExist);
+        if (initResult.createdInsightTypeTable()) {
+            upsertInsightTypes(DefaultInsightTypes.all());
+        }
     }
 
     @Override
@@ -813,7 +819,7 @@ public class PostgresqlMemoryStore
         statement.setString(4, scope.memoryId());
         statement.setString(
                 5,
-                rawData.contentType() != null ? rawData.contentType() : ContentTypes.CONVERSATION);
+                rawData.contentType() != null ? rawData.contentType() : ConversationContent.TYPE);
         statement.setString(6, rawData.contentId());
         setJsonb(statement, 7, toSegmentJson(rawData.segment()));
         statement.setString(8, rawData.caption());
@@ -863,7 +869,7 @@ public class PostgresqlMemoryStore
         statement.setString(
                 13, item.type() != null ? item.type().name() : MemoryItemType.FACT.name());
         statement.setString(
-                14, item.contentType() != null ? item.contentType() : ContentTypes.CONVERSATION);
+                14, item.contentType() != null ? item.contentType() : ConversationContent.TYPE);
         setJsonb(statement, 15, jsonHelper.toJson(item.metadata()));
         setTimestamp(statement, 16, item.createdAt() != null ? item.createdAt() : now);
         setTimestamp(statement, 17, now);
@@ -978,8 +984,7 @@ public class PostgresqlMemoryStore
                 parseInstant(resultSet.getTimestamp("updated_at")),
                 parseInsightAnalysisMode(resultSet.getString("analysis_mode")),
                 jsonHelper.fromJson(resultSet.getString("tree_config"), InsightTreeConfig.class),
-                parseScope(resultSet.getString("scope")),
-                null);
+                parseScope(resultSet.getString("scope")));
     }
 
     private MemoryInsight mapInsight(ResultSet resultSet) throws SQLException {
@@ -1109,7 +1114,7 @@ public class PostgresqlMemoryStore
 
     private String parseContentType(String value) {
         if (value == null || value.isBlank()) {
-            return ContentTypes.CONVERSATION;
+            return ConversationContent.TYPE;
         }
         return value;
     }

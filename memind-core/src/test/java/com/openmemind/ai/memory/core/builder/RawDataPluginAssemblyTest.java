@@ -18,7 +18,6 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
@@ -34,6 +33,7 @@ import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.DefaultContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.SourceDescriptor;
 import com.openmemind.ai.memory.core.resource.SourceKind;
+import com.openmemind.ai.memory.core.support.TestDocumentContent;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,6 +42,9 @@ import org.mockito.Mockito;
 import reactor.core.publisher.Mono;
 
 class RawDataPluginAssemblyTest {
+
+    private static final String IMAGE_TYPE = "IMAGE";
+    private static final String AUDIO_TYPE = "AUDIO";
 
     @Test
     void duplicatePluginIdFailsFast() {
@@ -86,13 +89,13 @@ class RawDataPluginAssemblyTest {
                         List.of(
                                 testParser(
                                         "image-vision",
-                                        ContentTypes.IMAGE,
+                                        IMAGE_TYPE,
                                         "image.caption-ocr",
                                         Set.of("image/png"),
                                         Set.of(".png")),
                                 testParser(
                                         "audio-transcription",
-                                        ContentTypes.AUDIO,
+                                        AUDIO_TYPE,
                                         "audio.transcript",
                                         Set.of("audio/mpeg"),
                                         Set.of(".mp3"))),
@@ -118,8 +121,8 @@ class RawDataPluginAssemblyTest {
                         ContentCapability::contentType,
                         ContentCapability::contentProfile)
                 .containsExactlyInAnyOrder(
-                        tuple("image-vision", ContentTypes.IMAGE, "image.caption-ocr"),
-                        tuple("audio-transcription", ContentTypes.AUDIO, "audio.transcript"));
+                        tuple("image-vision", IMAGE_TYPE, "image.caption-ocr"),
+                        tuple("audio-transcription", AUDIO_TYPE, "audio.transcript"));
     }
 
     @Test
@@ -161,7 +164,7 @@ class RawDataPluginAssemblyTest {
                     public List<RawDataIngestionPolicy> ingestionPolicies() {
                         return List.of(
                                 new RawDataIngestionPolicy(
-                                        ContentTypes.DOCUMENT,
+                                        TestDocumentContent.TYPE,
                                         Set.of(ContentGovernanceType.DOCUMENT_BINARY),
                                         new SourceLimitOptions(128)));
                     }
@@ -186,7 +189,7 @@ class RawDataPluginAssemblyTest {
                                 registry.resolve(
                                                 new ContentCapability(
                                                         "document-test",
-                                                        ContentTypes.DOCUMENT,
+                                                        TestDocumentContent.TYPE,
                                                         "document.binary",
                                                         ContentGovernanceType.DOCUMENT_BINARY,
                                                         Set.of("application/pdf"),
@@ -278,7 +281,7 @@ class RawDataPluginAssemblyTest {
     private static ContentParser testParser(String parserId) {
         return testParser(
                 parserId,
-                ContentTypes.DOCUMENT,
+                TestDocumentContent.TYPE,
                 "document.binary",
                 Set.of("application/pdf"),
                 Set.of(".pdf"));

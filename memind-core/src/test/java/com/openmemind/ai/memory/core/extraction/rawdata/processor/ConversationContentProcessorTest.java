@@ -19,6 +19,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig;
@@ -48,13 +49,26 @@ class ConversationContentProcessorTest {
     @Test
     @DisplayName("contentType() should return CONVERSATION")
     void contentTypeIsConversation() {
-        assertThat(processor.contentType()).isEqualTo("CONVERSATION");
+        assertThat(processor.contentType()).isEqualTo(ConversationContent.TYPE);
     }
 
     @Test
     @DisplayName("supportsInsight() should return true")
     void supportsInsightIsTrue() {
         assertThat(processor.supportsInsight()).isTrue();
+    }
+
+    @Test
+    @DisplayName("allowedCategories() should include user and agent conversation categories")
+    void allowedCategoriesIncludeConversationAgentCategories() {
+        assertThat(processor.allowedCategories())
+                .containsExactlyInAnyOrder(
+                        MemoryCategory.PROFILE,
+                        MemoryCategory.BEHAVIOR,
+                        MemoryCategory.EVENT,
+                        MemoryCategory.DIRECTIVE,
+                        MemoryCategory.PLAYBOOK,
+                        MemoryCategory.RESOLUTION);
     }
 
     @Test

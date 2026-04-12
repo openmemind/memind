@@ -15,7 +15,6 @@ package com.openmemind.ai.memory.plugin.rawdata.image.content;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
@@ -26,6 +25,8 @@ import java.util.Map;
  * Parsed image raw content.
  */
 public final class ImageContent extends RawContent {
+
+    public static final String TYPE = "IMAGE";
 
     private final String mimeType;
     private final String description;
@@ -53,7 +54,7 @@ public final class ImageContent extends RawContent {
 
     @Override
     public String contentType() {
-        return ContentTypes.IMAGE;
+        return TYPE;
     }
 
     @Override

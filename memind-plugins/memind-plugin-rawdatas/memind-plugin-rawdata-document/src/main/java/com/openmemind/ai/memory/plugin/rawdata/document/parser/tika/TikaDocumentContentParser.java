@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.document.parser.tika;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.resource.ContentParser;
@@ -48,7 +47,7 @@ public final class TikaDocumentContentParser implements ContentParser {
 
     @Override
     public String contentType() {
-        return ContentTypes.DOCUMENT;
+        return DocumentContent.TYPE;
     }
 
     @Override

@@ -11,13 +11,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.data;
+package com.openmemind.ai.memory.plugin.jdbc.internal.schema;
 
-import java.util.List;
+public record StoreSchemaInitResult(boolean createdStoreSchema, boolean createdInsightTypeTable) {
 
-/**
- * Agent Self-Evolution Guide
- *
- */
-public record SelfImprovementGuide(
-        List<String> guidelines, List<String> topIssues, List<String> strengths) {}
+    public static StoreSchemaInitResult unchanged() {
+        return new StoreSchemaInitResult(false, false);
+    }
+}

@@ -18,7 +18,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions;
 import com.openmemind.ai.memory.core.builder.SourceLimitOptions;
 import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import com.openmemind.ai.memory.plugin.rawdata.audio.chunk.TranscriptSegmentChunker;
@@ -39,7 +38,7 @@ class AudioContentProcessorTest {
                 new AudioContentProcessor(
                         new TranscriptSegmentChunker(), AudioExtractionOptions.defaults());
 
-        assertThat(processor.contentType()).isEqualTo(ContentTypes.AUDIO);
+        assertThat(processor.contentType()).isEqualTo(AudioContent.TYPE);
         assertThat(processor.supportsInsight()).isTrue();
     }
 

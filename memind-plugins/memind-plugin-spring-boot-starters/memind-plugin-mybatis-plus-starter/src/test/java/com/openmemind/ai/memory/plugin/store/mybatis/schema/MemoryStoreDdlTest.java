@@ -15,14 +15,21 @@ package com.openmemind.ai.memory.plugin.store.mybatis.schema;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import java.lang.reflect.Proxy;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.AbstractDataSource;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
+import org.sqlite.SQLiteDataSource;
 
 @DisplayName("Memory store DDL")
 class MemoryStoreDdlTest {
@@ -69,6 +76,52 @@ class MemoryStoreDdlTest {
                         "db/migration/postgresql/V1__init_store.sql",
                         "db/migration/postgresql/V2__init_text_search.sql",
                         "db/migration/postgresql/V3__multimodal.sql");
+    }
+
+    @Test
+    @DisplayName("Seed default taxonomy only when insight type table is first created")
+    void seedsDefaultsWhenInsightTypeTableIsFirstCreated(@TempDir Path tempDir) {
+        SQLiteDataSource dataSource = new SQLiteDataSource();
+        dataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("fresh.db"));
+
+        MemoryStoreDdl ddl = new MemoryStoreDdl(dataSource, detector);
+        ddl.runScript(
+                ds -> {
+                    ResourceDatabasePopulator populator =
+                            new ResourceDatabasePopulator(
+                                    new ClassPathResource(
+                                            "db/migration/sqlite/V1__init_store.sql"));
+                    populator.execute(ds);
+                });
+
+        Integer count =
+                new JdbcTemplate(dataSource)
+                        .queryForObject("SELECT COUNT(*) FROM memory_insight_type", Integer.class);
+
+        assertThat(count).isEqualTo(DefaultInsightTypes.all().size());
+    }
+
+    @Test
+    @DisplayName("Do not seed default taxonomy when insight type table already exists")
+    void doesNotSeedDefaultsWhenInsightTypeTableAlreadyExists(@TempDir Path tempDir) {
+        SQLiteDataSource dataSource = new SQLiteDataSource();
+        dataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("existing.db"));
+
+        ResourceDatabasePopulator populator =
+                new ResourceDatabasePopulator(
+                        new ClassPathResource("db/migration/sqlite/V1__init_store.sql"));
+        populator.execute(dataSource);
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate.update("DELETE FROM memory_insight_type");
+
+        MemoryStoreDdl ddl = new MemoryStoreDdl(dataSource, detector);
+        ddl.runScript(ignored -> {});
+
+        Integer count =
+                jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM memory_insight_type", Integer.class);
+
+        assertThat(count).isZero();
     }
 
     private DataSource dataSource(String productName, String url) {

@@ -32,7 +32,11 @@ public final class StoreSchemaBootstrap {
 
     private StoreSchemaBootstrap() {}
 
-    public static void ensureSqlite(DataSource dataSource, boolean createIfNotExist) {
+    public static StoreSchemaInitResult ensureSqlite(
+            DataSource dataSource, boolean createIfNotExist) {
+        boolean hadInsightTypeTable =
+                SchemaVerifier.hasSqliteTable(dataSource, "memory_insight_type");
+        boolean createdStoreSchema = false;
         if (!hasRequiredSqliteStoreTables(dataSource)) {
             if (!createIfNotExist) {
                 throw new JdbcPluginException(
@@ -40,51 +44,71 @@ public final class StoreSchemaBootstrap {
             }
             JdbcExecutor.execute(dataSource, "PRAGMA journal_mode = WAL");
             SqlScriptRunner.execute(dataSource, SQLITE_STORE_RESOURCE);
+            createdStoreSchema = true;
         }
-        if (hasRequiredSqliteMultimodalSchema(dataSource)) {
-            return;
+        if (!hasRequiredSqliteMultimodalSchema(dataSource)) {
+            if (!createIfNotExist) {
+                throw new JdbcPluginException(
+                        "Missing required SQLite multimodal schema: memory_resource");
+            }
+            SqlScriptRunner.execute(dataSource, SQLITE_MULTIMODAL_RESOURCE);
         }
-        if (!createIfNotExist) {
-            throw new JdbcPluginException(
-                    "Missing required SQLite multimodal schema: memory_resource");
-        }
-        SqlScriptRunner.execute(dataSource, SQLITE_MULTIMODAL_RESOURCE);
+        boolean hasInsightTypeTable =
+                SchemaVerifier.hasSqliteTable(dataSource, "memory_insight_type");
+        return new StoreSchemaInitResult(
+                createdStoreSchema, !hadInsightTypeTable && hasInsightTypeTable);
     }
 
-    public static void ensureMysql(DataSource dataSource, boolean createIfNotExist) {
+    public static StoreSchemaInitResult ensureMysql(
+            DataSource dataSource, boolean createIfNotExist) {
+        boolean hadInsightTypeTable =
+                SchemaVerifier.hasMysqlTable(dataSource, "memory_insight_type");
+        boolean createdStoreSchema = false;
         if (!hasRequiredMysqlStoreTables(dataSource)) {
             if (!createIfNotExist) {
                 throw new JdbcPluginException(
                         "Missing required MySQL store table: memory_raw_data");
             }
             SqlScriptRunner.execute(dataSource, MYSQL_STORE_RESOURCE);
+            createdStoreSchema = true;
         }
-        if (hasRequiredMysqlMultimodalSchema(dataSource)) {
-            return;
+        if (!hasRequiredMysqlMultimodalSchema(dataSource)) {
+            if (!createIfNotExist) {
+                throw new JdbcPluginException(
+                        "Missing required MySQL multimodal schema: memory_resource");
+            }
+            SqlScriptRunner.execute(dataSource, MYSQL_MULTIMODAL_RESOURCE);
         }
-        if (!createIfNotExist) {
-            throw new JdbcPluginException(
-                    "Missing required MySQL multimodal schema: memory_resource");
-        }
-        SqlScriptRunner.execute(dataSource, MYSQL_MULTIMODAL_RESOURCE);
+        boolean hasInsightTypeTable =
+                SchemaVerifier.hasMysqlTable(dataSource, "memory_insight_type");
+        return new StoreSchemaInitResult(
+                createdStoreSchema, !hadInsightTypeTable && hasInsightTypeTable);
     }
 
-    public static void ensurePostgresql(DataSource dataSource, boolean createIfNotExist) {
+    public static StoreSchemaInitResult ensurePostgresql(
+            DataSource dataSource, boolean createIfNotExist) {
+        boolean hadInsightTypeTable =
+                SchemaVerifier.hasPostgresqlTable(dataSource, "memory_insight_type");
+        boolean createdStoreSchema = false;
         if (!hasRequiredPostgresqlStoreTables(dataSource)) {
             if (!createIfNotExist) {
                 throw new JdbcPluginException(
                         "Missing required PostgreSQL store table: memory_raw_data");
             }
             SqlScriptRunner.execute(dataSource, POSTGRESQL_STORE_RESOURCE);
+            createdStoreSchema = true;
         }
-        if (hasRequiredPostgresqlMultimodalSchema(dataSource)) {
-            return;
+        if (!hasRequiredPostgresqlMultimodalSchema(dataSource)) {
+            if (!createIfNotExist) {
+                throw new JdbcPluginException(
+                        "Missing required PostgreSQL multimodal schema: memory_resource");
+            }
+            SqlScriptRunner.execute(dataSource, POSTGRESQL_MULTIMODAL_RESOURCE);
         }
-        if (!createIfNotExist) {
-            throw new JdbcPluginException(
-                    "Missing required PostgreSQL multimodal schema: memory_resource");
-        }
-        SqlScriptRunner.execute(dataSource, POSTGRESQL_MULTIMODAL_RESOURCE);
+        boolean hasInsightTypeTable =
+                SchemaVerifier.hasPostgresqlTable(dataSource, "memory_insight_type");
+        return new StoreSchemaInitResult(
+                createdStoreSchema, !hadInsightTypeTable && hasInsightTypeTable);
     }
 
     private static boolean hasRequiredSqliteStoreTables(DataSource dataSource) {

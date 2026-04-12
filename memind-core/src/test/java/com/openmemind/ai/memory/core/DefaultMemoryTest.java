@@ -51,6 +51,8 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.mes
 import com.openmemind.ai.memory.core.extraction.result.InsightResult;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
+import com.openmemind.ai.memory.core.extraction.source.FileExtractionSource;
+import com.openmemind.ai.memory.core.extraction.source.UrlExtractionSource;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
@@ -255,13 +257,10 @@ class DefaultMemoryTest {
                             argThat(
                                     request ->
                                             request.memoryId().equals(memoryId)
-                                                    && request.fileInput() != null
-                                                    && request.fileInput()
-                                                            .fileName()
-                                                            .equals("report.pdf")
-                                                    && request.fileInput()
-                                                            .mimeType()
-                                                            .equals("application/pdf")
+                                                    && request.source()
+                                                            instanceof FileExtractionSource source
+                                                    && source.fileName().equals("report.pdf")
+                                                    && source.mimeType().equals("application/pdf")
                                                     && request.config().scope() == MemoryScope.AGENT
                                                     && request.config()
                                                             .timeout()
@@ -297,7 +296,7 @@ class DefaultMemoryTest {
                     .extract(
                             argThat(
                                     request ->
-                                            request.urlInput() != null
+                                            request.source() instanceof UrlExtractionSource
                                                     && request.config().equals(config)));
         }
 

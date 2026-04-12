@@ -58,7 +58,7 @@ class TracingInsightGroupClassifierTest {
         var insightType =
                 new MemoryInsightType(
                         1L, "PROFILE", "desc", null, List.of(), 400, null, null, null, null, null,
-                        null, null);
+                        null);
 
         var traced = new TracingInsightGroupClassifier(delegate, observer);
 
@@ -83,7 +83,7 @@ class TracingInsightGroupClassifierTest {
         var insightType =
                 new MemoryInsightType(
                         1L, "PROFILE", "desc", null, List.of(), 400, null, null, null, null, null,
-                        null, null);
+                        null);
 
         var traced = new TracingInsightGroupClassifier(delegate, observer);
 

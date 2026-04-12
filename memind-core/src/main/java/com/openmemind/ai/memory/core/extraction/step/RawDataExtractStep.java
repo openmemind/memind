@@ -14,6 +14,7 @@
 package com.openmemind.ai.memory.core.extraction.step;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import java.util.Map;
@@ -31,7 +32,7 @@ public interface RawDataExtractStep {
      *
      * @param memoryId Memory identifier
      * @param content Raw content
-     * @param contentType Content type identifier (e.g. ContentTypes.CONVERSATION)
+     * @param contentType Content type identifier (e.g. {@link ConversationContent#TYPE})
      * @param metadata Metadata
      * @return Processing result
      */
@@ -46,7 +47,7 @@ public interface RawDataExtractStep {
      *
      * @param memoryId Memory identifier
      * @param content Raw content
-     * @param contentType Content type identifier (e.g. ContentTypes.CONVERSATION)
+     * @param contentType Content type identifier (e.g. {@link ConversationContent#TYPE})
      * @param metadata Metadata
      * @param language Target language, can be null
      * @return Processing result

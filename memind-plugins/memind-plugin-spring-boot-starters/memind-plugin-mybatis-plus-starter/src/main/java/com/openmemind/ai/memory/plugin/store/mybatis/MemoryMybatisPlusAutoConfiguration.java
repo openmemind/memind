@@ -31,7 +31,6 @@ import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.plugin.store.mybatis.handler.DefaultDBFieldHandler;
-import com.openmemind.ai.memory.plugin.store.mybatis.initializer.DefaultTaxonomySeeder;
 import com.openmemind.ai.memory.plugin.store.mybatis.initializer.MemoryStoreProperties;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.ConversationBufferMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.InsightBufferMapper;
@@ -53,7 +52,6 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -166,15 +164,5 @@ public class MemoryMybatisPlusAutoConfiguration {
             case MYSQL -> new MysqlFulltextTextSearch(jdbcTemplate);
             case POSTGRESQL -> new PostgresqlTrigramTextSearch(jdbcTemplate);
         };
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(DefaultTaxonomySeeder.class)
-    @ConditionalOnProperty(
-            name = "memind.store.init-schema",
-            havingValue = "true",
-            matchIfMissing = true)
-    public DefaultTaxonomySeeder defaultTaxonomySeeder(MemoryStore memoryStore) {
-        return new DefaultTaxonomySeeder(memoryStore);
     }
 }

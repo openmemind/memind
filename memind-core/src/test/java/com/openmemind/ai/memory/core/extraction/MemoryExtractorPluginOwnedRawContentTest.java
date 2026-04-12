@@ -14,27 +14,34 @@
 package com.openmemind.ai.memory.core.extraction;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
 import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.extraction.step.InsightExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import reactor.core.publisher.Mono;
 
 class MemoryExtractorPluginOwnedRawContentTest {
 
     @Test
-    void unknownPluginOwnedRawContentUsesGenericMissingProcessorError() {
+    void pluginOwnedRawContentWithoutRegisteredProcessorStillFlowsThroughRawDataStep() {
         RawDataExtractStep rawDataStep = Mockito.mock(RawDataExtractStep.class);
         MemoryItemExtractStep itemStep = Mockito.mock(MemoryItemExtractStep.class);
         InsightExtractStep insightStep = Mockito.mock(InsightExtractStep.class);
+        when(rawDataStep.extract(any(), any(), eq("TEST_PLUGIN"), any(), any()))
+                .thenReturn(Mono.just(RawDataResult.empty()));
 
         MemoryExtractor extractor =
                 new MemoryExtractor(
@@ -55,10 +62,9 @@ class MemoryExtractorPluginOwnedRawContentTest {
         ExtractionResult result = extractor.extract(pluginOwnedRequest()).block();
 
         assertThat(result).isNotNull();
-        assertThat(result.isFailed()).isTrue();
-        assertThat(result.errorMessage())
-                .contains("No processor registered for raw content type: TEST_PLUGIN");
-        verifyNoInteractions(rawDataStep, itemStep, insightStep);
+        assertThat(result.isSuccess()).isTrue();
+        Mockito.verify(rawDataStep).extract(any(), any(), eq("TEST_PLUGIN"), any(), any());
+        verifyNoInteractions(itemStep, insightStep);
     }
 
     private static ExtractionRequest pluginOwnedRequest() {

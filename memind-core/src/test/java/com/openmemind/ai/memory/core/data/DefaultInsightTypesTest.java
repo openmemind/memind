@@ -15,7 +15,7 @@ package com.openmemind.ai.memory.core.data;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
+import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -39,35 +39,20 @@ class DefaultInsightTypesTest {
     }
 
     @Test
-    @DisplayName("user branch insight types should accept multimodal textual content")
-    void userBranchTypesShouldAcceptMultimodalTextualContent() {
-        List<String> expected =
-                List.of(
-                        ContentTypes.CONVERSATION,
-                        ContentTypes.DOCUMENT,
-                        ContentTypes.IMAGE,
-                        ContentTypes.AUDIO);
-
-        assertThat(DefaultInsightTypes.identity().acceptContentTypes())
-                .containsExactlyElementsOf(expected);
-        assertThat(DefaultInsightTypes.preferences().acceptContentTypes())
-                .containsExactlyElementsOf(expected);
-        assertThat(DefaultInsightTypes.relationships().acceptContentTypes())
-                .containsExactlyElementsOf(expected);
-        assertThat(DefaultInsightTypes.experiences().acceptContentTypes())
-                .containsExactlyElementsOf(expected);
-        assertThat(DefaultInsightTypes.behavior().acceptContentTypes())
-                .containsExactlyElementsOf(expected);
+    @DisplayName("user branch insight types should remain user-scoped taxonomy definitions")
+    void userBranchTypesShouldRemainUserScoped() {
+        assertThat(DefaultInsightTypes.identity().scope()).isEqualTo(MemoryScope.USER);
+        assertThat(DefaultInsightTypes.preferences().scope()).isEqualTo(MemoryScope.USER);
+        assertThat(DefaultInsightTypes.relationships().scope()).isEqualTo(MemoryScope.USER);
+        assertThat(DefaultInsightTypes.experiences().scope()).isEqualTo(MemoryScope.USER);
+        assertThat(DefaultInsightTypes.behavior().scope()).isEqualTo(MemoryScope.USER);
     }
 
     @Test
-    @DisplayName("agent branch insight types should remain conversation only")
-    void agentBranchTypesShouldRemainConversationOnly() {
-        assertThat(DefaultInsightTypes.directives().acceptContentTypes())
-                .containsExactly(ContentTypes.CONVERSATION);
-        assertThat(DefaultInsightTypes.playbooks().acceptContentTypes())
-                .containsExactly(ContentTypes.CONVERSATION);
-        assertThat(DefaultInsightTypes.resolutions().acceptContentTypes())
-                .containsExactly(ContentTypes.CONVERSATION);
+    @DisplayName("agent branch insight types should remain agent-scoped taxonomy definitions")
+    void agentBranchTypesShouldRemainAgentScoped() {
+        assertThat(DefaultInsightTypes.directives().scope()).isEqualTo(MemoryScope.AGENT);
+        assertThat(DefaultInsightTypes.playbooks().scope()).isEqualTo(MemoryScope.AGENT);
+        assertThat(DefaultInsightTypes.resolutions().scope()).isEqualTo(MemoryScope.AGENT);
     }
 }

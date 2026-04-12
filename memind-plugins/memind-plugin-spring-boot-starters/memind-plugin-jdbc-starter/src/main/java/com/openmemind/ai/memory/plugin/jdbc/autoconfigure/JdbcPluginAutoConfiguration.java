@@ -42,7 +42,6 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.env.Environment;
 
@@ -125,16 +124,6 @@ public class JdbcPluginAutoConfiguration {
             case MYSQL -> new MysqlMemoryTextSearch(dataSource, createIfNotExist);
             case POSTGRESQL -> new PostgresqlMemoryTextSearch(dataSource, createIfNotExist);
         };
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(DefaultTaxonomySeeder.class)
-    @ConditionalOnProperty(
-            name = "memind.store.init-schema",
-            havingValue = "true",
-            matchIfMissing = true)
-    public DefaultTaxonomySeeder defaultTaxonomySeeder(MemoryStore memoryStore) {
-        return new DefaultTaxonomySeeder(memoryStore);
     }
 
     private JdbcDialect detectDialect(DataSource dataSource) {

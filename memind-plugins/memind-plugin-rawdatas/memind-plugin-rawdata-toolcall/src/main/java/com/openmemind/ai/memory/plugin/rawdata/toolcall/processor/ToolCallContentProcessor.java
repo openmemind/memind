@@ -20,7 +20,6 @@ import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.caption.ToolCallCaptionGenerator;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.chunk.ToolCallChunker;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.content.ToolCallContent;
-import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallContentTypes;
 import java.util.List;
 import java.util.Objects;
 import reactor.core.publisher.Mono;
@@ -71,7 +70,7 @@ public class ToolCallContentProcessor implements RawContentProcessor<ToolCallCon
 
     @Override
     public String contentType() {
-        return ToolCallContentTypes.TOOL_CALL;
+        return ToolCallContent.TYPE;
     }
 
     @Override

@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.core.builder;
 
-import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
@@ -58,7 +57,6 @@ import com.openmemind.ai.memory.core.resource.HttpResourceFetcher;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.utils.IdUtils;
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -112,8 +110,7 @@ final class MemoryExtractionAssembler {
                         context.memoryStore(),
                         context.memoryVector(),
                         IdUtils.snowflake(),
-                        null,
-                        conversationCategories());
+                        null);
 
         InsightGenerator insightGenerator =
                 new LlmInsightGenerator(
@@ -279,9 +276,7 @@ final class MemoryExtractionAssembler {
 
         var defaultStrategy =
                 new LlmItemExtractionStrategy(
-                        registry.resolve(ChatClientSlot.ITEM_EXTRACTION),
-                        conversationCategories(),
-                        promptRegistry);
+                        registry.resolve(ChatClientSlot.ITEM_EXTRACTION), promptRegistry);
         return new DefaultMemoryItemExtractor(defaultStrategy, strategies);
     }
 
@@ -290,15 +285,5 @@ final class MemoryExtractionAssembler {
                 .filter(processor -> !processor.supportsInsight())
                 .map(RawContentProcessor::contentType)
                 .collect(Collectors.toSet());
-    }
-
-    private EnumSet<MemoryCategory> conversationCategories() {
-        return EnumSet.of(
-                MemoryCategory.PROFILE,
-                MemoryCategory.BEHAVIOR,
-                MemoryCategory.EVENT,
-                MemoryCategory.DIRECTIVE,
-                MemoryCategory.PLAYBOOK,
-                MemoryCategory.RESOLUTION);
     }
 }

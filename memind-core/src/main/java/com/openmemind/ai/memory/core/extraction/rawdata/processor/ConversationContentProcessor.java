@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.core.extraction.rawdata.processor;
 
+import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionStrategy;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
@@ -24,6 +25,7 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationCont
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
 import reactor.core.publisher.Mono;
@@ -96,6 +98,17 @@ public class ConversationContentProcessor implements RawContentProcessor<Convers
     @Override
     public ItemExtractionStrategy itemExtractionStrategy() {
         return itemExtractionStrategy;
+    }
+
+    @Override
+    public java.util.Set<MemoryCategory> allowedCategories() {
+        return EnumSet.of(
+                MemoryCategory.PROFILE,
+                MemoryCategory.BEHAVIOR,
+                MemoryCategory.EVENT,
+                MemoryCategory.DIRECTIVE,
+                MemoryCategory.PLAYBOOK,
+                MemoryCategory.RESOLUTION);
     }
 
     @Override

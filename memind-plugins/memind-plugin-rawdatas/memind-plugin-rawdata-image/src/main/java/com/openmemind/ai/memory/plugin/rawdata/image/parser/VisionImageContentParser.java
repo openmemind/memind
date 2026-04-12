@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.image.parser;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.resource.ContentParser;
@@ -61,7 +60,7 @@ public final class VisionImageContentParser implements ContentParser {
 
     @Override
     public String contentType() {
-        return ContentTypes.IMAGE;
+        return ImageContent.TYPE;
     }
 
     @Override

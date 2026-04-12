@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.core.support;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
@@ -68,7 +67,7 @@ public final class TestDocumentProcessor implements RawContentProcessor<TestDocu
 
     @Override
     public String contentType() {
-        return ContentTypes.DOCUMENT;
+        return TestDocumentContent.TYPE;
     }
 
     @Override

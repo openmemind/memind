@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.image.processor;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.ParsedContentTooLargeException;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
@@ -59,7 +58,7 @@ public class ImageContentProcessor implements RawContentProcessor<ImageContent> 
 
     @Override
     public String contentType() {
-        return ContentTypes.IMAGE;
+        return ImageContent.TYPE;
     }
 
     @Override

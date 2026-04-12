@@ -15,7 +15,6 @@ package com.openmemind.ai.memory.plugin.rawdata.image.processor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import com.openmemind.ai.memory.plugin.rawdata.image.chunk.ImageSegmentComposer;
@@ -40,7 +39,7 @@ class ImageContentProcessorTest {
                         "file:///tmp/dashboard.png",
                         Map.of("width", 1280, "height", 720));
 
-        assertThat(processor.contentType()).isEqualTo(ContentTypes.IMAGE);
+        assertThat(processor.contentType()).isEqualTo(ImageContent.TYPE);
 
         StepVerifier.create(processor.chunk(content))
                 .assertNext(

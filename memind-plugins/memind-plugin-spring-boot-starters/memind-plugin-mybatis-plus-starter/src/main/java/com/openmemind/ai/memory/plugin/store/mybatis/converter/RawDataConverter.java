@@ -13,9 +13,9 @@
  */
 package com.openmemind.ai.memory.plugin.store.mybatis.converter;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
@@ -36,7 +36,7 @@ public final class RawDataConverter {
         dataObject.setAgentId(memoryId.getAttribute("agentId"));
         dataObject.setMemoryId(memoryId.toIdentifier());
         dataObject.setType(
-                record.contentType() != null ? record.contentType() : ContentTypes.CONVERSATION);
+                record.contentType() != null ? record.contentType() : ConversationContent.TYPE);
         dataObject.setContentId(record.contentId());
         dataObject.setCaption(record.caption());
         dataObject.setCaptionVectorId(record.captionVectorId());
@@ -76,7 +76,7 @@ public final class RawDataConverter {
 
     private static String parseContentType(String value) {
         if (value == null || value.isBlank()) {
-            return ContentTypes.CONVERSATION;
+            return ConversationContent.TYPE;
         }
         return value;
     }

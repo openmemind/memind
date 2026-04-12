@@ -69,8 +69,7 @@ class InsightTypeConverterTest {
                         BASE_TIME.plusSeconds(60),
                         InsightAnalysisMode.ROOT,
                         InsightTreeConfig.defaults(),
-                        MemoryScope.USER,
-                        List.of("conversation"));
+                        MemoryScope.USER);
 
         var dataObject = InsightTypeConverter.toDO(record);
 

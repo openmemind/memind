@@ -11,17 +11,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.extraction;
+package com.openmemind.ai.memory.core.extraction.source;
 
 import com.openmemind.ai.memory.core.resource.ResourceUrlValidator;
 import java.util.Objects;
 
 /**
- * Remote URL payload for downloader-backed extraction requests.
+ * Extraction source backed by a remote URL.
  */
-public record RawUrlInput(String sourceUrl, String fileName, String mimeType) {
+public record UrlExtractionSource(String sourceUrl, String fileName, String mimeType)
+        implements ExtractionSource {
 
-    public RawUrlInput {
+    public UrlExtractionSource {
         Objects.requireNonNull(sourceUrl, "sourceUrl is required");
         sourceUrl = sourceUrl.trim();
         if (sourceUrl.isEmpty()) {

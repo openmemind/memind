@@ -11,25 +11,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.extraction;
+package com.openmemind.ai.memory.core.extraction.source;
 
-import java.util.Arrays;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import java.util.Objects;
 
 /**
- * Raw file payload for parser-backed extraction requests.
+ * Extraction source that already carries parsed {@link RawContent}.
  */
-public record RawFileInput(String fileName, byte[] data, String mimeType) {
+public record DirectContentSource(RawContent content) implements ExtractionSource {
 
-    public RawFileInput {
-        Objects.requireNonNull(fileName, "fileName is required");
-        Objects.requireNonNull(data, "data is required");
-        Objects.requireNonNull(mimeType, "mimeType is required");
-        data = Arrays.copyOf(data, data.length);
-    }
-
-    @Override
-    public byte[] data() {
-        return Arrays.copyOf(data, data.length);
+    public DirectContentSource {
+        Objects.requireNonNull(content, "content is required");
     }
 }

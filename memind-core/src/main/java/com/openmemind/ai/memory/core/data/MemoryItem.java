@@ -35,7 +35,7 @@ public record MemoryItem(
         /* Memory category */
         MemoryCategory category,
 
-        /* Content type identifier (e.g. ContentTypes.CONVERSATION) */
+        /* Content type identifier (e.g. ConversationContent.TYPE) */
         String contentType,
 
         /* Vector ID (null when not indexed) */

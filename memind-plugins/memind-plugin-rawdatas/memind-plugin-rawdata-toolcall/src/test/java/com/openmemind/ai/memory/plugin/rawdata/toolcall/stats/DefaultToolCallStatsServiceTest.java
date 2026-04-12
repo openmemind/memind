@@ -24,7 +24,7 @@ import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
-import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallContentTypes;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.content.ToolCallContent;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -139,7 +139,7 @@ class DefaultToolCallStatsServiceTest {
                 content,
                 MemoryScope.AGENT,
                 MemoryCategory.TOOL,
-                ToolCallContentTypes.TOOL_CALL,
+                ToolCallContent.TYPE,
                 null,
                 "raw-1",
                 "hash-1",

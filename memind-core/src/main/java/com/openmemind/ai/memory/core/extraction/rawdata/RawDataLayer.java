@@ -13,11 +13,11 @@
  */
 package com.openmemind.ai.memory.core.extraction.rawdata;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
 import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
@@ -179,7 +179,7 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
             return Mono.just(RawDataResult.existing(existing.get()));
         }
 
-        String contentType = (type != null && !type.isBlank()) ? type : ContentTypes.CONVERSATION;
+        String contentType = (type != null && !type.isBlank()) ? type : ConversationContent.TYPE;
 
         // Skip chunk, start directly from caption
         return defaultCaptionGenerator
@@ -454,7 +454,7 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
 
     private String normalizeContentType(String contentType) {
         return (contentType == null || contentType.isBlank())
-                ? ContentTypes.CONVERSATION
+                ? ConversationContent.TYPE
                 : contentType;
     }
 

@@ -15,16 +15,18 @@ package com.openmemind.ai.memory.core.extraction.item;
 
 import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
 import com.openmemind.ai.memory.core.builder.PromptBudgetOptions;
-import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.prompt.PromptResult;
+import java.util.Set;
 
 /**
  * MemoryItem extraction layer configuration
  *
  * @param scope memory scope
- * @param contentType content type identifier (e.g. ContentTypes.CONVERSATION)
+ * @param contentType content type identifier (e.g. {@link ConversationContent#TYPE})
  * @param enableForesight whether to enable Foresight
  * @param language target output language
  * @param promptBudget prompt budget governance for item extraction
@@ -32,29 +34,71 @@ import com.openmemind.ai.memory.core.prompt.PromptResult;
 public record ItemExtractionConfig(
         MemoryScope scope,
         String contentType,
+        Set<MemoryCategory> allowedCategories,
         boolean enableForesight,
         String language,
         PromptBudgetOptions promptBudget) {
 
     public ItemExtractionConfig(
             MemoryScope scope, String contentType, boolean enableForesight, String language) {
-        this(scope, contentType, enableForesight, language, PromptBudgetOptions.defaults());
+        this(
+                scope,
+                contentType,
+                MemoryCategory.userCategories(),
+                enableForesight,
+                language,
+                PromptBudgetOptions.defaults());
+    }
+
+    public ItemExtractionConfig(
+            MemoryScope scope,
+            String contentType,
+            Set<MemoryCategory> allowedCategories,
+            boolean enableForesight,
+            String language) {
+        this(
+                scope,
+                contentType,
+                allowedCategories,
+                enableForesight,
+                language,
+                PromptBudgetOptions.defaults());
+    }
+
+    public ItemExtractionConfig(
+            MemoryScope scope,
+            String contentType,
+            boolean enableForesight,
+            String language,
+            PromptBudgetOptions promptBudget) {
+        this(
+                scope,
+                contentType,
+                MemoryCategory.userCategories(),
+                enableForesight,
+                language,
+                promptBudget);
     }
 
     public static ItemExtractionConfig defaults() {
         return new ItemExtractionConfig(
                 MemoryScope.USER,
-                ContentTypes.CONVERSATION,
+                ConversationContent.TYPE,
+                MemoryCategory.userCategories(),
                 false,
                 PromptResult.DEFAULT_LANGUAGE,
                 PromptBudgetOptions.defaults());
     }
 
     public static ItemExtractionConfig from(
-            ExtractionConfig config, String contentType, ItemExtractionOptions options) {
+            ExtractionConfig config,
+            String contentType,
+            ItemExtractionOptions options,
+            Set<MemoryCategory> allowedCategories) {
         return new ItemExtractionConfig(
                 config.scope(),
                 contentType,
+                allowedCategories,
                 config.enableForesight(),
                 config.language(),
                 options.promptBudget());

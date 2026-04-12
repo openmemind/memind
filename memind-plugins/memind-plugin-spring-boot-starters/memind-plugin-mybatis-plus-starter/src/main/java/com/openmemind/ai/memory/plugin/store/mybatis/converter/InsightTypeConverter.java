@@ -56,7 +56,6 @@ public final class InsightTypeConverter {
                         ? InsightAnalysisMode.valueOf(dataObject.getAnalysisMode())
                         : InsightAnalysisMode.BRANCH,
                 dataObject.getTreeConfig(),
-                dataObject.getScope() != null ? MemoryScope.valueOf(dataObject.getScope()) : null,
-                null);
+                dataObject.getScope() != null ? MemoryScope.valueOf(dataObject.getScope()) : null);
     }
 }

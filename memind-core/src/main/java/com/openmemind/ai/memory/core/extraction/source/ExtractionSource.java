@@ -11,16 +11,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.data;
-
-import java.util.List;
+package com.openmemind.ai.memory.core.extraction.source;
 
 /**
- * Task experience retrieval result
- *
+ * Input source submitted to the extraction pipeline.
  */
-public record TaskExperience(
-        List<String> contrastiveInsights,
-        List<String> experienceInsights,
-        List<String> strategies,
-        List<String> antipatterns) {}
+public sealed interface ExtractionSource
+        permits DirectContentSource, FileExtractionSource, UrlExtractionSource {}

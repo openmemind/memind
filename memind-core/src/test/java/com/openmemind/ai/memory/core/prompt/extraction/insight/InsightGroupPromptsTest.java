@@ -213,7 +213,6 @@ class InsightGroupPromptsTest {
                 null,
                 null,
                 null,
-                null,
                 null);
     }
 }

@@ -15,7 +15,7 @@ package com.openmemind.ai.memory.plugin.jdbc.sqlite;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
@@ -29,6 +29,7 @@ import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeConfig;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
@@ -40,6 +41,7 @@ import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaBootstrap;
+import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaInitResult;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JdbcExecutor;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JsonCodec;
 import java.sql.Connection;
@@ -111,9 +113,13 @@ public class SqliteMemoryStore
             ObjectMapper objectMapper,
             boolean createIfNotExist) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
-        StoreSchemaBootstrap.ensureSqlite(this.dataSource, createIfNotExist);
         this.jsonHelper = new JsonCodec(Objects.requireNonNull(objectMapper, "objectMapper"));
         this.resourceStore = resourceStore;
+        StoreSchemaInitResult initResult =
+                StoreSchemaBootstrap.ensureSqlite(this.dataSource, createIfNotExist);
+        if (initResult.createdInsightTypeTable()) {
+            upsertInsightTypes(DefaultInsightTypes.all());
+        }
     }
 
     @Override
@@ -826,7 +832,7 @@ public class SqliteMemoryStore
         statement.setString(4, scope.memoryId());
         statement.setString(
                 5,
-                rawData.contentType() != null ? rawData.contentType() : ContentTypes.CONVERSATION);
+                rawData.contentType() != null ? rawData.contentType() : ConversationContent.TYPE);
         statement.setString(6, rawData.contentId());
         statement.setString(7, toSegmentJson(rawData.segment()));
         statement.setString(8, rawData.caption());
@@ -878,7 +884,7 @@ public class SqliteMemoryStore
         statement.setString(
                 13, item.type() != null ? item.type().name() : MemoryItemType.FACT.name());
         statement.setString(
-                14, item.contentType() != null ? item.contentType() : ContentTypes.CONVERSATION);
+                14, item.contentType() != null ? item.contentType() : ConversationContent.TYPE);
         statement.setString(15, jsonHelper.toJson(item.metadata()));
         statement.setString(16, writeInstant(item.createdAt() != null ? item.createdAt() : now));
         statement.setString(17, writeInstant(now));
@@ -994,8 +1000,7 @@ public class SqliteMemoryStore
                 parseInstant(resultSet.getString("updated_at")),
                 parseInsightAnalysisMode(resultSet.getString("analysis_mode")),
                 jsonHelper.fromJson(resultSet.getString("tree_config"), InsightTreeConfig.class),
-                parseScope(resultSet.getString("scope")),
-                null);
+                parseScope(resultSet.getString("scope")));
     }
 
     private MemoryInsight mapInsight(ResultSet resultSet) throws SQLException {
@@ -1125,7 +1130,7 @@ public class SqliteMemoryStore
 
     private String parseContentType(String value) {
         if (value == null || value.isBlank()) {
-            return ContentTypes.CONVERSATION;
+            return ConversationContent.TYPE;
         }
         return value;
     }

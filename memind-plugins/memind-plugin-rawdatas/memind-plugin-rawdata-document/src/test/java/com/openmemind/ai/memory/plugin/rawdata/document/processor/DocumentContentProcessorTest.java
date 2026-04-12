@@ -15,7 +15,6 @@ package com.openmemind.ai.memory.plugin.rawdata.document.processor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import com.openmemind.ai.memory.plugin.rawdata.document.chunk.ProfileAwareDocumentChunker;
@@ -41,7 +40,7 @@ class DocumentContentProcessorTest {
                 new DocumentContentProcessor(
                         new ProfileAwareDocumentChunker(), DocumentExtractionOptions.defaults());
 
-        assertThat(processor.contentType()).isEqualTo(ContentTypes.DOCUMENT);
+        assertThat(processor.contentType()).isEqualTo(DocumentContent.TYPE);
         assertThat(processor.supportsInsight()).isTrue();
     }
 

@@ -16,10 +16,12 @@ package com.openmemind.ai.memory.core.extraction;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import com.openmemind.ai.memory.core.extraction.source.DirectContentSource;
+import com.openmemind.ai.memory.core.extraction.source.FileExtractionSource;
+import com.openmemind.ai.memory.core.extraction.source.UrlExtractionSource;
 import com.openmemind.ai.memory.core.support.TestDocumentContent;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -80,7 +82,9 @@ class ExtractionRequestTest {
 
         var request = ExtractionRequest.of(DefaultMemoryId.of("user-1", "agent-1"), content);
 
-        assertThat(request.contentType()).isEqualTo("CUSTOM");
+        assertThat(request.source()).isInstanceOf(DirectContentSource.class);
+        assertThat(request.content()).isNotNull();
+        assertThat(request.content().contentType()).isEqualTo("CUSTOM");
         assertThat(request.metadata())
                 .containsEntry("x", 1)
                 .containsEntry("sourceKind", "DIRECT")
@@ -105,7 +109,9 @@ class ExtractionRequestTest {
 
         var request = ExtractionRequest.of(DefaultMemoryId.of("user-1", "agent-1"), content);
 
-        assertThat(request.contentType()).isEqualTo(ContentTypes.DOCUMENT);
+        assertThat(request.source()).isInstanceOf(DirectContentSource.class);
+        assertThat(request.content()).isSameAs(((DirectContentSource) request.source()).content());
+        assertThat(request.content().contentType()).isEqualTo(TestDocumentContent.TYPE);
         assertThat(request.metadata())
                 .containsEntry("sourceKind", "DIRECT")
                 .containsEntry("parserId", "direct")
@@ -150,7 +156,9 @@ class ExtractionRequestTest {
 
         var request = ExtractionRequest.of(DefaultMemoryId.of("user-1", "agent-1"), content);
 
-        assertThat(request.contentType()).isEqualTo(ContentTypes.DOCUMENT);
+        assertThat(request.source()).isInstanceOf(DirectContentSource.class);
+        assertThat(request.content()).isNotNull();
+        assertThat(request.content().contentType()).isEqualTo(TestDocumentContent.TYPE);
         assertThat(request.metadata())
                 .containsEntry("author", "Alice")
                 .containsEntry("sourceKind", "DIRECT")
@@ -222,7 +230,8 @@ class ExtractionRequestTest {
                 .hasMessageContaining("document.binary");
     }
 
-    void fileFactoryShouldPopulateRawFileInputAndDefensivelyCopyBytes() {
+    @Test
+    void fileFactoryShouldPopulateFileSourceAndDefensivelyCopyBytes() {
         var bytes = new byte[] {1, 2, 3};
 
         var request =
@@ -234,14 +243,15 @@ class ExtractionRequestTest {
         bytes[0] = 9;
 
         assertThat(request.content()).isNull();
-        assertThat(request.fileInput()).isNotNull();
-        assertThat(request.fileInput().fileName()).isEqualTo("report.pdf");
-        assertThat(request.fileInput().mimeType()).isEqualTo("application/pdf");
-        assertThat(request.fileInput().data()).containsExactly((byte) 1, (byte) 2, (byte) 3);
+        assertThat(request.source()).isInstanceOf(FileExtractionSource.class);
+        var fileSource = (FileExtractionSource) request.source();
+        assertThat(fileSource.fileName()).isEqualTo("report.pdf");
+        assertThat(fileSource.mimeType()).isEqualTo("application/pdf");
+        assertThat(fileSource.data()).containsExactly((byte) 1, (byte) 2, (byte) 3);
     }
 
     @Test
-    void urlFactoryShouldPopulateRawUrlInputAndOptionalOverrides() {
+    void urlFactoryShouldPopulateUrlSourceAndOptionalOverrides() {
         var request =
                 ExtractionRequest.url(
                         DefaultMemoryId.of("user-1", "agent-1"),
@@ -250,11 +260,11 @@ class ExtractionRequestTest {
                         "application/pdf");
 
         assertThat(request.content()).isNull();
-        assertThat(request.fileInput()).isNull();
-        assertThat(request.urlInput()).isNotNull();
-        assertThat(request.urlInput().sourceUrl()).isEqualTo("https://example.com/report.pdf");
-        assertThat(request.urlInput().fileName()).isEqualTo("report.pdf");
-        assertThat(request.urlInput().mimeType()).isEqualTo("application/pdf");
+        assertThat(request.source()).isInstanceOf(UrlExtractionSource.class);
+        var urlSource = (UrlExtractionSource) request.source();
+        assertThat(urlSource.sourceUrl()).isEqualTo("https://example.com/report.pdf");
+        assertThat(urlSource.fileName()).isEqualTo("report.pdf");
+        assertThat(urlSource.mimeType()).isEqualTo("application/pdf");
     }
 
     @Test
@@ -269,7 +279,7 @@ class ExtractionRequestTest {
     }
 
     @Test
-    void withConfigAndWithMetadataShouldPreserveRawFileInput() {
+    void withConfigAndWithMetadataShouldPreserveFileSource() {
         var request =
                 ExtractionRequest.file(
                                 DefaultMemoryId.of("user-1", "agent-1"),
@@ -279,14 +289,14 @@ class ExtractionRequestTest {
                         .withMetadata("source", "upload")
                         .withConfig(ExtractionConfig.agentOnly());
 
-        assertThat(request.fileInput()).isNotNull();
-        assertThat(request.fileInput().fileName()).isEqualTo("report.pdf");
+        assertThat(request.source()).isInstanceOf(FileExtractionSource.class);
+        assertThat(((FileExtractionSource) request.source()).fileName()).isEqualTo("report.pdf");
         assertThat(request.metadata()).containsEntry("source", "upload");
         assertThat(request.config()).isEqualTo(ExtractionConfig.agentOnly());
     }
 
     @Test
-    void withConfigAndWithMetadataShouldPreserveRawUrlInput() {
+    void withConfigAndWithMetadataShouldPreserveUrlSource() {
         var request =
                 ExtractionRequest.url(
                                 DefaultMemoryId.of("user-1", "agent-1"),
@@ -296,10 +306,11 @@ class ExtractionRequestTest {
                         .withMetadata("source", "link")
                         .withConfig(ExtractionConfig.agentOnly());
 
-        assertThat(request.urlInput()).isNotNull();
-        assertThat(request.urlInput().sourceUrl()).isEqualTo("https://example.com/report.pdf");
-        assertThat(request.urlInput().fileName()).isEqualTo("report.pdf");
-        assertThat(request.urlInput().mimeType()).isEqualTo("application/pdf");
+        assertThat(request.source()).isInstanceOf(UrlExtractionSource.class);
+        var urlSource = (UrlExtractionSource) request.source();
+        assertThat(urlSource.sourceUrl()).isEqualTo("https://example.com/report.pdf");
+        assertThat(urlSource.fileName()).isEqualTo("report.pdf");
+        assertThat(urlSource.mimeType()).isEqualTo("application/pdf");
         assertThat(request.metadata()).containsEntry("source", "link");
         assertThat(request.config()).isEqualTo(ExtractionConfig.agentOnly());
     }

@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.audio.processor;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.ParsedContentTooLargeException;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
@@ -57,7 +56,7 @@ public final class AudioContentProcessor implements RawContentProcessor<AudioCon
 
     @Override
     public String contentType() {
-        return ContentTypes.AUDIO;
+        return AudioContent.TYPE;
     }
 
     @Override

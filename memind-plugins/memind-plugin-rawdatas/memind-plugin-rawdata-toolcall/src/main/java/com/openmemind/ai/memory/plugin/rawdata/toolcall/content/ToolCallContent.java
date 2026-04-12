@@ -17,7 +17,6 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.utils.HashUtils;
-import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallContentTypes;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallRecord;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -26,6 +25,8 @@ import java.util.stream.Collectors;
  * Tool call raw content.
  */
 public class ToolCallContent extends RawContent {
+
+    public static final String TYPE = "TOOL_CALL";
 
     private final List<ToolCallRecord> calls;
 
@@ -36,7 +37,7 @@ public class ToolCallContent extends RawContent {
 
     @Override
     public String contentType() {
-        return ToolCallContentTypes.TOOL_CALL;
+        return TYPE;
     }
 
     @JsonProperty("calls")

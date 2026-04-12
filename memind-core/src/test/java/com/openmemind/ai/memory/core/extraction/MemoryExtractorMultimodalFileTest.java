@@ -19,7 +19,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
 import com.openmemind.ai.memory.core.builder.PromptBudgetOptions;
 import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
@@ -63,6 +62,9 @@ import reactor.core.publisher.Mono;
 
 class MemoryExtractorMultimodalFileTest {
 
+    private static final String IMAGE_TYPE = "IMAGE";
+    private static final String AUDIO_TYPE = "AUDIO";
+
     @Test
     void fileRequestShouldParseAndStoreBytesBeforeRunningRawDataExtraction() {
         var parserRegistry = new RecordingRegistry();
@@ -92,7 +94,7 @@ class MemoryExtractorMultimodalFileTest {
         assertThat(parserRegistry.calls).containsExactly("report.pdf:application/pdf:3");
         assertThat(resourceStore.storedRefs).hasSize(1);
         assertThat(rawDataStep.lastContent).isInstanceOf(TestDocumentContent.class);
-        assertThat(rawDataStep.lastContentType).isEqualTo(ContentTypes.DOCUMENT);
+        assertThat(rawDataStep.lastContentType).isEqualTo(TestDocumentContent.TYPE);
         assertThat(rawDataStep.lastMetadata)
                 .containsEntry("fileName", "report.pdf")
                 .containsEntry("mimeType", "application/pdf")
@@ -316,7 +318,7 @@ class MemoryExtractorMultimodalFileTest {
 
         assertThat(result).isNotNull();
         assertThat(result.isSuccess()).isTrue();
-        assertThat(rawDataStep.lastContentType).isEqualTo(ContentTypes.IMAGE);
+        assertThat(rawDataStep.lastContentType).isEqualTo(IMAGE_TYPE);
         assertThat(rawDataStep.lastMetadata)
                 .containsEntry("parserId", "image-vision")
                 .containsEntry("contentProfile", "image.caption-ocr");
@@ -338,7 +340,7 @@ class MemoryExtractorMultimodalFileTest {
                         new RawDataIngestionPolicyRegistry(
                                 List.of(
                                         new RawDataIngestionPolicy(
-                                                ContentTypes.DOCUMENT,
+                                                TestDocumentContent.TYPE,
                                                 Set.of(ContentGovernanceType.DOCUMENT_BINARY),
                                                 new com.openmemind.ai.memory.core.builder
                                                         .SourceLimitOptions(2)))),
@@ -479,7 +481,7 @@ class MemoryExtractorMultimodalFileTest {
         assertThat(parserRegistry.calls).containsExactly("report.pdf:application/pdf:3");
         assertThat(resourceStore.storedRefs).hasSize(1);
         assertThat(rawDataStep.lastContent).isInstanceOf(TestDocumentContent.class);
-        assertThat(rawDataStep.lastContentType).isEqualTo(ContentTypes.DOCUMENT);
+        assertThat(rawDataStep.lastContentType).isEqualTo(TestDocumentContent.TYPE);
         assertThat(rawDataStep.lastMetadata)
                 .containsEntry("fileName", "report.pdf")
                 .containsEntry("mimeType", "application/pdf")
@@ -517,7 +519,7 @@ class MemoryExtractorMultimodalFileTest {
 
         assertThat(result).isNotNull();
         assertThat(result.isSuccess()).isTrue();
-        assertThat(rawDataStep.lastContentType).isEqualTo(ContentTypes.AUDIO);
+        assertThat(rawDataStep.lastContentType).isEqualTo(AUDIO_TYPE);
         assertThat(rawDataStep.lastMetadata)
                 .containsEntry("parserId", "audio-transcription")
                 .containsEntry("contentProfile", "audio.transcript");
@@ -674,33 +676,16 @@ class MemoryExtractorMultimodalFileTest {
     }
 
     @Test
-    void requestWithoutContentFileOrUrlShouldFailFastDuringResolution() {
-        var extractor =
-                extractor(
-                        (memoryId, content, contentType, metadata) ->
-                                Mono.just(RawDataResult.empty()),
-                        (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
-                        (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
-                        null,
-                        null,
-                        null);
-
-        var result =
-                extractor
-                        .extract(
+    void requestWithoutSourceShouldFailFastOnConstruction() {
+        assertThatThrownBy(
+                        () ->
                                 new ExtractionRequest(
                                         DefaultMemoryId.of("user-1", "agent-1"),
                                         null,
-                                        null,
-                                        null,
-                                        ContentTypes.CONVERSATION,
                                         Map.of(),
                                         ExtractionConfig.defaults()))
-                        .block();
-
-        assertThat(result).isNotNull();
-        assertThat(result.isFailed()).isTrue();
-        assertThat(result.errorMessage()).contains("content, fileInput, or urlInput is required");
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("source");
     }
 
     @Test
@@ -751,7 +736,7 @@ class MemoryExtractorMultimodalFileTest {
                             nullParser(),
                             new ContentCapability(
                                     "document-test",
-                                    ContentTypes.DOCUMENT,
+                                    TestDocumentContent.TYPE,
                                     "document.binary",
                                     Set.of("application/pdf"),
                                     Set.of(".pdf"),
@@ -777,7 +762,7 @@ class MemoryExtractorMultimodalFileTest {
             return List.of(
                     new ContentCapability(
                             "document-test",
-                            ContentTypes.DOCUMENT,
+                            TestDocumentContent.TYPE,
                             "document.binary",
                             Set.of("application/pdf"),
                             Set.of(".pdf"),
@@ -794,7 +779,7 @@ class MemoryExtractorMultimodalFileTest {
                                 testImageParser(),
                                 new ContentCapability(
                                         "image-vision",
-                                        ContentTypes.IMAGE,
+                                        IMAGE_TYPE,
                                         "image.caption-ocr",
                                         Set.of("image/png"),
                                         Set.of(".png"),
@@ -822,7 +807,7 @@ class MemoryExtractorMultimodalFileTest {
                                 testAudioParser(),
                                 new ContentCapability(
                                         "audio-transcription",
-                                        ContentTypes.AUDIO,
+                                        AUDIO_TYPE,
                                         "audio.transcript",
                                         Set.of("audio/mpeg"),
                                         Set.of(".mp3"),
@@ -850,7 +835,7 @@ class MemoryExtractorMultimodalFileTest {
 
             @Override
             public String contentType() {
-                return ContentTypes.IMAGE;
+                return IMAGE_TYPE;
             }
 
             @Override
@@ -890,7 +875,7 @@ class MemoryExtractorMultimodalFileTest {
 
             @Override
             public String contentType() {
-                return ContentTypes.AUDIO;
+                return AUDIO_TYPE;
             }
 
             @Override
@@ -1031,7 +1016,7 @@ class MemoryExtractorMultimodalFileTest {
 
         @Override
         public String contentType() {
-            return ContentTypes.IMAGE;
+            return IMAGE_TYPE;
         }
 
         @Override
@@ -1049,7 +1034,7 @@ class MemoryExtractorMultimodalFileTest {
 
         @Override
         public String contentType() {
-            return ContentTypes.AUDIO;
+            return AUDIO_TYPE;
         }
 
         @Override
@@ -1071,22 +1056,22 @@ class MemoryExtractorMultimodalFileTest {
         return new RawDataIngestionPolicyRegistry(
                 List.of(
                         new RawDataIngestionPolicy(
-                                ContentTypes.DOCUMENT,
+                                TestDocumentContent.TYPE,
                                 Set.of(ContentGovernanceType.DOCUMENT_TEXT_LIKE),
                                 new com.openmemind.ai.memory.core.builder.SourceLimitOptions(
                                         2L * 1024 * 1024)),
                         new RawDataIngestionPolicy(
-                                ContentTypes.DOCUMENT,
+                                TestDocumentContent.TYPE,
                                 Set.of(ContentGovernanceType.DOCUMENT_BINARY),
                                 new com.openmemind.ai.memory.core.builder.SourceLimitOptions(
                                         20L * 1024 * 1024)),
                         new RawDataIngestionPolicy(
-                                ContentTypes.IMAGE,
+                                IMAGE_TYPE,
                                 Set.of(ContentGovernanceType.IMAGE_CAPTION_OCR),
                                 new com.openmemind.ai.memory.core.builder.SourceLimitOptions(
                                         10L * 1024 * 1024)),
                         new RawDataIngestionPolicy(
-                                ContentTypes.AUDIO,
+                                AUDIO_TYPE,
                                 Set.of(ContentGovernanceType.AUDIO_TRANSCRIPT),
                                 new com.openmemind.ai.memory.core.builder.SourceLimitOptions(
                                         25L * 1024 * 1024))));
@@ -1109,7 +1094,7 @@ class MemoryExtractorMultimodalFileTest {
                             nullParser(),
                             new ContentCapability(
                                     "document-tika",
-                                    ContentTypes.DOCUMENT,
+                                    TestDocumentContent.TYPE,
                                     "document.binary",
                                     Set.of("application/pdf"),
                                     Set.of(".pdf"),
@@ -1140,7 +1125,7 @@ class MemoryExtractorMultimodalFileTest {
                             nullParser(),
                             new ContentCapability(
                                     "document-custom",
-                                    ContentTypes.DOCUMENT,
+                                    TestDocumentContent.TYPE,
                                     "document.pdf.tika",
                                     ContentGovernanceType.DOCUMENT_BINARY,
                                     Set.of("application/pdf"),
@@ -1166,7 +1151,7 @@ class MemoryExtractorMultimodalFileTest {
             return List.of(
                     new ContentCapability(
                             "document-custom",
-                            ContentTypes.DOCUMENT,
+                            TestDocumentContent.TYPE,
                             "document.pdf.tika",
                             ContentGovernanceType.DOCUMENT_BINARY,
                             Set.of("application/pdf"),
@@ -1184,7 +1169,7 @@ class MemoryExtractorMultimodalFileTest {
                             nullParser(),
                             new ContentCapability(
                                     "document-custom",
-                                    ContentTypes.DOCUMENT,
+                                    TestDocumentContent.TYPE,
                                     "document.pdf.tika",
                                     ContentGovernanceType.DOCUMENT_BINARY,
                                     Set.of("application/pdf"),
@@ -1224,7 +1209,7 @@ class MemoryExtractorMultimodalFileTest {
                             nullParser(),
                             new ContentCapability(
                                     "document-custom",
-                                    ContentTypes.DOCUMENT,
+                                    TestDocumentContent.TYPE,
                                     "document.pdf.tika",
                                     ContentGovernanceType.DOCUMENT_BINARY,
                                     Set.of("application/pdf"),
@@ -1278,7 +1263,7 @@ class MemoryExtractorMultimodalFileTest {
             return List.of(
                     new ContentCapability(
                             "document-test",
-                            ContentTypes.DOCUMENT,
+                            TestDocumentContent.TYPE,
                             "document.binary",
                             Set.of("application/pdf"),
                             Set.of(".pdf"),
@@ -1295,7 +1280,7 @@ class MemoryExtractorMultimodalFileTest {
                             nullParser(),
                             new ContentCapability(
                                     "document-test",
-                                    ContentTypes.DOCUMENT,
+                                    TestDocumentContent.TYPE,
                                     "document.binary",
                                     Set.of("application/pdf"),
                                     Set.of(".pdf"),
@@ -1348,7 +1333,7 @@ class MemoryExtractorMultimodalFileTest {
 
         @Override
         public String contentType() {
-            return ContentTypes.IMAGE;
+            return IMAGE_TYPE;
         }
 
         @Override
@@ -1417,7 +1402,7 @@ class MemoryExtractorMultimodalFileTest {
 
         @Override
         public String contentType() {
-            return ContentTypes.AUDIO;
+            return AUDIO_TYPE;
         }
 
         @Override
@@ -1470,7 +1455,7 @@ class MemoryExtractorMultimodalFileTest {
 
             @Override
             public String contentType() {
-                return ContentTypes.DOCUMENT;
+                return TestDocumentContent.TYPE;
             }
 
             @Override

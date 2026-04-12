@@ -18,8 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
+import com.openmemind.ai.memory.core.extraction.source.DirectContentSource;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.content.ToolCallContent;
-import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallContentTypes;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallRecord;
 import java.time.Instant;
 import java.util.List;
@@ -45,7 +45,8 @@ class ToolCallExtractionRequestsTest {
         ExtractionRequest request = ToolCallExtractionRequests.toolCall(memoryId, List.of(record));
 
         assertThat(request.memoryId()).isEqualTo(memoryId);
+        assertThat(request.source()).isInstanceOf(DirectContentSource.class);
         assertThat(request.content()).isInstanceOf(ToolCallContent.class);
-        assertThat(request.contentType()).isEqualTo(ToolCallContentTypes.TOOL_CALL);
+        assertThat(request.content().contentType()).isEqualTo(ToolCallContent.TYPE);
     }
 }

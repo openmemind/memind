@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.core.extraction.insight.tree;
 
-import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
@@ -354,10 +353,9 @@ public class InsightTreeReorganizer {
         var allBranches = store.insightOperations().getInsightsByTier(memoryId, InsightTier.BRANCH);
         var configuredTypes = store.insightOperations().listInsightTypes();
         var rootTypes =
-                (configuredTypes.isEmpty() ? DefaultInsightTypes.all() : configuredTypes)
-                        .stream()
-                                .filter(t -> t.insightAnalysisMode() == InsightAnalysisMode.ROOT)
-                                .toList();
+                configuredTypes.stream()
+                        .filter(t -> t.insightAnalysisMode() == InsightAnalysisMode.ROOT)
+                        .toList();
         return new RootContext(allBranches, rootTypes);
     }
 

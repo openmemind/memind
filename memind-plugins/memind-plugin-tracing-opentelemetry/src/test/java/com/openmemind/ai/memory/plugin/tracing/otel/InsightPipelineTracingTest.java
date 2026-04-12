@@ -134,8 +134,7 @@ class InsightPipelineTracingTest {
                 Instant.now(),
                 InsightAnalysisMode.BRANCH,
                 null,
-                MemoryScope.USER,
-                null);
+                MemoryScope.USER);
     }
 
     private static MemoryItem testItem(long id) {

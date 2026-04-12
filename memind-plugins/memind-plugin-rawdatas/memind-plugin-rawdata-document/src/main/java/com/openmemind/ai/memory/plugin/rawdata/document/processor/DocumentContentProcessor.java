@@ -14,7 +14,6 @@
 package com.openmemind.ai.memory.plugin.rawdata.document.processor;
 
 import com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions;
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.ContentGovernanceResolver;
@@ -61,7 +60,7 @@ public final class DocumentContentProcessor implements RawContentProcessor<Docum
 
     @Override
     public String contentType() {
-        return ContentTypes.DOCUMENT;
+        return DocumentContent.TYPE;
     }
 
     @Override

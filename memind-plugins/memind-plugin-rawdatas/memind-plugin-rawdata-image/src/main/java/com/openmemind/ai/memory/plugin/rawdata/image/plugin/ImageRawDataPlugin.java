@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.image.plugin;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
@@ -22,6 +21,7 @@ import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.plugin.rawdata.image.chunk.ImageSegmentComposer;
 import com.openmemind.ai.memory.plugin.rawdata.image.config.ImageExtractionOptions;
+import com.openmemind.ai.memory.plugin.rawdata.image.content.ImageContent;
 import com.openmemind.ai.memory.plugin.rawdata.image.processor.ImageContentProcessor;
 import java.util.List;
 import java.util.Set;
@@ -52,7 +52,7 @@ public final class ImageRawDataPlugin implements RawDataPlugin {
     public List<RawDataIngestionPolicy> ingestionPolicies() {
         return List.of(
                 new RawDataIngestionPolicy(
-                        ContentTypes.IMAGE,
+                        ImageContent.TYPE,
                         Set.of(ContentGovernanceType.IMAGE_CAPTION_OCR),
                         options.sourceLimit()));
     }

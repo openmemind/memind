@@ -18,7 +18,6 @@ import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
 import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.context.CommitDecision;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectionContext;
@@ -26,6 +25,7 @@ import com.openmemind.ai.memory.core.extraction.context.CommitDetectionInput;
 import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.item.SegmentBudgetEnforcer;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
@@ -36,6 +36,9 @@ import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeCo
 import com.openmemind.ai.memory.core.extraction.result.InsightResult;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
+import com.openmemind.ai.memory.core.extraction.source.DirectContentSource;
+import com.openmemind.ai.memory.core.extraction.source.FileExtractionSource;
+import com.openmemind.ai.memory.core.extraction.source.UrlExtractionSource;
 import com.openmemind.ai.memory.core.extraction.step.InsightExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
@@ -397,11 +400,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
 
         var startTime = Instant.now();
 
-        return Mono.defer(
-                        () -> {
-                            ensureDirectContentProcessorAvailable(request);
-                            return resolveExtractionRequest(request);
-                        })
+        return Mono.defer(() -> resolveExtractionRequest(request))
                 .flatMap(resolved -> executeResolvedRequest(resolved, startTime))
                 .onErrorResume(e -> toErrorResult(request.memoryId(), e, startTime));
     }
@@ -454,14 +453,14 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         String contentId = HashUtils.sampledSha256(content);
 
         var request =
-                new ExtractionRequest(
-                        memoryId, null, null, null, ContentTypes.CONVERSATION, Map.of(), config);
+                resolvedRequest(
+                        memoryId, new ConversationContent(messages), Map.of(), config, null);
 
         return segmentProcessor
                 .processSegment(
                         memoryId,
                         segment,
-                        "CONVERSATION",
+                        ConversationContent.TYPE,
                         contentId,
                         sealMetadata,
                         config.language())
@@ -568,103 +567,101 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
 
     private record PendingExtraction(List<Message> messages, Map<String, Object> sealMetadata) {}
 
-    private record ResolvedExtractionRequest(ExtractionRequest request, ResourceRef cleanupRef) {}
+    private record ResolvedExtractionRequest(
+            MemoryId memoryId,
+            RawContent content,
+            String contentType,
+            Map<String, Object> metadata,
+            ExtractionConfig config,
+            ResourceRef cleanupRef) {
+
+        private ResolvedExtractionRequest {
+            Objects.requireNonNull(memoryId, "memoryId is required");
+            Objects.requireNonNull(content, "content is required");
+            Objects.requireNonNull(contentType, "contentType is required");
+            metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+            config = Objects.requireNonNull(config, "config is required");
+        }
+    }
 
     private Mono<ExtractionResult> executeResolvedRequest(
             ResolvedExtractionRequest resolved, Instant startTime) {
-        var request = resolved.request();
-        Objects.requireNonNull(request.content(), "content is required");
-
         var rawDataPersisted = new AtomicBoolean(false);
-        return extractRawData(request)
+        return extractRawData(resolved)
                 .doOnNext(
                         r -> {
                             rawDataPersisted.set(true);
                             log.info("RawData completed: segments={}", r.segments().size());
                         })
-                .flatMap(rawResult -> extractMemoryItem(request, rawResult))
+                .flatMap(rawResult -> extractMemoryItem(resolved, rawResult))
                 .doOnNext(
                         p ->
                                 log.info(
                                         "MemoryItem completed: newItems={}",
                                         p.itemResult().newItems().size()))
-                .flatMap(pair -> extractInsight(request, pair))
+                .flatMap(pair -> extractInsight(resolved, pair))
                 .doOnNext(
                         t ->
                                 log.info(
                                         "Insight completed: count={}",
                                         t.insightResult().totalCount()))
-                .map(triple -> toSuccessResult(request.memoryId(), triple, startTime))
-                .timeout(request.config().timeout())
+                .map(triple -> toSuccessResult(resolved.memoryId(), triple, startTime))
+                .timeout(resolved.config().timeout())
                 .onErrorResume(
                         e ->
                                 cleanupStoredResourceIfNeeded(
                                                 resolved.cleanupRef(), rawDataPersisted)
-                                        .then(toErrorResult(request.memoryId(), e, startTime)));
+                                        .then(toErrorResult(resolved.memoryId(), e, startTime)));
     }
 
     private Mono<ResolvedExtractionRequest> resolveExtractionRequest(ExtractionRequest request) {
-        RawUrlInput urlInput = request.urlInput();
-        RawFileInput fileInput = request.fileInput();
-        if (fileInput != null && urlInput != null) {
-            return Mono.error(
-                    new IllegalArgumentException("fileInput and urlInput cannot both be provided"));
-        }
-        if (urlInput != null) {
-            return resolveUrlExtractionRequest(request);
-        }
-        if (fileInput != null) {
-            return resolveFileExtractionRequest(request);
-        }
-        return resolveDirectContentRequest(request);
+        return switch (request.source()) {
+            case DirectContentSource directSource ->
+                    resolveDirectContentRequest(request, directSource);
+            case FileExtractionSource fileSource ->
+                    resolveFileExtractionRequest(request, fileSource);
+            case UrlExtractionSource urlSource -> resolveUrlExtractionRequest(request, urlSource);
+        };
     }
 
-    private Mono<ResolvedExtractionRequest> resolveDirectContentRequest(ExtractionRequest request) {
-        if (request.content() == null) {
-            return Mono.error(
-                    new IllegalArgumentException(
-                            "Extraction request content, fileInput, or urlInput is required"));
+    private Mono<ResolvedExtractionRequest> resolveDirectContentRequest(
+            ExtractionRequest request, DirectContentSource directSource) {
+        RawContent content = directSource.content();
+        if (content.directGovernanceType() == null) {
+            return Mono.just(
+                    resolvedRequest(
+                            request.memoryId(),
+                            content,
+                            request.metadata(),
+                            request.config(),
+                            null));
         }
-        if (request.content().directGovernanceType() == null) {
-            return Mono.just(new ResolvedExtractionRequest(request, null));
-        }
-
-        RawContent normalizedContent =
-                validateWithProcessor(
-                        MultimodalMetadataNormalizer.normalizeDirectContent(
-                                request.content(), request.metadata()));
-        Map<String, Object> normalizedMetadata =
-                ExtractionRequest.normalizeMultimodalMetadata(normalizedContent);
-        ExtractionRequest normalizedRequest =
-                new ExtractionRequest(
+        RawContent normalizedContent = validateWithProcessor(content);
+        return Mono.just(
+                resolvedRequest(
                         request.memoryId(),
                         normalizedContent,
-                        null,
-                        null,
-                        request.contentType() == null || request.contentType().isBlank()
-                                ? normalizedContent.contentType()
-                                : request.contentType(),
-                        normalizedMetadata,
-                        request.config());
-        return Mono.just(new ResolvedExtractionRequest(normalizedRequest, null));
+                        ExtractionRequest.normalizeMultimodalMetadata(normalizedContent),
+                        request.config(),
+                        null));
     }
 
     private Mono<ResolvedExtractionRequest> resolveFileExtractionRequest(
-            ExtractionRequest request) {
+            ExtractionRequest request, FileExtractionSource fileSource) {
         if (contentParserRegistry == null) {
             return Mono.error(
                     new IllegalStateException(
                             "ContentParserRegistry is required for file extraction requests"));
         }
 
-        RawFileInput fileInput = request.fileInput();
-        String checksum = HashUtils.sha256(fileInput.data());
-        long sizeBytes = fileInput.data().length;
+        byte[] fileBytes = fileSource.data();
+        String checksum = HashUtils.sha256(fileBytes);
+        long sizeBytes = fileBytes.length;
         SourceDescriptor source =
                 new SourceDescriptor(
                         SourceKind.FILE,
-                        fileInput.fileName(),
-                        fileInput.mimeType(),
+                        fileSource.fileName(),
+                        fileSource.mimeType(),
                         sizeBytes,
                         null);
         return contentParserRegistry
@@ -674,7 +671,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                             long maxBytes = resolveSourceLimit(resolution.capability());
                             validateKnownSourceSize(source, maxBytes);
                             return contentParserRegistry
-                                    .parse(fileInput.data(), source)
+                                    .parse(fileBytes, source)
                                     .switchIfEmpty(
                                             Mono.error(
                                                     new IllegalStateException(
@@ -691,28 +688,25 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                                                                                 request.metadata(),
                                                                                 resolution
                                                                                         .capability()));
-                                                Map<String, Object> normalizedMetadata =
-                                                        ExtractionRequest
-                                                                .normalizeMultimodalMetadata(
-                                                                        normalizedContent);
                                                 if (resourceStore == null) {
                                                     return Mono.just(
-                                                            new ResolvedExtractionRequest(
-                                                                    buildResolvedFileRequest(
-                                                                            request,
-                                                                            normalizedContent,
-                                                                            fileInput,
-                                                                            checksum,
-                                                                            sizeBytes,
-                                                                            null),
+                                                            buildResolvedParsedRequest(
+                                                                    request.memoryId(),
+                                                                    normalizedContent,
+                                                                    request.metadata(),
+                                                                    request.config(),
+                                                                    fileSource.fileName(),
+                                                                    fileSource.mimeType(),
+                                                                    checksum,
+                                                                    sizeBytes,
                                                                     null));
                                                 }
                                                 return resourceStore
                                                         .store(
                                                                 request.memoryId(),
-                                                                fileInput.fileName(),
-                                                                fileInput.data(),
-                                                                fileInput.mimeType(),
+                                                                fileSource.fileName(),
+                                                                fileBytes,
+                                                                fileSource.mimeType(),
                                                                 Map.of(
                                                                         "checksum",
                                                                         checksum,
@@ -720,20 +714,24 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                                                                         sizeBytes))
                                                         .map(
                                                                 storedResource ->
-                                                                        new ResolvedExtractionRequest(
-                                                                                buildResolvedFileRequest(
-                                                                                        request,
-                                                                                        normalizedContent,
-                                                                                        fileInput,
-                                                                                        checksum,
-                                                                                        sizeBytes,
-                                                                                        storedResource),
+                                                                        buildResolvedParsedRequest(
+                                                                                request.memoryId(),
+                                                                                normalizedContent,
+                                                                                request.metadata(),
+                                                                                request.config(),
+                                                                                fileSource
+                                                                                        .fileName(),
+                                                                                fileSource
+                                                                                        .mimeType(),
+                                                                                checksum,
+                                                                                sizeBytes,
                                                                                 storedResource));
                                             });
                         });
     }
 
-    private Mono<ResolvedExtractionRequest> resolveUrlExtractionRequest(ExtractionRequest request) {
+    private Mono<ResolvedExtractionRequest> resolveUrlExtractionRequest(
+            ExtractionRequest request, UrlExtractionSource urlSource) {
         if (contentParserRegistry == null) {
             return Mono.error(
                     new IllegalStateException(
@@ -745,14 +743,13 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                             "ResourceFetcher is required for URL extraction requests"));
         }
 
-        RawUrlInput urlInput = request.urlInput();
         SourceDescriptor provisionalSource =
                 new SourceDescriptor(
                         SourceKind.URL,
-                        urlInput.fileName(),
-                        urlInput.mimeType(),
+                        urlSource.fileName(),
+                        urlSource.mimeType(),
                         null,
-                        urlInput.sourceUrl());
+                        urlSource.sourceUrl());
 
         return contentParserRegistry
                 .resolve(provisionalSource)
@@ -765,38 +762,41 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                                                 .open(
                                                         new ResourceFetchRequest(
                                                                 request.memoryId(),
-                                                                urlInput.sourceUrl(),
-                                                                urlInput.fileName(),
-                                                                urlInput.mimeType()))
+                                                                urlSource.sourceUrl(),
+                                                                urlSource.fileName(),
+                                                                urlSource.mimeType()))
                                                 .flatMap(
                                                         session ->
                                                                 resolveFetchedUrlRequest(
                                                                         request, session))));
     }
 
-    private ExtractionRequest buildResolvedFileRequest(
-            ExtractionRequest request,
+    private ResolvedExtractionRequest buildResolvedParsedRequest(
+            MemoryId memoryId,
             RawContent parsedContent,
-            RawFileInput fileInput,
+            Map<String, Object> requestMetadata,
+            ExtractionConfig config,
+            String fileName,
+            String fallbackMimeType,
             String checksum,
             long sizeBytes,
             ResourceRef storedResource) {
         Map<String, Object> normalized = new LinkedHashMap<>();
-        if (request.metadata() != null && !request.metadata().isEmpty()) {
-            normalized.putAll(request.metadata());
+        if (requestMetadata != null && !requestMetadata.isEmpty()) {
+            normalized.putAll(requestMetadata);
         }
         normalized.putAll(ExtractionRequest.normalizeMultimodalMetadata(parsedContent));
-        if (request.metadata() != null && !request.metadata().isEmpty()) {
-            reapplyTransportContext(request.metadata(), normalized, "sourceKind");
-            reapplyTransportContext(request.metadata(), normalized, "sourceUri");
+        if (requestMetadata != null && !requestMetadata.isEmpty()) {
+            reapplyTransportContext(requestMetadata, normalized, "sourceKind");
+            reapplyTransportContext(requestMetadata, normalized, "sourceUri");
         }
         normalized.putIfAbsent("sourceKind", SourceKind.FILE.name());
 
-        String mimeType = resolveMimeType(parsedContent, fileInput.mimeType(), storedResource);
+        String mimeType = resolveMimeType(parsedContent, fallbackMimeType, storedResource);
         if (mimeType != null) {
             normalized.put("mimeType", mimeType);
         }
-        normalized.put("fileName", fileInput.fileName());
+        normalized.put("fileName", fileName);
         normalized.put("checksum", checksum);
         normalized.put("sizeBytes", sizeBytes);
 
@@ -809,21 +809,10 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
             normalized.put(
                     "resourceId",
                     HashUtils.sampledSha256(
-                            request.memoryId().toIdentifier()
-                                    + "|"
-                                    + fileInput.fileName()
-                                    + "|"
-                                    + checksum));
+                            memoryId.toIdentifier() + "|" + fileName + "|" + checksum));
         }
 
-        return new ExtractionRequest(
-                request.memoryId(),
-                parsedContent,
-                null,
-                null,
-                parsedContent.contentType(),
-                normalized,
-                request.config());
+        return resolvedRequest(memoryId, parsedContent, normalized, config, storedResource);
     }
 
     private Mono<ResolvedExtractionRequest> resolveFetchedUrlRequest(
@@ -854,6 +843,13 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                                                                 fetched.finalUrl());
                                                 return contentParserRegistry
                                                         .parse(fetched.data(), fetchedSource)
+                                                        .switchIfEmpty(
+                                                                Mono.error(
+                                                                        new IllegalStateException(
+                                                                                "ContentParserRegistry"
+                                                                                    + " returned no"
+                                                                                    + " content for"
+                                                                                    + " URL extraction")))
                                                         .flatMap(
                                                                 parsedContent -> {
                                                                     RawContent normalizedContent =
@@ -865,13 +861,10 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                                                                                                             .metadata(),
                                                                                                     finalResolution
                                                                                                             .capability()));
-                                                                    Map<String, Object>
-                                                                            normalizedMetadata =
-                                                                                    ExtractionRequest
-                                                                                            .normalizeMultimodalMetadata(
-                                                                                                    normalizedContent);
                                                                     return persistFetchedUrlRequest(
-                                                                            request,
+                                                                            request.memoryId(),
+                                                                            request.metadata(),
+                                                                            request.config(),
                                                                             normalizedContent,
                                                                             fetched);
                                                                 });
@@ -892,55 +885,48 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
     }
 
     private Mono<ResolvedExtractionRequest> persistFetchedUrlRequest(
-            ExtractionRequest request, RawContent parsedContent, FetchedResource fetchedResource) {
-        RawFileInput fetchedFileInput =
-                new RawFileInput(
-                        fetchedResource.fileName(),
-                        fetchedResource.data(),
-                        fetchedResource.mimeType());
-        String checksum = HashUtils.sha256(fetchedResource.data());
+            MemoryId memoryId,
+            Map<String, Object> requestMetadata,
+            ExtractionConfig config,
+            RawContent parsedContent,
+            FetchedResource fetchedResource) {
+        byte[] fetchedBytes = fetchedResource.data();
+        String checksum = HashUtils.sha256(fetchedBytes);
         long sizeBytes = fetchedResource.sizeBytes();
-        Map<String, Object> requestMetadata = new LinkedHashMap<>(request.metadata());
-        requestMetadata.put("sourceUri", fetchedResource.finalUrl());
-        requestMetadata.put("sourceKind", SourceKind.URL.name());
-        ExtractionRequest normalizedRequest =
-                new ExtractionRequest(
-                        request.memoryId(),
-                        null,
-                        null,
-                        request.urlInput(),
-                        null,
-                        Map.copyOf(requestMetadata),
-                        request.config());
+        Map<String, Object> transportMetadata = new LinkedHashMap<>(requestMetadata);
+        transportMetadata.put("sourceUri", fetchedResource.finalUrl());
+        transportMetadata.put("sourceKind", SourceKind.URL.name());
         if (resourceStore == null) {
             return Mono.just(
-                    new ResolvedExtractionRequest(
-                            buildResolvedFileRequest(
-                                    normalizedRequest,
-                                    parsedContent,
-                                    fetchedFileInput,
-                                    checksum,
-                                    sizeBytes,
-                                    null),
+                    buildResolvedParsedRequest(
+                            memoryId,
+                            parsedContent,
+                            transportMetadata,
+                            config,
+                            fetchedResource.fileName(),
+                            fetchedResource.mimeType(),
+                            checksum,
+                            sizeBytes,
                             null));
         }
         return resourceStore
                 .store(
-                        request.memoryId(),
+                        memoryId,
                         fetchedResource.fileName(),
-                        fetchedResource.data(),
+                        fetchedBytes,
                         fetchedResource.mimeType(),
                         Map.of("checksum", checksum, "sizeBytes", sizeBytes))
                 .map(
                         storedResource ->
-                                new ResolvedExtractionRequest(
-                                        buildResolvedFileRequest(
-                                                normalizedRequest,
-                                                parsedContent,
-                                                fetchedFileInput,
-                                                checksum,
-                                                sizeBytes,
-                                                storedResource),
+                                buildResolvedParsedRequest(
+                                        memoryId,
+                                        parsedContent,
+                                        transportMetadata,
+                                        config,
+                                        fetchedResource.fileName(),
+                                        fetchedResource.mimeType(),
+                                        checksum,
+                                        sizeBytes,
                                         storedResource));
     }
 
@@ -965,6 +951,16 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         }
     }
 
+    private ResolvedExtractionRequest resolvedRequest(
+            MemoryId memoryId,
+            RawContent content,
+            Map<String, Object> metadata,
+            ExtractionConfig config,
+            ResourceRef cleanupRef) {
+        return new ResolvedExtractionRequest(
+                memoryId, content, content.contentType(), metadata, config, cleanupRef);
+    }
+
     private RawContentProcessorRegistry processorRegistryRequired(RawContent content) {
         if (rawContentProcessorRegistry == null) {
             throw new IllegalStateException(
@@ -974,24 +970,17 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
         return rawContentProcessorRegistry;
     }
 
-    private void ensureDirectContentProcessorAvailable(ExtractionRequest request) {
-        RawContent content = request.content();
-        if (content == null || content instanceof ConversationContent) {
-            return;
-        }
-        ensureProcessorRegistered(content);
-    }
-
-    private void ensureProcessorRegistered(RawContent content) {
-        if (!processorRegistryRequired(content).supports(content.getClass())) {
+    private <T extends RawContent> RawContentProcessor<T> resolveRequiredProcessor(T content) {
+        try {
+            return processorRegistryRequired(content).resolve(content);
+        } catch (IllegalArgumentException e) {
             throw new IllegalStateException(
-                    "No processor registered for raw content type: " + content.contentType());
+                    "No processor registered for raw content type: " + content.contentType(), e);
         }
     }
 
     private <T extends RawContent> T validateWithProcessor(T content) {
-        ensureProcessorRegistered(content);
-        processorRegistryRequired(content).resolve(content).validateParsedContent(content);
+        resolveRequiredProcessor(content).validateParsedContent(content);
         return content;
     }
 
@@ -1012,7 +1001,7 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                         });
     }
 
-    private Mono<RawDataResult> extractRawData(ExtractionRequest request) {
+    private Mono<RawDataResult> extractRawData(ResolvedExtractionRequest request) {
         return rawDataStep.extract(
                 request.memoryId(),
                 request.content(),
@@ -1021,21 +1010,26 @@ public class MemoryExtractor implements MemoryExtractionPipeline {
                 request.config().language());
     }
 
-    private Mono<StepPair> extractMemoryItem(ExtractionRequest request, RawDataResult rawResult) {
+    private Mono<StepPair> extractMemoryItem(
+            ResolvedExtractionRequest request, RawDataResult rawResult) {
         if (rawResult.isEmpty()) {
             return Mono.just(new StepPair(rawResult, MemoryItemResult.empty()));
         }
 
+        var processor = resolveRequiredProcessor(request.content());
         ItemExtractionConfig itemConfig =
                 ItemExtractionConfig.from(
-                        request.config(), request.contentType(), itemExtractionOptions);
+                        request.config(),
+                        request.contentType(),
+                        itemExtractionOptions,
+                        processor.allowedCategories());
         RawDataResult budgeted = segmentBudgetEnforcer.enforce(rawResult, itemConfig);
         return memoryItemStep
                 .extract(request.memoryId(), budgeted, itemConfig)
                 .map(itemResult -> new StepPair(budgeted, itemResult));
     }
 
-    private Mono<StepTriple> extractInsight(ExtractionRequest request, StepPair pair) {
+    private Mono<StepTriple> extractInsight(ResolvedExtractionRequest request, StepPair pair) {
         if (!request.config().enableInsight()) {
             log.debug("Insight skipped: enableInsight=false");
             return Mono.just(

@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.audio.parser;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.resource.ContentParser;
@@ -53,7 +52,7 @@ public final class TranscriptionAudioContentParser implements ContentParser {
 
     @Override
     public String contentType() {
-        return ContentTypes.AUDIO;
+        return AudioContent.TYPE;
     }
 
     @Override

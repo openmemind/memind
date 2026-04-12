@@ -15,7 +15,6 @@ package com.openmemind.ai.memory.plugin.rawdata.audio.content;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
@@ -28,6 +27,8 @@ import java.util.Map;
  * Parsed audio raw content.
  */
 public final class AudioContent extends RawContent {
+
+    public static final String TYPE = "AUDIO";
 
     private final String mimeType;
     private final String transcript;
@@ -55,7 +56,7 @@ public final class AudioContent extends RawContent {
 
     @Override
     public String contentType() {
-        return ContentTypes.AUDIO;
+        return TYPE;
     }
 
     @Override

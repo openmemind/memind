@@ -28,6 +28,15 @@ import org.sqlite.SQLiteDataSource;
 class StoreSchemaBootstrapTest {
 
     @Test
+    void ensureSqliteReportsWhenInsightTypeTableWasCreated(@TempDir Path tempDir) {
+        DataSource dataSource = dataSource(tempDir.resolve("fresh.db"));
+
+        StoreSchemaInitResult result = StoreSchemaBootstrap.ensureSqlite(dataSource, true);
+
+        assertThat(result.createdInsightTypeTable()).isTrue();
+    }
+
+    @Test
     void ensureSqliteUpgradesLegacyStoreSchemaWithMultimodalTablesAndColumns(
             @TempDir Path tempDir) {
         DataSource dataSource = dataSource(tempDir.resolve("legacy-store.db"));
@@ -37,11 +46,12 @@ class StoreSchemaBootstrapTest {
         assertThat(columnExists(dataSource, "memory_raw_data", "resource_id")).isFalse();
         assertThat(columnExists(dataSource, "memory_raw_data", "mime_type")).isFalse();
 
-        StoreSchemaBootstrap.ensureSqlite(dataSource, true);
+        StoreSchemaInitResult result = StoreSchemaBootstrap.ensureSqlite(dataSource, true);
 
         assertThat(tableExists(dataSource, "memory_resource")).isTrue();
         assertThat(columnExists(dataSource, "memory_raw_data", "resource_id")).isTrue();
         assertThat(columnExists(dataSource, "memory_raw_data", "mime_type")).isTrue();
+        assertThat(result.createdInsightTypeTable()).isFalse();
     }
 
     private DataSource dataSource(Path dbPath) {

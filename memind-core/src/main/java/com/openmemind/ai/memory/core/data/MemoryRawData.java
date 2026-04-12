@@ -23,7 +23,7 @@ public record MemoryRawData(
         String id,
         String memoryId,
 
-        /* Content type identifier (e.g. ContentTypes.CONVERSATION) */
+        /* Content type identifier (e.g. ConversationContent.TYPE) */
         String contentType,
 
         /* Original content ID */
