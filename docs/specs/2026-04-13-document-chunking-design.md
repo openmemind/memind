@@ -44,6 +44,13 @@ Document chunking will use a uniform three-stage model:
 2. merge undersized neighboring blocks when the profile semantics allow it
 3. split oversized blocks only inside their own local structure boundary
 
+When `DocumentContent.sections()` is non-empty, section boundaries remain the outermost document-owned structure boundary:
+
+- section splitting happens before profile-specific chunk routing
+- profile chunking applies independently within each section
+- emitted segments must preserve section metadata such as `sectionIndex` and `sectionTitle`
+- emitted segment boundaries must continue to map back to absolute positions in `DocumentContent.parsedText`
+
 The routing remains profile-aware:
 
 - `document.markdown` -> heading-block policy
@@ -123,6 +130,12 @@ Every document profile will follow the same logical algorithm:
 4. Keep normal blocks unchanged
 5. Split oversized blocks only within the same structure block
 6. Emit final `Segment`s with preserved `CharBoundary` and structure metadata
+
+If the document already contains explicit `DocumentSection`s:
+
+1. keep section as the outer boundary
+2. build profile-specific structure blocks inside each section
+3. never merge or split across section boundaries at the rawdata chunking stage
 
 ### Size vocabulary
 
@@ -230,7 +243,9 @@ Rules:
 - chunk by row windows, not by plain paragraph
 - merge consecutive rows until approaching `targetTokens`
 - record `rowStart` / `rowEnd`
+- each emitted row-window chunk must retain row identity in-band in the chunk text, not only in metadata
 - if a single row exceeds `hardMaxTokens`, split only inside that row
+- every child chunk produced from an oversized row must repeat the stable `Row N:` identity prefix so retrieval and item extraction do not lose row ownership
 
 Rationale:
 
@@ -385,11 +400,19 @@ The implementation must include focused tests for both chunk semantics and robus
 - oversized paragraphs split correctly
 - `CharBoundary` offsets remain correct after merge and split
 
+### Section-boundary tests
+
+- direct `DocumentContent` with populated `sections()` keeps section as the outer chunking boundary
+- profile-specific chunking runs inside each section rather than across sections
+- emitted segment metadata preserves `sectionIndex` and `sectionTitle`
+- absolute `CharBoundary` values remain correct after section-local chunking
+
 ### CSV tests
 
 - row windows emit `rowStart` / `rowEnd`
 - multiple short rows merge into one chunk
 - oversized row splits within the row window
+- oversized single-row splits repeat the `Row N:` identity prefix in every child chunk
 - malformed row text degrades gracefully without chunk crash
 
 ### Robustness tests
