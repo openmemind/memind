@@ -28,11 +28,11 @@ import com.openmemind.ai.memory.core.retrieval.sufficiency.SufficiencyGate;
 import com.openmemind.ai.memory.core.retrieval.tier.InsightTypeRouter;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.tracing.NoopMemoryObserver;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryExtractor;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightExtractStep;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightGenerator;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightGroupClassifier;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightTypeRouter;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryExtractor;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryItemDeduplicator;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryItemExtractStep;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryRetriever;
@@ -76,8 +76,7 @@ public class TracingBeanPostProcessor implements BeanPostProcessor, Ordered {
             return bean;
         }
 
-        if (bean instanceof MemoryExtractor d
-                && !(bean instanceof TracingMemoryExtractor)) {
+        if (bean instanceof MemoryExtractor d && !(bean instanceof TracingMemoryExtractor)) {
             return new TracingMemoryExtractor(d, observer);
         }
         if (bean instanceof RawDataExtractStep d && !(bean instanceof TracingRawDataExtractStep)) {

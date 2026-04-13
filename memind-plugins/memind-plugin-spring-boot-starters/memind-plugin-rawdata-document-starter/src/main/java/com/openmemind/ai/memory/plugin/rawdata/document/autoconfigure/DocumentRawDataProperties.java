@@ -77,6 +77,12 @@ public class DocumentRawDataProperties {
                 new TokenChunkingProperties(DEFAULT_EXTRACTION.textLikeChunking());
         private final TokenChunkingProperties binaryChunking =
                 new TokenChunkingProperties(DEFAULT_EXTRACTION.binaryChunking());
+        private int textLikeMinChunkTokens = DEFAULT_EXTRACTION.textLikeMinChunkTokens();
+        private int binaryMinChunkTokens = DEFAULT_EXTRACTION.binaryMinChunkTokens();
+        private int pdfMaxMergedPages = DEFAULT_EXTRACTION.pdfMaxMergedPages();
+        private boolean llmCaptionEnabled = DEFAULT_EXTRACTION.llmCaptionEnabled();
+        private int captionConcurrency = DEFAULT_EXTRACTION.captionConcurrency();
+        private int fallbackCaptionMaxLength = DEFAULT_EXTRACTION.fallbackCaptionMaxLength();
 
         public SourceLimitProperties getTextLikeSourceLimit() {
             return textLikeSourceLimit;
@@ -102,6 +108,54 @@ public class DocumentRawDataProperties {
             return binaryChunking;
         }
 
+        public int getTextLikeMinChunkTokens() {
+            return textLikeMinChunkTokens;
+        }
+
+        public void setTextLikeMinChunkTokens(int textLikeMinChunkTokens) {
+            this.textLikeMinChunkTokens = textLikeMinChunkTokens;
+        }
+
+        public int getBinaryMinChunkTokens() {
+            return binaryMinChunkTokens;
+        }
+
+        public void setBinaryMinChunkTokens(int binaryMinChunkTokens) {
+            this.binaryMinChunkTokens = binaryMinChunkTokens;
+        }
+
+        public int getPdfMaxMergedPages() {
+            return pdfMaxMergedPages;
+        }
+
+        public void setPdfMaxMergedPages(int pdfMaxMergedPages) {
+            this.pdfMaxMergedPages = pdfMaxMergedPages;
+        }
+
+        public boolean isLlmCaptionEnabled() {
+            return llmCaptionEnabled;
+        }
+
+        public void setLlmCaptionEnabled(boolean llmCaptionEnabled) {
+            this.llmCaptionEnabled = llmCaptionEnabled;
+        }
+
+        public int getCaptionConcurrency() {
+            return captionConcurrency;
+        }
+
+        public void setCaptionConcurrency(int captionConcurrency) {
+            this.captionConcurrency = captionConcurrency;
+        }
+
+        public int getFallbackCaptionMaxLength() {
+            return fallbackCaptionMaxLength;
+        }
+
+        public void setFallbackCaptionMaxLength(int fallbackCaptionMaxLength) {
+            this.fallbackCaptionMaxLength = fallbackCaptionMaxLength;
+        }
+
         DocumentExtractionOptions toOptions() {
             return new DocumentExtractionOptions(
                     textLikeSourceLimit.toOptions(),
@@ -109,7 +163,13 @@ public class DocumentRawDataProperties {
                     textLikeParsedLimit.toOptions(),
                     binaryParsedLimit.toOptions(),
                     textLikeChunking.toOptions(),
-                    binaryChunking.toOptions());
+                    binaryChunking.toOptions(),
+                    textLikeMinChunkTokens,
+                    binaryMinChunkTokens,
+                    pdfMaxMergedPages,
+                    llmCaptionEnabled,
+                    captionConcurrency,
+                    fallbackCaptionMaxLength);
         }
     }
 

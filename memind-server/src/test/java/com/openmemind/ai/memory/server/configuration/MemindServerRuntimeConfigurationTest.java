@@ -43,8 +43,8 @@ import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
-import com.openmemind.ai.memory.plugin.rawdata.audio.parser.TranscriptionAudioContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.audio.content.AudioContent;
+import com.openmemind.ai.memory.plugin.rawdata.audio.parser.TranscriptionAudioContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.document.DocumentSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
 import com.openmemind.ai.memory.plugin.rawdata.image.content.ImageContent;
@@ -141,7 +141,8 @@ class MemindServerRuntimeConfigurationTest {
                         provider(ResourceFetcher.class, fetcher));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults());
-        var extractor = readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
+        var extractor =
+                readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
         ContentParserRegistry registry =
                 readField(extractor, "contentParserRegistry", ContentParserRegistry.class);
 
@@ -203,7 +204,8 @@ class MemindServerRuntimeConfigurationTest {
                         emptyProvider(ResourceFetcher.class));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults());
-        var extractor = readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
+        var extractor =
+                readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
 
         RawContentProcessorRegistry registry =
                 readField(
@@ -242,7 +244,8 @@ class MemindServerRuntimeConfigurationTest {
                         emptyProvider(ResourceFetcher.class));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults());
-        var extractor = readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
+        var extractor =
+                readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
         ContentParserRegistry registry =
                 readField(extractor, "contentParserRegistry", ContentParserRegistry.class);
 

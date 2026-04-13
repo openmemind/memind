@@ -14,8 +14,8 @@
 package com.openmemind.ai.memory.core.extraction.rawdata;
 
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
-import com.openmemind.ai.memory.core.extraction.item.ItemExtractionStrategy;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
+import com.openmemind.ai.memory.core.extraction.item.ItemExtractionStrategy;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.TruncateCaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;

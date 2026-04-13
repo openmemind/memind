@@ -75,10 +75,8 @@ class AudioContentTest {
                         Map.of("durationSeconds", 12));
 
         assertThat(content.contentMetadata()).containsEntry("durationSeconds", 12);
-        assertThat(content.directGovernanceType())
-                .isEqualTo(AudioSemantics.GOVERNANCE_TRANSCRIPT);
-        assertThat(content.directContentProfile())
-                .isEqualTo(AudioSemantics.PROFILE_TRANSCRIPT);
+        assertThat(content.directGovernanceType()).isEqualTo(AudioSemantics.GOVERNANCE_TRANSCRIPT);
+        assertThat(content.directContentProfile()).isEqualTo(AudioSemantics.PROFILE_TRANSCRIPT);
         assertThat(content.withMetadata(Map.of("parserId", "whisper")))
                 .isInstanceOf(AudioContent.class)
                 .extracting(value -> ((AudioContent) value).metadata().get("parserId"))

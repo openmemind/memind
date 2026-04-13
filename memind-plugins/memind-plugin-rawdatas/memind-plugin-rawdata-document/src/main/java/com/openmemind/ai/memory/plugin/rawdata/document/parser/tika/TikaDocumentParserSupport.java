@@ -15,22 +15,52 @@ package com.openmemind.ai.memory.plugin.rawdata.document.parser.tika;
 
 import java.io.ByteArrayInputStream;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
+import org.apache.tika.config.InitializableProblemHandler;
+import org.apache.tika.config.LoadErrorHandler;
+import org.apache.tika.config.ServiceLoader;
 import org.apache.tika.detect.DefaultDetector;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.metadata.TikaCoreProperties;
 import org.apache.tika.mime.MediaType;
+import org.apache.tika.mime.MimeTypes;
 import org.apache.tika.parser.AutoDetectParser;
+import org.apache.tika.parser.DefaultParser;
 import org.apache.tika.parser.ParseContext;
+import org.apache.tika.parser.Parser;
+import org.apache.tika.parser.external.CompositeExternalParser;
+import org.apache.tika.parser.ocr.TesseractOCRParser;
 import org.apache.tika.sax.BodyContentHandler;
 
 class TikaDocumentParserSupport {
 
     private static final Pattern EXTRA_BLANK_LINES = Pattern.compile("\n{3,}");
+    private static final Set<Class<? extends Parser>> EXCLUDED_PARSER_TYPES =
+            Set.of(CompositeExternalParser.class, TesseractOCRParser.class);
 
-    private final DefaultDetector detector = new DefaultDetector();
-    private final AutoDetectParser parser = new AutoDetectParser();
+    private final DefaultDetector detector;
+    private final AutoDetectParser parser;
     private final PdfPageTextExtractor pdfPageTextExtractor = new PdfPageTextExtractor();
+
+    TikaDocumentParserSupport() {
+        ServiceLoader serviceLoader =
+                new ServiceLoader(
+                        TikaDocumentParserSupport.class.getClassLoader(),
+                        LoadErrorHandler.IGNORE,
+                        InitializableProblemHandler.IGNORE,
+                        false);
+        MimeTypes mimeTypes = MimeTypes.getDefaultMimeTypes(serviceLoader.getLoader());
+        this.detector = new DefaultDetector(mimeTypes, serviceLoader);
+        this.parser =
+                new AutoDetectParser(
+                        detector,
+                        new DefaultParser(
+                                mimeTypes.getMediaTypeRegistry(),
+                                serviceLoader,
+                                EXCLUDED_PARSER_TYPES));
+    }
 
     ParsedDocument parse(byte[] data, String fileName, String mimeType) throws Exception {
         Metadata detectionMetadata = new Metadata();
@@ -88,6 +118,12 @@ class TikaDocumentParserSupport {
         String leafFileName = Path.of(fileName).getFileName().toString();
         int extensionIndex = leafFileName.lastIndexOf('.');
         return extensionIndex > 0 ? leafFileName.substring(0, extensionIndex) : leafFileName;
+    }
+
+    List<String> componentParserClassNames() {
+        return parser.getAllComponentParsers().stream()
+                .map(component -> component.getClass().getName())
+                .toList();
     }
 
     record ParsedDocument(String detectedMimeType, String text, Metadata metadata) {}

@@ -20,9 +20,9 @@ import java.util.List;
  * Vector math utility class
  *
  */
-public final class VectorMath {
+public final class VectorUtils {
 
-    private VectorMath() {}
+    private VectorUtils() {}
 
     /**
      * Cosine similarity, returns 0.0 for invalid input

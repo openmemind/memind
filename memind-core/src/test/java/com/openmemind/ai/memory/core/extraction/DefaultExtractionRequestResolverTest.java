@@ -175,16 +175,16 @@ class DefaultExtractionRequestResolverTest {
                                     source.mimeType(),
                                     source.sizeBytes() == null ? "null" : source.sizeBytes()));
             return Mono.just(
-                            new ParserResolution(
-                                    new TestDocumentParser(),
-                                    new ContentCapability(
-                                            "document-test",
-                                            TestDocumentContent.TYPE,
-                                            "document.binary",
-                                            TestDocumentContent.GOVERNANCE_BINARY,
-                                            Set.of("application/pdf"),
-                                            Set.of(".pdf"),
-                                            0)));
+                    new ParserResolution(
+                            new TestDocumentParser(),
+                            new ContentCapability(
+                                    "document-test",
+                                    TestDocumentContent.TYPE,
+                                    "document.binary",
+                                    TestDocumentContent.GOVERNANCE_BINARY,
+                                    Set.of("application/pdf"),
+                                    Set.of(".pdf"),
+                                    0)));
         }
 
         @Override

@@ -78,8 +78,7 @@ import reactor.test.StepVerifier;
 @DisplayName("DefaultMemory — getContext / commit")
 class DefaultMemoryContextTest {
 
-    @Mock
-    MemoryExtractor extractor;
+    @Mock MemoryExtractor extractor;
     @Mock MemoryRetriever retriever;
     @Mock MemoryStore memoryStore;
     @Mock MemoryVector vector;

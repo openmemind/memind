@@ -139,9 +139,7 @@ public final class TestDocumentContent extends RawContent {
                 || "text/csv".equals(mimeType)) {
             return GOVERNANCE_TEXT_LIKE;
         }
-        return mimeType != null && !mimeType.isBlank()
-                ? GOVERNANCE_BINARY
-                : GOVERNANCE_TEXT_LIKE;
+        return mimeType != null && !mimeType.isBlank() ? GOVERNANCE_BINARY : GOVERNANCE_TEXT_LIKE;
     }
 
     private static String deriveContentProfile(String mimeType, String governanceType) {

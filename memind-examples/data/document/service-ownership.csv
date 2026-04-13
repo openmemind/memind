@@ -1,0 +1,5 @@
+service,owner_team,primary_oncall,slack_channel,change_approver,slo,notes
+billing-service,Billing Platform,Alice Wong,#team-billing,Jordan Patel,99.95% monthly availability,Owns invoice writes and ledger orchestration
+payment-api,Payments Edge,Ryan Lopez,#team-payments,Jordan Patel,99.90% monthly availability,Owns partner traffic shaping and Retry-After enforcement
+ledger-worker,Data Infrastructure,Noah Kim,#team-data-platform,Maya Chen,99.50% successful job completion,Backfill and replay worker used after rollback or catch-up
+notification-service,Core Experience,Elena Rossi,#team-core-exp,Jordan Patel,99.90% monthly availability,Used for customer support notification fanout during incidents

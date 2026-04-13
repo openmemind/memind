@@ -17,7 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TokenAwareSegmentAssembler;
-import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -25,22 +24,44 @@ import org.junit.jupiter.api.Test;
 class MarkdownDocumentChunkerTest {
 
     @Test
-    void chunkKeepsPreambleAndHeadingBlocksSeparated() {
-        var chunker = new MarkdownDocumentChunker(new TokenAwareSegmentAssembler());
+    void chunkAddsHeadingMetadataAndNeverMergesAcrossHeadingBlocks() {
+        var chunker =
+                new MarkdownDocumentChunker(
+                        new TokenAwareSegmentAssembler(),
+                        new ParagraphWindowDocumentChunker(
+                                new TokenAwareSegmentAssembler(), new DocumentChunkSupport()),
+                        new DocumentChunkSupport());
         var text = "Lead in\n\n# Intro\nhello\n\n## Usage\nworld";
 
-        List<Segment> segments = chunker.chunk(text, new TokenChunkingOptions(16, 24));
+        List<Segment> segments = chunker.chunk(text, new TokenChunkingOptions(16, 24), 6);
 
         assertThat(segments).hasSize(3);
-        assertThat(segments)
-                .extracting(Segment::content)
-                .containsExactly("Lead in", "# Intro\nhello", "## Usage\nworld");
-        assertThat(segments)
-                .extracting(
-                        segment -> {
-                            CharBoundary boundary = (CharBoundary) segment.boundary();
-                            return text.substring(boundary.startChar(), boundary.endChar());
-                        })
-                .containsExactly("Lead in", "# Intro\nhello", "## Usage\nworld");
+        assertThat(segments.get(1).metadata())
+                .containsEntry("chunkStrategy", "markdown-heading")
+                .containsEntry("structureType", "headingBlock")
+                .containsEntry("headingLevel", 1)
+                .containsEntry("headingTitle", "Intro");
+        assertThat(segments.get(2).content()).isEqualTo("## Usage\nworld");
+    }
+
+    @Test
+    void chunkSplitsOversizedHeadingOnlyInsideThatHeadingBlock() {
+        var chunker =
+                new MarkdownDocumentChunker(
+                        new TokenAwareSegmentAssembler(),
+                        new ParagraphWindowDocumentChunker(
+                                new TokenAwareSegmentAssembler(), new DocumentChunkSupport()),
+                        new DocumentChunkSupport());
+        String text = "# Intro\n" + "word ".repeat(2_500) + "\n\n## Usage\nshort";
+
+        List<Segment> segments = chunker.chunk(text, new TokenChunkingOptions(1_200, 1_800), 300);
+
+        assertThat(segments).hasSizeGreaterThan(2);
+        assertThat(segments.subList(0, segments.size() - 1))
+                .allSatisfy(
+                        segment ->
+                                assertThat(segment.metadata())
+                                        .containsEntry("headingTitle", "Intro"));
+        assertThat(segments.getLast().metadata()).containsEntry("headingTitle", "Usage");
     }
 }

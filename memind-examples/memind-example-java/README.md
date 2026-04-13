@@ -10,6 +10,7 @@ single scenario directly from your IDE or with Maven.
 - `insight`: multi-batch extraction with deeper synthesized retrieval
 - `agent`: agent-only extraction, insight flushing, and agent-scoped retrieval
 - `tool`: tool call reporting and tool statistics
+- `document`: parser-backed ingestion of a bundled multi-document release knowledge pack
 
 ## Configuration
 
@@ -80,6 +81,28 @@ OPENAI_API_KEY=your-key \
 mvn -pl memind-examples/memind-example-java -am -DskipTests exec:java \
   -Dexec.mainClass=com.openmemind.ai.memory.example.java.tool.ToolMemoryExample
 ```
+
+Document Memory:
+
+```bash
+OPENAI_API_KEY=your-key \
+mvn -pl memind-examples/memind-example-java -am -DskipTests exec:java \
+  -Dexec.mainClass=com.openmemind.ai.memory.example.java.document.DocumentMemoryExample
+```
+
+The built-in document example ingests a realistic billing-release knowledge pack:
+
+- `release-readiness.md`
+- `migration-runbook.md`
+- `incident-retrospective.html`
+- `service-ownership.csv`
+- `weekend-handoff.txt`
+
+The example runs both direct fact lookup and cross-document retrieval over that corpus.
+
+If you want to swap in your own Markdown, HTML, CSV, TXT, or PDF inputs, edit
+[`DocumentMemoryExample.java`](src/main/java/com/openmemind/ai/memory/example/java/document/DocumentMemoryExample.java)
+and replace the defaults returned by `defaultDocuments()` and `defaultQueryCases()`.
 
 ## Runtime Data
 

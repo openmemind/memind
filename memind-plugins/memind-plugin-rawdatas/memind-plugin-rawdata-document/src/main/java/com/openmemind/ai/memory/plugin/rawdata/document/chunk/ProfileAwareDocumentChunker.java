@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.document.chunk;
 
-import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TokenAwareSegmentAssembler;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.plugin.rawdata.document.DocumentSemantics;
@@ -26,17 +25,22 @@ import java.util.Objects;
  */
 public final class ProfileAwareDocumentChunker {
 
-    private final TokenAwareSegmentAssembler tokenAwareSegmentAssembler;
-    private final MarkdownDocumentChunker markdownDocumentChunker;
+    private final ParagraphWindowDocumentChunker paragraphChunker;
+    private final MarkdownDocumentChunker markdownChunker;
+    private final PdfPageDocumentChunker pdfChunker;
+    private final CsvRowWindowDocumentChunker csvChunker;
 
     public ProfileAwareDocumentChunker() {
         this(new TokenAwareSegmentAssembler());
     }
 
-    public ProfileAwareDocumentChunker(TokenAwareSegmentAssembler tokenAwareSegmentAssembler) {
-        this.tokenAwareSegmentAssembler =
-                Objects.requireNonNull(tokenAwareSegmentAssembler, "tokenAwareSegmentAssembler");
-        this.markdownDocumentChunker = new MarkdownDocumentChunker(tokenAwareSegmentAssembler);
+    public ProfileAwareDocumentChunker(TokenAwareSegmentAssembler assembler) {
+        Objects.requireNonNull(assembler, "assembler");
+        var support = new DocumentChunkSupport();
+        this.paragraphChunker = new ParagraphWindowDocumentChunker(assembler, support);
+        this.markdownChunker = new MarkdownDocumentChunker(assembler, paragraphChunker, support);
+        this.pdfChunker = new PdfPageDocumentChunker(assembler, paragraphChunker, support);
+        this.csvChunker = new CsvRowWindowDocumentChunker(assembler, paragraphChunker, support);
     }
 
     public List<Segment> chunk(
@@ -50,34 +54,23 @@ public final class ProfileAwareDocumentChunker {
                 contentProfile == null || contentProfile.isBlank()
                         ? DocumentSemantics.PROFILE_TEXT
                         : contentProfile;
-        TokenChunkingOptions chunkingOptions =
+        int minChunkTokens =
+                DocumentSemantics.isBinaryGovernance(governanceType)
+                        ? options.binaryMinChunkTokens()
+                        : options.textLikeMinChunkTokens();
+        var chunkingOptions =
                 DocumentSemantics.isBinaryGovernance(governanceType)
                         ? options.binaryChunking()
                         : options.textLikeChunking();
         return switch (profile) {
             case DocumentSemantics.PROFILE_MARKDOWN ->
-                    markdownDocumentChunker.chunk(text, chunkingOptions);
-            case DocumentSemantics.PROFILE_CSV, DocumentSemantics.PROFILE_PDF_TIKA ->
-                    preserveParagraphBoundaries(text, chunkingOptions);
-            case DocumentSemantics.PROFILE_BINARY,
-                    DocumentSemantics.PROFILE_HTML,
-                    DocumentSemantics.PROFILE_TEXT ->
-                    tokenAwareSegmentAssembler.assemble(
-                            tokenAwareSegmentAssembler.paragraphCandidates(text), chunkingOptions);
-            default ->
-                    tokenAwareSegmentAssembler.assemble(
-                            tokenAwareSegmentAssembler.paragraphCandidates(text), chunkingOptions);
+                    markdownChunker.chunk(text, chunkingOptions, minChunkTokens);
+            case DocumentSemantics.PROFILE_PDF_TIKA ->
+                    pdfChunker.chunk(
+                            text, chunkingOptions, minChunkTokens, options.pdfMaxMergedPages());
+            case DocumentSemantics.PROFILE_CSV ->
+                    csvChunker.chunk(text, chunkingOptions, minChunkTokens);
+            default -> paragraphChunker.chunk(text, chunkingOptions, minChunkTokens);
         };
-    }
-
-    private List<Segment> preserveParagraphBoundaries(
-            String text, TokenChunkingOptions chunkingOptions) {
-        return tokenAwareSegmentAssembler.paragraphCandidates(text).stream()
-                .flatMap(
-                        candidate ->
-                                tokenAwareSegmentAssembler
-                                        .splitOversized(candidate, chunkingOptions.hardMaxTokens())
-                                        .stream())
-                .toList();
     }
 }

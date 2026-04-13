@@ -76,10 +76,8 @@ class ImageContentTest {
                         Map.of("width", 1280));
 
         assertThat(content.contentMetadata()).containsEntry("width", 1280);
-        assertThat(content.directGovernanceType())
-                .isEqualTo(ImageSemantics.GOVERNANCE_CAPTION_OCR);
-        assertThat(content.directContentProfile())
-                .isEqualTo(ImageSemantics.PROFILE_CAPTION_OCR);
+        assertThat(content.directGovernanceType()).isEqualTo(ImageSemantics.GOVERNANCE_CAPTION_OCR);
+        assertThat(content.directContentProfile()).isEqualTo(ImageSemantics.PROFILE_CAPTION_OCR);
         assertThat(content.withMetadata(Map.of("parserId", "vision")))
                 .isInstanceOf(ImageContent.class)
                 .extracting(value -> ((ImageContent) value).metadata().get("parserId"))

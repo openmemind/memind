@@ -31,13 +31,11 @@ import reactor.core.publisher.Mono;
  *
  * <p>All extraction methods are wrapped by the observer to record spans and attributes.
  */
-public class TracingMemoryExtractor extends TracingSupport
-        implements MemoryExtractor {
+public class TracingMemoryExtractor extends TracingSupport implements MemoryExtractor {
 
     private final MemoryExtractor delegate;
 
-    public TracingMemoryExtractor(
-            MemoryExtractor delegate, MemoryObserver observer) {
+    public TracingMemoryExtractor(MemoryExtractor delegate, MemoryObserver observer) {
         super(observer);
         this.delegate = delegate;
     }

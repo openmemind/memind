@@ -48,7 +48,8 @@ class MultimodalMetadataNormalizerTest {
                         Set.of(".pdf"),
                         0);
 
-        var normalized = MultimodalMetadataNormalizer.normalizeParsed(content, Map.of(), capability);
+        var normalized =
+                MultimodalMetadataNormalizer.normalizeParsed(content, Map.of(), capability);
 
         assertThat(normalized)
                 .containsEntry("contentProfile", "document.markdown")

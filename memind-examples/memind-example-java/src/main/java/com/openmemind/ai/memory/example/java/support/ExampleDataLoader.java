@@ -41,6 +41,15 @@ public final class ExampleDataLoader {
         this.dataRoot = Objects.requireNonNull(dataRoot, "dataRoot").toAbsolutePath().normalize();
     }
 
+    public byte[] loadBytes(String relativePath) {
+        Path dataFile = resolveDataFile(relativePath);
+        try {
+            return Files.readAllBytes(dataFile);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to load example data from: " + dataFile, e);
+        }
+    }
+
     public List<Message> loadMessages(String relativePath) {
         var nodes = readJsonArray(relativePath);
         var messages = new ArrayList<Message>(nodes.size());
@@ -83,12 +92,7 @@ public final class ExampleDataLoader {
     }
 
     private List<JsonNode> readJsonArray(String relativePath) {
-        Path dataFile = dataRoot.resolve(relativePath).normalize();
-        if (!dataFile.startsWith(dataRoot)) {
-            throw new IllegalArgumentException(
-                    "Example data path escapes shared root: " + relativePath);
-        }
-
+        Path dataFile = resolveDataFile(relativePath);
         try (InputStream inputStream = Files.newInputStream(dataFile)) {
             var arrayNode = objectMapper.readTree(inputStream);
             var result = new ArrayList<JsonNode>(arrayNode.size());
@@ -111,5 +115,14 @@ public final class ExampleDataLoader {
         } catch (Exception e) {
             throw new IllegalStateException("Failed to serialize JSON node", e);
         }
+    }
+
+    private Path resolveDataFile(String relativePath) {
+        Path dataFile = dataRoot.resolve(relativePath).normalize();
+        if (!dataFile.startsWith(dataRoot)) {
+            throw new IllegalArgumentException(
+                    "Example data path escapes shared root: " + relativePath);
+        }
+        return dataFile;
     }
 }

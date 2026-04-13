@@ -599,6 +599,94 @@ class RawDataLayerProcessorTest {
     }
 
     @Test
+    @DisplayName("extract should persist and return processor-generated document captions")
+    void extractPersistsAndReturnsGeneratedDocumentCaption() {
+        var recordingStore = new RecordingMemoryStore();
+        var localVector = mock(MemoryVector.class);
+        var processorCaption = mock(CaptionGenerator.class);
+        var fallbackCaption = mock(CaptionGenerator.class);
+        var documentProcessor = mockTestDocumentProcessor();
+        var segment =
+                new Segment(
+                        "document chunk body",
+                        null,
+                        new CharBoundary(0, 19),
+                        Map.of("sectionIndex", 0));
+
+        when(documentProcessor.contentClass()).thenReturn(TestDocumentContent.class);
+        when(documentProcessor.usesSourceIdentity()).thenReturn(true);
+        when(documentProcessor.chunk(any(TestDocumentContent.class)))
+                .thenReturn(Mono.just(List.of(segment)));
+        when(documentProcessor.captionGenerator()).thenReturn(processorCaption);
+        when(processorCaption.generateForSegments(any(), eq("zh-CN")))
+                .thenReturn(Mono.just(List.of(segment.withCaption("generated summary"))));
+        when(localVector.storeBatch(any(), any(), any())).thenReturn(Mono.just(List.of("vec-1")));
+
+        var layer =
+                new RawDataLayer(
+                        List.of(documentProcessor),
+                        fallbackCaption,
+                        recordingStore,
+                        localVector,
+                        32);
+
+        var result =
+                layer.extract(
+                                new com.openmemind.ai.memory.core.data.DefaultMemoryId(
+                                        "memory", "agent"),
+                                TestDocumentContent.of("Doc", "text/plain", "document chunk body"),
+                                "DOCUMENT",
+                                Map.of(),
+                                "zh-CN")
+                        .block();
+
+        assertThat(result.rawDataList())
+                .extracting(MemoryRawData::caption)
+                .containsExactly("generated summary");
+        assertThat(result.segments())
+                .extracting(ParsedSegment::caption)
+                .containsExactly("generated summary");
+        assertThat(result.segments())
+                .extracting(ParsedSegment::text)
+                .containsExactly("document chunk body");
+        assertThat(recordingStore.lastRawData)
+                .extracting(MemoryRawData::caption)
+                .containsExactly("generated summary");
+        verify(processorCaption).generateForSegments(any(), eq("zh-CN"));
+        verifyNoInteractions(fallbackCaption);
+    }
+
+    @Test
+    @DisplayName("processSegment should keep using the default caption generator for document type")
+    void processSegmentStillUsesDefaultCaptionGeneratorForDocumentType() {
+        var recordingStore = new RecordingMemoryStore();
+        var localVector = mock(MemoryVector.class);
+        var fallbackCaption = mock(CaptionGenerator.class);
+        var segment = new Segment("document chunk", null, new CharBoundary(0, 14), Map.of());
+        when(fallbackCaption.generateForSegments(any(), eq("zh-CN")))
+                .thenReturn(Mono.just(List.of(segment.withCaption("default summary"))));
+        when(localVector.storeBatch(any(), any(), any())).thenReturn(Mono.just(List.of("vec-1")));
+
+        var layer = new RawDataLayer(List.of(), fallbackCaption, recordingStore, localVector, 32);
+
+        var result =
+                layer.processSegment(
+                                new com.openmemind.ai.memory.core.data.DefaultMemoryId(
+                                        "memory", "agent"),
+                                segment,
+                                "DOCUMENT",
+                                "content-id",
+                                Map.of(),
+                                "zh-CN")
+                        .block();
+
+        assertThat(result.segments())
+                .extracting(ParsedSegment::caption)
+                .containsExactly("default summary");
+        verify(fallbackCaption).generateForSegments(any(), eq("zh-CN"));
+    }
+
+    @Test
     @DisplayName(
             "extract should vectorize using caption first then segment content and skip blank text")
     void extractShouldVectorizeUsingFirstNonBlankTextSource() {

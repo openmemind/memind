@@ -18,8 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.source.DirectContentSource;
-import com.openmemind.ai.memory.plugin.rawdata.image.content.ImageContent;
 import com.openmemind.ai.memory.plugin.rawdata.image.ImageSemantics;
+import com.openmemind.ai.memory.plugin.rawdata.image.content.ImageContent;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 

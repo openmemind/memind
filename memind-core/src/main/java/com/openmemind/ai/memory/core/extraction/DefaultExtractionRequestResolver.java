@@ -14,6 +14,8 @@
 package com.openmemind.ai.memory.core.extraction;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.exception.SourceTooLargeException;
+import com.openmemind.ai.memory.core.exception.UnsupportedContentSourceException;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
@@ -31,8 +33,6 @@ import com.openmemind.ai.memory.core.resource.ResourceRef;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.resource.SourceDescriptor;
 import com.openmemind.ai.memory.core.resource.SourceKind;
-import com.openmemind.ai.memory.core.exception.SourceTooLargeException;
-import com.openmemind.ai.memory.core.exception.UnsupportedContentSourceException;
 import com.openmemind.ai.memory.core.utils.HashUtils;
 import java.util.LinkedHashMap;
 import java.util.Map;

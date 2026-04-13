@@ -37,8 +37,7 @@ class RawContentSpiTest {
         assertThat(content.contentMetadata()).containsEntry("author", "alice");
         assertThat(content.directGovernanceType())
                 .isEqualTo(TestDocumentContent.GOVERNANCE_TEXT_LIKE);
-        assertThat(content.directContentProfile())
-                .isEqualTo(TestDocumentContent.PROFILE_MARKDOWN);
+        assertThat(content.directContentProfile()).isEqualTo(TestDocumentContent.PROFILE_MARKDOWN);
         assertThat(content.withMetadata(Map.of("parserId", "direct")))
                 .isInstanceOf(TestDocumentContent.class)
                 .extracting(value -> ((TestDocumentContent) value).metadata().get("parserId"))

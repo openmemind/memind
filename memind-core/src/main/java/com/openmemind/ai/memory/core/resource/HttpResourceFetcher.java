@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.core.resource;
 
+import com.openmemind.ai.memory.core.exception.SourceTooLargeException;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.URI;
@@ -27,8 +28,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import com.openmemind.ai.memory.core.exception.SourceTooLargeException;
 import reactor.core.publisher.Mono;
 
 /**

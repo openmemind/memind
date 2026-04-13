@@ -1,0 +1,20 @@
+Weekend billing release handoff
+Shift start: Saturday 2026-04-18 00:30 UTC
+Release commander: Maya Chen
+Primary approver on bridge: Jordan Patel
+
+Known risks:
+- Some mobile clients still show weak Retry-After compliance, so the first 25% traffic increase needs close watch.
+- Finance asked for extra validation on enterprise account balances before the 100% flag rollout.
+- Ledger replay jobs must stay paused until rollback risk is cleared.
+
+Watch list:
+- Payments Edge Overview dashboard
+- Retry-After Compliance dashboard
+- Billing Write Path dashboard
+- billing_db.replica_lag_seconds
+
+Escalation notes:
+- If 429 rate stays above 2% for 10 minutes, page Ryan Lopez and open the incident bridge immediately.
+- If migration validation shows balance drift, disable billing_ledger_v2 before resuming backfills.
+- Notify finance operations and customer support before any rollback announcement is posted externally.

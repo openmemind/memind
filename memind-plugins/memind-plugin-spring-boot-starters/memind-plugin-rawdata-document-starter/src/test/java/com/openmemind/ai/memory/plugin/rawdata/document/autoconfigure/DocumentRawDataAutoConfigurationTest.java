@@ -70,7 +70,9 @@ class DocumentRawDataAutoConfigurationTest {
         contextRunner
                 .withPropertyValues(
                         "memind.rawdata.document.extraction.binary-source-limit.max-bytes=4096",
-                        "memind.rawdata.document.extraction.binary-chunking.hard-max-tokens=1600")
+                        "memind.rawdata.document.extraction.binary-chunking.hard-max-tokens=1600",
+                        "memind.rawdata.document.extraction.binary-min-chunk-tokens=256",
+                        "memind.rawdata.document.extraction.pdf-max-merged-pages=5")
                 .run(
                         context -> {
                             var plugin =
@@ -93,6 +95,41 @@ class DocumentRawDataAutoConfigurationTest {
                                                     .binaryChunking()
                                                     .hardMaxTokens())
                                     .isEqualTo(1600);
+                            assertThat(
+                                            readField(
+                                                            plugin,
+                                                            "options",
+                                                            DocumentExtractionOptions.class)
+                                                    .binaryMinChunkTokens())
+                                    .isEqualTo(256);
+                            assertThat(
+                                            readField(
+                                                            plugin,
+                                                            "options",
+                                                            DocumentExtractionOptions.class)
+                                                    .pdfMaxMergedPages())
+                                    .isEqualTo(5);
+                        });
+    }
+
+    @Test
+    void bindsDocumentCaptionOptionsIntoPluginBean() {
+        contextRunner
+                .withPropertyValues(
+                        "memind.rawdata.document.extraction.llm-caption-enabled=false",
+                        "memind.rawdata.document.extraction.caption-concurrency=2",
+                        "memind.rawdata.document.extraction.fallback-caption-max-length=128")
+                .run(
+                        context -> {
+                            var plugin =
+                                    (DocumentRawDataPlugin)
+                                            context.getBean("documentRawDataPlugin");
+                            var options =
+                                    readField(plugin, "options", DocumentExtractionOptions.class);
+
+                            assertThat(options.llmCaptionEnabled()).isFalse();
+                            assertThat(options.captionConcurrency()).isEqualTo(2);
+                            assertThat(options.fallbackCaptionMaxLength()).isEqualTo(128);
                         });
     }
 

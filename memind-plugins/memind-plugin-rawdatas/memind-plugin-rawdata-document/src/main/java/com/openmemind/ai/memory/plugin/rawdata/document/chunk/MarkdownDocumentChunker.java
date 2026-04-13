@@ -17,8 +17,11 @@ import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TokenAwareSegmentAssembler;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.core.utils.TokenUtils;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -28,61 +31,100 @@ import java.util.regex.Pattern;
  */
 final class MarkdownDocumentChunker {
 
-    private static final Pattern MARKDOWN_HEADING = Pattern.compile("(?m)^#{1,6}\\s+.+$");
+    private static final Pattern MARKDOWN_HEADING = Pattern.compile("(?m)^(#{1,6})\\s+(.+)$");
 
-    private final TokenAwareSegmentAssembler tokenAwareSegmentAssembler;
+    private final TokenAwareSegmentAssembler assembler;
+    private final ParagraphWindowDocumentChunker paragraphChunker;
+    private final DocumentChunkSupport support;
 
-    MarkdownDocumentChunker(TokenAwareSegmentAssembler tokenAwareSegmentAssembler) {
-        this.tokenAwareSegmentAssembler =
-                Objects.requireNonNull(tokenAwareSegmentAssembler, "tokenAwareSegmentAssembler");
+    MarkdownDocumentChunker(TokenAwareSegmentAssembler assembler) {
+        this(
+                assembler,
+                new ParagraphWindowDocumentChunker(assembler, new DocumentChunkSupport()),
+                new DocumentChunkSupport());
+    }
+
+    MarkdownDocumentChunker(
+            TokenAwareSegmentAssembler assembler,
+            ParagraphWindowDocumentChunker paragraphChunker,
+            DocumentChunkSupport support) {
+        this.assembler = Objects.requireNonNull(assembler, "assembler");
+        this.paragraphChunker = Objects.requireNonNull(paragraphChunker, "paragraphChunker");
+        this.support = Objects.requireNonNull(support, "support");
     }
 
     List<Segment> chunk(String text, TokenChunkingOptions options) {
+        return chunk(text, options, 1);
+    }
+
+    List<Segment> chunk(String text, TokenChunkingOptions options, int minChunkTokens) {
         Objects.requireNonNull(options, "options");
         if (text == null || text.isBlank()) {
             return List.of();
         }
 
-        List<Segment> blocks = headingBlocks(text);
-        if (blocks.isEmpty()) {
-            return tokenAwareSegmentAssembler.assemble(
-                    tokenAwareSegmentAssembler.paragraphCandidates(text), options);
+        List<HeadingMarker> headings = headingMarkers(text);
+        if (headings.isEmpty()) {
+            return paragraphChunker.chunk(text, options, minChunkTokens);
         }
 
+        List<Segment> blocks = headingBlocks(text, headings);
         List<Segment> segments = new ArrayList<>();
         for (Segment block : blocks) {
-            List<Segment> shiftedCandidates =
-                    tokenAwareSegmentAssembler.paragraphCandidates(block.content()).stream()
-                            .map(candidate -> shift(block, candidate))
-                            .toList();
-            segments.addAll(tokenAwareSegmentAssembler.assemble(shiftedCandidates, options));
+            if (TokenUtils.countTokens(block.content()) > options.hardMaxTokens()) {
+                segments.addAll(
+                        paragraphChunker.chunk(block.content(), options, minChunkTokens).stream()
+                                .map(child -> support.shift(block, child))
+                                .map(child -> support.mergeMetadata(child, block.metadata()))
+                                .toList());
+                continue;
+            }
+            segments.add(block);
         }
-        return segments;
+        return support.withChunkIndexes(segments);
     }
 
-    private List<Segment> headingBlocks(String text) {
+    private List<HeadingMarker> headingMarkers(String text) {
         Matcher matcher = MARKDOWN_HEADING.matcher(text);
-        List<Integer> starts = new ArrayList<>();
+        List<HeadingMarker> markers = new ArrayList<>();
         while (matcher.find()) {
-            starts.add(matcher.start());
+            markers.add(
+                    new HeadingMarker(
+                            matcher.start(), matcher.group(1).length(), matcher.group(2).trim()));
         }
-        if (starts.isEmpty()) {
-            return List.of();
-        }
-
-        List<Segment> blocks = new ArrayList<>();
-        if (starts.getFirst() > 0) {
-            addBlock(blocks, text, 0, starts.getFirst());
-        }
-        for (int index = 0; index < starts.size(); index++) {
-            int start = starts.get(index);
-            int end = index + 1 < starts.size() ? starts.get(index + 1) : text.length();
-            addBlock(blocks, text, start, end);
-        }
-        return blocks;
+        return List.copyOf(markers);
     }
 
-    private void addBlock(List<Segment> blocks, String text, int rawStart, int rawEnd) {
+    private List<Segment> headingBlocks(String text, List<HeadingMarker> headings) {
+        List<Segment> blocks = new ArrayList<>();
+        if (headings.getFirst().start() > 0) {
+            addBlock(blocks, text, 0, headings.getFirst().start(), baseHeadingMetadata());
+        }
+        for (int index = 0; index < headings.size(); index++) {
+            HeadingMarker heading = headings.get(index);
+            int end = index + 1 < headings.size() ? headings.get(index + 1).start() : text.length();
+            addBlock(blocks, text, heading.start(), end, headingMetadata(heading));
+        }
+        return List.copyOf(blocks);
+    }
+
+    private Map<String, Object> baseHeadingMetadata() {
+        return Map.of("chunkStrategy", "markdown-heading", "structureType", "headingBlock");
+    }
+
+    private Map<String, Object> headingMetadata(HeadingMarker heading) {
+        Map<String, Object> metadata = new LinkedHashMap<>(baseHeadingMetadata());
+        metadata.put("headingLevel", heading.level());
+        metadata.put("headingTitle", heading.title());
+        return Map.copyOf(metadata);
+    }
+
+    private void addBlock(
+            List<Segment> blocks,
+            String text,
+            int rawStart,
+            int rawEnd,
+            Map<String, Object> metadata) {
         int start = skipWhitespaceForward(text, rawStart);
         int end = skipWhitespaceBackward(text, rawEnd);
         if (start >= end) {
@@ -90,30 +132,7 @@ final class MarkdownDocumentChunker {
         }
         blocks.add(
                 new Segment(
-                        text.substring(start, end),
-                        null,
-                        new CharBoundary(start, end),
-                        java.util.Map.of()));
-    }
-
-    private Segment shift(Segment parent, Segment child) {
-        CharBoundary parentBoundary = charBoundary(parent);
-        CharBoundary childBoundary = charBoundary(child);
-        return new Segment(
-                child.content(),
-                child.caption(),
-                new CharBoundary(
-                        parentBoundary.startChar() + childBoundary.startChar(),
-                        parentBoundary.startChar() + childBoundary.endChar()),
-                child.metadata(),
-                parent.runtimeContext());
-    }
-
-    private CharBoundary charBoundary(Segment segment) {
-        if (segment.boundary() instanceof CharBoundary charBoundary) {
-            return charBoundary;
-        }
-        throw new IllegalArgumentException("MarkdownDocumentChunker requires CharBoundary");
+                        text.substring(start, end), null, new CharBoundary(start, end), metadata));
     }
 
     private int skipWhitespaceForward(String text, int index) {
@@ -131,4 +150,6 @@ final class MarkdownDocumentChunker {
         }
         return cursor;
     }
+
+    private record HeadingMarker(int start, int level, String title) {}
 }

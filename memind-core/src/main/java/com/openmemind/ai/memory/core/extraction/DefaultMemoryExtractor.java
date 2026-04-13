@@ -332,52 +332,54 @@ public class DefaultMemoryExtractor implements MemoryExtractor {
         var bufferKey = memoryId.toIdentifier();
 
         return Mono.fromCallable(
-                        () -> ConversationBufferLocks.withLock(
-                                bufferKey,
-                                () -> {
-                                    recentConversationBuffer.append(bufferKey, message);
-                                    if (message.role() == Message.Role.ASSISTANT) {
-                                        appendToPendingBuffer(bufferKey, message);
-                                        return Optional.<PendingExtraction>empty();
-                                    }
+                        () ->
+                                ConversationBufferLocks.withLock(
+                                        bufferKey,
+                                        () -> {
+                                            recentConversationBuffer.append(bufferKey, message);
+                                            if (message.role() == Message.Role.ASSISTANT) {
+                                                appendToPendingBuffer(bufferKey, message);
+                                                return Optional.<PendingExtraction>empty();
+                                            }
 
-                                    var snapshot = pendingConversationBuffer.load(bufferKey);
-                                    if (snapshot.isEmpty()) {
-                                        appendToPendingBuffer(bufferKey, message);
-                                        return Optional.<PendingExtraction>empty();
-                                    }
+                                            var snapshot =
+                                                    pendingConversationBuffer.load(bufferKey);
+                                            if (snapshot.isEmpty()) {
+                                                appendToPendingBuffer(bufferKey, message);
+                                                return Optional.<PendingExtraction>empty();
+                                            }
 
-                                    var detectionInput =
-                                            new CommitDetectionInput(
-                                                    snapshot,
-                                                    List.of(message),
-                                                    CommitDetectionContext.empty());
-                                    var decision =
-                                            contextCommitDetector
-                                                    .shouldCommit(detectionInput)
-                                                    .defaultIfEmpty(CommitDecision.hold())
-                                                    .block();
+                                            var detectionInput =
+                                                    new CommitDetectionInput(
+                                                            snapshot,
+                                                            List.of(message),
+                                                            CommitDetectionContext.empty());
+                                            var decision =
+                                                    contextCommitDetector
+                                                            .shouldCommit(detectionInput)
+                                                            .defaultIfEmpty(CommitDecision.hold())
+                                                            .block();
 
-                                    if (decision == null || !decision.shouldSeal()) {
-                                        appendToPendingBuffer(bufferKey, message);
-                                        return Optional.<PendingExtraction>empty();
-                                    }
+                                            if (decision == null || !decision.shouldSeal()) {
+                                                appendToPendingBuffer(bufferKey, message);
+                                                return Optional.<PendingExtraction>empty();
+                                            }
 
-                                    log.debug(
-                                            "Boundary detection triggered sealing: memoryId={},"
-                                                    + " reason={}, confidence={}",
-                                            bufferKey,
-                                            decision.reason(),
-                                            decision.confidence());
+                                            log.debug(
+                                                    "Boundary detection triggered sealing:"
+                                                        + " memoryId={}, reason={}, confidence={}",
+                                                    bufferKey,
+                                                    decision.reason(),
+                                                    decision.confidence());
 
-                                    var sealedMessages = List.copyOf(snapshot);
-                                    pendingConversationBuffer.clear(bufferKey);
-                                    pendingConversationBuffer.append(bufferKey, message);
+                                            var sealedMessages = List.copyOf(snapshot);
+                                            pendingConversationBuffer.clear(bufferKey);
+                                            pendingConversationBuffer.append(bufferKey, message);
 
-                                    return Optional.of(
-                                            new PendingExtraction(
-                                                    sealedMessages, new HashMap<>()));
-                                }))
+                                            return Optional.of(
+                                                    new PendingExtraction(
+                                                            sealedMessages, new HashMap<>()));
+                                        }))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(
                         pending ->
@@ -490,7 +492,8 @@ public class DefaultMemoryExtractor implements MemoryExtractor {
                         request.contentType(),
                         itemExtractionOptions,
                         processor.allowedCategories());
-        RawDataResult normalized = processor.normalizeForItemBudget(request.content(), rawResult, itemConfig);
+        RawDataResult normalized =
+                processor.normalizeForItemBudget(request.content(), rawResult, itemConfig);
         RawDataResult budgeted = segmentBudgetEnforcer.enforce(normalized, itemConfig);
         return memoryItemStep
                 .extract(request.memoryId(), budgeted, itemConfig)

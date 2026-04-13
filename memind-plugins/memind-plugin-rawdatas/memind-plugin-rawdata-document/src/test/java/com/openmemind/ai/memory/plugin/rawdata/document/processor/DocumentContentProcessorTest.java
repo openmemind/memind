@@ -14,7 +14,9 @@
 package com.openmemind.ai.memory.plugin.rawdata.document.processor;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
+import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import com.openmemind.ai.memory.plugin.rawdata.document.DocumentSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.document.chunk.ProfileAwareDocumentChunker;
@@ -30,8 +32,18 @@ class DocumentContentProcessorTest {
 
     @Test
     void pluginOwnsDocumentExtractionDefaults() {
+        assertThat(DocumentExtractionOptions.defaults().textLikeParsedLimit().maxTokens())
+                .isEqualTo(100_000);
         assertThat(DocumentExtractionOptions.defaults().binaryParsedLimit().maxTokens())
-                .isEqualTo(30_000);
+                .isEqualTo(100_000);
+        assertThat(DocumentExtractionOptions.defaults().wholeDocumentMaxTokens()).isEqualTo(12_000);
+        assertThat(DocumentExtractionOptions.defaults().textLikeChunking().targetTokens())
+                .isEqualTo(1_200);
+        assertThat(DocumentExtractionOptions.defaults().textLikeChunking().hardMaxTokens())
+                .isEqualTo(1_800);
+        assertThat(DocumentExtractionOptions.defaults().textLikeMinChunkTokens()).isEqualTo(300);
+        assertThat(DocumentExtractionOptions.defaults().binaryMinChunkTokens()).isEqualTo(300);
+        assertThat(DocumentExtractionOptions.defaults().pdfMaxMergedPages()).isEqualTo(3);
     }
 
     @Test
@@ -45,7 +57,28 @@ class DocumentContentProcessorTest {
     }
 
     @Test
-    void documentProcessorUsesHeadingAwareChunkingForMarkdownProfile() {
+    void processorUsesInjectedCaptionGenerator() {
+        var captionGenerator = mock(CaptionGenerator.class);
+        var processor =
+                new DocumentContentProcessor(
+                        new ProfileAwareDocumentChunker(),
+                        DocumentExtractionOptions.defaults(),
+                        captionGenerator);
+
+        assertThat(processor.captionGenerator()).isSameAs(captionGenerator);
+    }
+
+    @Test
+    void legacyConstructorRemainsAvailableForCompatibility() {
+        var processor =
+                new DocumentContentProcessor(
+                        new ProfileAwareDocumentChunker(), DocumentExtractionOptions.defaults());
+
+        assertThat(processor.captionGenerator()).isNotNull();
+    }
+
+    @Test
+    void documentProcessorKeepsSmallMarkdownAsWholeDocument() {
         var processor =
                 new DocumentContentProcessor(
                         new ProfileAwareDocumentChunker(), DocumentExtractionOptions.defaults());
@@ -61,9 +94,14 @@ class DocumentContentProcessorTest {
         StepVerifier.create(processor.chunk(content))
                 .assertNext(
                         segments -> {
-                            assertThat(segments).hasSize(2);
-                            assertThat(segments.getFirst().content()).contains("# Intro");
-                            assertThat(segments.get(1).content()).contains("## Usage");
+                            assertThat(segments).singleElement();
+                            assertThat(segments.getFirst().content())
+                                    .contains("# Intro")
+                                    .contains("## Usage");
+                            assertThat(segments.getFirst().metadata())
+                                    .containsEntry("chunkStrategy", "document-whole")
+                                    .containsEntry("structureType", "document")
+                                    .containsEntry("chunkIndex", 0);
                         })
                 .verifyComplete();
     }
@@ -72,7 +110,8 @@ class DocumentContentProcessorTest {
     void documentProcessorKeepsChunksWithinHardTokenBudget() {
         var processor =
                 new DocumentContentProcessor(
-                        new ProfileAwareDocumentChunker(), DocumentExtractionOptions.defaults());
+                        new ProfileAwareDocumentChunker(),
+                        optionsWithWholeDocumentMaxTokens(1_000));
         var content =
                 new DocumentContent(
                         "Guide",
@@ -103,7 +142,7 @@ class DocumentContentProcessorTest {
     }
 
     @Test
-    void documentProcessorChunksRowShapedCsvWithCsvProfile() {
+    void documentProcessorKeepsSmallCsvAsWholeDocument() {
         var processor =
                 new DocumentContentProcessor(
                         new ProfileAwareDocumentChunker(), DocumentExtractionOptions.defaults());
@@ -125,24 +164,28 @@ class DocumentContentProcessorTest {
         StepVerifier.create(processor.chunk(content))
                 .assertNext(
                         segments -> {
-                            assertThat(segments).hasSize(2);
-                            assertThat(segments.getFirst().content()).contains("Row 1:");
-                            assertThat(segments.get(1).content()).contains("Row 2:");
+                            assertThat(segments).singleElement();
+                            assertThat(segments.getFirst().content())
+                                    .contains("Row 1:")
+                                    .contains("Row 2:");
+                            assertThat(segments.getFirst().metadata())
+                                    .containsEntry("chunkStrategy", "document-whole")
+                                    .containsEntry("structureType", "document")
+                                    .containsEntry("chunkIndex", 0);
                         })
                 .verifyComplete();
     }
 
     @Test
-    void documentProcessorUsesBinaryChunkingForPdfTikaProfile() {
+    void documentProcessorKeepsSmallPdfAsWholeDocument() {
         var processor =
                 new DocumentContentProcessor(
                         new ProfileAwareDocumentChunker(), DocumentExtractionOptions.defaults());
-        String text = "word ".repeat(1_300);
         var content =
                 new DocumentContent(
                         "Manual",
                         "application/pdf",
-                        text,
+                        "Page 1:\nalpha\n\nPage 2:\nbeta\n\nPage 3:\n" + "word ".repeat(900),
                         List.of(),
                         null,
                         Map.of("contentProfile", DocumentSemantics.PROFILE_PDF_TIKA));
@@ -150,16 +193,11 @@ class DocumentContentProcessorTest {
         StepVerifier.create(processor.chunk(content))
                 .assertNext(
                         segments -> {
-                            assertThat(segments).hasSize(1);
-                            assertThat(TokenUtils.countTokens(segments.getFirst().content()))
-                                    .isGreaterThan(
-                                            DocumentExtractionOptions.defaults()
-                                                    .textLikeChunking()
-                                                    .hardMaxTokens())
-                                    .isLessThanOrEqualTo(
-                                            DocumentExtractionOptions.defaults()
-                                                    .binaryChunking()
-                                                    .hardMaxTokens());
+                            assertThat(segments).singleElement();
+                            assertThat(segments.getFirst().metadata())
+                                    .containsEntry("chunkStrategy", "document-whole")
+                                    .containsEntry("structureType", "document")
+                                    .containsEntry("chunkIndex", 0);
                         })
                 .verifyComplete();
     }
@@ -214,20 +252,67 @@ class DocumentContentProcessorTest {
     }
 
     @Test
-    void shouldPreserveSectionMetadataWhenSectionsExist() {
+    void normalizeForItemBudgetReusesProfileSpecificChunking() {
         var processor =
                 new DocumentContentProcessor(
                         new ProfileAwareDocumentChunker(), DocumentExtractionOptions.defaults());
         var content =
                 new DocumentContent(
+                        "People",
+                        "text/csv",
+                        "Row 1:\n" + "column1: word, ".repeat(2_600),
+                        List.of(),
+                        null,
+                        Map.of("contentProfile", DocumentSemantics.PROFILE_CSV));
+        var rawDataResult =
+                new com.openmemind.ai.memory.core.extraction.result.RawDataResult(
+                        List.of(),
+                        List.of(
+                                new com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment(
+                                        content.toContentString(),
+                                        null,
+                                        0,
+                                        content.toContentString().length(),
+                                        "raw-1",
+                                        content.metadata())),
+                        false);
+        var itemConfig =
+                new com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig(
+                        com.openmemind.ai.memory.core.data.enums.MemoryScope.USER,
+                        DocumentContent.TYPE,
+                        false,
+                        "English",
+                        new com.openmemind.ai.memory.core.builder.PromptBudgetOptions(
+                                1_800, 200, 200, 200));
+
+        var normalized = processor.normalizeForItemBudget(content, rawDataResult, itemConfig);
+
+        assertThat(normalized.segments()).hasSizeGreaterThan(1);
+        assertThat(normalized.segments())
+                .allSatisfy(segment -> assertThat(segment.text()).startsWith("Row 1:"));
+    }
+
+    @Test
+    void documentProcessorKeepsSectionAsOuterBoundary() {
+        var processor =
+                new DocumentContentProcessor(
+                        new ProfileAwareDocumentChunker(), optionsWithWholeDocumentMaxTokens(5));
+        var content =
+                new DocumentContent(
                         "Report",
                         "application/pdf",
-                        "summary\n\nappendix",
+                        "Page 1:\nsummary\n\nPage 2:\nappendix",
                         List.of(
-                                new DocumentSection("Summary", "summary", 0, Map.of("page", 1)),
-                                new DocumentSection("Appendix", "appendix", 1, Map.of("page", 2))),
-                        "file:///tmp/report.pdf",
-                        Map.of("author", "Alice"));
+                                new DocumentSection(
+                                        "Summary", "Page 1:\nsummary", 0, Map.of("page", 1)),
+                                new DocumentSection(
+                                        "Appendix", "Page 2:\nappendix", 1, Map.of("page", 2))),
+                        null,
+                        Map.of(
+                                "author",
+                                "Alice",
+                                "contentProfile",
+                                DocumentSemantics.PROFILE_PDF_TIKA));
 
         StepVerifier.create(processor.chunk(content))
                 .assertNext(
@@ -236,12 +321,93 @@ class DocumentContentProcessorTest {
                             assertThat(segments.getFirst().metadata())
                                     .containsEntry("sectionIndex", 0)
                                     .containsEntry("sectionTitle", "Summary")
-                                    .containsEntry("page", 1);
+                                    .containsEntry("page", 1)
+                                    .containsEntry("pageNumber", 1)
+                                    .containsEntry("chunkIndex", 0);
                             assertThat(segments.get(1).metadata())
                                     .containsEntry("sectionIndex", 1)
                                     .containsEntry("sectionTitle", "Appendix")
-                                    .containsEntry("page", 2);
+                                    .containsEntry("page", 2)
+                                    .containsEntry("pageNumber", 2)
+                                    .containsEntry("chunkIndex", 1);
                         })
                 .verifyComplete();
+    }
+
+    @Test
+    void documentProcessorFallsBackToWholeDocumentChunkingWhenSectionSpansCannotBeProven() {
+        var processor =
+                new DocumentContentProcessor(
+                        new ProfileAwareDocumentChunker(), DocumentExtractionOptions.defaults());
+        var content =
+                new DocumentContent(
+                        "Report",
+                        "text/plain",
+                        "Summary\n\nBody",
+                        List.of(
+                                new DocumentSection("Summary", "Summary", 0, Map.of()),
+                                new DocumentSection("Body", "B ody", 1, Map.of())),
+                        null,
+                        Map.of("contentProfile", DocumentSemantics.PROFILE_TEXT));
+
+        StepVerifier.create(processor.chunk(content))
+                .assertNext(
+                        segments -> {
+                            assertThat(segments).singleElement();
+                            assertThat(segments.getFirst().metadata())
+                                    .doesNotContainKeys("sectionIndex", "sectionTitle")
+                                    .containsEntry("chunkStrategy", "document-whole")
+                                    .containsEntry("structureType", "document")
+                                    .containsEntry("chunkIndex", 0);
+                        })
+                .verifyComplete();
+    }
+
+    @Test
+    void documentProcessorIgnoresSectionsWhenWholeDocumentThresholdIsNotExceeded() {
+        var processor =
+                new DocumentContentProcessor(
+                        new ProfileAwareDocumentChunker(), DocumentExtractionOptions.defaults());
+        var content =
+                new DocumentContent(
+                        "Guide",
+                        "text/markdown",
+                        "# Intro\nhello\n\n## Usage\nworld",
+                        List.of(
+                                new DocumentSection("Intro", "# Intro\nhello", 0, Map.of()),
+                                new DocumentSection("Usage", "## Usage\nworld", 1, Map.of())),
+                        null,
+                        Map.of("contentProfile", DocumentSemantics.PROFILE_MARKDOWN));
+
+        StepVerifier.create(processor.chunk(content))
+                .assertNext(
+                        segments -> {
+                            assertThat(segments).singleElement();
+                            assertThat(segments.getFirst().metadata())
+                                    .containsEntry("chunkStrategy", "document-whole")
+                                    .containsEntry("structureType", "document")
+                                    .containsEntry("sectionCount", 2)
+                                    .doesNotContainKeys("sectionIndex", "sectionTitle");
+                        })
+                .verifyComplete();
+    }
+
+    private static DocumentExtractionOptions optionsWithWholeDocumentMaxTokens(
+            int wholeDocumentMaxTokens) {
+        var defaults = DocumentExtractionOptions.defaults();
+        return new DocumentExtractionOptions(
+                defaults.textLikeSourceLimit(),
+                defaults.binarySourceLimit(),
+                defaults.textLikeParsedLimit(),
+                defaults.binaryParsedLimit(),
+                wholeDocumentMaxTokens,
+                defaults.textLikeChunking(),
+                defaults.binaryChunking(),
+                defaults.textLikeMinChunkTokens(),
+                defaults.binaryMinChunkTokens(),
+                defaults.pdfMaxMergedPages(),
+                defaults.llmCaptionEnabled(),
+                defaults.captionConcurrency(),
+                defaults.fallbackCaptionMaxLength());
     }
 }

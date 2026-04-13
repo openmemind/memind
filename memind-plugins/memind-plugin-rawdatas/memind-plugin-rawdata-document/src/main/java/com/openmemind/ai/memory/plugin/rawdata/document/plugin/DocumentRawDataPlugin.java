@@ -15,11 +15,13 @@ package com.openmemind.ai.memory.plugin.rawdata.document.plugin;
 
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
+import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicy;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.document.DocumentSemantics;
+import com.openmemind.ai.memory.plugin.rawdata.document.caption.LlmDocumentCaptionGenerator;
 import com.openmemind.ai.memory.plugin.rawdata.document.chunk.ProfileAwareDocumentChunker;
 import com.openmemind.ai.memory.plugin.rawdata.document.config.DocumentExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
@@ -47,7 +49,16 @@ public final class DocumentRawDataPlugin implements RawDataPlugin {
 
     @Override
     public List<RawContentProcessor<?>> processors(RawDataPluginContext context) {
-        return List.of(new DocumentContentProcessor(new ProfileAwareDocumentChunker(), options));
+        var captionClient = context.chatClientRegistry().resolve(ChatClientSlot.CAPTION_GENERATOR);
+        var captionGenerator =
+                new LlmDocumentCaptionGenerator(
+                        captionClient,
+                        options.llmCaptionEnabled(),
+                        options.captionConcurrency(),
+                        options.fallbackCaptionMaxLength());
+        return List.of(
+                new DocumentContentProcessor(
+                        new ProfileAwareDocumentChunker(), options, captionGenerator));
     }
 
     @Override

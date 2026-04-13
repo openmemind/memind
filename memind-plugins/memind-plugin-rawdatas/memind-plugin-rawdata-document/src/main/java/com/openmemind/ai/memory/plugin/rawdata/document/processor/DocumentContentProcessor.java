@@ -19,11 +19,13 @@ import com.openmemind.ai.memory.core.exception.ParsedContentTooLargeException;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
+import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import com.openmemind.ai.memory.plugin.rawdata.document.DocumentSemantics;
+import com.openmemind.ai.memory.plugin.rawdata.document.caption.DocumentCaptionFallbacks;
 import com.openmemind.ai.memory.plugin.rawdata.document.chunk.ProfileAwareDocumentChunker;
 import com.openmemind.ai.memory.plugin.rawdata.document.config.DocumentExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
@@ -42,17 +44,30 @@ import reactor.core.publisher.Mono;
  */
 public final class DocumentContentProcessor implements RawContentProcessor<DocumentContent> {
 
+    private static final String WHOLE_DOCUMENT_CHUNK_STRATEGY = "document-whole";
+
     private final ProfileAwareDocumentChunker profileAwareDocumentChunker;
     private final DocumentExtractionOptions options;
+    private final DocumentSectionBoundaryResolver sectionBoundaryResolver;
+    private final CaptionGenerator captionGenerator;
 
     public DocumentContentProcessor(
             ProfileAwareDocumentChunker profileAwareDocumentChunker,
             DocumentExtractionOptions options) {
+        this(profileAwareDocumentChunker, options, fallbackCaptionGenerator(options));
+    }
+
+    public DocumentContentProcessor(
+            ProfileAwareDocumentChunker profileAwareDocumentChunker,
+            DocumentExtractionOptions options,
+            CaptionGenerator captionGenerator) {
         this.profileAwareDocumentChunker =
                 Objects.requireNonNull(
                         profileAwareDocumentChunker,
                         "profileAwareDocumentChunker must not be null");
         this.options = Objects.requireNonNull(options, "options must not be null");
+        this.captionGenerator = Objects.requireNonNull(captionGenerator, "captionGenerator");
+        this.sectionBoundaryResolver = new DocumentSectionBoundaryResolver();
     }
 
     @Override
@@ -68,6 +83,11 @@ public final class DocumentContentProcessor implements RawContentProcessor<Docum
     @Override
     public boolean usesSourceIdentity() {
         return true;
+    }
+
+    @Override
+    public CaptionGenerator captionGenerator() {
+        return captionGenerator;
     }
 
     @Override
@@ -88,61 +108,34 @@ public final class DocumentContentProcessor implements RawContentProcessor<Docum
 
     @Override
     public Mono<List<Segment>> chunk(DocumentContent content) {
+        String text = content.toContentString();
+        if (text == null || text.isBlank()) {
+            return Mono.just(List.of());
+        }
         String profile = resolveContentProfile(content);
         String governanceType = resolveGovernanceType(content, profile);
+        if (TokenUtils.countTokens(text) <= options.wholeDocumentMaxTokens()) {
+            return Mono.just(finalizeSegments(List.of(wholeDocumentSegment(content))));
+        }
         if (content.sections().isEmpty()) {
             return Mono.just(
-                    enrichWithContentMetadata(
-                            profileAwareDocumentChunker.chunk(
-                                    content.toContentString(), options, governanceType, profile),
-                            content.metadata()));
+                    finalizeSegments(chunkStructuredDocument(content, governanceType, profile)));
         }
 
-        List<Segment> segments = new ArrayList<>();
-        String fullText = content.toContentString();
-        int searchFrom = 0;
-        for (DocumentSection section : content.sections()) {
-            String sectionText = section.content();
-            if (sectionText == null || sectionText.isBlank()) {
-                continue;
-            }
-            int sectionStart = fullText.indexOf(sectionText, searchFrom);
-            if (sectionStart < 0) {
-                sectionStart = Math.max(0, searchFrom);
-            }
-            searchFrom = sectionStart + sectionText.length();
-            for (Segment local :
-                    profileAwareDocumentChunker.chunk(
-                            sectionText, options, governanceType, profile)) {
-                CharBoundary localBoundary = (CharBoundary) local.boundary();
-                Map<String, Object> metadata = new LinkedHashMap<>(content.metadata());
-                metadata.putAll(local.metadata());
-                metadata.putAll(section.metadata());
-                metadata.put("sectionIndex", section.index());
-                if (section.title() != null && !section.title().isBlank()) {
-                    metadata.put("sectionTitle", section.title());
-                }
-                segments.add(
-                        new Segment(
-                                local.content(),
-                                local.caption(),
-                                new CharBoundary(
-                                        sectionStart + localBoundary.startChar(),
-                                        sectionStart + localBoundary.endChar()),
-                                Map.copyOf(metadata),
-                                local.runtimeContext()));
-            }
-        }
         return Mono.just(
-                segments.isEmpty()
-                        ? enrichWithContentMetadata(
-                                profileAwareDocumentChunker.chunk(
-                                        content.toContentString(),
-                                        options,
-                                        governanceType,
-                                        profile),
-                                content.metadata())
-                        : segments);
+                sectionBoundaryResolver
+                        .resolve(text, content.sections())
+                        .filter(spans -> !spans.isEmpty())
+                        .map(
+                                spans ->
+                                        finalizeSegments(
+                                                chunkResolvedSections(
+                                                        spans, content, profile, governanceType)))
+                        .orElseGet(
+                                () ->
+                                        finalizeSegments(
+                                                chunkStructuredDocument(
+                                                        content, governanceType, profile))));
     }
 
     @Override
@@ -275,23 +268,103 @@ public final class DocumentContentProcessor implements RawContentProcessor<Docum
                 - budget.safetyMargin();
     }
 
+    private List<Segment> chunkStructuredDocument(
+            DocumentContent content, String governanceType, String profile) {
+        return enrichWithContentMetadata(
+                profileAwareDocumentChunker.chunk(
+                        content.toContentString(), options, governanceType, profile),
+                content.metadata());
+    }
+
+    private Segment wholeDocumentSegment(DocumentContent content) {
+        String text = content.toContentString();
+        Map<String, Object> metadata = new LinkedHashMap<>(content.metadata());
+        metadata.put("chunkStrategy", WHOLE_DOCUMENT_CHUNK_STRATEGY);
+        metadata.put("structureType", "document");
+        if (!content.sections().isEmpty()) {
+            metadata.put("sectionCount", content.sections().size());
+        }
+        return new Segment(text, null, new CharBoundary(0, text.length()), Map.copyOf(metadata));
+    }
+
+    private List<Segment> chunkResolvedSections(
+            List<DocumentSectionBoundaryResolver.ResolvedSectionSpan> spans,
+            DocumentContent content,
+            String profile,
+            String governanceType) {
+        List<Segment> segments = new ArrayList<>();
+        for (DocumentSectionBoundaryResolver.ResolvedSectionSpan span : spans) {
+            DocumentSection section = span.section();
+            List<Segment> localSegments =
+                    profileAwareDocumentChunker.chunk(
+                            section.content(), options, governanceType, profile);
+            for (Segment local : localSegments) {
+                CharBoundary localBoundary = charBoundary(local);
+                Map<String, Object> metadata = new LinkedHashMap<>(content.metadata());
+                metadata.putAll(local.metadata());
+                metadata.putAll(section.metadata());
+                metadata.put("sectionIndex", section.index());
+                if (section.title() != null && !section.title().isBlank()) {
+                    metadata.put("sectionTitle", section.title());
+                }
+                segments.add(
+                        new Segment(
+                                local.content(),
+                                local.caption(),
+                                new CharBoundary(
+                                        span.start() + localBoundary.startChar(),
+                                        span.start() + localBoundary.endChar()),
+                                Map.copyOf(metadata),
+                                local.runtimeContext()));
+            }
+        }
+        return segments;
+    }
+
+    private List<Segment> finalizeSegments(List<Segment> segments) {
+        List<Segment> finalized = new ArrayList<>(segments.size());
+        for (int index = 0; index < segments.size(); index++) {
+            Segment segment = segments.get(index);
+            Map<String, Object> metadata = new LinkedHashMap<>(segment.metadata());
+            metadata.put("chunkIndex", index);
+            finalized.add(
+                    new Segment(
+                            segment.content(),
+                            segment.caption(),
+                            segment.boundary(),
+                            Map.copyOf(metadata),
+                            segment.runtimeContext()));
+        }
+        return List.copyOf(finalized);
+    }
+
     private DocumentExtractionOptions budgetOptions(int effectiveBudget, String governanceType) {
         int hardMaxTokens = Math.max(1, effectiveBudget);
         TokenChunkingOptions textLikeChunking =
                 capChunking(options.textLikeChunking(), hardMaxTokens);
         TokenChunkingOptions binaryChunking = capChunking(options.binaryChunking(), hardMaxTokens);
-        if (DocumentSemantics.isBinaryGovernance(governanceType)) {
-            binaryChunking = capChunking(options.binaryChunking(), hardMaxTokens);
-        } else {
-            textLikeChunking = capChunking(options.textLikeChunking(), hardMaxTokens);
-        }
         return new DocumentExtractionOptions(
                 options.textLikeSourceLimit(),
                 options.binarySourceLimit(),
                 options.textLikeParsedLimit(),
                 options.binaryParsedLimit(),
+                options.wholeDocumentMaxTokens(),
                 textLikeChunking,
-                binaryChunking);
+                binaryChunking,
+                options.textLikeMinChunkTokens(),
+                options.binaryMinChunkTokens(),
+                options.pdfMaxMergedPages(),
+                options.llmCaptionEnabled(),
+                options.captionConcurrency(),
+                options.fallbackCaptionMaxLength());
+    }
+
+    private static CaptionGenerator fallbackCaptionGenerator(DocumentExtractionOptions options) {
+        var resolvedOptions = Objects.requireNonNull(options, "options must not be null");
+        return (content, metadata) ->
+                Mono.just(
+                        DocumentCaptionFallbacks.build(
+                                content, metadata, resolvedOptions.fallbackCaptionMaxLength()));
     }
 
     private TokenChunkingOptions capChunking(TokenChunkingOptions base, int hardMaxTokens) {
@@ -318,14 +391,24 @@ public final class DocumentContentProcessor implements RawContentProcessor<Docum
 
     private ParsedSegment toParsedSegment(
             ParsedSegment original, Segment child, int baseStartIndex) {
-        CharBoundary boundary = (CharBoundary) child.boundary();
+        CharBoundary boundary = charBoundary(child);
+        Map<String, Object> metadata = new LinkedHashMap<>(original.metadata());
+        metadata.putAll(child.metadata());
         return new ParsedSegment(
                 child.content(),
                 child.caption() != null ? child.caption() : original.caption(),
                 baseStartIndex + boundary.startChar(),
                 baseStartIndex + boundary.endChar(),
                 original.rawDataId(),
-                child.metadata(),
+                Map.copyOf(metadata),
                 original.runtimeContext());
+    }
+
+    private CharBoundary charBoundary(Segment segment) {
+        if (segment.boundary() instanceof CharBoundary charBoundary) {
+            return charBoundary;
+        }
+        throw new IllegalArgumentException(
+                "DocumentContentProcessor requires CharBoundary segments");
     }
 }

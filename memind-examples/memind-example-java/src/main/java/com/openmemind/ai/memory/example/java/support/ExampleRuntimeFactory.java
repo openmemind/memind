@@ -24,6 +24,7 @@ import com.openmemind.ai.memory.plugin.ai.spring.SpringAiFileVector;
 import com.openmemind.ai.memory.plugin.ai.spring.SpringAiStructuredChatClient;
 import com.openmemind.ai.memory.plugin.jdbc.JdbcMemoryAccess;
 import com.openmemind.ai.memory.plugin.jdbc.JdbcStore;
+import com.openmemind.ai.memory.plugin.rawdata.document.plugin.DocumentRawDataPlugin;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.plugin.ToolCallRawDataPlugin;
 import io.micrometer.observation.ObservationRegistry;
 import java.nio.file.Files;
@@ -72,9 +73,7 @@ public final class ExampleRuntimeFactory {
                                             embeddingModel))
                             .reranker(createReranker(settings.rerank()))
                             .options(options);
-            if ("tool".equalsIgnoreCase(scenario)) {
-                memoryBuilder.rawDataPlugin(new ToolCallRawDataPlugin());
-            }
+            memoryBuilder = applyScenarioPlugins(memoryBuilder, scenario);
             Memory memory = memoryBuilder.build();
 
             return new ExampleRuntime(
@@ -88,6 +87,17 @@ public final class ExampleRuntimeFactory {
             throw new IllegalStateException(
                     "Failed to create Java example runtime for scenario: " + scenario, exception);
         }
+    }
+
+    static MemoryBuilder applyScenarioPlugins(MemoryBuilder memoryBuilder, String scenario) {
+        Objects.requireNonNull(memoryBuilder, "memoryBuilder");
+        Objects.requireNonNull(scenario, "scenario");
+
+        return switch (scenario.toLowerCase(Locale.ROOT)) {
+            case "tool" -> memoryBuilder.rawDataPlugin(new ToolCallRawDataPlugin());
+            case "document" -> memoryBuilder.rawDataPlugin(new DocumentRawDataPlugin());
+            default -> memoryBuilder;
+        };
     }
 
     static Path prepareRuntimeLayout(String scenario, ExampleSettings settings) throws Exception {
