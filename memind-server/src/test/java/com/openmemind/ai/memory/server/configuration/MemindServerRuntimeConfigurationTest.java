@@ -23,7 +23,6 @@ import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
@@ -45,7 +44,10 @@ import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import com.openmemind.ai.memory.plugin.rawdata.audio.parser.TranscriptionAudioContentParser;
+import com.openmemind.ai.memory.plugin.rawdata.audio.content.AudioContent;
+import com.openmemind.ai.memory.plugin.rawdata.document.DocumentSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
+import com.openmemind.ai.memory.plugin.rawdata.image.content.ImageContent;
 import com.openmemind.ai.memory.plugin.rawdata.image.parser.VisionImageContentParser;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeFactory;
 import java.lang.reflect.Proxy;
@@ -79,12 +81,17 @@ class MemindServerRuntimeConfigurationTest {
 
                     @Override
                     public String contentType() {
-                        return ContentTypes.DOCUMENT;
+                        return DocumentContent.TYPE;
                     }
 
                     @Override
                     public String contentProfile() {
                         return "document.binary";
+                    }
+
+                    @Override
+                    public String governanceType() {
+                        return DocumentSemantics.GOVERNANCE_BINARY;
                     }
 
                     @Override
@@ -158,12 +165,17 @@ class MemindServerRuntimeConfigurationTest {
 
                     @Override
                     public String contentType() {
-                        return ContentTypes.DOCUMENT;
+                        return DocumentContent.TYPE;
                     }
 
                     @Override
                     public String contentProfile() {
                         return "document.binary";
+                    }
+
+                    @Override
+                    public String governanceType() {
+                        return DocumentSemantics.GOVERNANCE_BINARY;
                     }
 
                     @Override
@@ -241,8 +253,8 @@ class MemindServerRuntimeConfigurationTest {
                         ContentCapability::contentType,
                         ContentCapability::contentProfile)
                 .containsExactlyInAnyOrder(
-                        tuple("image-vision", ContentTypes.IMAGE, "image.caption-ocr"),
-                        tuple("audio-transcription", ContentTypes.AUDIO, "audio.transcript"));
+                        tuple("image-vision", ImageContent.TYPE, "image.caption-ocr"),
+                        tuple("audio-transcription", AudioContent.TYPE, "audio.transcript"));
     }
 
     @SuppressWarnings("unchecked")

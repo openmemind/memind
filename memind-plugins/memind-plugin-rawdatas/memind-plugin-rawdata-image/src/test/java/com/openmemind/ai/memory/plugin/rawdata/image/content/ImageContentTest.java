@@ -17,11 +17,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
-import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.utils.HashUtils;
+import com.openmemind.ai.memory.plugin.rawdata.image.ImageSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.image.plugin.ImageRawContentTypeRegistrar;
 import java.util.List;
 import java.util.Map;
@@ -78,9 +77,9 @@ class ImageContentTest {
 
         assertThat(content.contentMetadata()).containsEntry("width", 1280);
         assertThat(content.directGovernanceType())
-                .isEqualTo(ContentGovernanceType.IMAGE_CAPTION_OCR);
+                .isEqualTo(ImageSemantics.GOVERNANCE_CAPTION_OCR);
         assertThat(content.directContentProfile())
-                .isEqualTo(BuiltinContentProfiles.IMAGE_CAPTION_OCR);
+                .isEqualTo(ImageSemantics.PROFILE_CAPTION_OCR);
         assertThat(content.withMetadata(Map.of("parserId", "vision")))
                 .isInstanceOf(ImageContent.class)
                 .extracting(value -> ((ImageContent) value).metadata().get("parserId"))

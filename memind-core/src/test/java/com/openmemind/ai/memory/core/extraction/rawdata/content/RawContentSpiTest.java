@@ -16,8 +16,6 @@ package com.openmemind.ai.memory.core.extraction.rawdata.content;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
-import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.support.TestDocumentContent;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -32,15 +30,15 @@ class RawContentSpiTest {
                         "text/markdown",
                         "# title",
                         "file:///tmp/guide.md",
-                        ContentGovernanceType.DOCUMENT_TEXT_LIKE,
-                        BuiltinContentProfiles.DOCUMENT_MARKDOWN,
+                        TestDocumentContent.GOVERNANCE_TEXT_LIKE,
+                        TestDocumentContent.PROFILE_MARKDOWN,
                         Map.of("author", "alice"));
 
         assertThat(content.contentMetadata()).containsEntry("author", "alice");
         assertThat(content.directGovernanceType())
-                .isEqualTo(ContentGovernanceType.DOCUMENT_TEXT_LIKE);
+                .isEqualTo(TestDocumentContent.GOVERNANCE_TEXT_LIKE);
         assertThat(content.directContentProfile())
-                .isEqualTo(BuiltinContentProfiles.DOCUMENT_MARKDOWN);
+                .isEqualTo(TestDocumentContent.PROFILE_MARKDOWN);
         assertThat(content.withMetadata(Map.of("parserId", "direct")))
                 .isInstanceOf(TestDocumentContent.class)
                 .extracting(value -> ((TestDocumentContent) value).metadata().get("parserId"))

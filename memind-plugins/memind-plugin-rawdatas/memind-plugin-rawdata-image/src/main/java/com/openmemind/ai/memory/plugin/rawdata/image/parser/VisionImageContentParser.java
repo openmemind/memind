@@ -13,12 +13,12 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.image.parser;
 
-import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.core.resource.SourceDescriptor;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.plugin.rawdata.image.content.ImageContent;
+import com.openmemind.ai.memory.plugin.rawdata.image.ImageSemantics;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -65,7 +65,12 @@ public final class VisionImageContentParser implements ContentParser {
 
     @Override
     public String contentProfile() {
-        return BuiltinContentProfiles.IMAGE_CAPTION_OCR;
+        return ImageSemantics.PROFILE_CAPTION_OCR;
+    }
+
+    @Override
+    public String governanceType() {
+        return ImageSemantics.GOVERNANCE_CAPTION_OCR;
     }
 
     @Override

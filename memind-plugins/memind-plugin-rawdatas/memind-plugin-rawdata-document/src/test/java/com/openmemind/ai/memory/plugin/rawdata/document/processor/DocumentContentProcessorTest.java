@@ -15,8 +15,8 @@ package com.openmemind.ai.memory.plugin.rawdata.document.processor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
+import com.openmemind.ai.memory.plugin.rawdata.document.DocumentSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.document.chunk.ProfileAwareDocumentChunker;
 import com.openmemind.ai.memory.plugin.rawdata.document.config.DocumentExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
@@ -119,7 +119,7 @@ class DocumentContentProcessorTest {
                                 "contentProfile",
                                 "document.pdf.tika",
                                 "governanceType",
-                                ContentGovernanceType.DOCUMENT_BINARY.name()));
+                                DocumentSemantics.GOVERNANCE_BINARY));
 
         StepVerifier.create(processor.chunk(content))
                 .assertNext(
@@ -130,12 +130,59 @@ class DocumentContentProcessorTest {
                                             DocumentExtractionOptions.defaults()
                                                     .textLikeChunking()
                                                     .hardMaxTokens())
-                                    .isLessThanOrEqualTo(
+                                        .isLessThanOrEqualTo(
                                             DocumentExtractionOptions.defaults()
                                                     .binaryChunking()
                                                     .hardMaxTokens());
                         })
                 .verifyComplete();
+    }
+
+    @Test
+    void normalizeForItemBudgetUsesMarkdownAwareSecondarySplit() {
+        var processor =
+                new DocumentContentProcessor(
+                        new ProfileAwareDocumentChunker(), DocumentExtractionOptions.defaults());
+        var content =
+                new DocumentContent(
+                        "Guide",
+                        "text/markdown",
+                        "# Intro\n"
+                                + "word ".repeat(3_000)
+                                + "\n\n## Usage\n"
+                                + "word ".repeat(3_000),
+                        List.of(),
+                        null,
+                        Map.of("contentProfile", DocumentSemantics.PROFILE_MARKDOWN));
+        var rawDataResult =
+                new com.openmemind.ai.memory.core.extraction.result.RawDataResult(
+                        List.of(),
+                        List.of(
+                                new com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment(
+                                        content.toContentString(),
+                                        null,
+                                        0,
+                                        content.toContentString().length(),
+                                        "raw-1",
+                                        Map.of("contentProfile", DocumentSemantics.PROFILE_MARKDOWN))),
+                        false);
+        var itemConfig =
+                new com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig(
+                        com.openmemind.ai.memory.core.data.enums.MemoryScope.USER,
+                        DocumentContent.TYPE,
+                        false,
+                        "English",
+                        new com.openmemind.ai.memory.core.builder.PromptBudgetOptions(
+                                1_800, 200, 200, 200));
+
+        var normalized = processor.normalizeForItemBudget(content, rawDataResult, itemConfig);
+
+        assertThat(normalized.segments()).hasSizeGreaterThan(1);
+        assertThat(normalized.segments())
+                .allSatisfy(
+                        segment ->
+                                assertThat(TokenUtils.countTokens(segment.text()))
+                                        .isLessThanOrEqualTo(1_200));
     }
 
     @Test

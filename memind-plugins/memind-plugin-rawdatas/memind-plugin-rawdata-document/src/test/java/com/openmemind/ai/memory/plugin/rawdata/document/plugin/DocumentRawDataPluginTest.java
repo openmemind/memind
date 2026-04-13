@@ -19,7 +19,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.SourceLimitOptions;
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
@@ -29,6 +28,7 @@ import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.resource.ContentParser;
+import com.openmemind.ai.memory.plugin.rawdata.document.DocumentSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.document.config.DocumentExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
 import com.openmemind.ai.memory.plugin.rawdata.document.processor.DocumentContentProcessor;
@@ -78,12 +78,10 @@ class DocumentRawDataPluginTest {
         assertThat(plugin.ingestionPolicies())
                 .extracting(
                         policy ->
-                                Map.entry(
-                                        policy.governanceTypes().iterator().next(),
-                                        policy.sourceLimit().maxBytes()))
+                                Map.entry(policy.governanceType(), policy.sourceLimit().maxBytes()))
                 .containsExactlyInAnyOrder(
-                        Map.entry(ContentGovernanceType.DOCUMENT_TEXT_LIKE, 512L),
-                        Map.entry(ContentGovernanceType.DOCUMENT_BINARY, 4096L));
+                        Map.entry(DocumentSemantics.GOVERNANCE_TEXT_LIKE, 512L),
+                        Map.entry(DocumentSemantics.GOVERNANCE_BINARY, 4096L));
     }
 
     @Test

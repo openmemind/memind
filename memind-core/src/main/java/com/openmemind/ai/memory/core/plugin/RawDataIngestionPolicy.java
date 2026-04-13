@@ -14,30 +14,26 @@
 package com.openmemind.ai.memory.core.plugin;
 
 import com.openmemind.ai.memory.core.builder.SourceLimitOptions;
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.resource.ContentCapability;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * Plugin-owned source ingestion policy for parser-backed rawdata extraction.
  */
 public record RawDataIngestionPolicy(
-        String contentType,
-        Set<ContentGovernanceType> governanceTypes,
-        SourceLimitOptions sourceLimit) {
+        String contentType, String governanceType, SourceLimitOptions sourceLimit) {
 
     public RawDataIngestionPolicy {
         contentType = Objects.requireNonNull(contentType, "contentType");
-        governanceTypes = Set.copyOf(Objects.requireNonNull(governanceTypes, "governanceTypes"));
+        governanceType = Objects.requireNonNull(governanceType, "governanceType");
         sourceLimit = Objects.requireNonNull(sourceLimit, "sourceLimit");
-        if (governanceTypes.isEmpty()) {
-            throw new IllegalArgumentException("governanceTypes must not be empty");
+        if (governanceType.isBlank()) {
+            throw new IllegalArgumentException("governanceType must not be blank");
         }
     }
 
     public boolean supports(ContentCapability capability) {
         return contentType.equals(capability.contentType())
-                && governanceTypes.contains(capability.governanceType());
+                && governanceType.equals(capability.governanceType());
     }
 }

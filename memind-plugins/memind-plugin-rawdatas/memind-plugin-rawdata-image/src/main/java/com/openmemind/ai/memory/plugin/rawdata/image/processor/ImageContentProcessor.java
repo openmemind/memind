@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.image.processor;
 
-import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.ParsedContentTooLargeException;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
@@ -23,6 +22,7 @@ import com.openmemind.ai.memory.plugin.rawdata.image.caption.ImageCaptionGenerat
 import com.openmemind.ai.memory.plugin.rawdata.image.chunk.ImageSegmentComposer;
 import com.openmemind.ai.memory.plugin.rawdata.image.config.ImageExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.image.content.ImageContent;
+import com.openmemind.ai.memory.plugin.rawdata.image.ImageSemantics;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -97,7 +97,7 @@ public class ImageContentProcessor implements RawContentProcessor<ImageContent> 
         }
         return content.directContentProfile() != null
                 ? content.directContentProfile()
-                : BuiltinContentProfiles.IMAGE_CAPTION_OCR;
+                : ImageSemantics.PROFILE_CAPTION_OCR;
     }
 
     private Segment mergeMetadata(Segment segment, Map<String, Object> contentMetadata) {

@@ -15,10 +15,9 @@ package com.openmemind.ai.memory.plugin.rawdata.document.content;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
-import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.utils.HashUtils;
+import com.openmemind.ai.memory.plugin.rawdata.document.DocumentSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.document.DocumentSection;
 import java.util.List;
 import java.util.Map;
@@ -83,38 +82,13 @@ public final class DocumentContent extends RawContent {
     }
 
     @Override
-    public ContentGovernanceType directGovernanceType() {
-        if ("text/markdown".equals(mimeType)
-                || "text/html".equals(mimeType)
-                || "text/plain".equals(mimeType)
-                || "text/csv".equals(mimeType)) {
-            return ContentGovernanceType.DOCUMENT_TEXT_LIKE;
-        }
-        if (mimeType != null && !mimeType.isBlank()) {
-            return ContentGovernanceType.DOCUMENT_BINARY;
-        }
-        return sections.isEmpty()
-                ? ContentGovernanceType.DOCUMENT_TEXT_LIKE
-                : ContentGovernanceType.DOCUMENT_BINARY;
+    public String directGovernanceType() {
+        return DocumentSemantics.directGovernance(mimeType, !sections.isEmpty());
     }
 
     @Override
     public String directContentProfile() {
-        if ("text/markdown".equals(mimeType)) {
-            return BuiltinContentProfiles.DOCUMENT_MARKDOWN;
-        }
-        if ("text/html".equals(mimeType)) {
-            return BuiltinContentProfiles.DOCUMENT_HTML;
-        }
-        if ("text/plain".equals(mimeType) || "text/csv".equals(mimeType)) {
-            return BuiltinContentProfiles.DOCUMENT_TEXT;
-        }
-        if (mimeType != null && !mimeType.isBlank()) {
-            return BuiltinContentProfiles.DOCUMENT_BINARY;
-        }
-        return sections.isEmpty()
-                ? BuiltinContentProfiles.DOCUMENT_TEXT
-                : BuiltinContentProfiles.DOCUMENT_BINARY;
+        return DocumentSemantics.directProfile(mimeType, !sections.isEmpty());
     }
 
     @JsonProperty("title")

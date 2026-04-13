@@ -13,12 +13,12 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.audio.processor;
 
-import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.ParsedContentTooLargeException;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
+import com.openmemind.ai.memory.plugin.rawdata.audio.AudioSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.audio.caption.AudioCaptionGenerator;
 import com.openmemind.ai.memory.plugin.rawdata.audio.chunk.TranscriptSegmentChunker;
 import com.openmemind.ai.memory.plugin.rawdata.audio.config.AudioExtractionOptions;
@@ -104,7 +104,7 @@ public final class AudioContentProcessor implements RawContentProcessor<AudioCon
         }
         return content.directContentProfile() != null
                 ? content.directContentProfile()
-                : BuiltinContentProfiles.AUDIO_TRANSCRIPT;
+                : AudioSemantics.PROFILE_TRANSCRIPT;
     }
 
     private Duration resolveAudioDuration(AudioContent content) {

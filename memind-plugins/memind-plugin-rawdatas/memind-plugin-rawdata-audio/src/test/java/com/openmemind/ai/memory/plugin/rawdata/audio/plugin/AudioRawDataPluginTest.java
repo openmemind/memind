@@ -19,7 +19,6 @@ import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions;
 import com.openmemind.ai.memory.core.builder.SourceLimitOptions;
 import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
@@ -27,6 +26,7 @@ import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
+import com.openmemind.ai.memory.plugin.rawdata.audio.AudioSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.audio.config.AudioExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.audio.content.AudioContent;
 import com.openmemind.ai.memory.plugin.rawdata.audio.processor.AudioContentProcessor;
@@ -72,8 +72,8 @@ class AudioRawDataPluginTest {
                 .singleElement()
                 .satisfies(
                         policy -> {
-                            assertThat(policy.governanceTypes())
-                                    .containsExactly(ContentGovernanceType.AUDIO_TRANSCRIPT);
+                            assertThat(policy.governanceType())
+                                    .isEqualTo(AudioSemantics.GOVERNANCE_TRANSCRIPT);
                             assertThat(policy.sourceLimit().maxBytes()).isEqualTo(8192L);
                         });
     }

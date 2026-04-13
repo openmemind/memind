@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.core.plugin;
 
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.resource.ContentCapability;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,11 +33,9 @@ public final class RawDataIngestionPolicyRegistry {
         this.policies = List.copyOf(Objects.requireNonNull(policies, "policies"));
         Map<String, RawDataIngestionPolicy> byKey = new LinkedHashMap<>();
         for (RawDataIngestionPolicy policy : this.policies) {
-            for (ContentGovernanceType governanceType : policy.governanceTypes()) {
-                String key = policy.contentType() + "::" + governanceType.name();
-                if (byKey.putIfAbsent(key, policy) != null) {
-                    throw new IllegalStateException("Duplicate rawdata ingestion policy: " + key);
-                }
+            String key = policy.contentType() + "::" + policy.governanceType();
+            if (byKey.putIfAbsent(key, policy) != null) {
+                throw new IllegalStateException("Duplicate rawdata ingestion policy: " + key);
             }
         }
     }

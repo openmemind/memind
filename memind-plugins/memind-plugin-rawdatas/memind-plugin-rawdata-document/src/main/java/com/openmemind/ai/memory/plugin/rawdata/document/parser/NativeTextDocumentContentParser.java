@@ -13,10 +13,10 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.document.parser;
 
-import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.core.resource.SourceDescriptor;
+import com.openmemind.ai.memory.plugin.rawdata.document.DocumentSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -49,7 +49,12 @@ public final class NativeTextDocumentContentParser implements ContentParser {
 
     @Override
     public String contentProfile() {
-        return BuiltinContentProfiles.DOCUMENT_TEXT;
+        return DocumentSemantics.PROFILE_TEXT;
+    }
+
+    @Override
+    public String governanceType() {
+        return DocumentSemantics.GOVERNANCE_TEXT_LIKE;
     }
 
     @Override
@@ -127,9 +132,9 @@ public final class NativeTextDocumentContentParser implements ContentParser {
 
     private static String resolveProfile(String mimeType) {
         return switch (mimeType) {
-            case "text/markdown" -> BuiltinContentProfiles.DOCUMENT_MARKDOWN;
-            case "text/html" -> BuiltinContentProfiles.DOCUMENT_HTML;
-            default -> BuiltinContentProfiles.DOCUMENT_TEXT;
+            case "text/markdown" -> DocumentSemantics.PROFILE_MARKDOWN;
+            case "text/html" -> DocumentSemantics.PROFILE_HTML;
+            default -> DocumentSemantics.PROFILE_TEXT;
         };
     }
 

@@ -16,10 +16,10 @@ package com.openmemind.ai.memory.plugin.rawdata.image.support;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.source.DirectContentSource;
 import com.openmemind.ai.memory.plugin.rawdata.image.content.ImageContent;
+import com.openmemind.ai.memory.plugin.rawdata.image.ImageSemantics;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -56,8 +56,8 @@ class ImageExtractionRequestsTest {
                 .containsEntry("width", 1280)
                 .containsEntry("sourceKind", "DIRECT")
                 .containsEntry("parserId", "direct")
-                .containsEntry("contentProfile", "image.caption-ocr")
-                .containsEntry("governanceType", ContentGovernanceType.IMAGE_CAPTION_OCR.name())
+                .containsEntry("contentProfile", ImageSemantics.PROFILE_CAPTION_OCR)
+                .containsEntry("governanceType", ImageSemantics.GOVERNANCE_CAPTION_OCR)
                 .containsEntry("mimeType", "image/png")
                 .containsEntry("sourceUri", "file:///tmp/dashboard.png");
     }

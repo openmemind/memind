@@ -85,16 +85,8 @@ public final class SegmentBudgetEnforcer {
     }
 
     private List<Segment> structuredCandidates(Segment base) {
-        String profile = String.valueOf(base.metadata().getOrDefault("contentProfile", "")).trim();
         List<Segment> candidates =
-                switch (profile) {
-                    case "document.markdown" ->
-                            tokenAwareSegmentAssembler.markdownCandidates(
-                                    base.content(), base.metadata());
-                    default ->
-                            tokenAwareSegmentAssembler.paragraphCandidates(
-                                    base.content(), base.metadata());
-                };
+                tokenAwareSegmentAssembler.paragraphCandidates(base.content(), base.metadata());
         if (candidates.isEmpty()) {
             return List.of(base);
         }

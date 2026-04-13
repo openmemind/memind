@@ -13,8 +13,6 @@
  */
 package com.openmemind.ai.memory.core.resource;
 
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
-import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Objects;
@@ -27,7 +25,7 @@ public record ContentCapability(
         String parserId,
         String contentType,
         String contentProfile,
-        ContentGovernanceType governanceType,
+        String governanceType,
         Set<String> supportedMimeTypes,
         Set<String> supportedExtensions,
         int priority) {
@@ -39,29 +37,6 @@ public record ContentCapability(
         governanceType = Objects.requireNonNull(governanceType, "governanceType is required");
         supportedMimeTypes = immutableCopy(supportedMimeTypes, "supportedMimeTypes");
         supportedExtensions = immutableCopy(supportedExtensions, "supportedExtensions");
-    }
-
-    public ContentCapability(
-            String parserId,
-            String contentType,
-            String contentProfile,
-            Set<String> supportedMimeTypes,
-            Set<String> supportedExtensions,
-            int priority) {
-        this(
-                parserId,
-                contentType,
-                contentProfile,
-                BuiltinContentProfiles.governanceTypeOf(contentProfile)
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "Non-builtin contentProfile requires explicit"
-                                                        + " governanceType: "
-                                                        + contentProfile)),
-                supportedMimeTypes,
-                supportedExtensions,
-                priority);
     }
 
     private static Set<String> immutableCopy(Set<String> values, String fieldName) {

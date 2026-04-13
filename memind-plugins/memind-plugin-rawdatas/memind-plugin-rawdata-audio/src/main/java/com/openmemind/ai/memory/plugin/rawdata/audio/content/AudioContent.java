@@ -15,10 +15,9 @@ package com.openmemind.ai.memory.plugin.rawdata.audio.content;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
-import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.utils.HashUtils;
+import com.openmemind.ai.memory.plugin.rawdata.audio.AudioSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.audio.content.audio.TranscriptSegment;
 import java.util.List;
 import java.util.Map;
@@ -80,13 +79,13 @@ public final class AudioContent extends RawContent {
     }
 
     @Override
-    public ContentGovernanceType directGovernanceType() {
-        return ContentGovernanceType.AUDIO_TRANSCRIPT;
+    public String directGovernanceType() {
+        return AudioSemantics.GOVERNANCE_TRANSCRIPT;
     }
 
     @Override
     public String directContentProfile() {
-        return BuiltinContentProfiles.AUDIO_TRANSCRIPT;
+        return AudioSemantics.PROFILE_TRANSCRIPT;
     }
 
     @Override

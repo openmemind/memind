@@ -17,11 +17,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
-import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.utils.HashUtils;
+import com.openmemind.ai.memory.plugin.rawdata.audio.AudioSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.audio.content.audio.TranscriptSegment;
 import com.openmemind.ai.memory.plugin.rawdata.audio.plugin.AudioRawContentTypeRegistrar;
 import java.time.Duration;
@@ -77,9 +76,9 @@ class AudioContentTest {
 
         assertThat(content.contentMetadata()).containsEntry("durationSeconds", 12);
         assertThat(content.directGovernanceType())
-                .isEqualTo(ContentGovernanceType.AUDIO_TRANSCRIPT);
+                .isEqualTo(AudioSemantics.GOVERNANCE_TRANSCRIPT);
         assertThat(content.directContentProfile())
-                .isEqualTo(BuiltinContentProfiles.AUDIO_TRANSCRIPT);
+                .isEqualTo(AudioSemantics.PROFILE_TRANSCRIPT);
         assertThat(content.withMetadata(Map.of("parserId", "whisper")))
                 .isInstanceOf(AudioContent.class)
                 .extracting(value -> ((AudioContent) value).metadata().get("parserId"))

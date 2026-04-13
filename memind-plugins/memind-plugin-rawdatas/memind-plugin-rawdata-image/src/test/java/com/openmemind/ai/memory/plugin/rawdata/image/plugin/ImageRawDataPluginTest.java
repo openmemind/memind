@@ -19,7 +19,6 @@ import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions;
 import com.openmemind.ai.memory.core.builder.SourceLimitOptions;
 import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
@@ -27,6 +26,7 @@ import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
+import com.openmemind.ai.memory.plugin.rawdata.image.ImageSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.image.config.ImageExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.image.content.ImageContent;
 import com.openmemind.ai.memory.plugin.rawdata.image.processor.ImageContentProcessor;
@@ -72,8 +72,8 @@ class ImageRawDataPluginTest {
                 .singleElement()
                 .satisfies(
                         policy -> {
-                            assertThat(policy.governanceTypes())
-                                    .containsExactly(ContentGovernanceType.IMAGE_CAPTION_OCR);
+                            assertThat(policy.governanceType())
+                                    .isEqualTo(ImageSemantics.GOVERNANCE_CAPTION_OCR);
                             assertThat(policy.sourceLimit().maxBytes()).isEqualTo(4096L);
                         });
     }

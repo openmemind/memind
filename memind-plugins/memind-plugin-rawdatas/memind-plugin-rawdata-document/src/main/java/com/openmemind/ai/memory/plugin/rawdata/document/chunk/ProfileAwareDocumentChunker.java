@@ -14,10 +14,9 @@
 package com.openmemind.ai.memory.plugin.rawdata.document.chunk;
 
 import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
-import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.TokenAwareSegmentAssembler;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.plugin.rawdata.document.DocumentSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.document.config.DocumentExtractionOptions;
 import java.util.List;
 import java.util.Objects;
@@ -41,27 +40,25 @@ public final class ProfileAwareDocumentChunker {
     public List<Segment> chunk(
             String text,
             DocumentExtractionOptions options,
-            ContentGovernanceType governanceType,
+            String governanceType,
             String contentProfile) {
         Objects.requireNonNull(options, "options");
         Objects.requireNonNull(governanceType, "governanceType");
         String profile =
                 contentProfile == null || contentProfile.isBlank()
-                        ? BuiltinContentProfiles.DOCUMENT_TEXT
+                        ? DocumentSemantics.PROFILE_TEXT
                         : contentProfile;
         TokenChunkingOptions chunkingOptions =
-                switch (governanceType) {
-                    case DOCUMENT_BINARY -> options.binaryChunking();
-                    case DOCUMENT_TEXT_LIKE -> options.textLikeChunking();
-                    default -> options.textLikeChunking();
-                };
+                DocumentSemantics.isBinaryGovernance(governanceType)
+                        ? options.binaryChunking()
+                        : options.textLikeChunking();
         List<Segment> candidates =
                 switch (profile) {
-                    case BuiltinContentProfiles.DOCUMENT_MARKDOWN ->
+                    case DocumentSemantics.PROFILE_MARKDOWN ->
                             tokenAwareSegmentAssembler.markdownCandidates(text);
-                    case BuiltinContentProfiles.DOCUMENT_BINARY,
-                            BuiltinContentProfiles.DOCUMENT_HTML,
-                            BuiltinContentProfiles.DOCUMENT_TEXT ->
+                    case DocumentSemantics.PROFILE_BINARY,
+                            DocumentSemantics.PROFILE_HTML,
+                            DocumentSemantics.PROFILE_TEXT ->
                             tokenAwareSegmentAssembler.paragraphCandidates(text);
                     default -> tokenAwareSegmentAssembler.paragraphCandidates(text);
                 };

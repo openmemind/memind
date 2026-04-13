@@ -14,10 +14,10 @@
 package com.openmemind.ai.memory.core.resource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.support.TestDocumentContent;
 import java.util.List;
@@ -35,6 +35,7 @@ class ContentParserRegistryTest {
                         "document-native-text",
                         TestDocumentContent.TYPE,
                         "document.markdown",
+                        TestDocumentContent.GOVERNANCE_TEXT_LIKE,
                         100,
                         Set.of("text/markdown"),
                         Set.of(".md"));
@@ -43,6 +44,7 @@ class ContentParserRegistryTest {
                         "document-fallback",
                         TestDocumentContent.TYPE,
                         "document.binary",
+                        TestDocumentContent.GOVERNANCE_BINARY,
                         10,
                         Set.of("text/markdown", "application/pdf"),
                         Set.of(".md", ".pdf"));
@@ -61,7 +63,7 @@ class ContentParserRegistryTest {
                             assertThat(resolution.capability().contentProfile())
                                     .isEqualTo("document.markdown");
                             assertThat(resolution.capability().governanceType())
-                                    .isEqualTo(ContentGovernanceType.DOCUMENT_TEXT_LIKE);
+                                    .isEqualTo(TestDocumentContent.GOVERNANCE_TEXT_LIKE);
                         })
                 .verifyComplete();
     }
@@ -75,6 +77,7 @@ class ContentParserRegistryTest {
                                         "document-native-text",
                                         TestDocumentContent.TYPE,
                                         "document.text",
+                                        TestDocumentContent.GOVERNANCE_TEXT_LIKE,
                                         100,
                                         Set.of("text/plain"),
                                         Set.of(".txt"))));
@@ -89,7 +92,7 @@ class ContentParserRegistryTest {
                         tuple(
                                 "document-native-text",
                                 "document.text",
-                                ContentGovernanceType.DOCUMENT_TEXT_LIKE,
+                                TestDocumentContent.GOVERNANCE_TEXT_LIKE,
                                 Set.of(".txt")));
     }
 
@@ -100,6 +103,7 @@ class ContentParserRegistryTest {
                         "document-parser",
                         TestDocumentContent.TYPE,
                         "document.text",
+                        TestDocumentContent.GOVERNANCE_TEXT_LIKE,
                         100,
                         Set.of("text/plain"),
                         Set.of(".txt"));
@@ -108,6 +112,7 @@ class ContentParserRegistryTest {
                         "document-parser",
                         TestDocumentContent.TYPE,
                         "document.markdown",
+                        TestDocumentContent.GOVERNANCE_TEXT_LIKE,
                         90,
                         Set.of("text/markdown"),
                         Set.of(".md"));
@@ -124,6 +129,7 @@ class ContentParserRegistryTest {
                         "document-markdown-a",
                         TestDocumentContent.TYPE,
                         "document.markdown",
+                        TestDocumentContent.GOVERNANCE_TEXT_LIKE,
                         100,
                         Set.of("text/markdown"),
                         Set.of(".md"));
@@ -132,6 +138,7 @@ class ContentParserRegistryTest {
                         "document-markdown-b",
                         TestDocumentContent.TYPE,
                         "document.markdown",
+                        TestDocumentContent.GOVERNANCE_TEXT_LIKE,
                         100,
                         Set.of("text/markdown"),
                         Set.of(".md"));
@@ -146,26 +153,26 @@ class ContentParserRegistryTest {
     }
 
     @Test
-    void registryRejectsNonBuiltinProfileWithoutExplicitGovernanceType() {
+    void registryAcceptsOpaquePluginOwnedGovernanceType() {
         ContentParser parser =
                 parser(
                         "document-custom",
                         TestDocumentContent.TYPE,
                         "document.pdf.tika",
+                        "video.semantic-caption",
                         100,
                         Set.of("application/pdf"),
                         Set.of(".pdf"));
 
-        assertThatThrownBy(() -> new DefaultContentParserRegistry(List.of(parser)))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("document.pdf.tika")
-                .hasMessageContaining("governanceType()");
+        assertThatCode(() -> new DefaultContentParserRegistry(List.of(parser)))
+                .doesNotThrowAnyException();
     }
 
     private static ContentParser parser(
             String parserId,
             String contentType,
             String contentProfile,
+            String governanceType,
             int priority,
             Set<String> mimeTypes,
             Set<String> extensions) {
@@ -183,6 +190,11 @@ class ContentParserRegistryTest {
             @Override
             public String contentProfile() {
                 return contentProfile;
+            }
+
+            @Override
+            public String governanceType() {
+                return governanceType;
             }
 
             @Override

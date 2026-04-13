@@ -15,10 +15,9 @@ package com.openmemind.ai.memory.plugin.rawdata.image.content;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
-import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.utils.HashUtils;
+import com.openmemind.ai.memory.plugin.rawdata.image.ImageSemantics;
 import java.util.Map;
 
 /**
@@ -82,13 +81,13 @@ public final class ImageContent extends RawContent {
     }
 
     @Override
-    public ContentGovernanceType directGovernanceType() {
-        return ContentGovernanceType.IMAGE_CAPTION_OCR;
+    public String directGovernanceType() {
+        return ImageSemantics.GOVERNANCE_CAPTION_OCR;
     }
 
     @Override
     public String directContentProfile() {
-        return BuiltinContentProfiles.IMAGE_CAPTION_OCR;
+        return ImageSemantics.PROFILE_CAPTION_OCR;
     }
 
     @Override

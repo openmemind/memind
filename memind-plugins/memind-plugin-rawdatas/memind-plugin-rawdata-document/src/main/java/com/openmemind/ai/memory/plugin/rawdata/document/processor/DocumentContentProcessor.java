@@ -14,14 +14,16 @@
 package com.openmemind.ai.memory.plugin.rawdata.document.processor;
 
 import com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions;
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
-import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
-import com.openmemind.ai.memory.core.extraction.ContentGovernanceResolver;
+import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
 import com.openmemind.ai.memory.core.extraction.ParsedContentTooLargeException;
+import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
+import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
+import com.openmemind.ai.memory.plugin.rawdata.document.DocumentSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.document.chunk.ProfileAwareDocumentChunker;
 import com.openmemind.ai.memory.plugin.rawdata.document.config.DocumentExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
@@ -72,9 +74,9 @@ public final class DocumentContentProcessor implements RawContentProcessor<Docum
     public void validateParsedContent(DocumentContent content) {
         String profile = resolveContentProfile(content);
         ParsedContentLimitOptions limits =
-                resolveGovernanceType(content, profile) == ContentGovernanceType.DOCUMENT_TEXT_LIKE
-                        ? options.textLikeParsedLimit()
-                        : options.binaryParsedLimit();
+                DocumentSemantics.isBinaryGovernance(resolveGovernanceType(content, profile))
+                        ? options.binaryParsedLimit()
+                        : options.textLikeParsedLimit();
         int tokenCount = TokenUtils.countTokens(content.toContentString());
         if (tokenCount > limits.maxTokens()) {
             throw new ParsedContentTooLargeException(
@@ -87,7 +89,7 @@ public final class DocumentContentProcessor implements RawContentProcessor<Docum
     @Override
     public Mono<List<Segment>> chunk(DocumentContent content) {
         String profile = resolveContentProfile(content);
-        ContentGovernanceType governanceType = resolveGovernanceType(content, profile);
+        String governanceType = resolveGovernanceType(content, profile);
         if (content.sections().isEmpty()) {
             return Mono.just(
                     enrichWithContentMetadata(
@@ -143,21 +145,55 @@ public final class DocumentContentProcessor implements RawContentProcessor<Docum
                         : segments);
     }
 
+    @Override
+    public RawDataResult normalizeForItemBudget(
+            DocumentContent content, RawDataResult rawDataResult, ItemExtractionConfig config) {
+        if (rawDataResult.segments().isEmpty()) {
+            return rawDataResult;
+        }
+        int effectiveBudget = effectiveBudget(config);
+        String profile = resolveContentProfile(content);
+        String governanceType = resolveGovernanceType(content, profile);
+        DocumentExtractionOptions budgetOptions = budgetOptions(effectiveBudget, governanceType);
+
+        List<ParsedSegment> normalized = new ArrayList<>();
+        for (ParsedSegment segment : rawDataResult.segments()) {
+            if (TokenUtils.countTokens(segment.text()) <= effectiveBudget) {
+                normalized.add(segment);
+                continue;
+            }
+            normalized.addAll(splitForItemBudget(segment, budgetOptions, governanceType, profile));
+        }
+        return rawDataResult.withSegments(normalized);
+    }
+
     private String resolveContentProfile(DocumentContent content) {
         Object value = content.metadata().get("contentProfile");
         if (value != null && !value.toString().isBlank()) {
             return value.toString();
         }
-        return BuiltinContentProfiles.DOCUMENT_TEXT;
+        if (content.directContentProfile() != null && !content.directContentProfile().isBlank()) {
+            return content.directContentProfile();
+        }
+        return DocumentSemantics.PROFILE_TEXT;
     }
 
-    private ContentGovernanceType resolveGovernanceType(
+    private String resolveGovernanceType(
             DocumentContent content, String contentProfile) {
         if (content.metadata().containsKey("governanceType")) {
-            return ContentGovernanceResolver.resolveRequired(content.metadata());
+            Object governanceType = content.metadata().get("governanceType");
+            if (governanceType != null && !governanceType.toString().isBlank()) {
+                return governanceType.toString();
+            }
+            throw new IllegalArgumentException(
+                    "Missing governanceType for contentProfile=" + contentProfile);
         }
-        return BuiltinContentProfiles.governanceTypeOf(contentProfile)
-                .orElse(ContentGovernanceType.DOCUMENT_TEXT_LIKE);
+        if (content.directGovernanceType() != null && !content.directGovernanceType().isBlank()) {
+            return content.directGovernanceType();
+        }
+        return DocumentSemantics.PROFILE_BINARY.equals(contentProfile)
+                ? DocumentSemantics.GOVERNANCE_BINARY
+                : DocumentSemantics.GOVERNANCE_TEXT_LIKE;
     }
 
     private List<Segment> enrichWithContentMetadata(
@@ -230,5 +266,66 @@ public final class DocumentContentProcessor implements RawContentProcessor<Docum
                 segment.boundary(),
                 Map.copyOf(merged),
                 segment.runtimeContext());
+    }
+
+    private int effectiveBudget(ItemExtractionConfig config) {
+        var budget = config.promptBudget();
+        return budget.maxInputTokens()
+                - budget.reservedPromptOverhead()
+                - budget.reservedOutputTokens()
+                - budget.safetyMargin();
+    }
+
+    private DocumentExtractionOptions budgetOptions(int effectiveBudget, String governanceType) {
+        int hardMaxTokens = Math.max(1, effectiveBudget);
+        TokenChunkingOptions textLikeChunking = capChunking(options.textLikeChunking(), hardMaxTokens);
+        TokenChunkingOptions binaryChunking = capChunking(options.binaryChunking(), hardMaxTokens);
+        if (DocumentSemantics.isBinaryGovernance(governanceType)) {
+            binaryChunking = capChunking(options.binaryChunking(), hardMaxTokens);
+        } else {
+            textLikeChunking = capChunking(options.textLikeChunking(), hardMaxTokens);
+        }
+        return new DocumentExtractionOptions(
+                options.textLikeSourceLimit(),
+                options.binarySourceLimit(),
+                options.textLikeParsedLimit(),
+                options.binaryParsedLimit(),
+                textLikeChunking,
+                binaryChunking);
+    }
+
+    private TokenChunkingOptions capChunking(TokenChunkingOptions base, int hardMaxTokens) {
+        int targetTokens = Math.min(base.targetTokens(), hardMaxTokens);
+        return new TokenChunkingOptions(targetTokens, hardMaxTokens);
+    }
+
+    private List<ParsedSegment> splitForItemBudget(
+            ParsedSegment segment,
+            DocumentExtractionOptions budgetOptions,
+            String governanceType,
+            String profile) {
+        List<Segment> splitSegments =
+                profileAwareDocumentChunker.chunk(
+                        segment.text(), budgetOptions, governanceType, profile);
+        if (splitSegments.size() <= 1) {
+            return List.of(segment);
+        }
+        int startIndex = Math.max(0, segment.startIndex());
+        return splitSegments.stream()
+                .map(child -> toParsedSegment(segment, child, startIndex))
+                .toList();
+    }
+
+    private ParsedSegment toParsedSegment(
+            ParsedSegment original, Segment child, int baseStartIndex) {
+        CharBoundary boundary = (CharBoundary) child.boundary();
+        return new ParsedSegment(
+                child.content(),
+                child.caption() != null ? child.caption() : original.caption(),
+                baseStartIndex + boundary.startChar(),
+                baseStartIndex + boundary.endChar(),
+                original.rawDataId(),
+                child.metadata(),
+                original.runtimeContext());
     }
 }

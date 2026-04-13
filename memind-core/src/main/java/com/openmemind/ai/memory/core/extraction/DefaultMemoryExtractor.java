@@ -490,7 +490,8 @@ public class DefaultMemoryExtractor implements MemoryExtractor {
                         request.contentType(),
                         itemExtractionOptions,
                         processor.allowedCategories());
-        RawDataResult budgeted = segmentBudgetEnforcer.enforce(rawResult, itemConfig);
+        RawDataResult normalized = processor.normalizeForItemBudget(request.content(), rawResult, itemConfig);
+        RawDataResult budgeted = segmentBudgetEnforcer.enforce(normalized, itemConfig);
         return memoryItemStep
                 .extract(request.memoryId(), budgeted, itemConfig)
                 .map(itemResult -> new StepPair(budgeted, itemResult));

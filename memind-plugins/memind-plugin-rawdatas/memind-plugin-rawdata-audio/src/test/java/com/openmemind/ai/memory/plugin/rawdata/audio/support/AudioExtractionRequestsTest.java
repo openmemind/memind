@@ -16,9 +16,9 @@ package com.openmemind.ai.memory.plugin.rawdata.audio.support;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.source.DirectContentSource;
+import com.openmemind.ai.memory.plugin.rawdata.audio.AudioSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.audio.content.AudioContent;
 import java.util.List;
 import java.util.Map;
@@ -52,8 +52,8 @@ class AudioExtractionRequestsTest {
         assertThat(request.metadata())
                 .containsEntry("sourceKind", "DIRECT")
                 .containsEntry("parserId", "direct")
-                .containsEntry("contentProfile", "audio.transcript")
-                .containsEntry("governanceType", ContentGovernanceType.AUDIO_TRANSCRIPT.name())
+                .containsEntry("contentProfile", AudioSemantics.PROFILE_TRANSCRIPT)
+                .containsEntry("governanceType", AudioSemantics.GOVERNANCE_TRANSCRIPT)
                 .containsEntry("mimeType", "audio/mpeg")
                 .containsEntry("sourceUri", "file:///tmp/audio.mp3");
     }

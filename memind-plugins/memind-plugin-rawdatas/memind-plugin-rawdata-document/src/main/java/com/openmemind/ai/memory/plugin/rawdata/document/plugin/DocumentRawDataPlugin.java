@@ -13,13 +13,13 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.document.plugin;
 
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
 import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicy;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.resource.ContentParser;
+import com.openmemind.ai.memory.plugin.rawdata.document.DocumentSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.document.chunk.ProfileAwareDocumentChunker;
 import com.openmemind.ai.memory.plugin.rawdata.document.config.DocumentExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
@@ -60,11 +60,11 @@ public final class DocumentRawDataPlugin implements RawDataPlugin {
         return List.of(
                 new RawDataIngestionPolicy(
                         DocumentContent.TYPE,
-                        java.util.Set.of(ContentGovernanceType.DOCUMENT_TEXT_LIKE),
+                        DocumentSemantics.GOVERNANCE_TEXT_LIKE,
                         options.textLikeSourceLimit()),
                 new RawDataIngestionPolicy(
                         DocumentContent.TYPE,
-                        java.util.Set.of(ContentGovernanceType.DOCUMENT_BINARY),
+                        DocumentSemantics.GOVERNANCE_BINARY,
                         options.binarySourceLimit()));
     }
 

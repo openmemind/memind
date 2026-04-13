@@ -11,14 +11,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.data.enums;
+package com.openmemind.ai.memory.plugin.rawdata.audio;
 
-/**
- * Closed governance families used by multimodal ingestion policies.
- */
-public enum ContentGovernanceType {
-    DOCUMENT_TEXT_LIKE,
-    DOCUMENT_BINARY,
-    IMAGE_CAPTION_OCR,
-    AUDIO_TRANSCRIPT
+public final class AudioSemantics {
+
+    public static final String GOVERNANCE_TRANSCRIPT = "audio.transcript";
+    public static final String PROFILE_TRANSCRIPT = "audio.transcript";
+
+    private AudioSemantics() {}
 }

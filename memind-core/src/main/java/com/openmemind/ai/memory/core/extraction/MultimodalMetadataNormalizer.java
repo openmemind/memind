@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.core.extraction;
 
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.resource.ContentCapability;
 import java.util.LinkedHashMap;
@@ -40,12 +39,12 @@ public final class MultimodalMetadataNormalizer {
         putRequestMetadata(normalized, requestMetadata);
         putTransportMetadata(normalized, content);
 
-        ContentGovernanceType governanceType = deriveDirectGovernanceType(content);
+        String governanceType = deriveDirectGovernanceType(content);
         validateGovernanceType(normalized.get("governanceType"), governanceType);
 
         normalized.put("sourceKind", "DIRECT");
         putIfBlank(normalized, "parserId", "direct");
-        normalized.put("governanceType", governanceType.name());
+        normalized.put("governanceType", governanceType);
         normalized.put(
                 "contentProfile",
                 resolveContentProfile(
@@ -72,7 +71,7 @@ public final class MultimodalMetadataNormalizer {
                 contentMetadata(content).get("governanceType"), capability.governanceType());
 
         normalized.put("parserId", capability.parserId());
-        normalized.put("governanceType", capability.governanceType().name());
+        normalized.put("governanceType", capability.governanceType());
         normalized.put(
                 "contentProfile",
                 resolveContentProfile(
@@ -157,13 +156,12 @@ public final class MultimodalMetadataNormalizer {
     }
 
     private static void validateGovernanceType(
-            Object governanceValue, ContentGovernanceType expectedGovernanceType) {
+            Object governanceValue, String expectedGovernanceType) {
         if (governanceValue == null || governanceValue.toString().isBlank()) {
             return;
         }
-        ContentGovernanceType actualGovernanceType =
-                ContentGovernanceType.valueOf(governanceValue.toString());
-        if (actualGovernanceType != expectedGovernanceType) {
+        String actualGovernanceType = governanceValue.toString();
+        if (!expectedGovernanceType.equals(actualGovernanceType)) {
             throw new IllegalArgumentException(
                     "Metadata governanceType=%s conflicts with authoritative governanceType=%s"
                             .formatted(actualGovernanceType, expectedGovernanceType));
@@ -171,26 +169,21 @@ public final class MultimodalMetadataNormalizer {
     }
 
     private static String resolveContentProfile(
-            Object explicitValue, String defaultProfile, ContentGovernanceType governanceType) {
-        String profile =
-                explicitValue == null || explicitValue.toString().isBlank()
-                        ? defaultProfile
-                        : explicitValue.toString();
-        BuiltinContentProfiles.governanceTypeOf(profile)
-                .ifPresent(
-                        builtinGovernanceType -> {
-                            if (builtinGovernanceType != governanceType) {
-                                throw new IllegalArgumentException(
-                                        "Metadata contentProfile=%s conflicts with governanceType=%s"
-                                                .formatted(profile, governanceType));
-                            }
-                        });
-        return profile;
+            Object explicitValue, String defaultProfile, String governanceType) {
+        String profile = explicitValue == null ? null : explicitValue.toString();
+        if (profile != null && !profile.isBlank()) {
+            return profile;
+        }
+        if (defaultProfile == null || defaultProfile.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Missing contentProfile for governanceType=" + governanceType);
+        }
+        return defaultProfile;
     }
 
-    private static ContentGovernanceType deriveDirectGovernanceType(RawContent content) {
-        ContentGovernanceType governanceType = content.directGovernanceType();
-        if (governanceType == null) {
+    private static String deriveDirectGovernanceType(RawContent content) {
+        String governanceType = content.directGovernanceType();
+        if (governanceType == null || governanceType.isBlank()) {
             throw new IllegalArgumentException(
                     "Unsupported multimodal content: " + content.contentType());
         }

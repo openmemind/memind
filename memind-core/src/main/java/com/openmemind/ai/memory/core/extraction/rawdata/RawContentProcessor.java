@@ -15,10 +15,12 @@ package com.openmemind.ai.memory.core.extraction.rawdata;
 
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.TruncateCaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import java.time.Instant;
 import java.util.List;
 import reactor.core.publisher.Mono;
@@ -64,6 +66,12 @@ public interface RawContentProcessor<T extends RawContent> {
 
     /** Validate parsed/direct content before it enters rawdata persistence. */
     default void validateParsedContent(T content) {}
+
+    /** Allow plugins to normalize raw segments for item-level prompt budgets before core hard enforcement. */
+    default RawDataResult normalizeForItemBudget(
+            T content, RawDataResult rawDataResult, ItemExtractionConfig config) {
+        return rawDataResult;
+    }
 
     default Instant resolveSegmentStartTime(T content, Segment segment, Instant fallback) {
         if (segment.runtimeContext() != null && segment.runtimeContext().startTime() != null) {

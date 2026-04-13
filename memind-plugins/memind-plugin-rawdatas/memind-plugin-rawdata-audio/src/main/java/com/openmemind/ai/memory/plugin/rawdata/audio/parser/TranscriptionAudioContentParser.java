@@ -13,10 +13,10 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.audio.parser;
 
-import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.core.resource.SourceDescriptor;
+import com.openmemind.ai.memory.plugin.rawdata.audio.AudioSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.audio.content.AudioContent;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -57,7 +57,12 @@ public final class TranscriptionAudioContentParser implements ContentParser {
 
     @Override
     public String contentProfile() {
-        return BuiltinContentProfiles.AUDIO_TRANSCRIPT;
+        return AudioSemantics.PROFILE_TRANSCRIPT;
+    }
+
+    @Override
+    public String governanceType() {
+        return AudioSemantics.GOVERNANCE_TRANSCRIPT;
     }
 
     @Override

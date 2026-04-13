@@ -13,8 +13,6 @@
  */
 package com.openmemind.ai.memory.core.resource;
 
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
-import com.openmemind.ai.memory.core.extraction.BuiltinContentProfiles;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import java.util.Objects;
 import java.util.Set;
@@ -31,17 +29,7 @@ public interface ContentParser {
 
     String contentProfile();
 
-    default ContentGovernanceType governanceType() {
-        return BuiltinContentProfiles.governanceTypeOf(contentProfile())
-                .orElseThrow(
-                        () ->
-                                new IllegalStateException(
-                                        "Parser "
-                                                + parserId()
-                                                + " uses non-builtin contentProfile "
-                                                + contentProfile()
-                                                + " and must override governanceType()"));
-    }
+    String governanceType();
 
     default int priority() {
         return 0;

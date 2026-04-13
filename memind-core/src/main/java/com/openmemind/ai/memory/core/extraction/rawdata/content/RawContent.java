@@ -15,7 +15,6 @@ package com.openmemind.ai.memory.core.extraction.rawdata.content;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import java.util.Map;
 
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
@@ -46,7 +45,7 @@ public abstract class RawContent {
         return null;
     }
 
-    public ContentGovernanceType directGovernanceType() {
+    public String directGovernanceType() {
         return null;
     }
 

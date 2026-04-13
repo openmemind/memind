@@ -22,7 +22,6 @@ import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
@@ -64,6 +63,8 @@ class DefaultMemoryExtractorMultimodalFileTest {
 
     private static final String IMAGE_TYPE = "IMAGE";
     private static final String AUDIO_TYPE = "AUDIO";
+    private static final String IMAGE_GOVERNANCE = "image.caption-ocr";
+    private static final String AUDIO_GOVERNANCE = "audio.transcript";
 
     @Test
     void fileRequestShouldParseAndStoreBytesBeforeRunningRawDataExtraction() {
@@ -100,7 +101,7 @@ class DefaultMemoryExtractorMultimodalFileTest {
                 .containsEntry("mimeType", "application/pdf")
                 .containsEntry("parserId", "document-test")
                 .containsEntry("contentProfile", "document.binary")
-                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name())
+                .containsEntry("governanceType", TestDocumentContent.GOVERNANCE_BINARY)
                 .containsEntry("resourceId", "stored-res-1")
                 .containsEntry("storageUri", "file:///stored/report.pdf")
                 .containsEntry("sizeBytes", 3L)
@@ -135,11 +136,11 @@ class DefaultMemoryExtractorMultimodalFileTest {
         assertThat(rawDataStep.lastMetadata)
                 .containsEntry("parserId", "document-custom")
                 .containsEntry("contentProfile", "document.pdf.tika")
-                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name());
+                .containsEntry("governanceType", TestDocumentContent.GOVERNANCE_BINARY);
         assertThat(((TestDocumentContent) rawDataStep.lastContent).metadata())
                 .containsEntry("parserId", "document-custom")
                 .containsEntry("contentProfile", "document.pdf.tika")
-                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name());
+                .containsEntry("governanceType", TestDocumentContent.GOVERNANCE_BINARY);
     }
 
     @Test
@@ -171,12 +172,12 @@ class DefaultMemoryExtractorMultimodalFileTest {
     }
 
     @Test
-    void fileRequestShouldRejectBuiltinProfileThatConflictsWithCapabilityGovernance() {
+    void fileRequestShouldPreserveBuiltinLookingProfileAsOpaqueMetadata() {
         var parserRegistry = new ConflictingBuiltinProfileRegistry();
+        var rawDataStep = new RecordingRawDataStep(false);
         var extractor =
                 extractor(
-                        (memoryId, content, contentType, metadata) ->
-                                Mono.just(RawDataResult.empty()),
+                        rawDataStep,
                         (memoryId, rawDataResult, config) -> Mono.just(MemoryItemResult.empty()),
                         (memoryId, memoryItemResult) -> Mono.just(InsightResult.empty()),
                         parserRegistry,
@@ -194,8 +195,10 @@ class DefaultMemoryExtractorMultimodalFileTest {
                         .block();
 
         assertThat(result).isNotNull();
-        assertThat(result.isFailed()).isTrue();
-        assertThat(result.errorMessage()).contains("contentProfile").contains("document.markdown");
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(rawDataStep.lastMetadata)
+                .containsEntry("contentProfile", "document.markdown")
+                .containsEntry("governanceType", TestDocumentContent.GOVERNANCE_BINARY);
     }
 
     @Test
@@ -341,7 +344,7 @@ class DefaultMemoryExtractorMultimodalFileTest {
                                 List.of(
                                         new RawDataIngestionPolicy(
                                                 TestDocumentContent.TYPE,
-                                                Set.of(ContentGovernanceType.DOCUMENT_BINARY),
+                                                TestDocumentContent.GOVERNANCE_BINARY,
                                                 new com.openmemind.ai.memory.core.builder
                                                         .SourceLimitOptions(2)))),
                         RawDataExtractionOptions.defaults(),
@@ -489,7 +492,7 @@ class DefaultMemoryExtractorMultimodalFileTest {
                 .containsEntry("sourceUri", "https://example.com/report.pdf")
                 .containsEntry("parserId", "document-test")
                 .containsEntry("contentProfile", "document.binary")
-                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name())
+                .containsEntry("governanceType", TestDocumentContent.GOVERNANCE_BINARY)
                 .containsEntry("resourceId", "stored-res-1")
                 .containsEntry("storageUri", "file:///stored/report.pdf");
     }
@@ -738,6 +741,7 @@ class DefaultMemoryExtractorMultimodalFileTest {
                                     "document-test",
                                     TestDocumentContent.TYPE,
                                     "document.binary",
+                                    TestDocumentContent.GOVERNANCE_BINARY,
                                     Set.of("application/pdf"),
                                     Set.of(".pdf"),
                                     10)));
@@ -764,6 +768,7 @@ class DefaultMemoryExtractorMultimodalFileTest {
                             "document-test",
                             TestDocumentContent.TYPE,
                             "document.binary",
+                            TestDocumentContent.GOVERNANCE_BINARY,
                             Set.of("application/pdf"),
                             Set.of(".pdf"),
                             10));
@@ -781,6 +786,7 @@ class DefaultMemoryExtractorMultimodalFileTest {
                                         "image-vision",
                                         IMAGE_TYPE,
                                         "image.caption-ocr",
+                                        IMAGE_GOVERNANCE,
                                         Set.of("image/png"),
                                         Set.of(".png"),
                                         50)));
@@ -809,6 +815,7 @@ class DefaultMemoryExtractorMultimodalFileTest {
                                         "audio-transcription",
                                         AUDIO_TYPE,
                                         "audio.transcript",
+                                        AUDIO_GOVERNANCE,
                                         Set.of("audio/mpeg"),
                                         Set.of(".mp3"),
                                         50)));
@@ -841,6 +848,11 @@ class DefaultMemoryExtractorMultimodalFileTest {
             @Override
             public String contentProfile() {
                 return "image.caption-ocr";
+            }
+
+            @Override
+            public String governanceType() {
+                return IMAGE_GOVERNANCE;
             }
 
             @Override
@@ -881,6 +893,11 @@ class DefaultMemoryExtractorMultimodalFileTest {
             @Override
             public String contentProfile() {
                 return "audio.transcript";
+            }
+
+            @Override
+            public String governanceType() {
+                return AUDIO_GOVERNANCE;
             }
 
             @Override
@@ -1057,22 +1074,22 @@ class DefaultMemoryExtractorMultimodalFileTest {
                 List.of(
                         new RawDataIngestionPolicy(
                                 TestDocumentContent.TYPE,
-                                Set.of(ContentGovernanceType.DOCUMENT_TEXT_LIKE),
+                                TestDocumentContent.GOVERNANCE_TEXT_LIKE,
                                 new com.openmemind.ai.memory.core.builder.SourceLimitOptions(
                                         2L * 1024 * 1024)),
                         new RawDataIngestionPolicy(
                                 TestDocumentContent.TYPE,
-                                Set.of(ContentGovernanceType.DOCUMENT_BINARY),
+                                TestDocumentContent.GOVERNANCE_BINARY,
                                 new com.openmemind.ai.memory.core.builder.SourceLimitOptions(
                                         20L * 1024 * 1024)),
                         new RawDataIngestionPolicy(
                                 IMAGE_TYPE,
-                                Set.of(ContentGovernanceType.IMAGE_CAPTION_OCR),
+                                IMAGE_GOVERNANCE,
                                 new com.openmemind.ai.memory.core.builder.SourceLimitOptions(
                                         10L * 1024 * 1024)),
                         new RawDataIngestionPolicy(
                                 AUDIO_TYPE,
-                                Set.of(ContentGovernanceType.AUDIO_TRANSCRIPT),
+                                AUDIO_GOVERNANCE,
                                 new com.openmemind.ai.memory.core.builder.SourceLimitOptions(
                                         25L * 1024 * 1024))));
     }
@@ -1096,6 +1113,7 @@ class DefaultMemoryExtractorMultimodalFileTest {
                                     "document-tika",
                                     TestDocumentContent.TYPE,
                                     "document.binary",
+                                    TestDocumentContent.GOVERNANCE_BINARY,
                                     Set.of("application/pdf"),
                                     Set.of(".pdf"),
                                     50)));
@@ -1127,7 +1145,7 @@ class DefaultMemoryExtractorMultimodalFileTest {
                                     "document-custom",
                                     TestDocumentContent.TYPE,
                                     "document.pdf.tika",
-                                    ContentGovernanceType.DOCUMENT_BINARY,
+                                    TestDocumentContent.GOVERNANCE_BINARY,
                                     Set.of("application/pdf"),
                                     Set.of(".pdf"),
                                     10)));
@@ -1153,7 +1171,7 @@ class DefaultMemoryExtractorMultimodalFileTest {
                             "document-custom",
                             TestDocumentContent.TYPE,
                             "document.pdf.tika",
-                            ContentGovernanceType.DOCUMENT_BINARY,
+                            TestDocumentContent.GOVERNANCE_BINARY,
                             Set.of("application/pdf"),
                             Set.of(".pdf"),
                             10));
@@ -1171,7 +1189,7 @@ class DefaultMemoryExtractorMultimodalFileTest {
                                     "document-custom",
                                     TestDocumentContent.TYPE,
                                     "document.pdf.tika",
-                                    ContentGovernanceType.DOCUMENT_BINARY,
+                                    TestDocumentContent.GOVERNANCE_BINARY,
                                     Set.of("application/pdf"),
                                     Set.of(".pdf"),
                                     10)));
@@ -1191,7 +1209,7 @@ class DefaultMemoryExtractorMultimodalFileTest {
                                     "contentProfile",
                                     "document.pdf.tika",
                                     "governanceType",
-                                    ContentGovernanceType.DOCUMENT_TEXT_LIKE.name())));
+                                    TestDocumentContent.GOVERNANCE_TEXT_LIKE)));
         }
 
         @Override
@@ -1211,7 +1229,7 @@ class DefaultMemoryExtractorMultimodalFileTest {
                                     "document-custom",
                                     TestDocumentContent.TYPE,
                                     "document.pdf.tika",
-                                    ContentGovernanceType.DOCUMENT_BINARY,
+                                    TestDocumentContent.GOVERNANCE_BINARY,
                                     Set.of("application/pdf"),
                                     Set.of(".pdf"),
                                     10)));
@@ -1265,6 +1283,7 @@ class DefaultMemoryExtractorMultimodalFileTest {
                             "document-test",
                             TestDocumentContent.TYPE,
                             "document.binary",
+                            TestDocumentContent.GOVERNANCE_BINARY,
                             Set.of("application/pdf"),
                             Set.of(".pdf"),
                             10));
@@ -1282,6 +1301,7 @@ class DefaultMemoryExtractorMultimodalFileTest {
                                     "document-test",
                                     TestDocumentContent.TYPE,
                                     "document.binary",
+                                    TestDocumentContent.GOVERNANCE_BINARY,
                                     Set.of("application/pdf"),
                                     Set.of(".pdf"),
                                     10)));
@@ -1372,8 +1392,8 @@ class DefaultMemoryExtractorMultimodalFileTest {
         }
 
         @Override
-        public ContentGovernanceType directGovernanceType() {
-            return ContentGovernanceType.IMAGE_CAPTION_OCR;
+        public String directGovernanceType() {
+            return IMAGE_GOVERNANCE;
         }
 
         @Override
@@ -1436,8 +1456,8 @@ class DefaultMemoryExtractorMultimodalFileTest {
         }
 
         @Override
-        public ContentGovernanceType directGovernanceType() {
-            return ContentGovernanceType.AUDIO_TRANSCRIPT;
+        public String directGovernanceType() {
+            return AUDIO_GOVERNANCE;
         }
 
         @Override
@@ -1461,6 +1481,11 @@ class DefaultMemoryExtractorMultimodalFileTest {
             @Override
             public String contentProfile() {
                 return "document.binary";
+            }
+
+            @Override
+            public String governanceType() {
+                return TestDocumentContent.GOVERNANCE_BINARY;
             }
 
             @Override

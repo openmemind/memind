@@ -17,7 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.builder.SourceLimitOptions;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicy;
@@ -62,7 +61,7 @@ class DefaultExtractionRequestResolverTest {
                         "application/pdf",
                         "Document body",
                         "direct://doc-1",
-                        ContentGovernanceType.DOCUMENT_BINARY,
+                        TestDocumentContent.GOVERNANCE_BINARY,
                         "document.pdf.tika",
                         Map.of());
 
@@ -77,7 +76,7 @@ class DefaultExtractionRequestResolverTest {
                 .containsEntry("sourceUri", "direct://doc-1")
                 .containsEntry("mimeType", "application/pdf")
                 .containsEntry("parserId", "direct")
-                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name());
+                .containsEntry("governanceType", TestDocumentContent.GOVERNANCE_BINARY);
     }
 
     @Test
@@ -159,7 +158,7 @@ class DefaultExtractionRequestResolverTest {
                 List.of(
                         new RawDataIngestionPolicy(
                                 TestDocumentContent.TYPE,
-                                Set.of(ContentGovernanceType.DOCUMENT_BINARY),
+                                TestDocumentContent.GOVERNANCE_BINARY,
                                 new SourceLimitOptions(1024 * 1024))));
     }
 
@@ -176,16 +175,16 @@ class DefaultExtractionRequestResolverTest {
                                     source.mimeType(),
                                     source.sizeBytes() == null ? "null" : source.sizeBytes()));
             return Mono.just(
-                    new ParserResolution(
-                            new TestDocumentParser(),
-                            new ContentCapability(
-                                    "document-test",
-                                    TestDocumentContent.TYPE,
-                                    "document.binary",
-                                    ContentGovernanceType.DOCUMENT_BINARY,
-                                    Set.of("application/pdf"),
-                                    Set.of(".pdf"),
-                                    0)));
+                            new ParserResolution(
+                                    new TestDocumentParser(),
+                                    new ContentCapability(
+                                            "document-test",
+                                            TestDocumentContent.TYPE,
+                                            "document.binary",
+                                            TestDocumentContent.GOVERNANCE_BINARY,
+                                            Set.of("application/pdf"),
+                                            Set.of(".pdf"),
+                                            0)));
         }
 
         @Override
@@ -196,7 +195,7 @@ class DefaultExtractionRequestResolverTest {
                             source.mimeType(),
                             "Parsed %s".formatted(source.fileName()),
                             source.sourceUrl(),
-                            ContentGovernanceType.DOCUMENT_BINARY,
+                            TestDocumentContent.GOVERNANCE_BINARY,
                             "document.binary",
                             Map.of("author", "Alice")));
         }
@@ -222,6 +221,11 @@ class DefaultExtractionRequestResolverTest {
         @Override
         public String contentProfile() {
             return "document.binary";
+        }
+
+        @Override
+        public String governanceType() {
+            return TestDocumentContent.GOVERNANCE_BINARY;
         }
 
         @Override

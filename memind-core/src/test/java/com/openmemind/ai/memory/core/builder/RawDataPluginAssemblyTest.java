@@ -18,7 +18,6 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
@@ -91,11 +90,13 @@ class RawDataPluginAssemblyTest {
                                         "image-vision",
                                         IMAGE_TYPE,
                                         "image.caption-ocr",
+                                        "image.caption-ocr",
                                         Set.of("image/png"),
                                         Set.of(".png")),
                                 testParser(
                                         "audio-transcription",
                                         AUDIO_TYPE,
+                                        "audio.transcript",
                                         "audio.transcript",
                                         Set.of("audio/mpeg"),
                                         Set.of(".mp3"))),
@@ -165,7 +166,7 @@ class RawDataPluginAssemblyTest {
                         return List.of(
                                 new RawDataIngestionPolicy(
                                         TestDocumentContent.TYPE,
-                                        Set.of(ContentGovernanceType.DOCUMENT_BINARY),
+                                        TestDocumentContent.GOVERNANCE_BINARY,
                                         new SourceLimitOptions(128)));
                     }
                 };
@@ -191,7 +192,7 @@ class RawDataPluginAssemblyTest {
                                                         "document-test",
                                                         TestDocumentContent.TYPE,
                                                         "document.binary",
-                                                        ContentGovernanceType.DOCUMENT_BINARY,
+                                                        TestDocumentContent.GOVERNANCE_BINARY,
                                                         Set.of("application/pdf"),
                                                         Set.of(".pdf"),
                                                         10))
@@ -283,6 +284,7 @@ class RawDataPluginAssemblyTest {
                 parserId,
                 TestDocumentContent.TYPE,
                 "document.binary",
+                TestDocumentContent.GOVERNANCE_BINARY,
                 Set.of("application/pdf"),
                 Set.of(".pdf"));
     }
@@ -291,6 +293,7 @@ class RawDataPluginAssemblyTest {
             String parserId,
             String contentType,
             String contentProfile,
+            String governanceType,
             Set<String> supportedMimeTypes,
             Set<String> supportedExtensions) {
         return new ContentParser() {
@@ -307,6 +310,11 @@ class RawDataPluginAssemblyTest {
             @Override
             public String contentProfile() {
                 return contentProfile;
+            }
+
+            @Override
+            public String governanceType() {
+                return governanceType;
             }
 
             @Override

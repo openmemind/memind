@@ -44,6 +44,11 @@ public final class TikaDocumentContentParser implements ContentParser {
     }
 
     @Override
+    public String governanceType() {
+        return delegate.governanceType();
+    }
+
+    @Override
     public int priority() {
         return delegate.priority();
     }

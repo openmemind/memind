@@ -17,7 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
-import com.openmemind.ai.memory.core.data.enums.ContentGovernanceType;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.source.DirectContentSource;
 import com.openmemind.ai.memory.core.extraction.source.FileExtractionSource;
@@ -68,8 +67,8 @@ class ExtractionRequestTest {
             }
 
             @Override
-            public ContentGovernanceType directGovernanceType() {
-                return ContentGovernanceType.DOCUMENT_TEXT_LIKE;
+            public String directGovernanceType() {
+                return TestDocumentContent.GOVERNANCE_TEXT_LIKE;
             }
 
             @Override
@@ -90,7 +89,7 @@ class ExtractionRequestTest {
                 .containsEntry("sourceKind", "DIRECT")
                 .containsEntry("parserId", "direct")
                 .containsEntry("contentProfile", "custom.text")
-                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_TEXT_LIKE.name());
+                .containsEntry("governanceType", TestDocumentContent.GOVERNANCE_TEXT_LIKE);
     }
 
     @Test
@@ -116,7 +115,7 @@ class ExtractionRequestTest {
                 .containsEntry("sourceKind", "DIRECT")
                 .containsEntry("parserId", "direct")
                 .containsEntry("contentProfile", "document.markdown")
-                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_TEXT_LIKE.name())
+                .containsEntry("governanceType", TestDocumentContent.GOVERNANCE_TEXT_LIKE)
                 .containsEntry("mimeType", "text/markdown");
     }
 
@@ -128,7 +127,7 @@ class ExtractionRequestTest {
                         "application/pdf",
                         "hello",
                         null,
-                        ContentGovernanceType.DOCUMENT_BINARY,
+                        TestDocumentContent.GOVERNANCE_BINARY,
                         "document.binary",
                         Map.of("parserId", "document-tika", "contentProfile", "document.binary"));
 
@@ -138,7 +137,7 @@ class ExtractionRequestTest {
                 .containsEntry("sourceKind", "DIRECT")
                 .containsEntry("parserId", "document-tika")
                 .containsEntry("contentProfile", "document.binary")
-                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name())
+                .containsEntry("governanceType", TestDocumentContent.GOVERNANCE_BINARY)
                 .containsEntry("mimeType", "application/pdf");
     }
 
@@ -150,7 +149,7 @@ class ExtractionRequestTest {
                         "application/pdf",
                         "revenue grew",
                         "file:///tmp/report.pdf",
-                        ContentGovernanceType.DOCUMENT_BINARY,
+                        TestDocumentContent.GOVERNANCE_BINARY,
                         "document.binary",
                         Map.of("author", "Alice"));
 
@@ -164,7 +163,7 @@ class ExtractionRequestTest {
                 .containsEntry("sourceKind", "DIRECT")
                 .containsEntry("parserId", "direct")
                 .containsEntry("contentProfile", "document.binary")
-                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name())
+                .containsEntry("governanceType", TestDocumentContent.GOVERNANCE_BINARY)
                 .containsEntry("mimeType", "application/pdf")
                 .containsEntry("sourceUri", "file:///tmp/report.pdf");
     }
@@ -177,7 +176,7 @@ class ExtractionRequestTest {
                         "text/markdown",
                         "# title",
                         null,
-                        ContentGovernanceType.DOCUMENT_TEXT_LIKE,
+                        TestDocumentContent.GOVERNANCE_TEXT_LIKE,
                         "document.markdown",
                         Map.of("contentProfile", "document.custom.markdown"));
 
@@ -185,7 +184,7 @@ class ExtractionRequestTest {
 
         assertThat(request.metadata())
                 .containsEntry("contentProfile", "document.custom.markdown")
-                .containsEntry("governanceType", ContentGovernanceType.DOCUMENT_TEXT_LIKE.name());
+                .containsEntry("governanceType", TestDocumentContent.GOVERNANCE_TEXT_LIKE);
     }
 
     @Test
@@ -196,9 +195,9 @@ class ExtractionRequestTest {
                         "text/markdown",
                         "# title",
                         null,
-                        ContentGovernanceType.DOCUMENT_TEXT_LIKE,
+                        TestDocumentContent.GOVERNANCE_TEXT_LIKE,
                         "document.markdown",
-                        Map.of("governanceType", ContentGovernanceType.DOCUMENT_BINARY.name()));
+                        Map.of("governanceType", TestDocumentContent.GOVERNANCE_BINARY));
 
         assertThatThrownBy(
                         () ->
@@ -206,28 +205,7 @@ class ExtractionRequestTest {
                                         DefaultMemoryId.of("user-1", "agent-1"), content))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("governanceType")
-                .hasMessageContaining(ContentGovernanceType.DOCUMENT_TEXT_LIKE.name());
-    }
-
-    @Test
-    void documentFactoryShouldRejectBuiltinProfileThatConflictsWithDerivedGovernance() {
-        var content =
-                new TestDocumentContent(
-                        "Guide",
-                        "text/markdown",
-                        "# title",
-                        null,
-                        ContentGovernanceType.DOCUMENT_TEXT_LIKE,
-                        "document.markdown",
-                        Map.of("contentProfile", "document.binary"));
-
-        assertThatThrownBy(
-                        () ->
-                                ExtractionRequest.of(
-                                        DefaultMemoryId.of("user-1", "agent-1"), content))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("contentProfile")
-                .hasMessageContaining("document.binary");
+                .hasMessageContaining(TestDocumentContent.GOVERNANCE_TEXT_LIKE);
     }
 
     @Test
