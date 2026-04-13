@@ -46,6 +46,45 @@ class NativeTextDocumentContentParserTest {
     }
 
     @Test
+    void parseMarkdownPreservesAuthoredMarkdownSyntax() {
+        DocumentContent content =
+                (DocumentContent)
+                        new NativeTextDocumentContentParser()
+                                .parse(
+                                        """
+                                        # Guide
+
+                                        - keep this list
+
+                                        ```text
+                                        code fence
+                                        ```
+                                        """
+                                                .getBytes(StandardCharsets.UTF_8),
+                                        new SourceDescriptor(
+                                                SourceKind.FILE,
+                                                "guide.md",
+                                                "text/markdown",
+                                                64L,
+                                                null))
+                                .block();
+
+        assertThat(content).isNotNull();
+        assertThat(content.parsedText())
+                .isEqualTo(
+                        String.join(
+                                "\n",
+                                "# Guide",
+                                "",
+                                "- keep this list",
+                                "",
+                                "```text",
+                                "code fence",
+                                "```"));
+        assertThat(content.metadata()).containsEntry("contentProfile", "document.markdown");
+    }
+
+    @Test
     void parseHtmlExtractsVisibleTextAndDecodesEntities() {
         DocumentContent content =
                 (DocumentContent)
@@ -73,7 +112,7 @@ class NativeTextDocumentContentParserTest {
                                 .block();
 
         assertThat(content).isNotNull();
-        assertThat(content.parsedText()).isEqualTo("Hello & welcome\nLine 2");
+        assertThat(content.parsedText()).isEqualTo("Hello & welcome\n\nLine 2");
         assertThat(content.metadata()).containsEntry("contentProfile", "document.html");
     }
 
@@ -97,23 +136,105 @@ class NativeTextDocumentContentParserTest {
     }
 
     @Test
-    void parseCsvKeepsTabularTextUntouched() {
+    void parseCsvShapesRowsAndPublishesCsvProfile() {
         DocumentContent content =
                 (DocumentContent)
                         new NativeTextDocumentContentParser()
                                 .parse(
-                                        "name,age\nalice,30".getBytes(StandardCharsets.UTF_8),
+                                        "name,team\nAlice,Core\nBob,AI\n"
+                                                .getBytes(StandardCharsets.UTF_8),
                                         new SourceDescriptor(
                                                 SourceKind.FILE,
-                                                "table.csv",
+                                                "people.csv",
                                                 "text/csv",
-                                                17L,
+                                                27L,
                                                 null))
                                 .block();
 
         assertThat(content).isNotNull();
-        assertThat(content.parsedText()).isEqualTo("name,age\nalice,30");
-        assertThat(content.metadata()).containsEntry("contentProfile", "document.text");
+        assertThat(content.parsedText())
+                .isEqualTo(
+                        String.join(
+                                "\n",
+                                "Row 1:",
+                                "name: Alice, team: Core",
+                                "",
+                                "Row 2:",
+                                "name: Bob, team: AI"));
+        assertThat(content.metadata()).containsEntry("contentProfile", "document.csv");
+    }
+
+    @Test
+    void parseLowercaseHeaderCsvStillUsesHeaderNames() {
+        DocumentContent content =
+                (DocumentContent)
+                        new NativeTextDocumentContentParser()
+                                .parse(
+                                        "name,team\nalice,core\nbob,ai\n"
+                                                .getBytes(StandardCharsets.UTF_8),
+                                        new SourceDescriptor(
+                                                SourceKind.FILE,
+                                                "people.csv",
+                                                "text/csv",
+                                                29L,
+                                                null))
+                                .block();
+
+        assertThat(content).isNotNull();
+        assertThat(content.parsedText())
+                .isEqualTo(
+                        String.join(
+                                "\n",
+                                "Row 1:",
+                                "name: alice, team: core",
+                                "",
+                                "Row 2:",
+                                "name: bob, team: ai"));
+        assertThat(content.metadata()).containsEntry("contentProfile", "document.csv");
+    }
+
+    @Test
+    void parseHeaderlessCsvUsesSyntheticKeys() {
+        DocumentContent content =
+                (DocumentContent)
+                        new NativeTextDocumentContentParser()
+                                .parse(
+                                        "Alice,PM\nBob,Engineer\n".getBytes(StandardCharsets.UTF_8),
+                                        new SourceDescriptor(
+                                                SourceKind.FILE,
+                                                "people.csv",
+                                                "text/csv",
+                                                24L,
+                                                null))
+                                .block();
+
+        assertThat(content).isNotNull();
+        assertThat(content.parsedText())
+                .isEqualTo(
+                        String.join(
+                                "\n",
+                                "Row 1:",
+                                "column1: Alice, column2: PM",
+                                "",
+                                "Row 2:",
+                                "column1: Bob, column2: Engineer"));
+        assertThat(content.metadata()).containsEntry("contentProfile", "document.csv");
+    }
+
+    @Test
+    void parseSameFixtureTwiceProducesStableTextAndContentId() {
+        NativeTextDocumentContentParser parser = new NativeTextDocumentContentParser();
+        SourceDescriptor source =
+                new SourceDescriptor(SourceKind.FILE, "page.html", "text/html", 32L, null);
+        byte[] payload = "<h1>Title</h1><p>Hello</p>".getBytes(StandardCharsets.UTF_8);
+
+        DocumentContent first = (DocumentContent) parser.parse(payload, source).block();
+        DocumentContent second = (DocumentContent) parser.parse(payload, source).block();
+
+        assertThat(first).isNotNull();
+        assertThat(second).isNotNull();
+        assertThat(first.parsedText()).isEqualTo(second.parsedText());
+        assertThat(first.getContentId()).isEqualTo(second.getContentId());
     }
 
     @Test

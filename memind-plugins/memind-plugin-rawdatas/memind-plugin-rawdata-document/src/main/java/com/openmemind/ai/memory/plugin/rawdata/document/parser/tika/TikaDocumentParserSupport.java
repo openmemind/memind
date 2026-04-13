@@ -24,12 +24,13 @@ import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.parser.ParseContext;
 import org.apache.tika.sax.BodyContentHandler;
 
-final class TikaDocumentParserSupport {
+class TikaDocumentParserSupport {
 
     private static final Pattern EXTRA_BLANK_LINES = Pattern.compile("\n{3,}");
 
     private final DefaultDetector detector = new DefaultDetector();
     private final AutoDetectParser parser = new AutoDetectParser();
+    private final PdfPageTextExtractor pdfPageTextExtractor = new PdfPageTextExtractor();
 
     ParsedDocument parse(byte[] data, String fileName, String mimeType) throws Exception {
         Metadata detectionMetadata = new Metadata();
@@ -56,7 +57,19 @@ final class TikaDocumentParserSupport {
         return new ParsedDocument(detectedMimeType, handler.toString(), parseMetadata);
     }
 
-    String normalizeText(String text) {
+    CanonicalDocumentText canonicalize(byte[] data, ParsedDocument parsedDocument)
+            throws Exception {
+        if ("application/pdf".equals(parsedDocument.detectedMimeType())) {
+            PdfPageTextExtractor.PageAwarePdfText pageAware = pdfPageTextExtractor.extract(data);
+            if (pageAware.pageAware()) {
+                return new CanonicalDocumentText(
+                        pageAware.text(), true, pageAware.emittedPageCount());
+            }
+        }
+        return new CanonicalDocumentText(normalizeBlockText(parsedDocument.text()), false, null);
+    }
+
+    static String normalizeBlockText(String text) {
         if (text == null) {
             return "";
         }
@@ -78,4 +91,6 @@ final class TikaDocumentParserSupport {
     }
 
     record ParsedDocument(String detectedMimeType, String text, Metadata metadata) {}
+
+    record CanonicalDocumentText(String text, boolean pageAware, Integer pageCount) {}
 }

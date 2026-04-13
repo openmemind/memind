@@ -20,7 +20,7 @@ import org.apache.tika.metadata.Metadata;
 import org.apache.tika.metadata.Office;
 import org.apache.tika.metadata.TikaCoreProperties;
 
-final class TikaDocumentMetadataMapper {
+class TikaDocumentMetadataMapper {
 
     Map<String, Object> map(Metadata metadata, String detectedMimeType) {
         Map<String, Object> mapped = new LinkedHashMap<>();

@@ -57,6 +57,8 @@ public final class ProfileAwareDocumentChunker {
         return switch (profile) {
             case DocumentSemantics.PROFILE_MARKDOWN ->
                     markdownDocumentChunker.chunk(text, chunkingOptions);
+            case DocumentSemantics.PROFILE_CSV, DocumentSemantics.PROFILE_PDF_TIKA ->
+                    preserveParagraphBoundaries(text, chunkingOptions);
             case DocumentSemantics.PROFILE_BINARY,
                     DocumentSemantics.PROFILE_HTML,
                     DocumentSemantics.PROFILE_TEXT ->
@@ -66,5 +68,16 @@ public final class ProfileAwareDocumentChunker {
                     tokenAwareSegmentAssembler.assemble(
                             tokenAwareSegmentAssembler.paragraphCandidates(text), chunkingOptions);
         };
+    }
+
+    private List<Segment> preserveParagraphBoundaries(
+            String text, TokenChunkingOptions chunkingOptions) {
+        return tokenAwareSegmentAssembler.paragraphCandidates(text).stream()
+                .flatMap(
+                        candidate ->
+                                tokenAwareSegmentAssembler
+                                        .splitOversized(candidate, chunkingOptions.hardMaxTokens())
+                                        .stream())
+                .toList();
     }
 }

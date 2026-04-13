@@ -36,6 +36,7 @@ public final class NativeTextDocumentContentParser implements ContentParser {
     private static final Set<String> SUPPORTED_EXTENSIONS =
             Set.of(".txt", ".md", ".html", ".htm", ".csv");
     private static final HtmlTextExtractor HTML_TEXT_EXTRACTOR = new HtmlTextExtractor();
+    private static final CsvTextShaper CSV_TEXT_SHAPER = new CsvTextShaper();
 
     @Override
     public String parserId() {
@@ -134,16 +135,31 @@ public final class NativeTextDocumentContentParser implements ContentParser {
         return switch (mimeType) {
             case "text/markdown" -> DocumentSemantics.PROFILE_MARKDOWN;
             case "text/html" -> DocumentSemantics.PROFILE_HTML;
+            case "text/csv" -> DocumentSemantics.PROFILE_CSV;
             default -> DocumentSemantics.PROFILE_TEXT;
         };
     }
 
     private static String normalizeText(String rawText, String mimeType) {
         String normalized = rawText.replace("\r\n", "\n").replace('\r', '\n');
-        if ("text/html".equals(mimeType)) {
-            return HTML_TEXT_EXTRACTOR.extract(normalized);
-        }
-        return normalized.strip();
+        return switch (mimeType) {
+            case "text/html" -> HTML_TEXT_EXTRACTOR.extract(normalized);
+            case "text/csv" -> CSV_TEXT_SHAPER.shape(normalized);
+            case "text/markdown" -> normalizeMarkdown(normalized);
+            default -> normalizePlainText(normalized);
+        };
+    }
+
+    private static String normalizeMarkdown(String text) {
+        return collapseBlankLines(text).strip();
+    }
+
+    private static String normalizePlainText(String text) {
+        return collapseBlankLines(text).strip();
+    }
+
+    private static String collapseBlankLines(String text) {
+        return text.replaceAll("\n{3,}", "\n\n");
     }
 
     private static String resolveTitle(String fileName) {

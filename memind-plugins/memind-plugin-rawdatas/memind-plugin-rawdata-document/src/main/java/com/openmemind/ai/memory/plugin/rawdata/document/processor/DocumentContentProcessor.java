@@ -17,8 +17,8 @@ import com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions;
 import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
 import com.openmemind.ai.memory.core.exception.ParsedContentTooLargeException;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
-import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
@@ -178,8 +178,7 @@ public final class DocumentContentProcessor implements RawContentProcessor<Docum
         return DocumentSemantics.PROFILE_TEXT;
     }
 
-    private String resolveGovernanceType(
-            DocumentContent content, String contentProfile) {
+    private String resolveGovernanceType(DocumentContent content, String contentProfile) {
         if (content.metadata().containsKey("governanceType")) {
             Object governanceType = content.metadata().get("governanceType");
             if (governanceType != null && !governanceType.toString().isBlank()) {
@@ -191,7 +190,7 @@ public final class DocumentContentProcessor implements RawContentProcessor<Docum
         if (content.directGovernanceType() != null && !content.directGovernanceType().isBlank()) {
             return content.directGovernanceType();
         }
-        return DocumentSemantics.PROFILE_BINARY.equals(contentProfile)
+        return DocumentSemantics.isBinaryProfile(contentProfile)
                 ? DocumentSemantics.GOVERNANCE_BINARY
                 : DocumentSemantics.GOVERNANCE_TEXT_LIKE;
     }
@@ -278,7 +277,8 @@ public final class DocumentContentProcessor implements RawContentProcessor<Docum
 
     private DocumentExtractionOptions budgetOptions(int effectiveBudget, String governanceType) {
         int hardMaxTokens = Math.max(1, effectiveBudget);
-        TokenChunkingOptions textLikeChunking = capChunking(options.textLikeChunking(), hardMaxTokens);
+        TokenChunkingOptions textLikeChunking =
+                capChunking(options.textLikeChunking(), hardMaxTokens);
         TokenChunkingOptions binaryChunking = capChunking(options.binaryChunking(), hardMaxTokens);
         if (DocumentSemantics.isBinaryGovernance(governanceType)) {
             binaryChunking = capChunking(options.binaryChunking(), hardMaxTokens);

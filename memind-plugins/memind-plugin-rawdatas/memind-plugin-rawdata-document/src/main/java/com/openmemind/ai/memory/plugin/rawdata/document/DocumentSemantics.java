@@ -20,8 +20,10 @@ public final class DocumentSemantics {
 
     public static final String PROFILE_MARKDOWN = "document.markdown";
     public static final String PROFILE_HTML = "document.html";
+    public static final String PROFILE_CSV = "document.csv";
     public static final String PROFILE_TEXT = "document.text";
     public static final String PROFILE_BINARY = "document.binary";
+    public static final String PROFILE_PDF_TIKA = "document.pdf.tika";
 
     private DocumentSemantics() {}
 
@@ -45,7 +47,10 @@ public final class DocumentSemantics {
         if ("text/html".equals(mimeType)) {
             return PROFILE_HTML;
         }
-        if ("text/plain".equals(mimeType) || "text/csv".equals(mimeType)) {
+        if ("text/csv".equals(mimeType)) {
+            return PROFILE_CSV;
+        }
+        if ("text/plain".equals(mimeType)) {
             return PROFILE_TEXT;
         }
         if (mimeType != null && !mimeType.isBlank()) {
@@ -56,6 +61,10 @@ public final class DocumentSemantics {
 
     public static boolean isBinaryGovernance(String governanceType) {
         return GOVERNANCE_BINARY.equals(governanceType);
+    }
+
+    public static boolean isBinaryProfile(String contentProfile) {
+        return PROFILE_BINARY.equals(contentProfile) || PROFILE_PDF_TIKA.equals(contentProfile);
     }
 
     public static boolean isMarkdownProfile(String contentProfile) {

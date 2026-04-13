@@ -13,238 +13,140 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.document.parser;
 
-import java.util.Locale;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
 
 /**
- * Lightweight, linear HTML text extractor used by the native text parser.
+ * Structured HTML text extractor used by the native text parser.
  */
 public final class HtmlTextExtractor {
 
-    private static final Set<String> BLOCK_TAGS =
-            Set.of(
-                    "article",
-                    "aside",
-                    "blockquote",
-                    "br",
-                    "div",
-                    "footer",
-                    "h1",
-                    "h2",
-                    "h3",
-                    "h4",
-                    "h5",
-                    "h6",
-                    "header",
-                    "hr",
-                    "li",
-                    "main",
-                    "nav",
-                    "ol",
-                    "p",
-                    "pre",
-                    "section",
-                    "table",
-                    "tbody",
-                    "tfoot",
-                    "thead",
-                    "tr",
-                    "ul");
+    private static final Set<String> IGNORED_TAGS =
+            Set.of("script", "style", "head", "noscript", "template");
+    private static final Set<String> TEXT_BLOCK_TAGS =
+            Set.of("h1", "h2", "h3", "h4", "h5", "h6", "p", "pre", "blockquote");
 
     public String extract(String html) {
         if (html == null || html.isBlank()) {
             return "";
         }
-
-        StringBuilder text = new StringBuilder();
-        boolean inScript = false;
-        boolean inStyle = false;
-
-        for (int i = 0; i < html.length(); i++) {
-            char ch = html.charAt(i);
-            if ((inScript || inStyle) && ch != '<') {
-                continue;
-            }
-            if (ch == '<') {
-                if (startsWith(html, i, "<!--")) {
-                    int commentEnd = html.indexOf("-->", i + 4);
-                    if (commentEnd < 0) {
-                        break;
-                    }
-                    i = commentEnd + 2;
-                    continue;
-                }
-
-                int tagEnd = html.indexOf('>', i + 1);
-                if (tagEnd < 0) {
-                    text.append(ch);
-                    continue;
-                }
-
-                String tag = html.substring(i + 1, tagEnd);
-                String tagName = tagName(tag);
-                boolean closing = isClosingTag(tag);
-
-                if (inScript) {
-                    if (closing && "script".equals(tagName)) {
-                        inScript = false;
-                        appendLineBreak(text);
-                    }
-                    i = tagEnd;
-                    continue;
-                }
-                if (inStyle) {
-                    if (closing && "style".equals(tagName)) {
-                        inStyle = false;
-                        appendLineBreak(text);
-                    }
-                    i = tagEnd;
-                    continue;
-                }
-
-                if (!closing && "script".equals(tagName)) {
-                    inScript = true;
-                    i = tagEnd;
-                    continue;
-                }
-                if (!closing && "style".equals(tagName)) {
-                    inStyle = true;
-                    i = tagEnd;
-                    continue;
-                }
-                if (BLOCK_TAGS.contains(tagName)) {
-                    appendLineBreak(text);
-                }
-                i = tagEnd;
-                continue;
-            }
-
-            if (ch == '&') {
-                int entityEnd = html.indexOf(';', i + 1);
-                if (entityEnd > i && entityEnd - i <= 10) {
-                    String decoded = decodeEntity(html.substring(i, entityEnd + 1));
-                    if (decoded != null) {
-                        text.append(decoded);
-                        i = entityEnd;
-                        continue;
-                    }
-                }
-            }
-            text.append(ch);
-        }
-
-        return normalize(text.toString());
+        Document document = Jsoup.parse(html);
+        List<String> blocks = new ArrayList<>();
+        appendElement(document.body(), blocks);
+        return String.join("\n\n", blocks);
     }
 
-    private boolean startsWith(String text, int offset, String prefix) {
-        return text.regionMatches(offset, prefix, 0, prefix.length());
-    }
-
-    private boolean isClosingTag(String tag) {
-        return !tag.isBlank() && tag.trim().startsWith("/");
-    }
-
-    private String tagName(String tag) {
-        String trimmed = tag.trim();
-        if (trimmed.isEmpty()) {
-            return "";
-        }
-        int start = trimmed.startsWith("/") ? 1 : 0;
-        while (start < trimmed.length() && Character.isWhitespace(trimmed.charAt(start))) {
-            start++;
-        }
-        if (start >= trimmed.length()) {
-            return "";
-        }
-        if (trimmed.charAt(start) == '!' || trimmed.charAt(start) == '?') {
-            return "";
-        }
-        int end = start;
-        while (end < trimmed.length()) {
-            char ch = trimmed.charAt(end);
-            if (Character.isWhitespace(ch) || ch == '/' || ch == '>') {
-                break;
-            }
-            end++;
-        }
-        return trimmed.substring(start, end).toLowerCase(Locale.ROOT);
-    }
-
-    private void appendLineBreak(StringBuilder text) {
-        if (text.isEmpty() || text.charAt(text.length() - 1) == '\n') {
+    private void appendElement(Element element, List<String> blocks) {
+        if (element == null) {
             return;
         }
-        text.append('\n');
-    }
-
-    private String decodeEntity(String entity) {
-        return switch (entity) {
-            case "&amp;" -> "&";
-            case "&lt;" -> "<";
-            case "&gt;" -> ">";
-            case "&quot;" -> "\"";
-            case "&apos;", "&#39;" -> "'";
-            case "&nbsp;" -> " ";
-            default -> decodeNumericEntity(entity);
-        };
-    }
-
-    private String decodeNumericEntity(String entity) {
-        try {
-            if (entity.startsWith("&#x") || entity.startsWith("&#X")) {
-                return Character.toString(
-                        Integer.parseInt(entity.substring(3, entity.length() - 1), 16));
-            }
-            if (entity.startsWith("&#")) {
-                return Character.toString(
-                        Integer.parseInt(entity.substring(2, entity.length() - 1)));
-            }
-        } catch (IllegalArgumentException ignored) {
+        String tag = element.normalName();
+        if (IGNORED_TAGS.contains(tag)) {
+            return;
         }
-        return null;
-    }
-
-    private String normalize(String rawText) {
-        String normalized = rawText.replace("\r\n", "\n").replace('\r', '\n');
-        StringBuilder result = new StringBuilder();
-        boolean pendingSpace = false;
-        boolean previousWasNewline = true;
-
-        for (int i = 0; i < normalized.length(); i++) {
-            char ch = normalized.charAt(i);
-            if (ch == '\n') {
-                trimTrailingSpaces(result);
-                if (!result.isEmpty() && result.charAt(result.length() - 1) != '\n') {
-                    result.append('\n');
-                }
-                pendingSpace = false;
-                previousWasNewline = true;
+        if ("ul".equals(tag) || "ol".equals(tag)) {
+            addBlock(blocks, renderListBlock(element));
+            return;
+        }
+        if ("table".equals(tag)) {
+            addBlock(blocks, renderTableBlock(element));
+            return;
+        }
+        if (TEXT_BLOCK_TAGS.contains(tag)) {
+            addBlock(blocks, normalizeInline(element.text()));
+            return;
+        }
+        StringBuilder inlineBuffer = new StringBuilder();
+        for (Node child : element.childNodes()) {
+            if (child instanceof TextNode textNode) {
+                appendInline(inlineBuffer, textNode.text());
                 continue;
             }
-            if (Character.isWhitespace(ch)) {
-                if (!previousWasNewline && !result.isEmpty()) {
-                    pendingSpace = true;
-                }
+            if (!(child instanceof Element childElement)) {
                 continue;
             }
-            if (pendingSpace && !result.isEmpty() && result.charAt(result.length() - 1) != '\n') {
-                result.append(' ');
+            if (IGNORED_TAGS.contains(childElement.normalName())) {
+                continue;
             }
-            result.append(ch);
-            pendingSpace = false;
-            previousWasNewline = false;
+            if (isRenderableElement(childElement)) {
+                flushInlineBlock(blocks, inlineBuffer);
+                appendElement(childElement, blocks);
+                continue;
+            }
+            appendInline(inlineBuffer, childElement.text());
         }
-
-        trimTrailingSpaces(result);
-        while (!result.isEmpty() && result.charAt(result.length() - 1) == '\n') {
-            result.setLength(result.length() - 1);
-        }
-        return result.toString();
+        flushInlineBlock(blocks, inlineBuffer);
     }
 
-    private void trimTrailingSpaces(StringBuilder text) {
-        while (!text.isEmpty() && text.charAt(text.length() - 1) == ' ') {
-            text.setLength(text.length() - 1);
+    private boolean isRenderableElement(Element element) {
+        String tag = element.normalName();
+        if ("ul".equals(tag)
+                || "ol".equals(tag)
+                || "table".equals(tag)
+                || TEXT_BLOCK_TAGS.contains(tag)) {
+            return true;
         }
+        for (Element child : element.children()) {
+            if (isRenderableElement(child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String renderListBlock(Element list) {
+        return list.children().stream()
+                .filter(child -> "li".equals(child.normalName()))
+                .map(item -> "- " + normalizeInline(item.text()))
+                .filter(value -> !value.isBlank())
+                .collect(Collectors.joining("\n"));
+    }
+
+    private String renderTableBlock(Element table) {
+        return table.select("> tr, > thead > tr, > tbody > tr, > tfoot > tr").stream()
+                .map(this::serializeRow)
+                .filter(value -> !value.isBlank())
+                .collect(Collectors.joining("\n"));
+    }
+
+    private String serializeRow(Element row) {
+        return row.children().stream()
+                .filter(cell -> "th".equals(cell.normalName()) || "td".equals(cell.normalName()))
+                .map(cell -> normalizeInline(cell.text()))
+                .filter(value -> !value.isBlank())
+                .collect(Collectors.joining(" | "));
+    }
+
+    private void addBlock(List<String> blocks, String value) {
+        if (value != null && !value.isBlank()) {
+            blocks.add(value);
+        }
+    }
+
+    private void appendInline(StringBuilder inlineBuffer, String value) {
+        String normalized = normalizeInline(value);
+        if (normalized.isBlank()) {
+            return;
+        }
+        if (!inlineBuffer.isEmpty()) {
+            inlineBuffer.append(' ');
+        }
+        inlineBuffer.append(normalized);
+    }
+
+    private void flushInlineBlock(List<String> blocks, StringBuilder inlineBuffer) {
+        addBlock(blocks, inlineBuffer.toString());
+        inlineBuffer.setLength(0);
+    }
+
+    private String normalizeInline(String text) {
+        return text == null ? "" : text.replace('\u00A0', ' ').replaceAll("\\s+", " ").strip();
     }
 }

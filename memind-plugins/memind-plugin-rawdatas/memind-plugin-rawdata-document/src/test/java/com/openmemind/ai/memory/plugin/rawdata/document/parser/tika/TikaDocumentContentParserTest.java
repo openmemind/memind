@@ -21,6 +21,7 @@ import com.openmemind.ai.memory.core.resource.SourceKind;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import org.junit.jupiter.api.Test;
@@ -45,16 +46,27 @@ class TikaDocumentContentParserTest {
     }
 
     @Test
-    void parsesPdfDocument() {
+    void parsesPdfWithPageMarkersAndCanonicalPageCount() {
         DocumentContent content =
                 (DocumentContent)
-                        parser.parse(minimalPdf(), "report.pdf", "application/pdf").block();
+                        parser.parse(
+                                        twoPagePdf("First page", "Second page"),
+                                        new SourceDescriptor(
+                                                SourceKind.FILE,
+                                                "report.pdf",
+                                                "application/pdf",
+                                                512L,
+                                                null))
+                                .block();
 
         assertThat(content.mimeType()).isEqualTo("application/pdf");
-        assertThat(content.parsedText()).contains("Hello PDF");
+        assertThat(content.parsedText())
+                .isEqualTo(
+                        String.join("\n", "Page 1:", "First page", "", "Page 2:", "Second page"));
         assertThat(content.metadata())
                 .containsEntry("parserId", "document-tika")
-                .containsEntry("contentProfile", "document.binary")
+                .containsEntry("contentProfile", "document.pdf.tika")
+                .containsEntry("pageCount", 2)
                 .containsEntry("parser", "tika");
     }
 
@@ -109,25 +121,75 @@ class TikaDocumentContentParserTest {
                 .hasMessageContaining("empty");
     }
 
-    private static byte[] minimalPdf() {
+    @Test
+    void rejectsMetadataOnlyBinaryParseResults() {
+        TikaDocumentParserSupport support =
+                new TikaDocumentParserSupport() {
+                    @Override
+                    TikaDocumentParserSupport.ParsedDocument parse(
+                            byte[] data, String fileName, String mimeType) {
+                        return new TikaDocumentParserSupport.ParsedDocument(
+                                "application/pdf", "", new org.apache.tika.metadata.Metadata());
+                    }
+
+                    @Override
+                    TikaDocumentParserSupport.CanonicalDocumentText canonicalize(
+                            byte[] data, TikaDocumentParserSupport.ParsedDocument parsedDocument) {
+                        return new TikaDocumentParserSupport.CanonicalDocumentText("", false, null);
+                    }
+                };
+
+        TikaDocumentMetadataMapper mapper =
+                new TikaDocumentMetadataMapper() {
+                    @Override
+                    Map<String, Object> map(
+                            org.apache.tika.metadata.Metadata metadata, String detectedMimeType) {
+                        return Map.of("pageCount", 1);
+                    }
+                };
+
+        TikaDocumentContentParser parser = new TikaDocumentContentParser(support, mapper);
+
+        assertThatThrownBy(
+                        () ->
+                                parser.parse(
+                                                "ignored".getBytes(StandardCharsets.UTF_8),
+                                                new SourceDescriptor(
+                                                        SourceKind.FILE,
+                                                        "blank.pdf",
+                                                        "application/pdf",
+                                                        7L,
+                                                        null))
+                                        .block())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("no text");
+    }
+
+    private static byte[] twoPagePdf(String firstPage, String secondPage) {
         try (var document = new org.apache.pdfbox.pdmodel.PDDocument()) {
-            var page = new org.apache.pdfbox.pdmodel.PDPage();
-            document.addPage(page);
-            try (var stream = new org.apache.pdfbox.pdmodel.PDPageContentStream(document, page)) {
-                stream.beginText();
-                stream.setFont(
-                        new org.apache.pdfbox.pdmodel.font.PDType1Font(
-                                org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.HELVETICA),
-                        12);
-                stream.newLineAtOffset(40, 700);
-                stream.showText("Hello PDF");
-                stream.endText();
-            }
+            writePage(document, firstPage);
+            writePage(document, secondPage);
             var out = new ByteArrayOutputStream();
             document.save(out);
             return out.toByteArray();
         } catch (Exception e) {
             throw new AssertionError(e);
+        }
+    }
+
+    private static void writePage(org.apache.pdfbox.pdmodel.PDDocument document, String text)
+            throws Exception {
+        var page = new org.apache.pdfbox.pdmodel.PDPage();
+        document.addPage(page);
+        try (var stream = new org.apache.pdfbox.pdmodel.PDPageContentStream(document, page)) {
+            stream.beginText();
+            stream.setFont(
+                    new org.apache.pdfbox.pdmodel.font.PDType1Font(
+                            org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.HELVETICA),
+                    12);
+            stream.newLineAtOffset(40, 700);
+            stream.showText(text);
+            stream.endText();
         }
     }
 

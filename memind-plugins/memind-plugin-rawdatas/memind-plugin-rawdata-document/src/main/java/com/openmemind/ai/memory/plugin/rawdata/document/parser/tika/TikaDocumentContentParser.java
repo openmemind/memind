@@ -13,10 +13,10 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.document.parser.tika;
 
+import com.openmemind.ai.memory.core.exception.UnsupportedContentSourceException;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.core.resource.SourceDescriptor;
-import com.openmemind.ai.memory.core.exception.UnsupportedContentSourceException;
 import com.openmemind.ai.memory.plugin.rawdata.document.DocumentSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
 import java.util.LinkedHashMap;
@@ -37,8 +37,18 @@ public final class TikaDocumentContentParser implements ContentParser {
 
     private static final Set<String> WEAK_EXTENSIONS = Set.of(".pdf", ".rtf", ".doc", ".docx");
 
-    private final TikaDocumentParserSupport parserSupport = new TikaDocumentParserSupport();
-    private final TikaDocumentMetadataMapper metadataMapper = new TikaDocumentMetadataMapper();
+    private final TikaDocumentParserSupport parserSupport;
+    private final TikaDocumentMetadataMapper metadataMapper;
+
+    public TikaDocumentContentParser() {
+        this(new TikaDocumentParserSupport(), new TikaDocumentMetadataMapper());
+    }
+
+    TikaDocumentContentParser(
+            TikaDocumentParserSupport parserSupport, TikaDocumentMetadataMapper metadataMapper) {
+        this.parserSupport = parserSupport;
+        this.metadataMapper = metadataMapper;
+    }
 
     @Override
     public String parserId() {
@@ -103,30 +113,32 @@ public final class TikaDocumentContentParser implements ContentParser {
                 () -> {
                     var parsedDocument =
                             parserSupport.parse(data, source.fileName(), source.mimeType());
-                    String normalizedText = parserSupport.normalizeText(parsedDocument.text());
+                    var canonicalText = parserSupport.canonicalize(data, parsedDocument);
+                    if (canonicalText.text().isBlank()) {
+                        throw new IllegalStateException("Tika produced no text");
+                    }
                     Map<String, Object> metadata =
                             metadataMapper.map(
                                     parsedDocument.metadata(), parsedDocument.detectedMimeType());
                     var enrichedMetadata = new LinkedHashMap<>(metadata);
                     enrichedMetadata.put("parserId", parserId());
-                    enrichedMetadata.put("contentProfile", contentProfile());
-                    if (normalizedText.isBlank() && !hasMeaningfulMetadata(metadata)) {
-                        throw new IllegalStateException("Tika produced no text or metadata");
+                    enrichedMetadata.put(
+                            "contentProfile",
+                            canonicalText.pageAware()
+                                    ? DocumentSemantics.PROFILE_PDF_TIKA
+                                    : contentProfile());
+                    if (canonicalText.pageAware()) {
+                        enrichedMetadata.put("pageCount", canonicalText.pageCount());
                     }
                     return new DocumentContent(
                             parserSupport.resolveTitle(
                                     parsedDocument.metadata(), source.fileName()),
                             resolvedMimeType(parsedDocument.detectedMimeType(), source.mimeType()),
-                            normalizedText,
+                            canonicalText.text(),
                             List.of(),
                             source.sourceUrl(),
                             Map.copyOf(enrichedMetadata));
                 });
-    }
-
-    private static boolean hasMeaningfulMetadata(Map<String, Object> metadata) {
-        return metadata.keySet().stream()
-                .anyMatch(key -> !"parser".equals(key) && !"detectedMimeType".equals(key));
     }
 
     private static String resolvedMimeType(String detectedMimeType, String fallbackMimeType) {

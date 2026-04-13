@@ -103,7 +103,37 @@ class DocumentContentProcessorTest {
     }
 
     @Test
-    void documentProcessorUsesBinaryChunkingForCustomBinaryProfile() {
+    void documentProcessorChunksRowShapedCsvWithCsvProfile() {
+        var processor =
+                new DocumentContentProcessor(
+                        new ProfileAwareDocumentChunker(), DocumentExtractionOptions.defaults());
+        var content =
+                new DocumentContent(
+                        "People",
+                        "text/csv",
+                        String.join(
+                                "\n",
+                                "Row 1:",
+                                "name: Alice, team: Core",
+                                "",
+                                "Row 2:",
+                                "name: Bob, team: AI"),
+                        List.of(),
+                        null,
+                        Map.of("contentProfile", DocumentSemantics.PROFILE_CSV));
+
+        StepVerifier.create(processor.chunk(content))
+                .assertNext(
+                        segments -> {
+                            assertThat(segments).hasSize(2);
+                            assertThat(segments.getFirst().content()).contains("Row 1:");
+                            assertThat(segments.get(1).content()).contains("Row 2:");
+                        })
+                .verifyComplete();
+    }
+
+    @Test
+    void documentProcessorUsesBinaryChunkingForPdfTikaProfile() {
         var processor =
                 new DocumentContentProcessor(
                         new ProfileAwareDocumentChunker(), DocumentExtractionOptions.defaults());
@@ -115,11 +145,7 @@ class DocumentContentProcessorTest {
                         text,
                         List.of(),
                         null,
-                        Map.of(
-                                "contentProfile",
-                                "document.pdf.tika",
-                                "governanceType",
-                                DocumentSemantics.GOVERNANCE_BINARY));
+                        Map.of("contentProfile", DocumentSemantics.PROFILE_PDF_TIKA));
 
         StepVerifier.create(processor.chunk(content))
                 .assertNext(
@@ -130,7 +156,7 @@ class DocumentContentProcessorTest {
                                             DocumentExtractionOptions.defaults()
                                                     .textLikeChunking()
                                                     .hardMaxTokens())
-                                        .isLessThanOrEqualTo(
+                                    .isLessThanOrEqualTo(
                                             DocumentExtractionOptions.defaults()
                                                     .binaryChunking()
                                                     .hardMaxTokens());
@@ -164,7 +190,9 @@ class DocumentContentProcessorTest {
                                         0,
                                         content.toContentString().length(),
                                         "raw-1",
-                                        Map.of("contentProfile", DocumentSemantics.PROFILE_MARKDOWN))),
+                                        Map.of(
+                                                "contentProfile",
+                                                DocumentSemantics.PROFILE_MARKDOWN))),
                         false);
         var itemConfig =
                 new com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig(

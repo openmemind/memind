@@ -37,6 +37,8 @@
         <progressbar.version>0.10.1</progressbar.version>
         <tika.version>3.2.3</tika.version>
         <pdfbox.version>3.0.4</pdfbox.version>
+        <commons-csv.version>1.14.1</commons-csv.version>
+        <jsoup.version>1.18.3</jsoup.version>
 
         <spotless.version>3.2.1</spotless.version>
         <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
@@ -214,13 +216,18 @@
                 <artifactId>pdfbox</artifactId>
                 <version>${pdfbox.version}</version>
             </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-csv</artifactId>
+                <version>${commons-csv.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jsoup</groupId>
+                <artifactId>jsoup</artifactId>
+                <version>${jsoup.version}</version>
+            </dependency>
 
             <!-- memind modules -->
-            <dependency>
-                <groupId>com.openmemind.ai</groupId>
-                <artifactId>memind-plugin-content-parser-document-tika</artifactId>
-                <version>${revision}</version>
-            </dependency>
             <dependency>
                 <groupId>com.openmemind.ai</groupId>
                 <artifactId>memind-plugin-tracing-opentelemetry</artifactId>
@@ -229,11 +236,6 @@
             <dependency>
                 <groupId>com.openmemind.ai</groupId>
                 <artifactId>memind-plugin-jdbc</artifactId>
-                <version>${revision}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.openmemind.ai</groupId>
-                <artifactId>memind-plugin-content-parser-document-tika-starter</artifactId>
                 <version>${revision}</version>
             </dependency>
             <dependency>
