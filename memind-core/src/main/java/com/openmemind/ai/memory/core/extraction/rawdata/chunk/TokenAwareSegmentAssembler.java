@@ -31,9 +31,7 @@ import java.util.stream.Collectors;
 public final class TokenAwareSegmentAssembler {
 
     private static final Pattern PARAGRAPH_BREAK = Pattern.compile("\\R\\s*\\R+");
-    private static final Pattern MARKDOWN_HEADING = Pattern.compile("(?m)^#{1,6}\\s+.+$");
     private static final Pattern WORD = Pattern.compile("\\S+");
-    private static final Pattern LEADING_MARKDOWN_HEADING = Pattern.compile("^#{1,6}\\s+");
 
     public List<Segment> paragraphCandidates(String text) {
         return paragraphCandidates(text, Map.of());
@@ -41,36 +39,6 @@ public final class TokenAwareSegmentAssembler {
 
     public List<Segment> paragraphCandidates(String text, Map<String, Object> metadata) {
         return splitCandidates(text, PARAGRAPH_BREAK, metadata, false);
-    }
-
-    public List<Segment> markdownCandidates(String text) {
-        return markdownCandidates(text, Map.of());
-    }
-
-    public List<Segment> markdownCandidates(String text, Map<String, Object> metadata) {
-        if (text == null || text.isBlank()) {
-            return List.of();
-        }
-
-        Matcher matcher = MARKDOWN_HEADING.matcher(text);
-        List<Integer> starts = new ArrayList<>();
-        while (matcher.find()) {
-            starts.add(matcher.start());
-        }
-        if (starts.isEmpty()) {
-            return paragraphCandidates(text, metadata);
-        }
-
-        List<Segment> candidates = new ArrayList<>();
-        if (starts.getFirst() > 0) {
-            addCandidate(candidates, text, 0, starts.getFirst(), metadata);
-        }
-        for (int i = 0; i < starts.size(); i++) {
-            int start = starts.get(i);
-            int end = i + 1 < starts.size() ? starts.get(i + 1) : text.length();
-            addCandidate(candidates, text, start, end, metadata);
-        }
-        return candidates;
     }
 
     public List<Segment> assemble(List<Segment> candidates, TokenChunkingOptions options) {
@@ -104,10 +72,7 @@ public final class TokenAwareSegmentAssembler {
             boolean exceedsHard =
                     !current.isEmpty()
                             && mergedTokenCount(current, candidate) > options.hardMaxTokens();
-            boolean startsNewHeadingBlock =
-                    !current.isEmpty()
-                            && LEADING_MARKDOWN_HEADING.matcher(candidate.content()).find();
-            if (metadataChanged || exceedsTarget || exceedsHard || startsNewHeadingBlock) {
+            if (metadataChanged || exceedsTarget || exceedsHard) {
                 segments.add(merge(current));
                 current = new ArrayList<>();
             }

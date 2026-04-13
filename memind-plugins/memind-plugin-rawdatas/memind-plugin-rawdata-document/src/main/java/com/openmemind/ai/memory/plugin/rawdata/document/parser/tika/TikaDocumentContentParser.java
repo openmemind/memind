@@ -16,7 +16,7 @@ package com.openmemind.ai.memory.plugin.rawdata.document.parser.tika;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.core.resource.SourceDescriptor;
-import com.openmemind.ai.memory.core.resource.UnsupportedContentSourceException;
+import com.openmemind.ai.memory.core.exception.UnsupportedContentSourceException;
 import com.openmemind.ai.memory.plugin.rawdata.document.DocumentSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
 import java.util.LinkedHashMap;

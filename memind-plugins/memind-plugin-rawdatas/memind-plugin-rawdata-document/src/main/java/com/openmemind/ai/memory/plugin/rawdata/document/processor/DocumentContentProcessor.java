@@ -15,7 +15,7 @@ package com.openmemind.ai.memory.plugin.rawdata.document.processor;
 
 import com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions;
 import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
-import com.openmemind.ai.memory.core.extraction.ParsedContentTooLargeException;
+import com.openmemind.ai.memory.core.exception.ParsedContentTooLargeException;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;

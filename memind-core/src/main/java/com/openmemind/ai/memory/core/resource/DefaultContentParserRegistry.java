@@ -13,6 +13,8 @@
  */
 package com.openmemind.ai.memory.core.resource;
 
+import com.openmemind.ai.memory.core.exception.AmbiguousContentParserException;
+import com.openmemind.ai.memory.core.exception.UnsupportedContentSourceException;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import java.util.Comparator;
 import java.util.List;

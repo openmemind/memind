@@ -27,6 +27,7 @@ import java.util.Objects;
 public final class ProfileAwareDocumentChunker {
 
     private final TokenAwareSegmentAssembler tokenAwareSegmentAssembler;
+    private final MarkdownDocumentChunker markdownDocumentChunker;
 
     public ProfileAwareDocumentChunker() {
         this(new TokenAwareSegmentAssembler());
@@ -35,6 +36,7 @@ public final class ProfileAwareDocumentChunker {
     public ProfileAwareDocumentChunker(TokenAwareSegmentAssembler tokenAwareSegmentAssembler) {
         this.tokenAwareSegmentAssembler =
                 Objects.requireNonNull(tokenAwareSegmentAssembler, "tokenAwareSegmentAssembler");
+        this.markdownDocumentChunker = new MarkdownDocumentChunker(tokenAwareSegmentAssembler);
     }
 
     public List<Segment> chunk(
@@ -52,16 +54,17 @@ public final class ProfileAwareDocumentChunker {
                 DocumentSemantics.isBinaryGovernance(governanceType)
                         ? options.binaryChunking()
                         : options.textLikeChunking();
-        List<Segment> candidates =
-                switch (profile) {
-                    case DocumentSemantics.PROFILE_MARKDOWN ->
-                            tokenAwareSegmentAssembler.markdownCandidates(text);
-                    case DocumentSemantics.PROFILE_BINARY,
-                            DocumentSemantics.PROFILE_HTML,
-                            DocumentSemantics.PROFILE_TEXT ->
-                            tokenAwareSegmentAssembler.paragraphCandidates(text);
-                    default -> tokenAwareSegmentAssembler.paragraphCandidates(text);
-                };
-        return tokenAwareSegmentAssembler.assemble(candidates, chunkingOptions);
+        return switch (profile) {
+            case DocumentSemantics.PROFILE_MARKDOWN ->
+                    markdownDocumentChunker.chunk(text, chunkingOptions);
+            case DocumentSemantics.PROFILE_BINARY,
+                    DocumentSemantics.PROFILE_HTML,
+                    DocumentSemantics.PROFILE_TEXT ->
+                    tokenAwareSegmentAssembler.assemble(
+                            tokenAwareSegmentAssembler.paragraphCandidates(text), chunkingOptions);
+            default ->
+                    tokenAwareSegmentAssembler.assemble(
+                            tokenAwareSegmentAssembler.paragraphCandidates(text), chunkingOptions);
+        };
     }
 }

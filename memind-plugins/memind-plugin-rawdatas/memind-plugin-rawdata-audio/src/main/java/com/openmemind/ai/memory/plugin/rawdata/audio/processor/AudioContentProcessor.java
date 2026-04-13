@@ -13,7 +13,7 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.audio.processor;
 
-import com.openmemind.ai.memory.core.extraction.ParsedContentTooLargeException;
+import com.openmemind.ai.memory.core.exception.ParsedContentTooLargeException;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;

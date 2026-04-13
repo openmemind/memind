@@ -11,14 +11,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.resource;
+package com.openmemind.ai.memory.core.exception;
 
 /**
- * Raised when a source exceeds the configured byte budget before parsing.
+ * Raised when multiple content parsers match the same input source.
  */
-public final class SourceTooLargeException extends IllegalArgumentException {
+public final class AmbiguousContentParserException extends IllegalStateException {
 
-    public SourceTooLargeException(String message) {
+    public AmbiguousContentParserException(String message) {
         super(message);
     }
 }

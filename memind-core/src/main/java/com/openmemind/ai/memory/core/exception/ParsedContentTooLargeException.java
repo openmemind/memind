@@ -11,7 +11,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.extraction;
+package com.openmemind.ai.memory.core.exception;
 
 /**
  * Raised when parsed multimodal content exceeds configured governance limits.

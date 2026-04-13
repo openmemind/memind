@@ -26,18 +26,16 @@ import org.junit.jupiter.api.Test;
 class TokenAwareSegmentAssemblerTest {
 
     @Test
-    void assembleSplitsMarkdownByHeadingCandidates() {
+    void assembleDoesNotTreatHeadingLikeStructuralBoundary() {
         var assembler = new TokenAwareSegmentAssembler();
         var text = "# Intro\nhello\n\n## Usage\nworld";
 
         List<Segment> segments =
                 assembler.assemble(
-                        assembler.markdownCandidates(text), new TokenChunkingOptions(16, 24));
+                        assembler.paragraphCandidates(text), new TokenChunkingOptions(16, 24));
 
-        assertThat(segments).hasSize(2);
-        assertThat(segments)
-                .extracting(Segment::content)
-                .containsExactly("# Intro\nhello", "## Usage\nworld");
+        assertThat(segments).hasSize(1);
+        assertThat(segments.getFirst().content()).isEqualTo(text);
     }
 
     @Test

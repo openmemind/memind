@@ -37,6 +37,8 @@ import java.util.concurrent.Executor;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSession;
+
+import com.openmemind.ai.memory.core.exception.SourceTooLargeException;
 import org.junit.jupiter.api.Test;
 
 class HttpResourceFetcherTest {

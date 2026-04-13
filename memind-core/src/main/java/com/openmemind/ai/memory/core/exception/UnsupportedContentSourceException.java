@@ -11,14 +11,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.resource;
+package com.openmemind.ai.memory.core.exception;
 
 /**
- * Raised when multiple content parsers match the same input source.
+ * Raised when no registered content parser supports a given source.
  */
-public final class AmbiguousContentParserException extends IllegalStateException {
+public final class UnsupportedContentSourceException extends IllegalArgumentException {
 
-    public AmbiguousContentParserException(String message) {
+    public UnsupportedContentSourceException(String message) {
         super(message);
     }
 }
