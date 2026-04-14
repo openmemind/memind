@@ -14,6 +14,8 @@
 package com.openmemind.ai.memory.plugin.rawdata.audio.plugin;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions;
@@ -26,6 +28,7 @@ import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
+import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.audio.AudioSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.audio.config.AudioExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.audio.content.AudioContent;
@@ -60,6 +63,7 @@ class AudioRawDataPluginTest {
                 new AudioExtractionOptions(
                         new SourceLimitOptions(8192),
                         new ParsedContentLimitOptions(999, null, null, Duration.ofMinutes(10)),
+                        777,
                         new TokenChunkingOptions(333, 444));
         var plugin = new AudioRawDataPlugin(options);
 
@@ -68,6 +72,10 @@ class AudioRawDataPluginTest {
                                 .parsedLimit()
                                 .maxTokens())
                 .isEqualTo(999);
+        assertThat(
+                        readField(plugin, "options", AudioExtractionOptions.class)
+                                .wholeTranscriptMaxTokens())
+                .isEqualTo(777);
         assertThat(plugin.ingestionPolicies())
                 .singleElement()
                 .satisfies(
@@ -80,6 +88,23 @@ class AudioRawDataPluginTest {
 
     @Test
     void pluginDoesNotExposeParserDirectly() {
+        var plugin = new AudioRawDataPlugin(AudioExtractionOptions.defaults());
+
+        assertThat(plugin.parsers(pluginContext())).isEmpty();
+    }
+
+    @Test
+    void pluginExposesProvidedParsers() {
+        ContentParser parser = mock(ContentParser.class);
+        when(parser.parserId()).thenReturn("audio-transcription");
+
+        var plugin = new AudioRawDataPlugin(AudioExtractionOptions.defaults(), List.of(parser));
+
+        assertThat(plugin.parsers(pluginContext())).containsExactly(parser);
+    }
+
+    @Test
+    void pluginWithoutSuppliedParserExposesNoParsers() {
         var plugin = new AudioRawDataPlugin(AudioExtractionOptions.defaults());
 
         assertThat(plugin.parsers(pluginContext())).isEmpty();

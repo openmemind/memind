@@ -14,15 +14,20 @@
 package com.openmemind.ai.memory.plugin.rawdata.audio.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
+import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.audio.config.AudioExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.audio.content.AudioContent;
+import com.openmemind.ai.memory.plugin.rawdata.audio.parser.TranscriptionAudioContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.audio.plugin.AudioRawDataPlugin;
 import com.openmemind.ai.memory.plugin.rawdata.jackson.autoconfigure.RawDataJacksonAutoConfiguration;
+import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.audio.transcription.TranscriptionModel;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
@@ -65,7 +70,8 @@ class AudioRawDataAutoConfigurationTest {
         contextRunner
                 .withPropertyValues(
                         "memind.rawdata.audio.extraction.source-limit.max-bytes=4096",
-                        "memind.rawdata.audio.extraction.chunking.hard-max-tokens=1200")
+                        "memind.rawdata.audio.extraction.chunking.hard-max-tokens=1200",
+                        "memind.rawdata.audio.extraction.whole-transcript-max-tokens=" + "2048")
                 .run(
                         context -> {
                             var plugin = (AudioRawDataPlugin) context.getBean("audioRawDataPlugin");
@@ -86,6 +92,13 @@ class AudioRawDataAutoConfigurationTest {
                                                     .chunking()
                                                     .hardMaxTokens())
                                     .isEqualTo(1200);
+                            assertThat(
+                                            readField(
+                                                            plugin,
+                                                            "options",
+                                                            AudioExtractionOptions.class)
+                                                    .wholeTranscriptMaxTokens())
+                                    .isEqualTo(2048);
                         });
     }
 
@@ -99,13 +112,30 @@ class AudioRawDataAutoConfigurationTest {
     @Test
     void parserDisabledStillRegistersPlugin() {
         contextRunner
+                .withBean(TranscriptionModel.class, () -> mock(TranscriptionModel.class))
                 .withPropertyValues("memind.rawdata.audio.parser-enabled=false")
                 .run(
                         context -> {
                             var plugin = (AudioRawDataPlugin) context.getBean("audioRawDataPlugin");
 
                             assertThat(context).hasSingleBean(RawDataPlugin.class);
-                            assertThat(plugin).isNotNull();
+                            assertThat(readField(plugin, "parsers", List.class)).isEmpty();
+                            assertThat(context).doesNotHaveBean(ContentParser.class);
+                        });
+    }
+
+    @Test
+    void pluginOwnsTranscriptionParserWhenModelPresent() {
+        contextRunner
+                .withBean(TranscriptionModel.class, () -> mock(TranscriptionModel.class))
+                .run(
+                        context -> {
+                            var plugin = (AudioRawDataPlugin) context.getBean("audioRawDataPlugin");
+
+                            assertThat(readField(plugin, "parsers", List.class))
+                                    .singleElement()
+                                    .isInstanceOf(TranscriptionAudioContentParser.class);
+                            assertThat(context).doesNotHaveBean(ContentParser.class);
                         });
     }
 

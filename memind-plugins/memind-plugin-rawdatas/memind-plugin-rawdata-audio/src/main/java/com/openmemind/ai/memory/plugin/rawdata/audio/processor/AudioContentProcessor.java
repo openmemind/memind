@@ -86,8 +86,20 @@ public final class AudioContentProcessor implements RawContentProcessor<AudioCon
 
     @Override
     public Mono<List<Segment>> chunk(AudioContent content) {
+        String transcript = content.toContentString();
+        if (transcript == null || transcript.isBlank()) {
+            return Mono.just(List.of());
+        }
+
+        List<Segment> segments;
+        if (TokenUtils.countTokens(transcript) <= options.wholeTranscriptMaxTokens()) {
+            segments = List.of(transcriptSegmentChunker.wholeTranscriptSegment(content));
+        } else {
+            segments = transcriptSegmentChunker.chunk(content, options);
+        }
+
         return Mono.just(
-                transcriptSegmentChunker.chunk(content, options).stream()
+                segments.stream()
                         .map(segment -> mergeMetadata(segment, content.metadata()))
                         .toList());
     }

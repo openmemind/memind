@@ -48,6 +48,7 @@ class AudioContentProcessorTest {
                 new AudioExtractionOptions(
                         new SourceLimitOptions(1024),
                         new ParsedContentLimitOptions(2048, null, null, Duration.ofMinutes(30)),
+                        64,
                         new TokenChunkingOptions(64, 96));
         var processor = new AudioContentProcessor(new TranscriptSegmentChunker(), options);
         var content = AudioContent.of("word ".repeat(120) + "\n\n" + "word ".repeat(120));
@@ -64,6 +65,102 @@ class AudioContentProcessorTest {
                                                                 .isLessThanOrEqualTo(
                                                                         options.chunking()
                                                                                 .hardMaxTokens())))
+                .verifyComplete();
+    }
+
+    @Test
+    void wholeTranscriptWithinBudgetStaysSingleSegmentEvenWithMultipleSpans() {
+        var options =
+                new AudioExtractionOptions(
+                        new SourceLimitOptions(1024),
+                        new ParsedContentLimitOptions(2048, null, null, Duration.ofMinutes(30)),
+                        64,
+                        new TokenChunkingOptions(16, 24));
+        var processor = new AudioContentProcessor(new TranscriptSegmentChunker(), options);
+        var content =
+                new AudioContent(
+                        "audio/mpeg",
+                        "alpha beta gamma delta epsilon zeta eta theta",
+                        List.of(
+                                new TranscriptSegment(
+                                        "alpha beta gamma delta",
+                                        Duration.ZERO,
+                                        Duration.ofSeconds(1),
+                                        "Alice"),
+                                new TranscriptSegment(
+                                        "epsilon zeta eta theta",
+                                        Duration.ofSeconds(1),
+                                        Duration.ofSeconds(2),
+                                        "Bob")),
+                        null,
+                        Map.of());
+
+        StepVerifier.create(processor.chunk(content))
+                .assertNext(
+                        segments -> {
+                            assertThat(segments).hasSize(1);
+                            assertThat(segments.getFirst().content())
+                                    .isEqualTo("alpha beta gamma delta epsilon zeta eta theta");
+                            assertThat(segments.getFirst().metadata())
+                                    .containsEntry("startTime", Duration.ZERO)
+                                    .containsEntry("endTime", Duration.ofSeconds(2))
+                                    .containsEntry("speakers", List.of("Alice", "Bob"));
+                        })
+                .verifyComplete();
+    }
+
+    @Test
+    void wholeTranscriptOverBudgetChunksInsteadOfStayingSingleSegment() {
+        var options =
+                new AudioExtractionOptions(
+                        new SourceLimitOptions(1024),
+                        new ParsedContentLimitOptions(4096, null, null, Duration.ofMinutes(30)),
+                        20,
+                        new TokenChunkingOptions(8, 12));
+        var processor = new AudioContentProcessor(new TranscriptSegmentChunker(), options);
+        var transcript = "word ".repeat(40).trim();
+        var content =
+                new AudioContent(
+                        "audio/mpeg",
+                        transcript,
+                        List.of(
+                                new TranscriptSegment(
+                                        "word ".repeat(10).trim(),
+                                        Duration.ZERO,
+                                        Duration.ofSeconds(10),
+                                        "Alice"),
+                                new TranscriptSegment(
+                                        "word ".repeat(10).trim(),
+                                        Duration.ofSeconds(10),
+                                        Duration.ofSeconds(20),
+                                        "Alice"),
+                                new TranscriptSegment(
+                                        "word ".repeat(10).trim(),
+                                        Duration.ofSeconds(20),
+                                        Duration.ofSeconds(30),
+                                        "Alice"),
+                                new TranscriptSegment(
+                                        "word ".repeat(10).trim(),
+                                        Duration.ofSeconds(30),
+                                        Duration.ofSeconds(40),
+                                        "Alice")),
+                        null,
+                        Map.of());
+
+        StepVerifier.create(processor.chunk(content))
+                .assertNext(
+                        segments -> {
+                            assertThat(segments).hasSizeGreaterThan(1);
+                            assertThat(segments)
+                                    .allSatisfy(
+                                            segment ->
+                                                    assertThat(
+                                                                    TokenUtils.countTokens(
+                                                                            segment.content()))
+                                                            .isLessThanOrEqualTo(
+                                                                    options.chunking()
+                                                                            .hardMaxTokens()));
+                        })
                 .verifyComplete();
     }
 
@@ -91,7 +188,7 @@ class AudioContentProcessorTest {
                 .assertNext(
                         segments -> {
                             assertThat(segments).hasSize(1);
-                            assertThat(segments.getFirst().content()).isEqualTo("hello\nworld");
+                            assertThat(segments.getFirst().content()).isEqualTo("hello world");
                             assertThat(segments.getFirst().metadata())
                                     .containsEntry("speaker", "Alice")
                                     .containsEntry("startTime", Duration.ZERO)
@@ -102,7 +199,12 @@ class AudioContentProcessorTest {
 
     @Test
     void audioProcessorSplitsOversizedSingleTranscriptSegmentWithinHardTokenBudget() {
-        var options = AudioExtractionOptions.defaults();
+        var options =
+                new AudioExtractionOptions(
+                        new SourceLimitOptions(25L * 1024 * 1024),
+                        new ParsedContentLimitOptions(18_000, null, null, Duration.ofMinutes(30)),
+                        400,
+                        new TokenChunkingOptions(800, 1000));
         var processor = new AudioContentProcessor(new TranscriptSegmentChunker(), options);
         var longTranscript = "word ".repeat(options.chunking().hardMaxTokens() * 2);
         var content =

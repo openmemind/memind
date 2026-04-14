@@ -60,6 +60,7 @@ public class AudioRawDataProperties {
                 new SourceLimitProperties(DEFAULT_EXTRACTION.sourceLimit());
         private final ParsedContentLimitProperties parsedLimit =
                 new ParsedContentLimitProperties(DEFAULT_EXTRACTION.parsedLimit());
+        private int wholeTranscriptMaxTokens = DEFAULT_EXTRACTION.wholeTranscriptMaxTokens();
         private final TokenChunkingProperties chunking =
                 new TokenChunkingProperties(DEFAULT_EXTRACTION.chunking());
 
@@ -71,13 +72,24 @@ public class AudioRawDataProperties {
             return parsedLimit;
         }
 
+        public int getWholeTranscriptMaxTokens() {
+            return wholeTranscriptMaxTokens;
+        }
+
+        public void setWholeTranscriptMaxTokens(int wholeTranscriptMaxTokens) {
+            this.wholeTranscriptMaxTokens = wholeTranscriptMaxTokens;
+        }
+
         public TokenChunkingProperties getChunking() {
             return chunking;
         }
 
         AudioExtractionOptions toOptions() {
             return new AudioExtractionOptions(
-                    sourceLimit.toOptions(), parsedLimit.toOptions(), chunking.toOptions());
+                    sourceLimit.toOptions(),
+                    parsedLimit.toOptions(),
+                    wholeTranscriptMaxTokens,
+                    chunking.toOptions());
         }
     }
 

@@ -18,6 +18,7 @@ import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
 import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicy;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
+import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.audio.AudioSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.audio.chunk.TranscriptSegmentChunker;
 import com.openmemind.ai.memory.plugin.rawdata.audio.config.AudioExtractionOptions;
@@ -28,13 +29,19 @@ import java.util.List;
 public final class AudioRawDataPlugin implements RawDataPlugin {
 
     private final AudioExtractionOptions options;
+    private final List<ContentParser> parsers;
 
     public AudioRawDataPlugin() {
-        this(AudioExtractionOptions.defaults());
+        this(AudioExtractionOptions.defaults(), List.of());
     }
 
     public AudioRawDataPlugin(AudioExtractionOptions options) {
+        this(options, List.of());
+    }
+
+    public AudioRawDataPlugin(AudioExtractionOptions options, List<ContentParser> parsers) {
         this.options = options == null ? AudioExtractionOptions.defaults() : options;
+        this.parsers = parsers == null ? List.of() : List.copyOf(parsers);
     }
 
     @Override
@@ -45,6 +52,11 @@ public final class AudioRawDataPlugin implements RawDataPlugin {
     @Override
     public List<RawContentProcessor<?>> processors(RawDataPluginContext context) {
         return List.of(new AudioContentProcessor(new TranscriptSegmentChunker(), options));
+    }
+
+    @Override
+    public List<ContentParser> parsers(RawDataPluginContext context) {
+        return parsers;
     }
 
     @Override

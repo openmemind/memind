@@ -97,6 +97,37 @@ public final class TranscriptSegmentChunker {
         return segments;
     }
 
+    public Segment wholeTranscriptSegment(AudioContent content) {
+        Objects.requireNonNull(content, "content");
+
+        String transcript = resolveTranscriptText(content);
+        if (content.segments().isEmpty()) {
+            return new Segment(
+                    transcript, null, new CharBoundary(0, transcript.length()), Map.of());
+        }
+
+        TranscriptSegment first = content.segments().getFirst();
+        TranscriptSegment last = content.segments().getLast();
+        List<String> speakers =
+                content.segments().stream()
+                        .map(TranscriptSegment::speaker)
+                        .filter(Objects::nonNull)
+                        .filter(speaker -> !speaker.isBlank())
+                        .distinct()
+                        .toList();
+        String singleSpeaker = speakers.size() == 1 ? speakers.getFirst() : null;
+        return new Segment(
+                transcript,
+                null,
+                new CharBoundary(0, transcript.length()),
+                segmentMetadata(
+                        first.startTime(),
+                        last.endTime(),
+                        singleSpeaker,
+                        singleSpeaker == null ? speakers : List.of(),
+                        false));
+    }
+
     private String resolveTranscriptText(AudioContent content) {
         if (content.toContentString() != null && !content.toContentString().isBlank()) {
             return content.toContentString();

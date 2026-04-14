@@ -24,6 +24,7 @@ import org.springframework.ai.audio.transcription.AudioTranscription;
 import org.springframework.ai.audio.transcription.AudioTranscriptionPrompt;
 import org.springframework.ai.audio.transcription.AudioTranscriptionResponse;
 import org.springframework.ai.audio.transcription.TranscriptionModel;
+import reactor.test.StepVerifier;
 
 class TranscriptionAudioContentParserTest {
 
@@ -74,6 +75,27 @@ class TranscriptionAudioContentParserTest {
                 .containsEntry("provider", "spring-ai");
     }
 
+    @Test
+    void parserFailsFastWhenModelDoesNotSupportAudioTranscription() {
+        var parser = new TranscriptionAudioContentParser(unsupportedTranscriptionModel());
+
+        StepVerifier.create(
+                        parser.parse(
+                                new byte[] {1, 2, 3},
+                                new SourceDescriptor(
+                                        SourceKind.FILE, "sample.mp3", "audio/mpeg", 3L, null)))
+                .expectErrorSatisfies(
+                        error -> {
+                            assertThat(error)
+                                    .isInstanceOf(IllegalStateException.class)
+                                    .hasMessageContaining("audio transcription");
+                            assertThat(error.getCause())
+                                    .isInstanceOf(UnsupportedOperationException.class)
+                                    .hasMessageContaining("audio transcription unsupported");
+                        })
+                .verify();
+    }
+
     @SuppressWarnings("unchecked")
     private static TranscriptionModel transcriptionModel(AudioTranscriptionResponse response) {
         return (TranscriptionModel)
@@ -90,6 +112,26 @@ class TranscriptionAudioContentParserTest {
                                         throw new UnsupportedOperationException(method.getName());
                                     }
                                     case "toString" -> "FakeTranscriptionModel";
+                                    case "hashCode" -> System.identityHashCode(proxy);
+                                    case "equals" -> proxy == args[0];
+                                    default ->
+                                            throw new UnsupportedOperationException(
+                                                    method.getName());
+                                });
+    }
+
+    @SuppressWarnings("unchecked")
+    private static TranscriptionModel unsupportedTranscriptionModel() {
+        return (TranscriptionModel)
+                Proxy.newProxyInstance(
+                        TranscriptionAudioContentParserTest.class.getClassLoader(),
+                        new Class<?>[] {TranscriptionModel.class},
+                        (proxy, method, args) ->
+                                switch (method.getName()) {
+                                    case "call" ->
+                                            throw new UnsupportedOperationException(
+                                                    "audio transcription unsupported");
+                                    case "toString" -> "UnsupportedTranscriptionModel";
                                     case "hashCode" -> System.identityHashCode(proxy);
                                     case "equals" -> proxy == args[0];
                                     default ->

@@ -25,18 +25,27 @@ import java.util.Objects;
 public record AudioExtractionOptions(
         SourceLimitOptions sourceLimit,
         ParsedContentLimitOptions parsedLimit,
+        int wholeTranscriptMaxTokens,
         TokenChunkingOptions chunking) {
 
     public AudioExtractionOptions {
         sourceLimit = Objects.requireNonNull(sourceLimit, "sourceLimit");
         parsedLimit = Objects.requireNonNull(parsedLimit, "parsedLimit");
         chunking = Objects.requireNonNull(chunking, "chunking");
+        if (wholeTranscriptMaxTokens <= 0) {
+            throw new IllegalArgumentException("wholeTranscriptMaxTokens must be positive");
+        }
+        if (wholeTranscriptMaxTokens > parsedLimit.maxTokens()) {
+            throw new IllegalArgumentException(
+                    "wholeTranscriptMaxTokens must not exceed parsedLimit.maxTokens");
+        }
     }
 
     public static AudioExtractionOptions defaults() {
         return new AudioExtractionOptions(
                 new SourceLimitOptions(25L * 1024 * 1024),
                 new ParsedContentLimitOptions(18_000, null, null, Duration.ofMinutes(30)),
+                4_000,
                 new TokenChunkingOptions(800, 1000));
     }
 }

@@ -95,12 +95,7 @@ public final class TranscriptionAudioContentParser implements ContentParser {
         }
 
         String resolvedMimeType = resolveMimeType(source);
-        return Mono.fromCallable(
-                        () ->
-                                transcriptionModel.call(
-                                        new AudioTranscriptionPrompt(
-                                                new NamedByteArrayResource(
-                                                        data, source.fileName()))))
+        return Mono.fromCallable(() -> transcribe(data, source))
                 .map(
                         response -> {
                             var result = response == null ? null : response.getResult();
@@ -124,6 +119,18 @@ public final class TranscriptionAudioContentParser implements ContentParser {
                                     source.sourceUrl(),
                                     metadata);
                         });
+    }
+
+    private org.springframework.ai.audio.transcription.AudioTranscriptionResponse transcribe(
+            byte[] data, SourceDescriptor source) {
+        try {
+            return transcriptionModel.call(
+                    new AudioTranscriptionPrompt(
+                            new NamedByteArrayResource(data, source.fileName())));
+        } catch (UnsupportedOperationException e) {
+            throw new IllegalStateException(
+                    "Configured transcription model does not support audio transcription", e);
+        }
     }
 
     private static boolean hasSupportedExtension(String fileName) {
