@@ -13,8 +13,6 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.mysql;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryId;
@@ -61,6 +59,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 public class MysqlMemoryStore
         implements MemoryStore,

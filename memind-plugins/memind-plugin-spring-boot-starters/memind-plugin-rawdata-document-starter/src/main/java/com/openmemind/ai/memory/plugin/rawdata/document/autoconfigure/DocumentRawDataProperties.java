@@ -73,6 +73,7 @@ public class DocumentRawDataProperties {
                 new ParsedContentLimitProperties(DEFAULT_EXTRACTION.textLikeParsedLimit());
         private final ParsedContentLimitProperties binaryParsedLimit =
                 new ParsedContentLimitProperties(DEFAULT_EXTRACTION.binaryParsedLimit());
+        private int wholeDocumentMaxTokens = DEFAULT_EXTRACTION.wholeDocumentMaxTokens();
         private final TokenChunkingProperties textLikeChunking =
                 new TokenChunkingProperties(DEFAULT_EXTRACTION.textLikeChunking());
         private final TokenChunkingProperties binaryChunking =
@@ -106,6 +107,14 @@ public class DocumentRawDataProperties {
 
         public TokenChunkingProperties getBinaryChunking() {
             return binaryChunking;
+        }
+
+        public int getWholeDocumentMaxTokens() {
+            return wholeDocumentMaxTokens;
+        }
+
+        public void setWholeDocumentMaxTokens(int wholeDocumentMaxTokens) {
+            this.wholeDocumentMaxTokens = wholeDocumentMaxTokens;
         }
 
         public int getTextLikeMinChunkTokens() {
@@ -162,6 +171,7 @@ public class DocumentRawDataProperties {
                     binarySourceLimit.toOptions(),
                     textLikeParsedLimit.toOptions(),
                     binaryParsedLimit.toOptions(),
+                    wholeDocumentMaxTokens,
                     textLikeChunking.toOptions(),
                     binaryChunking.toOptions(),
                     textLikeMinChunkTokens,

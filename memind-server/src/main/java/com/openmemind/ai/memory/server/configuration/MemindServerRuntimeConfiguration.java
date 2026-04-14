@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.server.configuration;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
@@ -26,6 +25,7 @@ import com.openmemind.ai.memory.core.resource.DefaultContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeFactory;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeManager;
@@ -43,6 +43,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import tools.jackson.databind.ObjectMapper;
 
 @Configuration(proxyBeanMethods = false)
 public class MemindServerRuntimeConfiguration {
@@ -52,7 +53,7 @@ public class MemindServerRuntimeConfiguration {
 
     @Bean
     MemoryOptionsCodec memoryOptionsCodec(ObjectProvider<ObjectMapper> objectMapperProvider) {
-        return new MemoryOptionsCodec(objectMapperProvider.getIfAvailable(ObjectMapper::new));
+        return new MemoryOptionsCodec(objectMapperProvider.getIfAvailable(JsonUtils::mapper));
     }
 
     @Bean

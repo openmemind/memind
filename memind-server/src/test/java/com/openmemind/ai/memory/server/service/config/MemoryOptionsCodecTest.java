@@ -15,9 +15,9 @@ package com.openmemind.ai.memory.server.service.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
 
 class MemoryOptionsCodecTest {
 

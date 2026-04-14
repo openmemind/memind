@@ -15,8 +15,6 @@ package com.openmemind.ai.memory.plugin.rawdata.image.content;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.utils.HashUtils;
@@ -25,15 +23,15 @@ import com.openmemind.ai.memory.plugin.rawdata.image.plugin.ImageRawContentTypeR
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
 
 class ImageContentTest {
 
     private static final ObjectMapper OBJECT_MAPPER = createObjectMapper();
 
     private static ObjectMapper createObjectMapper() {
-        ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        RawContentJackson.registerAll(mapper, List.of(new ImageRawContentTypeRegistrar()));
-        return mapper;
+        ObjectMapper mapper = new ObjectMapper();
+        return RawContentJackson.registerAll(mapper, List.of(new ImageRawContentTypeRegistrar()));
     }
 
     @Test

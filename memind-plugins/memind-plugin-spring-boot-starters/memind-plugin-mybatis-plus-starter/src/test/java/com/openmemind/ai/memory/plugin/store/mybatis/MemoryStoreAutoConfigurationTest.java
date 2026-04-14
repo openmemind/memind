@@ -18,11 +18,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.baomidou.mybatisplus.autoconfigure.DdlApplicationRunner;
 import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
-import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import com.baomidou.mybatisplus.extension.handlers.Jackson3TypeHandler;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
@@ -57,6 +56,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.sqlite.SQLiteDataSource;
 import reactor.core.publisher.Mono;
+import tools.jackson.databind.ObjectMapper;
 
 @DisplayName("Memory store auto-configuration")
 class MemoryStoreAutoConfigurationTest {
@@ -122,8 +122,8 @@ class MemoryStoreAutoConfigurationTest {
         }
 
         @Test
-        @DisplayName("Use the application ObjectMapper for JacksonTypeHandler")
-        void usesApplicationObjectMapperForJacksonTypeHandler() {
+        @DisplayName("Use the application ObjectMapper for Jackson3TypeHandler")
+        void usesApplicationObjectMapperForJackson3TypeHandler() {
             newContextRunner()
                     .withUserConfiguration(
                             ExistingDataSourceConfig.class, RawContentObjectMapperConfig.class)
@@ -131,7 +131,7 @@ class MemoryStoreAutoConfigurationTest {
                             context -> {
                                 RawContent restored =
                                         decodeRawContent(
-                                                JacksonTypeHandler.getObjectMapper(),
+                                                Jackson3TypeHandler.getObjectMapper(),
                                                 "{\"type\":\"test_raw\",\"text\":\"hello"
                                                         + " mybatis\"}");
 
@@ -360,9 +360,10 @@ class MemoryStoreAutoConfigurationTest {
         @Bean
         ObjectMapper objectMapper() {
             ObjectMapper mapper = new ObjectMapper();
-            RawContentJackson.registerCoreSubtypes(mapper);
-            RawContentJackson.registerPluginSubtypes(
-                    mapper, List.of(() -> Map.of("test_raw", TestRawContent.class)));
+            mapper = RawContentJackson.registerCoreSubtypes(mapper);
+            mapper =
+                    RawContentJackson.registerPluginSubtypes(
+                            mapper, List.of(() -> Map.of("test_raw", TestRawContent.class)));
             return mapper;
         }
     }

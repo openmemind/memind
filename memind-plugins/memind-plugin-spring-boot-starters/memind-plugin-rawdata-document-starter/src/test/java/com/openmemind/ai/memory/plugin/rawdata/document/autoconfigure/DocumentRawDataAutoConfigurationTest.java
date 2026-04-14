@@ -15,7 +15,6 @@ package com.openmemind.ai.memory.plugin.rawdata.document.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.resource.ContentParser;
@@ -26,6 +25,7 @@ import com.openmemind.ai.memory.plugin.rawdata.jackson.autoconfigure.RawDataJack
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import tools.jackson.databind.ObjectMapper;
 
 class DocumentRawDataAutoConfigurationTest {
 
@@ -70,6 +70,7 @@ class DocumentRawDataAutoConfigurationTest {
         contextRunner
                 .withPropertyValues(
                         "memind.rawdata.document.extraction.binary-source-limit.max-bytes=4096",
+                        "memind.rawdata.document.extraction.whole-document-max-tokens=1024",
                         "memind.rawdata.document.extraction.binary-chunking.hard-max-tokens=1600",
                         "memind.rawdata.document.extraction.binary-min-chunk-tokens=256",
                         "memind.rawdata.document.extraction.pdf-max-merged-pages=5")
@@ -87,6 +88,13 @@ class DocumentRawDataAutoConfigurationTest {
                                                     .binarySourceLimit()
                                                     .maxBytes())
                                     .isEqualTo(4096L);
+                            assertThat(
+                                            readField(
+                                                            plugin,
+                                                            "options",
+                                                            DocumentExtractionOptions.class)
+                                                    .wholeDocumentMaxTokens())
+                                    .isEqualTo(1024);
                             assertThat(
                                             readField(
                                                             plugin,

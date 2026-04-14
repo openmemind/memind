@@ -16,7 +16,6 @@ package com.openmemind.ai.memory.server.service.config;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.server.domain.config.model.ServerRuntimeConfigDO;
@@ -29,6 +28,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
 
 class MemoryOptionServiceTest {
 

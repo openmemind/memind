@@ -16,7 +16,6 @@ package com.openmemind.ai.memory.plugin.rawdata.image.autoconfigure;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
@@ -37,6 +36,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import reactor.core.publisher.Mono;
+import tools.jackson.databind.ObjectMapper;
 
 class ImageRawDataAutoConfigurationTest {
 

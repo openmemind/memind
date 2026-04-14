@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
@@ -370,8 +370,8 @@ class JdbcPluginAutoConfigurationSqliteTest {
         @Bean
         ObjectMapper objectMapper() {
             ObjectMapper mapper = new ObjectMapper();
-            RawContentJackson.registerCoreSubtypes(mapper);
-            RawContentJackson.registerPluginSubtypes(
+            mapper = RawContentJackson.registerCoreSubtypes(mapper);
+            mapper = RawContentJackson.registerPluginSubtypes(
                     mapper, List.of(() -> Map.of("test_raw", TestRawContent.class)));
             return mapper;
         }

@@ -13,15 +13,14 @@
  */
 package com.openmemind.ai.memory.core.utils;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import java.util.List;
 import java.util.Map;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.cfg.DateTimeFeature;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * JSON utility class
@@ -29,18 +28,17 @@ import java.util.Map;
  */
 public final class JsonUtils {
 
-    private static final ObjectMapper MAPPER = createMapper();
+    private static final JsonMapper MAPPER = createMapper();
 
     private JsonUtils() {}
 
-    private static ObjectMapper createMapper() {
-        ObjectMapper mapper =
-                new ObjectMapper()
-                        .registerModule(new JavaTimeModule())
-                        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-                        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
-        RawContentJackson.registerCoreSubtypes(mapper);
-        return mapper;
+    private static JsonMapper createMapper() {
+        JsonMapper mapper =
+                JsonMapper.builder()
+                        .disable(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS)
+                        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                        .build();
+        return RawContentJackson.registerCoreSubtypes(mapper);
     }
 
     /**
@@ -52,7 +50,7 @@ public final class JsonUtils {
         }
         try {
             return MAPPER.writeValueAsString(obj);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new JsonException("Failed to serialize object to JSON", e);
         }
     }
@@ -66,7 +64,7 @@ public final class JsonUtils {
         }
         try {
             return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(obj);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new JsonException("Failed to serialize object to JSON", e);
         }
     }
@@ -80,7 +78,7 @@ public final class JsonUtils {
         }
         try {
             return MAPPER.readValue(json, clazz);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new JsonException("Failed to deserialize JSON to " + clazz.getSimpleName(), e);
         }
     }
@@ -94,7 +92,7 @@ public final class JsonUtils {
         }
         try {
             return MAPPER.readValue(json, typeRef);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new JsonException("Failed to deserialize JSON", e);
         }
     }
@@ -109,7 +107,7 @@ public final class JsonUtils {
         try {
             var type = MAPPER.getTypeFactory().constructCollectionType(List.class, elementClass);
             return MAPPER.readValue(json, type);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new JsonException(
                     "Failed to deserialize JSON to List<" + elementClass.getSimpleName() + ">", e);
         }
@@ -125,7 +123,7 @@ public final class JsonUtils {
         }
         try {
             return MAPPER.readValue(json, Map.class);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new JsonException("Failed to deserialize JSON to Map", e);
         }
     }
@@ -133,8 +131,16 @@ public final class JsonUtils {
     /**
      * Get ObjectMapper instance (for advanced scenarios)
      */
-    public static ObjectMapper mapper() {
+    public static JsonMapper mapper() {
         return MAPPER;
+    }
+
+    /**
+     * Create an independent mapper instance preserving the shared baseline
+     * configuration, modules and raw-content subtype registrations.
+     */
+    public static JsonMapper newMapper() {
+        return MAPPER.rebuild().build();
     }
 
     /**

@@ -17,8 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
@@ -30,6 +28,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 class JsonCodecTest {
 
@@ -81,9 +81,10 @@ class JsonCodecTest {
     @Test
     void codecRoundTripsToolCallWhenPluginSubtypeIsExplicitlyRegistered() {
         ObjectMapper mapper = JsonCodec.createDefaultObjectMapper();
-        RawContentJackson.registerCoreSubtypes(mapper);
-        RawContentJackson.registerPluginSubtypes(
-                mapper, List.of(new ToolCallRawContentTypeRegistrar()));
+        mapper = RawContentJackson.registerCoreSubtypes(mapper);
+        mapper =
+                RawContentJackson.registerPluginSubtypes(
+                        mapper, List.of(new ToolCallRawContentTypeRegistrar()));
         JsonCodec codec = new JsonCodec(mapper);
         RawContent payload =
                 new ToolCallContent(

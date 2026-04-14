@@ -20,7 +20,7 @@
         <reactor-bom.version>2025.0.2</reactor-bom.version>
         <spring-boot.version>4.0.1</spring-boot.version>
         <spring-ai.version>2.0.0-M2</spring-ai.version>
-        <jackson.version>2.21.0</jackson.version>
+        <jackson.version>3.0.3</jackson.version>
         <slf4j.version>2.0.17</slf4j.version>
         <mysql.version>9.6.0</mysql.version>
         <postgresql.version>42.7.8</postgresql.version>
@@ -126,7 +126,7 @@
 
             <!-- Jackson -->
             <dependency>
-                <groupId>com.fasterxml.jackson</groupId>
+                <groupId>tools.jackson</groupId>
                 <artifactId>jackson-bom</artifactId>
                 <version>${jackson.version}</version>
                 <type>pom</type>

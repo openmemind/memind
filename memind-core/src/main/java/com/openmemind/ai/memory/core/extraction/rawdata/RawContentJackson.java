@@ -13,8 +13,6 @@
  */
 package com.openmemind.ai.memory.core.extraction.rawdata;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.NamedType;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import java.util.ArrayList;
@@ -23,6 +21,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.jsontype.NamedType;
 
 /**
  * Helper for applying {@link RawContent} subtype registrations to an {@link ObjectMapper}.
@@ -31,21 +31,21 @@ public final class RawContentJackson {
 
     private RawContentJackson() {}
 
-    public static void registerCoreSubtypes(ObjectMapper mapper) {
+    public static <T extends ObjectMapper> T registerCoreSubtypes(T mapper) {
         Objects.requireNonNull(mapper, "mapper");
-        mapper.registerSubtypes(coreNamedTypes().toArray(NamedType[]::new));
+        return registerNamedTypes(mapper, coreNamedTypes());
     }
 
-    public static void registerPluginSubtypes(
-            ObjectMapper mapper, Collection<RawContentTypeRegistrar> registrars) {
+    public static <T extends ObjectMapper> T registerPluginSubtypes(
+            T mapper, Collection<RawContentTypeRegistrar> registrars) {
         Objects.requireNonNull(mapper, "mapper");
-        mapper.registerSubtypes(pluginNamedTypes(registrars).toArray(NamedType[]::new));
+        return registerNamedTypes(mapper, pluginNamedTypes(registrars));
     }
 
-    public static void registerAll(
-            ObjectMapper mapper, Collection<RawContentTypeRegistrar> registrars) {
+    public static <T extends ObjectMapper> T registerAll(
+            T mapper, Collection<RawContentTypeRegistrar> registrars) {
         Objects.requireNonNull(mapper, "mapper");
-        mapper.registerSubtypes(allNamedTypes(registrars).toArray(NamedType[]::new));
+        return registerNamedTypes(mapper, allNamedTypes(registrars));
     }
 
     public static List<NamedType> coreNamedTypes() {
@@ -87,5 +87,11 @@ public final class RawContentJackson {
             }
         }
         return Map.copyOf(mappings);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends ObjectMapper> T registerNamedTypes(
+            T mapper, List<NamedType> namedTypes) {
+        return (T) mapper.rebuild().registerSubtypes(namedTypes.toArray(NamedType[]::new)).build();
     }
 }

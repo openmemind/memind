@@ -19,13 +19,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.exc.InvalidTypeIdException;
 
 class RawContentJacksonTest {
 
@@ -36,8 +36,7 @@ class RawContentJacksonTest {
 
     @Test
     void registerCoreSubtypesSupportsConversationDeserializationWithoutPlugins() throws Exception {
-        var mapper = new ObjectMapper();
-        RawContentJackson.registerCoreSubtypes(mapper);
+        var mapper = RawContentJackson.registerCoreSubtypes(new ObjectMapper());
 
         String json = "{\"type\":\"conversation\",\"messages\":[]}";
         RawContent decoded = mapper.readValue(json, RawContent.class);
@@ -47,8 +46,7 @@ class RawContentJacksonTest {
 
     @Test
     void registerCoreSubtypesOnlySupportsConversationWithoutPlugins() {
-        var mapper = new ObjectMapper().findAndRegisterModules();
-        RawContentJackson.registerCoreSubtypes(mapper);
+        var mapper = RawContentJackson.registerCoreSubtypes(new ObjectMapper());
 
         assertThatThrownBy(
                         () ->
@@ -63,10 +61,10 @@ class RawContentJacksonTest {
 
     @Test
     void registerPluginSubtypesAppliesRegistrarMappings() throws Exception {
-        var mapper = new ObjectMapper();
-        RawContentJackson.registerCoreSubtypes(mapper);
-        RawContentJackson.registerPluginSubtypes(
-                mapper, List.of(() -> Map.of("plugin_test", PluginTestContent.class)));
+        var mapper =
+                RawContentJackson.registerPluginSubtypes(
+                        RawContentJackson.registerCoreSubtypes(new ObjectMapper()),
+                        List.of(() -> Map.of("plugin_test", PluginTestContent.class)));
 
         RawContent decoded =
                 mapper.readValue(

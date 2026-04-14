@@ -13,12 +13,10 @@
  */
 package com.openmemind.ai.memory.server.service.config;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.openmemind.ai.memory.core.builder.ExtractionOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalOptions;
+import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.server.domain.config.view.MemoryOptionItemView;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.RecordComponent;
@@ -34,6 +32,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 public class MemoryOptionsProjectionMapper {
 
@@ -147,7 +149,7 @@ public class MemoryOptionsProjectionMapper {
     private final ObjectMapper objectMapper;
 
     public MemoryOptionsProjectionMapper() {
-        this.objectMapper = new ObjectMapper().findAndRegisterModules();
+        this.objectMapper = JsonUtils.newMapper();
     }
 
     public Map<String, List<MemoryOptionItemView>> toProjection(MemoryBuildOptions options) {
@@ -186,7 +188,7 @@ public class MemoryOptionsProjectionMapper {
         }
         try {
             return objectMapper.treeToValue(root, PersistedMemoryOptions.class).toOptions();
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalArgumentException("Invalid memory options payload", e);
         }
     }
@@ -290,9 +292,7 @@ public class MemoryOptionsProjectionMapper {
     }
 
     private static void setPathValue(
-            ObjectNode root,
-            List<String> pathSegments,
-            com.fasterxml.jackson.databind.JsonNode valueNode) {
+            ObjectNode root, List<String> pathSegments, JsonNode valueNode) {
         ObjectNode current = root;
         for (int i = 0; i < pathSegments.size() - 1; i++) {
             current = (ObjectNode) current.get(pathSegments.get(i));

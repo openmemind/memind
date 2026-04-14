@@ -13,10 +13,10 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.internal.support;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 public final class JsonCodec {
 
@@ -36,7 +36,7 @@ public final class JsonCodec {
         }
         try {
             return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new JdbcPluginException("Failed to serialize JSON", e);
         }
     }
@@ -47,7 +47,7 @@ public final class JsonCodec {
         }
         try {
             return objectMapper.readValue(json, type);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new JdbcPluginException("Failed to deserialize JSON", e);
         }
     }
@@ -58,12 +58,12 @@ public final class JsonCodec {
         }
         try {
             return objectMapper.readValue(json, typeReference);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new JdbcPluginException("Failed to deserialize JSON", e);
         }
     }
 
     public static ObjectMapper createDefaultObjectMapper() {
-        return JsonUtils.mapper().copy();
+        return JsonUtils.newMapper();
     }
 }

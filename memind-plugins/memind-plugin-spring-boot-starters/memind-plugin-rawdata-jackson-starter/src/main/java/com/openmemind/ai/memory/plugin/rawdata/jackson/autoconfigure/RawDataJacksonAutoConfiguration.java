@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.plugin.rawdata.jackson.autoconfigure;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
@@ -28,7 +27,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.http.converter.autoconfigure.ClientHttpMessageConvertersCustomizer;
 import org.springframework.boot.http.converter.autoconfigure.ServerHttpMessageConvertersCustomizer;
 import org.springframework.context.annotation.Bean;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 @AutoConfiguration(
         afterName = {
@@ -39,27 +40,26 @@ import org.springframework.http.converter.json.MappingJackson2HttpMessageConvert
 public class RawDataJacksonAutoConfiguration {
 
     @Bean
-    @ConditionalOnMissingBean(ObjectMapper.class)
-    ObjectMapper rawDataObjectMapper(ObjectProvider<RawDataPlugin> rawDataPluginProvider) {
-        ObjectMapper mapper = JsonUtils.mapper().copy();
-        RawContentJackson.registerAll(mapper, collectRegistrars(rawDataPluginProvider));
-        return mapper;
+    @ConditionalOnMissingBean(JsonMapper.class)
+    JsonMapper rawDataObjectMapper(ObjectProvider<RawDataPlugin> rawDataPluginProvider) {
+        JsonMapper mapper = JsonUtils.mapper().rebuild().build();
+        return RawContentJackson.registerAll(mapper, collectRegistrars(rawDataPluginProvider));
     }
 
     @Bean
     ServerHttpMessageConvertersCustomizer rawDataServerHttpMessageConvertersCustomizer(
-            ObjectProvider<ObjectMapper> objectMapperProvider) {
+            ObjectProvider<JsonMapper> objectMapperProvider) {
         return builder ->
                 builder.withJsonConverter(
-                        new MappingJackson2HttpMessageConverter(objectMapperProvider.getObject()));
+                        new JacksonJsonHttpMessageConverter(objectMapperProvider.getObject()));
     }
 
     @Bean
     ClientHttpMessageConvertersCustomizer rawDataClientHttpMessageConvertersCustomizer(
-            ObjectProvider<ObjectMapper> objectMapperProvider) {
+            ObjectProvider<JsonMapper> objectMapperProvider) {
         return builder ->
                 builder.withJsonConverter(
-                        new MappingJackson2HttpMessageConverter(objectMapperProvider.getObject()));
+                        new JacksonJsonHttpMessageConverter(objectMapperProvider.getObject()));
     }
 
     @Bean
@@ -88,7 +88,8 @@ public class RawDataJacksonAutoConfiguration {
         @Override
         public Object postProcessAfterInitialization(Object bean, String beanName) {
             if (bean instanceof ObjectMapper mapper) {
-                RawContentJackson.registerAll(mapper, collectRegistrars(rawDataPluginProvider));
+                return RawContentJackson.registerAll(
+                        mapper, collectRegistrars(rawDataPluginProvider));
             }
             return bean;
         }

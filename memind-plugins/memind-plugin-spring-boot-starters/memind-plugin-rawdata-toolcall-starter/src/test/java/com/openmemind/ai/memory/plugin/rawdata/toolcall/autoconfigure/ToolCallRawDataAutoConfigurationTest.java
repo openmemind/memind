@@ -16,8 +16,6 @@ package com.openmemind.ai.memory.plugin.rawdata.toolcall.autoconfigure;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -29,6 +27,8 @@ import com.openmemind.ai.memory.plugin.rawdata.toolcall.stats.ToolCallStatsServi
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.exc.InvalidTypeIdException;
 
 class ToolCallRawDataAutoConfigurationTest {
 

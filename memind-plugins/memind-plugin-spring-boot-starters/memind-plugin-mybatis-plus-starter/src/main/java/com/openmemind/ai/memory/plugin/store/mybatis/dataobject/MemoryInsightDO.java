@@ -17,7 +17,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import com.baomidou.mybatisplus.extension.handlers.Jackson3TypeHandler;
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.plugin.store.mybatis.handler.InstantTypeHandler;
 import java.time.Instant;
@@ -36,12 +36,12 @@ public class MemoryInsightDO extends BaseDO {
     private String scope;
     private String name;
 
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = Jackson3TypeHandler.class)
     private List<String> categories;
 
     private String content;
 
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = Jackson3TypeHandler.class)
     private List<InsightPoint> points;
 
     private String groupName;
@@ -51,14 +51,14 @@ public class MemoryInsightDO extends BaseDO {
     @TableField(typeHandler = InstantTypeHandler.class)
     private Instant lastReasonedAt;
 
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = Jackson3TypeHandler.class)
     private List<Float> summaryEmbedding;
 
     // === Tree structure fields ===
     private String tier;
     private Long parentInsightId;
 
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = Jackson3TypeHandler.class)
     private List<Long> childInsightIds;
 
     private Integer version;

@@ -15,8 +15,6 @@ package com.openmemind.ai.memory.plugin.rawdata.toolcall.content;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.ToolCallRawContentTypeRegistrar;
@@ -26,6 +24,7 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
 
 @DisplayName("ToolCallContent Test")
 class ToolCallContentTest {
@@ -33,10 +32,11 @@ class ToolCallContentTest {
     private static final ObjectMapper OBJECT_MAPPER = createObjectMapper();
 
     private static ObjectMapper createObjectMapper() {
-        ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        RawContentJackson.registerCoreSubtypes(mapper);
-        RawContentJackson.registerPluginSubtypes(
-                mapper, List.of(new ToolCallRawContentTypeRegistrar()));
+        ObjectMapper mapper = new ObjectMapper();
+        mapper = RawContentJackson.registerCoreSubtypes(mapper);
+        mapper =
+                RawContentJackson.registerPluginSubtypes(
+                        mapper, List.of(new ToolCallRawContentTypeRegistrar()));
         return mapper;
     }
 

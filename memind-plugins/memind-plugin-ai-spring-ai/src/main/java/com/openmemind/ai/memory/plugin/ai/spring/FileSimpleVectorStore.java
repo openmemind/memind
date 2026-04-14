@@ -13,8 +13,6 @@
  */
 package com.openmemind.ai.memory.plugin.ai.spring;
 
-import com.fasterxml.jackson.databind.ObjectWriter;
-import com.fasterxml.jackson.databind.json.JsonMapper;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -29,6 +27,8 @@ import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.ai.vectorstore.SimpleVectorStoreContent;
+import tools.jackson.databind.ObjectWriter;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * SimpleVectorStore that supports batch embedding and file persistence.

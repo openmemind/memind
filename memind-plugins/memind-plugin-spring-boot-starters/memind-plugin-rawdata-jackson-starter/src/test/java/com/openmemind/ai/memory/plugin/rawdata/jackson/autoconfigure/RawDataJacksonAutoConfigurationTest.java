@@ -18,8 +18,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.exc.InvalidTypeIdException;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
@@ -34,7 +32,9 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.http.converter.autoconfigure.HttpMessageConvertersAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.http.converter.HttpMessageConverters;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.exc.InvalidTypeIdException;
 
 class RawDataJacksonAutoConfigurationTest {
 
@@ -103,7 +103,7 @@ class RawDataJacksonAutoConfigurationTest {
     }
 
     @Test
-    void serverHttpMessageConvertersUseJackson2MapperThatUnderstandsRawContentTypes() {
+    void serverHttpMessageConvertersUseJacksonMapperThatUnderstandsRawContentTypes() {
         new ApplicationContextRunner()
                 .withConfiguration(
                         AutoConfigurations.of(
@@ -119,19 +119,19 @@ class RawDataJacksonAutoConfigurationTest {
                                     .orderedStream()
                                     .forEach(customizer -> customizer.customize(builder));
 
-                            MappingJackson2HttpMessageConverter jsonConverter =
+                            JacksonJsonHttpMessageConverter jsonConverter =
                                     java.util.stream.StreamSupport.stream(
                                                     builder.build().spliterator(), false)
                                             .filter(
-                                                    MappingJackson2HttpMessageConverter.class
+                                                    JacksonJsonHttpMessageConverter.class
                                                             ::isInstance)
-                                            .map(MappingJackson2HttpMessageConverter.class::cast)
+                                            .map(JacksonJsonHttpMessageConverter.class::cast)
                                             .findFirst()
                                             .orElseThrow();
 
                             assertThat(
                                             jsonConverter
-                                                    .getObjectMapper()
+                                                    .getMapper()
                                                     .readValue(
                                                             """
                                                             {"type":"conversation","messages":[{"role":"USER","content":[{"type":"text","text":"hi"}],"timestamp":null,"userName":null}]}

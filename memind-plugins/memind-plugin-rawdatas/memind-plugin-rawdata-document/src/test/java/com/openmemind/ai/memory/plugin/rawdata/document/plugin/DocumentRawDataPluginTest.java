@@ -21,8 +21,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.SourceLimitOptions;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
@@ -44,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
+import tools.jackson.databind.ObjectMapper;
 
 class DocumentRawDataPluginTest {
 
@@ -148,8 +147,10 @@ class DocumentRawDataPluginTest {
 
     @Test
     void rawContentJacksonRegistersDocumentSubtypeWithoutJsonSubTypes() throws Exception {
-        ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        RawContentJackson.registerAll(mapper, List.of(new DocumentRawContentTypeRegistrar()));
+        ObjectMapper mapper = new ObjectMapper();
+        mapper =
+                RawContentJackson.registerAll(
+                        mapper, List.of(new DocumentRawContentTypeRegistrar()));
 
         var decoded =
                 mapper.readValue(

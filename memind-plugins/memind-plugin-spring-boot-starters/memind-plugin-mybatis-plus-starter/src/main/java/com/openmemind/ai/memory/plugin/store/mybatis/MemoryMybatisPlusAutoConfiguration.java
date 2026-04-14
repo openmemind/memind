@@ -15,12 +15,11 @@ package com.openmemind.ai.memory.plugin.store.mybatis;
 
 import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
-import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import com.baomidou.mybatisplus.extension.handlers.Jackson3TypeHandler;
 import com.baomidou.mybatisplus.extension.parser.JsqlParserGlobal;
 import com.baomidou.mybatisplus.extension.parser.cache.JdkSerialCaffeineJsqlParseCache;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -57,10 +56,11 @@ import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.FullyQualifiedAnnotationBeanNameGenerator;
 import org.springframework.jdbc.core.JdbcTemplate;
+import tools.jackson.databind.ObjectMapper;
 
 @AutoConfiguration(
         after = DataSourceAutoConfiguration.class,
-        afterName = "org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration",
+        afterName = "org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration",
         before =
                 MybatisPlusAutoConfiguration
                         .class) // Purpose: to be configured before MyBatis Plus auto-configuration
@@ -84,13 +84,13 @@ public class MemoryMybatisPlusAutoConfiguration {
                 new JdkSerialCaffeineJsqlParseCache(
                         (cache) -> cache.maximumSize(1024).expireAfterWrite(5, TimeUnit.SECONDS)));
 
-        JacksonTypeHandler.setObjectMapper(JsonUtils.mapper().copy());
+        Jackson3TypeHandler.setObjectMapper(JsonUtils.newMapper());
     }
 
     public MemoryMybatisPlusAutoConfiguration(ObjectProvider<ObjectMapper> objectMapperProvider) {
         ObjectMapper objectMapper = objectMapperProvider.getIfAvailable();
         if (objectMapper != null) {
-            JacksonTypeHandler.setObjectMapper(objectMapper);
+            Jackson3TypeHandler.setObjectMapper(objectMapper);
         }
     }
 

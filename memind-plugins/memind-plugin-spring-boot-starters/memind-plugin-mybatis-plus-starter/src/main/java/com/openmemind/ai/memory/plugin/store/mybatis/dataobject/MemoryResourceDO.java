@@ -17,7 +17,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import com.baomidou.mybatisplus.extension.handlers.Jackson3TypeHandler;
 
 @TableName(value = "memory_resource", autoResultMap = true)
 public class MemoryResourceDO extends BaseDO {
@@ -35,7 +35,7 @@ public class MemoryResourceDO extends BaseDO {
     private String checksum;
     private Long sizeBytes;
 
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = Jackson3TypeHandler.class)
     private java.util.Map<String, Object> metadata;
 
     public Integer getId() {

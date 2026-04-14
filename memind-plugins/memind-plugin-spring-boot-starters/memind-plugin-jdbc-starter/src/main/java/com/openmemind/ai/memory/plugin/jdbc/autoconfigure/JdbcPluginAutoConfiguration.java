@@ -13,7 +13,7 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.autoconfigure;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -48,7 +48,7 @@ import org.springframework.core.env.Environment;
 @AutoConfiguration(
         afterName = {
             "org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration",
-            "org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration",
+            "org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration",
             "com.openmemind.ai.memory.plugin.store.mybatis.MemoryMybatisPlusAutoConfiguration"
         })
 @ConditionalOnBean(DataSource.class)
@@ -132,6 +132,6 @@ public class JdbcPluginAutoConfiguration {
 
     private ObjectMapper resolveObjectMapper(ObjectProvider<ObjectMapper> objectMapperProvider) {
         ObjectMapper objectMapper = objectMapperProvider.getIfAvailable();
-        return objectMapper != null ? objectMapper.copy() : JsonUtils.mapper().copy();
+        return objectMapper != null ? objectMapper.rebuild().build() : JsonUtils.newMapper();
     }
 }
