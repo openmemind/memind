@@ -33,7 +33,8 @@ class MemoryOptionsProjectionMapperTest {
                 .extracting(MemoryOptionItemView::key)
                 .contains(
                         "extraction.common.timeout",
-                        "extraction.rawdata.chunking.messagesPerChunk");
+                        "extraction.rawdata.conversation.messagesPerChunk",
+                        "extraction.rawdata.vectorBatchSize");
         assertThat(projection.get("retrieval"))
                 .extracting(MemoryOptionItemView::key)
                 .contains("retrieval.simple.timeout", "retrieval.advanced.rerank.mode");
@@ -51,6 +52,16 @@ class MemoryOptionsProjectionMapperTest {
         assertThat(rebuilt.extraction().item().foresightEnabled()).isTrue();
         assertThat(rebuilt.retrieval().simple().itemTopK()).isEqualTo(21);
         assertThat(rebuilt.retrieval().deep().rawDataEnabled()).isTrue();
+    }
+
+    @Test
+    void ignoresNullRuntimeOnlyFieldsFromProjectionDefinitions() {
+        var projection = mapper.toProjection(MemoryBuildOptions.defaults());
+
+        assertThat(projection.values().stream().flatMap(java.util.Collection::stream))
+                .extracting(MemoryOptionItemView::key)
+                .doesNotContain(
+                        "extraction.rawdata.contentParser", "extraction.rawdata.resourceFetcher");
     }
 
     private static void updateValue(

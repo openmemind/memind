@@ -15,12 +15,27 @@ package com.openmemind.ai.memory.core.builder;
 
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig;
+import java.util.Objects;
 
 public record RawDataExtractionOptions(
-        ConversationChunkingConfig chunking, CommitDetectorConfig commitDetection) {
+        ConversationChunkingConfig conversation,
+        CommitDetectorConfig commitDetection,
+        int vectorBatchSize) {
+
+    public static final int DEFAULT_VECTOR_BATCH_SIZE = 64;
+
+    public RawDataExtractionOptions {
+        conversation = Objects.requireNonNull(conversation, "conversation");
+        commitDetection = Objects.requireNonNull(commitDetection, "commitDetection");
+        if (vectorBatchSize <= 0) {
+            throw new IllegalArgumentException("vectorBatchSize must be > 0");
+        }
+    }
 
     public static RawDataExtractionOptions defaults() {
         return new RawDataExtractionOptions(
-                ConversationChunkingConfig.DEFAULT, CommitDetectorConfig.defaults());
+                ConversationChunkingConfig.DEFAULT,
+                CommitDetectorConfig.defaults(),
+                DEFAULT_VECTOR_BATCH_SIZE);
     }
 }

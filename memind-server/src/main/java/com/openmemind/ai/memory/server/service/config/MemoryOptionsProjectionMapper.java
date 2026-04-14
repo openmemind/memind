@@ -13,12 +13,10 @@
  */
 package com.openmemind.ai.memory.server.service.config;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.openmemind.ai.memory.core.builder.ExtractionOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalOptions;
+import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.server.domain.config.view.MemoryOptionItemView;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.RecordComponent;
@@ -34,6 +32,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 public class MemoryOptionsProjectionMapper {
 
@@ -55,13 +57,13 @@ public class MemoryOptionsProjectionMapper {
                             "Preferred language used by extraction prompts when generating memory"
                                     + " content."),
                     Map.entry(
-                            "extraction.rawdata.chunking.messagesPerChunk",
+                            "extraction.rawdata.conversation.messagesPerChunk",
                             "Chunk size used by fixed-size conversation segmentation."),
                     Map.entry(
-                            "extraction.rawdata.chunking.strategy",
+                            "extraction.rawdata.conversation.strategy",
                             "Conversation segmentation strategy used before raw data extraction."),
                     Map.entry(
-                            "extraction.rawdata.chunking.minMessagesPerSegment",
+                            "extraction.rawdata.conversation.minMessagesPerSegment",
                             "Minimum message count required before LLM-based segmentation can split"
                                     + " a conversation."),
                     Map.entry(
@@ -76,6 +78,10 @@ public class MemoryOptionsProjectionMapper {
                             "extraction.rawdata.commitDetection.minMessagesForLlm",
                             "Minimum buffered messages required before LLM topic-shift commit"
                                     + " detection runs."),
+                    Map.entry(
+                            "extraction.rawdata.vectorBatchSize",
+                            "Maximum number of raw data captions embedded in a single vector batch"
+                                    + " during extraction."),
                     Map.entry(
                             "extraction.item.foresightEnabled",
                             "Whether extraction should synthesize foresight-style item memories."),
@@ -143,7 +149,7 @@ public class MemoryOptionsProjectionMapper {
     private final ObjectMapper objectMapper;
 
     public MemoryOptionsProjectionMapper() {
-        this.objectMapper = new ObjectMapper().findAndRegisterModules();
+        this.objectMapper = JsonUtils.newMapper();
     }
 
     public Map<String, List<MemoryOptionItemView>> toProjection(MemoryBuildOptions options) {
@@ -182,7 +188,7 @@ public class MemoryOptionsProjectionMapper {
         }
         try {
             return objectMapper.treeToValue(root, PersistedMemoryOptions.class).toOptions();
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalArgumentException("Invalid memory options payload", e);
         }
     }
@@ -198,6 +204,9 @@ public class MemoryOptionsProjectionMapper {
             String currentPath,
             String currentGroup,
             List<OptionDefinition> definitions) {
+        if (value == null) {
+            return;
+        }
         Class<?> type = value.getClass();
         if (!type.isRecord()) {
             definitions.add(
@@ -227,6 +236,9 @@ public class MemoryOptionsProjectionMapper {
 
     private static void collectValues(
             Object value, String currentPath, Map<String, Object> flattened) {
+        if (value == null) {
+            return;
+        }
         Class<?> type = value.getClass();
         if (!type.isRecord()) {
             flattened.put(currentPath, value);
@@ -280,9 +292,7 @@ public class MemoryOptionsProjectionMapper {
     }
 
     private static void setPathValue(
-            ObjectNode root,
-            List<String> pathSegments,
-            com.fasterxml.jackson.databind.JsonNode valueNode) {
+            ObjectNode root, List<String> pathSegments, JsonNode valueNode) {
         ObjectNode current = root;
         for (int i = 0; i < pathSegments.size() - 1; i++) {
             current = (ObjectNode) current.get(pathSegments.get(i));

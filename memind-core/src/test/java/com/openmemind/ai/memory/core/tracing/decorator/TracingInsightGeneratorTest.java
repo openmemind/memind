@@ -133,8 +133,7 @@ class TracingInsightGeneratorTest {
 
     private static MemoryInsightType insightType() {
         return new MemoryInsightType(
-                1L, "PROFILE", "desc", null, List.of(), 400, null, null, null, null, null, null,
-                null);
+                1L, "PROFILE", "desc", null, List.of(), 400, null, null, null, null, null, null);
     }
 
     private static MemoryInsight memoryInsight() {

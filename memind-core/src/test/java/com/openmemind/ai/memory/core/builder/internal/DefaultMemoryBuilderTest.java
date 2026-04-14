@@ -29,7 +29,7 @@ import com.openmemind.ai.memory.core.builder.RetrievalAdvancedOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalCommonOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
-import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
+import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.item.MemoryItemLayer;
 import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItemExtractor;
@@ -39,6 +39,8 @@ import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptType;
+import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
+import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepRetrievalStrategy;
@@ -158,7 +160,7 @@ class DefaultMemoryBuilderTest {
                                 .vector(MEMORY_VECTOR)
                                 .build();
 
-        var extractor = readField(memory, "extractor", MemoryExtractor.class);
+        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
         var memoryItemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
         var itemExtractor =
                 readField(memoryItemLayer, "extractor", DefaultMemoryItemExtractor.class);
@@ -183,6 +185,30 @@ class DefaultMemoryBuilderTest {
     }
 
     @Test
+    void buildRoutesRuntimeRegistryAndFetcherIntoExtractor() {
+        var registry = proxy(ContentParserRegistry.class);
+        var fetcher = proxy(ResourceFetcher.class);
+
+        var memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(CHAT_CLIENT)
+                                .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .contentParserRegistry(registry)
+                                .resourceFetcher(fetcher)
+                                .build();
+
+        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
+
+        assertThat(readField(extractor, "contentParserRegistry", ContentParserRegistry.class))
+                .isSameAs(registry);
+        assertThat(readField(extractor, "resourceFetcher", ResourceFetcher.class))
+                .isSameAs(fetcher);
+    }
+
+    @Test
     void buildPropagatesPromptRegistryAcrossExtractionAndRetrievalAssemblies() {
         var promptRegistry =
                 InMemoryPromptRegistry.builder()
@@ -199,7 +225,7 @@ class DefaultMemoryBuilderTest {
                                 .promptRegistry(promptRegistry)
                                 .build();
 
-        var extractor = readField(memory, "extractor", MemoryExtractor.class);
+        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
         var contextCommitDetector =
                 readField(extractor, "contextCommitDetector", LlmContextCommitDetector.class);
         var extractionPromptRegistry =

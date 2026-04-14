@@ -17,7 +17,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import com.baomidou.mybatisplus.extension.handlers.Jackson3TypeHandler;
 import com.openmemind.ai.memory.plugin.store.mybatis.handler.InstantTypeHandler;
 import java.time.Instant;
 import java.util.Map;
@@ -34,14 +34,17 @@ public class MemoryRawDataDO extends BaseDO {
     private String type;
     private String contentId;
 
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = Jackson3TypeHandler.class)
     private Map<String, Object> segment;
 
     private String caption;
     private String captionVectorId;
 
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = Jackson3TypeHandler.class)
     private Map<String, Object> metadata;
+
+    private String resourceId;
+    private String mimeType;
 
     @TableField(typeHandler = InstantTypeHandler.class)
     private Instant startTime;
@@ -135,6 +138,22 @@ public class MemoryRawDataDO extends BaseDO {
 
     public void setMetadata(Map<String, Object> metadata) {
         this.metadata = metadata;
+    }
+
+    public String getResourceId() {
+        return resourceId;
+    }
+
+    public void setResourceId(String resourceId) {
+        this.resourceId = resourceId;
+    }
+
+    public String getMimeType() {
+        return mimeType;
+    }
+
+    public void setMimeType(String mimeType) {
+        this.mimeType = mimeType;
     }
 
     public Instant getStartTime() {

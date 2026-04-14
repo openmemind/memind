@@ -53,10 +53,7 @@ public record MemoryInsightType(
         InsightTreeConfig treeConfig,
 
         /* Scope (null indicates ROOT type, across scope) */
-        MemoryScope scope,
-
-        /* Accepted content type list (nullable, null=accept all types) */
-        List<String> acceptContentTypes) {
+        MemoryScope scope) {
 
     /** Resolve tree configuration, return default value when null */
     public InsightTreeConfig resolveTreeConfig() {
@@ -77,8 +74,7 @@ public record MemoryInsightType(
                 updatedAt,
                 insightAnalysisMode,
                 treeConfig,
-                scope,
-                acceptContentTypes);
+                scope);
     }
 
     /** Return a copy with different treeConfig */
@@ -95,7 +91,6 @@ public record MemoryInsightType(
                 updatedAt,
                 insightAnalysisMode,
                 treeConfig,
-                scope,
-                acceptContentTypes);
+                scope);
     }
 }

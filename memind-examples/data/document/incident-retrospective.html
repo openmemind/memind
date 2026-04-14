@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Payment API Incident Retrospective</title>
+  </head>
+  <body>
+    <h1>Payment API Incident Retrospective</h1>
+    <p>Date: 2026-03-28</p>
+    <p>
+      Summary: a partner retry storm overwhelmed <strong>payment-api</strong> after clients ignored
+      the Retry-After header. The incident produced a sustained mix of 429 and 503 responses and
+      amplified write pressure on the billing database.
+    </p>
+
+    <h2>What Failed</h2>
+    <ul>
+      <li>Several mobile clients retried without exponential backoff.</li>
+      <li>Retry-After compliance dashboards were not included in the release watch list.</li>
+      <li>On-call escalation started too late because the first page waited for absolute error volume.</li>
+    </ul>
+
+    <h2>What To Watch Next Time</h2>
+    <ul>
+      <li><code>payment_api.http_429_rate</code> and <code>payment_api.http_503_rate</code></li>
+      <li><code>gateway.retry_after_applied</code> and client retry burst dashboards</li>
+      <li><code>billing_db.replica_lag_seconds</code> and billing write latency p95</li>
+    </ul>
+
+    <h2>Operational Rule</h2>
+    <p>
+      If 429 responses stay above 2% for 10 minutes, or if Retry-After compliance drops sharply,
+      page the Payments API on-call, open the incident bridge, and have the release commander
+      decide whether to pause or rollback the rollout.
+    </p>
+  </body>
+</html>

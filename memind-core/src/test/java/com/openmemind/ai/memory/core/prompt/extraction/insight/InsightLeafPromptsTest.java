@@ -80,7 +80,6 @@ class InsightLeafPromptsTest {
                 null,
                 InsightAnalysisMode.BRANCH,
                 null,
-                MemoryScope.AGENT,
-                null);
+                MemoryScope.AGENT);
     }
 }

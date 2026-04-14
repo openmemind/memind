@@ -13,7 +13,7 @@
  */
 package com.openmemind.ai.memory.plugin.tracing.otel.autoconfigure;
 
-import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
+import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassifier;
 import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicator;
@@ -32,7 +32,7 @@ import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightExtractStep
 import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightGenerator;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightGroupClassifier;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightTypeRouter;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryExtractionPipeline;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryExtractor;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryItemDeduplicator;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryItemExtractStep;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryRetriever;
@@ -76,9 +76,8 @@ public class TracingBeanPostProcessor implements BeanPostProcessor, Ordered {
             return bean;
         }
 
-        if (bean instanceof MemoryExtractionPipeline d
-                && !(bean instanceof TracingMemoryExtractionPipeline)) {
-            return new TracingMemoryExtractionPipeline(d, observer);
+        if (bean instanceof MemoryExtractor d && !(bean instanceof TracingMemoryExtractor)) {
+            return new TracingMemoryExtractor(d, observer);
         }
         if (bean instanceof RawDataExtractStep d && !(bean instanceof TracingRawDataExtractStep)) {
             return new TracingRawDataExtractStep(d, observer);
@@ -125,7 +124,7 @@ public class TracingBeanPostProcessor implements BeanPostProcessor, Ordered {
     }
 
     private boolean isTraceableBean(Object bean) {
-        return bean instanceof MemoryExtractionPipeline
+        return bean instanceof MemoryExtractor
                 || bean instanceof RawDataExtractStep
                 || bean instanceof MemoryItemExtractStep
                 || bean instanceof InsightExtractStep
@@ -141,7 +140,7 @@ public class TracingBeanPostProcessor implements BeanPostProcessor, Ordered {
     }
 
     private boolean isAlreadyWrapped(Object bean) {
-        return bean instanceof TracingMemoryExtractionPipeline
+        return bean instanceof TracingMemoryExtractor
                 || bean instanceof TracingRawDataExtractStep
                 || bean instanceof TracingMemoryItemExtractStep
                 || bean instanceof TracingInsightExtractStep

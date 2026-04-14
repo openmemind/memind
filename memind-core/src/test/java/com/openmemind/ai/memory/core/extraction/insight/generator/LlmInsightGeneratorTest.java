@@ -84,7 +84,6 @@ class LlmInsightGeneratorTest {
                 null,
                 null,
                 null,
-                null,
                 null);
     }
 

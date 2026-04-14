@@ -13,12 +13,13 @@
  */
 package com.openmemind.ai.memory.example.java.tool;
 
-import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
-import com.openmemind.ai.memory.example.java.support.ExampleDataLoader;
 import com.openmemind.ai.memory.example.java.support.ExampleMemoryOptions;
 import com.openmemind.ai.memory.example.java.support.ExamplePrinter;
+import com.openmemind.ai.memory.example.java.support.ExampleRuntime;
 import com.openmemind.ai.memory.example.java.support.ExampleRuntimeFactory;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.stats.DefaultToolCallStatsService;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.support.ToolCallMemories;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,25 +36,28 @@ public final class ToolMemoryExample {
     public static void main(String[] args) {
         var runtime = ExampleRuntimeFactory.create(SCENARIO, ExampleMemoryOptions.defaultOptions());
         ExamplePrinter.printRuntimeSummary(SCENARIO, runtime);
-        run(runtime.memory(), runtime.dataLoader());
+        run(runtime);
     }
 
-    private static void run(Memory memory, ExampleDataLoader loader) {
+    private static void run(ExampleRuntime runtime) {
         var memoryId = DefaultMemoryId.of("user-tool", "memind");
+        var memory = runtime.memory();
+        var loader = runtime.dataLoader();
+        var toolStatsService = new DefaultToolCallStatsService(runtime.store());
 
-        ExamplePrinter.printSection("Step 1: Report Tool Calls — reportToolCalls()");
+        ExamplePrinter.printSection("Step 1: ToolCallMemories.report()");
         var toolRecords = loader.loadToolCalls("tool/tool-calls.json");
         log.info("  loaded {} tool call records", toolRecords.size());
 
-        var toolResult = memory.reportToolCalls(memoryId, toolRecords).block();
+        var toolResult = ToolCallMemories.report(memory, memoryId, toolRecords).block();
         ExamplePrinter.printExtractionResult(toolResult);
 
-        ExamplePrinter.printSection("Step 2: Tool Statistics — getToolStats() / getAllToolStats()");
+        ExamplePrinter.printSection("Step 2: ToolCallStatsService");
         log.info("  ── grep_code stats ──");
         ExamplePrinter.printToolStats(
-                "grep_code", memory.getToolStats(memoryId, "grep_code").block());
+                "grep_code", toolStatsService.getToolStats(memoryId, "grep_code").block());
 
         log.info("  ── all tool stats ──");
-        ExamplePrinter.printAllToolStats(memory.getAllToolStats(memoryId).block());
+        ExamplePrinter.printAllToolStats(toolStatsService.getAllToolStats(memoryId).block());
     }
 }

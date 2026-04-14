@@ -16,20 +16,19 @@ package com.openmemind.ai.memory.core;
 import com.openmemind.ai.memory.core.builder.DefaultMemoryBuilder;
 import com.openmemind.ai.memory.core.builder.MemoryBuilder;
 import com.openmemind.ai.memory.core.data.MemoryId;
-import com.openmemind.ai.memory.core.data.ToolCallStats;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
+import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
 import com.openmemind.ai.memory.core.extraction.context.ContextRequest;
 import com.openmemind.ai.memory.core.extraction.context.ContextWindow;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
+import java.util.Objects;
 import reactor.core.publisher.Mono;
 
 /**
@@ -39,9 +38,8 @@ import reactor.core.publisher.Mono;
  *
  * <ul>
  *   <li><b>Context</b> — manage conversation context with automatic buffer and commit
- *   <li><b>Extraction</b> — feed conversation messages or tool call records into memory
+ *   <li><b>Extraction</b> — feed conversation messages or arbitrary raw content into memory
  *   <li><b>Retrieval</b> — query memory with natural language
- *   <li><b>Tool stats</b> — read aggregated statistics about Agent tool usage
  * </ul>
  *
  * <p>All methods return {@link Mono} and are non-blocking.
@@ -55,11 +53,30 @@ public interface Memory extends AutoCloseable {
     // ===== Extraction =====
 
     /**
+     * Extract memories using a fully constructed extraction request.
+     *
+     * <p>Use this overload for parser-backed file ingestion, downloader-backed URL ingestion,
+     * or when the caller needs to provide request metadata directly.
+     *
+     * @param request extraction request including memory id, payload, and config
+     * @return extraction result
+     */
+    default Mono<ExtractionResult> extract(ExtractionRequest request) {
+        Objects.requireNonNull(request, "request must not be null");
+        if (request.content() == null) {
+            return Mono.error(
+                    new UnsupportedOperationException(
+                            "This Memory implementation does not support file/url extraction"
+                                    + " requests"));
+        }
+        return extract(request.memoryId(), request.content(), request.config());
+    }
+
+    /**
      * Extract memories from arbitrary raw content.
      *
      * <p>This is the generic entry point for custom content types.
-     * Use {@link #addMessages} for conversations and {@link #reportToolCalls} for tool calls
-     * as convenient alternatives.
+     * Use {@link #addMessages} for conversations.
      *
      * @param memoryId the memory identity
      * @param content raw content to extract from
@@ -238,52 +255,6 @@ public interface Memory extends AutoCloseable {
     default Mono<Void> invalidate(MemoryId memoryId) {
         return Mono.empty();
     }
-
-    // ===== Agent tool stats =====
-
-    /**
-     * Reports a single Agent tool call record into memory.
-     *
-     * <p>Tool call records are processed to extract tool usage patterns, success rates, and
-     * parameter statistics that the Agent can later retrieve to improve its behaviour.
-     *
-     * @param memoryId identifies the Agent whose tool memory to update
-     * @param record   the tool call record to persist
-     * @return an {@link ExtractionResult} describing what was stored
-     */
-    Mono<ExtractionResult> reportToolCall(MemoryId memoryId, ToolCallRecord record);
-
-    /**
-     * Reports multiple Agent tool call records into memory in a single batch.
-     *
-     * @param memoryId identifies the Agent whose tool memory to update
-     * @param records  the list of tool call records to persist
-     * @return an {@link ExtractionResult} describing what was stored
-     */
-    Mono<ExtractionResult> reportToolCalls(MemoryId memoryId, List<ToolCallRecord> records);
-
-    /**
-     * Returns aggregated usage statistics for a specific tool.
-     *
-     * <p>Statistics include call count, success/failure rates, average latency, and common
-     * parameter patterns — useful for the Agent to decide how and when to invoke the tool.
-     *
-     * @param memoryId identifies the Agent
-     * @param toolName the exact name of the tool to query
-     * @return a {@link ToolCallStats} snapshot, or empty if no data exists for this tool
-     */
-    Mono<ToolCallStats> getToolStats(MemoryId memoryId, String toolName);
-
-    /**
-     * Returns aggregated usage statistics for every tool the Agent has ever called.
-     *
-     * <p>The returned map is keyed by tool name. An empty map is returned if no tool calls have
-     * been recorded yet.
-     *
-     * @param memoryId identifies the Agent
-     * @return a map of tool name → {@link ToolCallStats}
-     */
-    Mono<Map<String, ToolCallStats>> getAllToolStats(MemoryId memoryId);
 
     /**
      * Forces a flush of any buffered insight data for the given memory.

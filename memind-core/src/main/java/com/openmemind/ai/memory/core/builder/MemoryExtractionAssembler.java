@@ -13,8 +13,7 @@
  */
 package com.openmemind.ai.memory.core.builder;
 
-import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
-import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
+import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
@@ -36,41 +35,68 @@ import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicato
 import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItemExtractor;
 import com.openmemind.ai.memory.core.extraction.item.extractor.MemoryItemExtractor;
 import com.openmemind.ai.memory.core.extraction.item.strategy.LlmItemExtractionStrategy;
-import com.openmemind.ai.memory.core.extraction.item.strategy.LlmToolCallItemExtractionStrategy;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.LlmConversationCaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
-import com.openmemind.ai.memory.core.extraction.rawdata.processor.ToolCallContentProcessor;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
+import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicy;
+import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicyRegistry;
+import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
+import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
+import com.openmemind.ai.memory.core.resource.ContentParser;
+import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
+import com.openmemind.ai.memory.core.resource.DefaultContentParserRegistry;
+import com.openmemind.ai.memory.core.resource.HttpResourceFetcher;
+import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.utils.IdUtils;
-import java.util.EnumSet;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 final class MemoryExtractionAssembler {
 
+    private static final ResourceFetcher DEFAULT_RESOURCE_FETCHER = new HttpResourceFetcher();
+
     MemoryExtractionAssembly assemble(MemoryAssemblyContext context) {
         ChatClientRegistry registry = context.chatClientRegistry();
+        var promptRegistry = context.promptRegistry();
         CaptionGenerator captionGenerator =
                 new LlmConversationCaptionGenerator(
-                        registry.resolve(ChatClientSlot.CAPTION_GENERATOR),
-                        context.promptRegistry());
-        List<RawContentProcessor<?>> processors =
-                createProcessors(
-                        registry, captionGenerator, context.promptRegistry(), context.options());
+                        registry.resolve(ChatClientSlot.CAPTION_GENERATOR), promptRegistry);
+        ConversationContentProcessor conversationProcessor =
+                conversationProcessor(
+                        registry, captionGenerator, promptRegistry, context.options());
+        RawDataPluginContext pluginContext =
+                new RawDataPluginContext(registry, promptRegistry, context.options());
+        List<RawDataPlugin> plugins = resolvePlugins(context);
+        List<RawContentProcessor<?>> processors = new ArrayList<>();
+        processors.add(conversationProcessor);
+        plugins.forEach(plugin -> processors.addAll(pluginProcessors(plugin, pluginContext)));
+        RawContentJackson.pluginSubtypeMappings(
+                plugins.stream().flatMap(plugin -> pluginTypeRegistrars(plugin).stream()).toList());
+        RawContentProcessorRegistry processorRegistry = new RawContentProcessorRegistry(processors);
+        RawDataIngestionPolicyRegistry ingestionPolicyRegistry =
+                resolveIngestionPolicyRegistry(plugins);
+        ContentParserRegistry effectiveParserRegistry =
+                resolveContentParserRegistry(context, plugins, pluginContext);
         RawDataLayer rawDataLayer =
                 new RawDataLayer(
-                        processors,
+                        processorRegistry,
                         captionGenerator,
                         context.memoryStore(),
-                        context.memoryVector());
+                        context.memoryVector(),
+                        context.options().extraction().rawdata().vectorBatchSize());
 
         MemoryItemExtractor itemExtractor =
                 createMemoryItemExtractor(registry, processors, context.promptRegistry());
@@ -84,8 +110,7 @@ final class MemoryExtractionAssembler {
                         context.memoryStore(),
                         context.memoryVector(),
                         IdUtils.snowflake(),
-                        null,
-                        conversationCategories());
+                        null);
 
         InsightGenerator insightGenerator =
                 new LlmInsightGenerator(
@@ -127,19 +152,30 @@ final class MemoryExtractionAssembler {
                         context.options().extraction().rawdata().commitDetection(),
                         registry.resolve(ChatClientSlot.CONTEXT_COMMIT_DETECTOR),
                         context.promptRegistry());
-        MemoryExtractionPipeline pipeline =
-                new MemoryExtractor(
+        MemoryExtractor pipeline =
+                new DefaultMemoryExtractor(
                         rawDataLayer,
                         memoryItemLayer,
                         insightLayer,
                         rawDataLayer,
                         contextCommitDetector,
                         context.pendingConversationBuffer(),
-                        context.recentConversationBuffer());
+                        context.recentConversationBuffer(),
+                        processorRegistry,
+                        effectiveParserRegistry,
+                        context.memoryStore().resourceStore(),
+                        resolveResourceFetcher(context.resourceFetcher()),
+                        ingestionPolicyRegistry,
+                        context.options().extraction().rawdata(),
+                        context.options().extraction().item());
         return new MemoryExtractionAssembly(pipeline, insightLayer, insightBuildScheduler);
     }
 
-    private List<RawContentProcessor<?>> createProcessors(
+    private ResourceFetcher resolveResourceFetcher(ResourceFetcher runtimeFetcher) {
+        return runtimeFetcher != null ? runtimeFetcher : DEFAULT_RESOURCE_FETCHER;
+    }
+
+    private ConversationContentProcessor conversationProcessor(
             ChatClientRegistry registry,
             CaptionGenerator captionGenerator,
             com.openmemind.ai.memory.core.prompt.PromptRegistry promptRegistry,
@@ -155,16 +191,76 @@ final class MemoryExtractionAssembler {
                 new ConversationContentProcessor(
                         conversationChunker,
                         llmConversationChunker,
-                        options.extraction().rawdata().chunking(),
+                        options.extraction().rawdata().conversation(),
                         captionGenerator,
                         null);
-        ToolCallContentProcessor toolCallProcessor =
-                new ToolCallContentProcessor(
-                        new LlmToolCallItemExtractionStrategy(
-                                registry.resolve(ChatClientSlot.TOOL_CALL_EXTRACTION),
-                                promptRegistry));
+        return conversationProcessor;
+    }
 
-        return List.of(conversationProcessor, toolCallProcessor);
+    private List<RawDataPlugin> resolvePlugins(MemoryAssemblyContext context) {
+        List<RawDataPlugin> plugins = new ArrayList<>(context.rawDataPlugins());
+
+        Set<String> pluginIds = new LinkedHashSet<>();
+        for (RawDataPlugin plugin : plugins) {
+            String pluginId = Objects.requireNonNull(plugin.pluginId(), "plugin.pluginId()");
+            if (!pluginIds.add(pluginId)) {
+                throw new IllegalStateException("Duplicate rawData pluginId: " + pluginId);
+            }
+        }
+        return List.copyOf(plugins);
+    }
+
+    private List<RawContentProcessor<?>> pluginProcessors(
+            RawDataPlugin plugin, RawDataPluginContext pluginContext) {
+        return List.copyOf(
+                Objects.requireNonNull(
+                        plugin.processors(pluginContext), plugin.pluginId() + ".processors()"));
+    }
+
+    private List<ContentParser> pluginParsers(
+            RawDataPlugin plugin, RawDataPluginContext pluginContext) {
+        return List.copyOf(
+                Objects.requireNonNull(
+                        plugin.parsers(pluginContext), plugin.pluginId() + ".parsers()"));
+    }
+
+    private List<RawDataIngestionPolicy> pluginIngestionPolicies(RawDataPlugin plugin) {
+        return List.copyOf(
+                Objects.requireNonNull(
+                        plugin.ingestionPolicies(), plugin.pluginId() + ".ingestionPolicies()"));
+    }
+
+    private List<com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar>
+            pluginTypeRegistrars(RawDataPlugin plugin) {
+        return List.copyOf(
+                Objects.requireNonNull(
+                        plugin.typeRegistrars(), plugin.pluginId() + ".typeRegistrars()"));
+    }
+
+    private ContentParserRegistry resolveContentParserRegistry(
+            MemoryAssemblyContext context,
+            List<RawDataPlugin> plugins,
+            RawDataPluginContext pluginContext) {
+        if (context.contentParserRegistry() != null) {
+            return context.contentParserRegistry();
+        }
+
+        List<ContentParser> pluginParsers =
+                plugins.stream()
+                        .flatMap(plugin -> pluginParsers(plugin, pluginContext).stream())
+                        .toList();
+        return pluginParsers.isEmpty() ? null : new DefaultContentParserRegistry(pluginParsers);
+    }
+
+    private RawDataIngestionPolicyRegistry resolveIngestionPolicyRegistry(
+            List<RawDataPlugin> plugins) {
+        List<RawDataIngestionPolicy> policies =
+                plugins.stream()
+                        .flatMap(plugin -> pluginIngestionPolicies(plugin).stream())
+                        .toList();
+        return policies.isEmpty()
+                ? RawDataIngestionPolicyRegistry.empty()
+                : new RawDataIngestionPolicyRegistry(policies);
     }
 
     private MemoryItemExtractor createMemoryItemExtractor(
@@ -180,9 +276,7 @@ final class MemoryExtractionAssembler {
 
         var defaultStrategy =
                 new LlmItemExtractionStrategy(
-                        registry.resolve(ChatClientSlot.ITEM_EXTRACTION),
-                        conversationCategories(),
-                        promptRegistry);
+                        registry.resolve(ChatClientSlot.ITEM_EXTRACTION), promptRegistry);
         return new DefaultMemoryItemExtractor(defaultStrategy, strategies);
     }
 
@@ -191,15 +285,5 @@ final class MemoryExtractionAssembler {
                 .filter(processor -> !processor.supportsInsight())
                 .map(RawContentProcessor::contentType)
                 .collect(Collectors.toSet());
-    }
-
-    private EnumSet<MemoryCategory> conversationCategories() {
-        return EnumSet.of(
-                MemoryCategory.PROFILE,
-                MemoryCategory.BEHAVIOR,
-                MemoryCategory.EVENT,
-                MemoryCategory.DIRECTIVE,
-                MemoryCategory.PLAYBOOK,
-                MemoryCategory.RESOLUTION);
     }
 }

@@ -31,6 +31,7 @@ import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
+import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
@@ -39,8 +40,11 @@ import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -106,25 +110,22 @@ class InsightTierRetrieverTest {
     }
 
     private MemoryInsightType buildType(String name, String description, InsightAnalysisMode mode) {
-        return buildType(name, description, mode, MemoryScope.USER);
+        return buildType(name, description, List.of(), mode, MemoryScope.USER);
     }
 
     private MemoryInsightType buildType(
             String name, String description, InsightAnalysisMode mode, MemoryScope scope) {
+        return buildType(name, description, List.of(), mode, scope);
+    }
+
+    private MemoryInsightType buildType(
+            String name,
+            String description,
+            List<String> categories,
+            InsightAnalysisMode mode,
+            MemoryScope scope) {
         return new MemoryInsightType(
-                1L,
-                name,
-                description,
-                null,
-                List.of(),
-                600,
-                null,
-                null,
-                null,
-                mode,
-                null,
-                scope,
-                null);
+                1L, name, description, null, categories, 600, null, null, null, mode, null, scope);
     }
 
     @Nested
@@ -678,6 +679,214 @@ class InsightTierRetrieverTest {
                             result -> {
                                 assertThat(result.results()).hasSize(1);
                                 assertThat(result.results().getFirst().sourceId()).isEqualTo("20");
+                            })
+                    .verifyComplete();
+        }
+
+        @Test
+        @DisplayName("Category filter should derive allowed types from current taxonomy")
+        void shouldDeriveAllowedTypesFromCurrentTaxonomyCategories() {
+            var profileInsight =
+                    buildInsight(
+                            10L,
+                            "custom_profile",
+                            "Profile branch",
+                            InsightTier.BRANCH,
+                            null,
+                            List.of());
+            var eventInsight =
+                    buildInsight(
+                            20L,
+                            "custom_event",
+                            "Event branch",
+                            InsightTier.BRANCH,
+                            null,
+                            List.of());
+
+            when(insightOperations.listInsights(memoryId))
+                    .thenReturn(List.of(profileInsight, eventInsight));
+            when(insightOperations.listInsightTypes())
+                    .thenReturn(
+                            List.of(
+                                    buildType(
+                                            "custom_profile",
+                                            "Profile descriptor",
+                                            List.of("profile"),
+                                            InsightAnalysisMode.BRANCH,
+                                            MemoryScope.USER),
+                                    buildType(
+                                            "custom_event",
+                                            "Event descriptor",
+                                            List.of("event"),
+                                            InsightAnalysisMode.BRANCH,
+                                            MemoryScope.USER)));
+            when(router.route(anyString(), anyList(), anyMap()))
+                    .thenReturn(Mono.just(List.of("custom_profile")));
+
+            var context =
+                    new QueryContext(
+                            memoryId,
+                            "Profile query",
+                            "Profile query",
+                            List.of(),
+                            Map.of(),
+                            null,
+                            Set.of(MemoryCategory.PROFILE));
+
+            StepVerifier.create(retriever.retrieve(context, config))
+                    .assertNext(
+                            result -> {
+                                assertThat(result.results()).hasSize(1);
+                                assertThat(result.results().getFirst().sourceId()).isEqualTo("10");
+                            })
+                    .verifyComplete();
+        }
+
+        @Test
+        @DisplayName(
+                "Historical scope/category should remain readable when taxonomy definition is"
+                        + " missing")
+        void shouldUsePersistedScopeAndCategoryWhenHistoricalTypeIsMissingFromTaxonomy() {
+            when(insightOperations.listInsightTypes()).thenReturn(List.of());
+
+            MemoryInsight legacyUserBranch =
+                    new MemoryInsight(
+                            10L,
+                            memoryId.toIdentifier(),
+                            "legacy_profile",
+                            MemoryScope.USER,
+                            "Legacy profile descriptor",
+                            List.of("profile"),
+                            List.of(
+                                    new InsightPoint(
+                                            InsightPoint.PointType.SUMMARY,
+                                            "legacy profile branch",
+                                            1.0f,
+                                            List.of())),
+                            null,
+                            0.9f,
+                            Instant.now(),
+                            null,
+                            Instant.now(),
+                            Instant.now(),
+                            InsightTier.BRANCH,
+                            null,
+                            List.of(),
+                            1);
+            MemoryInsight legacyAgentBranch =
+                    new MemoryInsight(
+                            20L,
+                            memoryId.toIdentifier(),
+                            "legacy_directive",
+                            MemoryScope.AGENT,
+                            "Legacy directive descriptor",
+                            List.of("directive"),
+                            List.of(
+                                    new InsightPoint(
+                                            InsightPoint.PointType.SUMMARY,
+                                            "legacy directive branch",
+                                            1.0f,
+                                            List.of())),
+                            null,
+                            0.8f,
+                            Instant.now(),
+                            null,
+                            Instant.now(),
+                            Instant.now(),
+                            InsightTier.BRANCH,
+                            null,
+                            List.of(),
+                            1);
+            when(insightOperations.listInsights(memoryId))
+                    .thenReturn(List.of(legacyUserBranch, legacyAgentBranch));
+            when(router.route(anyString(), anyList(), anyMap()))
+                    .thenReturn(Mono.just(List.of("legacy_profile")));
+
+            var context =
+                    new QueryContext(
+                            memoryId,
+                            "Legacy profile",
+                            "Legacy profile",
+                            List.of(),
+                            Map.of(),
+                            MemoryScope.USER,
+                            Set.of(MemoryCategory.PROFILE));
+
+            StepVerifier.create(retriever.retrieve(context, config))
+                    .assertNext(
+                            result -> {
+                                assertThat(result.results()).hasSize(1);
+                                assertThat(result.results().getFirst().sourceId()).isEqualTo("10");
+                            })
+                    .verifyComplete();
+        }
+    }
+
+    @Nested
+    @DisplayName("Historical Compatibility Test")
+    class HistoricalCompatibilityTests {
+
+        @Test
+        @DisplayName("Router descriptions should fall back to persisted insight names")
+        void shouldUsePersistedInsightNameAsRoutingDescriptionWhenTaxonomyDefinitionIsMissing() {
+            when(insightOperations.listInsightTypes()).thenReturn(List.of());
+            var legacyInsight =
+                    new MemoryInsight(
+                            1L,
+                            memoryId.toIdentifier(),
+                            "legacy_type",
+                            MemoryScope.USER,
+                            "Legacy branch descriptor",
+                            List.of("profile"),
+                            List.of(
+                                    new InsightPoint(
+                                            InsightPoint.PointType.SUMMARY,
+                                            "legacy branch",
+                                            1.0f,
+                                            List.of())),
+                            null,
+                            0.8f,
+                            Instant.now(),
+                            null,
+                            Instant.now(),
+                            Instant.now(),
+                            InsightTier.BRANCH,
+                            null,
+                            List.of(),
+                            1);
+            when(insightOperations.listInsights(memoryId)).thenReturn(List.of(legacyInsight));
+
+            AtomicReference<Map<String, String>> routedDescriptions =
+                    new AtomicReference<>(Map.of());
+            when(router.route(anyString(), anyList(), anyMap()))
+                    .thenAnswer(
+                            invocation -> {
+                                @SuppressWarnings("unchecked")
+                                Map<String, String> descriptions =
+                                        new LinkedHashMap<>(
+                                                (Map<String, String>) invocation.getArgument(2));
+                                routedDescriptions.set(Map.copyOf(descriptions));
+                                return Mono.just(List.of("legacy_type"));
+                            });
+
+            var context =
+                    new QueryContext(
+                            memoryId,
+                            "Legacy query",
+                            "Legacy query",
+                            List.of(),
+                            Map.of(),
+                            null,
+                            null);
+
+            StepVerifier.create(retriever.retrieve(context, config))
+                    .assertNext(
+                            result -> {
+                                assertThat(routedDescriptions.get())
+                                        .containsEntry("legacy_type", "Legacy branch descriptor");
+                                assertThat(result.results())
+                                        .extracting(resultItem -> resultItem.sourceId())
+                                        .containsExactly("1");
                             })
                     .verifyComplete();
         }

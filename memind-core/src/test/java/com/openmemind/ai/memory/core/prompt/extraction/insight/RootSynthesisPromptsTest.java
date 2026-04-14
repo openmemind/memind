@@ -71,7 +71,6 @@ class RootSynthesisPromptsTest {
                 null,
                 InsightAnalysisMode.ROOT,
                 null,
-                null,
                 null);
     }
 }

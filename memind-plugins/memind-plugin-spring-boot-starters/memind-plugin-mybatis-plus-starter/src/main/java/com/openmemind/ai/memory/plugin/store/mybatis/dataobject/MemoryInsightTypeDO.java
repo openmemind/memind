@@ -17,7 +17,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import com.baomidou.mybatisplus.extension.handlers.Jackson3TypeHandler;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeConfig;
 import com.openmemind.ai.memory.plugin.store.mybatis.handler.InstantTypeHandler;
 import java.time.Instant;
@@ -36,7 +36,7 @@ public class MemoryInsightTypeDO extends BaseDO {
     private String descriptionVectorId;
     private Integer targetTokens;
 
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = Jackson3TypeHandler.class)
     private List<String> categories;
 
     @TableField(typeHandler = InstantTypeHandler.class)
@@ -44,7 +44,7 @@ public class MemoryInsightTypeDO extends BaseDO {
 
     private String analysisMode;
 
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = Jackson3TypeHandler.class)
     private InsightTreeConfig treeConfig;
 
     private String scope;

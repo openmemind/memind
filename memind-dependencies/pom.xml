@@ -4,13 +4,13 @@
 
     <groupId>com.openmemind.ai</groupId>
     <artifactId>memind-dependencies</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Memind - Dependencies Bom</name>
 
     <properties>
-        <revision>0.1.0</revision>
+        <revision>0.2.0-SNAPSHOT</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <java.version>21</java.version>
@@ -20,7 +20,7 @@
         <reactor-bom.version>2025.0.2</reactor-bom.version>
         <spring-boot.version>4.0.1</spring-boot.version>
         <spring-ai.version>2.0.0-M2</spring-ai.version>
-        <jackson.version>2.21.0</jackson.version>
+        <jackson.version>3.0.3</jackson.version>
         <slf4j.version>2.0.17</slf4j.version>
         <mysql.version>9.6.0</mysql.version>
         <postgresql.version>42.7.8</postgresql.version>
@@ -35,6 +35,10 @@
         <mybatis-plus.version>3.5.16</mybatis-plus.version>
         <sqlite-jdbc.version>3.47.1.0</sqlite-jdbc.version>
         <progressbar.version>0.10.1</progressbar.version>
+        <tika.version>3.2.3</tika.version>
+        <pdfbox.version>3.0.4</pdfbox.version>
+        <commons-csv.version>1.14.1</commons-csv.version>
+        <jsoup.version>1.18.3</jsoup.version>
 
         <spotless.version>3.2.1</spotless.version>
         <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
@@ -122,7 +126,7 @@
 
             <!-- Jackson -->
             <dependency>
-                <groupId>com.fasterxml.jackson</groupId>
+                <groupId>tools.jackson</groupId>
                 <artifactId>jackson-bom</artifactId>
                 <version>${jackson.version}</version>
                 <type>pom</type>
@@ -194,6 +198,33 @@
                 <groupId>me.tongfei</groupId>
                 <artifactId>progressbar</artifactId>
                 <version>${progressbar.version}</version>
+            </dependency>
+
+            <!-- Apache Tika -->
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-core</artifactId>
+                <version>${tika.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-parsers-standard-package</artifactId>
+                <version>${tika.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.pdfbox</groupId>
+                <artifactId>pdfbox</artifactId>
+                <version>${pdfbox.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-csv</artifactId>
+                <version>${commons-csv.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jsoup</groupId>
+                <artifactId>jsoup</artifactId>
+                <version>${jsoup.version}</version>
             </dependency>
 
             <!-- memind modules -->

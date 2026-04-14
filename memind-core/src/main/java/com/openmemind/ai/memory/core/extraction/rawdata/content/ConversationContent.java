@@ -31,9 +31,11 @@ import java.util.stream.Collectors;
  */
 public class ConversationContent extends RawContent {
 
+    public static final String TYPE = "CONVERSATION";
+
     @Override
     public String contentType() {
-        return "CONVERSATION";
+        return TYPE;
     }
 
     private final List<Message> messages;

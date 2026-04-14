@@ -104,6 +104,7 @@ public class EvaluationMemindConfiguration {
         var rerank = retrieval.getRerank();
         int topK = props.getSystem().getSearch().getTopK();
         var defaultInsight = InsightExtractionOptions.defaults();
+        var defaultRawData = RawDataExtractionOptions.defaults();
         var insight =
                 new InsightExtractionOptions(memind.isEnableInsight(), defaultInsight.build());
 
@@ -112,11 +113,12 @@ public class EvaluationMemindConfiguration {
                         new ExtractionOptions(
                                 ExtractionCommonOptions.defaults(),
                                 new RawDataExtractionOptions(
-                                        RawDataExtractionOptions.defaults().chunking(),
+                                        defaultRawData.conversation(),
                                         new CommitDetectorConfig(
                                                 boundary.getMaxMessages(),
                                                 boundary.getMaxTokens(),
-                                                boundary.getMinMessagesForLlm())),
+                                                boundary.getMinMessagesForLlm()),
+                                        defaultRawData.vectorBatchSize()),
                                 ItemExtractionOptions.defaults(),
                                 insight))
                 .retrieval(

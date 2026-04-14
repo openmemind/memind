@@ -13,14 +13,19 @@
  */
 package com.openmemind.ai.memory.server.configuration;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
+import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
+import com.openmemind.ai.memory.core.resource.ContentParser;
+import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
+import com.openmemind.ai.memory.core.resource.DefaultContentParserRegistry;
+import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeFactory;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeManager;
@@ -29,6 +34,7 @@ import com.openmemind.ai.memory.server.service.config.MemoryOptionService;
 import com.openmemind.ai.memory.server.service.config.MemoryOptionsCodec;
 import com.openmemind.ai.memory.server.service.config.MemoryOptionsProjectionMapper;
 import com.openmemind.ai.memory.server.service.config.ServerRuntimeConfigRepository;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -37,6 +43,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import tools.jackson.databind.ObjectMapper;
 
 @Configuration(proxyBeanMethods = false)
 public class MemindServerRuntimeConfiguration {
@@ -46,7 +53,7 @@ public class MemindServerRuntimeConfiguration {
 
     @Bean
     MemoryOptionsCodec memoryOptionsCodec(ObjectProvider<ObjectMapper> objectMapperProvider) {
-        return new MemoryOptionsCodec(objectMapperProvider.getIfAvailable(ObjectMapper::new));
+        return new MemoryOptionsCodec(objectMapperProvider.getIfAvailable(JsonUtils::mapper));
     }
 
     @Bean
@@ -61,13 +68,20 @@ public class MemindServerRuntimeConfiguration {
             ObjectProvider<MemoryBuffer> memoryBufferProvider,
             ObjectProvider<MemoryVector> memoryVectorProvider,
             ObjectProvider<MemoryTextSearch> memoryTextSearch,
-            ObjectProvider<Reranker> reranker) {
+            ObjectProvider<Reranker> reranker,
+            ObjectProvider<ContentParser> contentParserProvider,
+            ObjectProvider<RawDataPlugin> rawDataPluginProvider,
+            ObjectProvider<ResourceFetcher> resourceFetcherProvider) {
         return options -> {
             StructuredChatClient structuredChatClient =
                     requireRuntimeDependency(structuredChatClientProvider);
             MemoryStore memoryStore = requireRuntimeDependency(memoryStoreProvider);
             MemoryBuffer memoryBuffer = requireRuntimeDependency(memoryBufferProvider);
             MemoryVector memoryVector = requireRuntimeDependency(memoryVectorProvider);
+            List<ContentParser> parsers = resolveContentParsers(contentParserProvider);
+            ContentParserRegistry contentParserRegistry =
+                    parsers.isEmpty() ? null : new DefaultContentParserRegistry(parsers);
+            ResourceFetcher resourceFetcher = resourceFetcherProvider.getIfAvailable();
             var builder =
                     Memory.builder()
                             .chatClient(structuredChatClient)
@@ -76,6 +90,13 @@ public class MemindServerRuntimeConfiguration {
                             .vector(memoryVector)
                             .options(options)
                             .externallyManaged(true);
+            if (contentParserRegistry != null) {
+                builder.contentParserRegistry(contentParserRegistry);
+            }
+            rawDataPluginProvider.orderedStream().forEach(builder::rawDataPlugin);
+            if (resourceFetcher != null) {
+                builder.resourceFetcher(resourceFetcher);
+            }
             MemoryTextSearch textSearch = memoryTextSearch.getIfAvailable();
             if (textSearch != null) {
                 builder.textSearch(textSearch);
@@ -86,6 +107,11 @@ public class MemindServerRuntimeConfiguration {
             }
             return builder.build();
         };
+    }
+
+    private static List<ContentParser> resolveContentParsers(
+            ObjectProvider<ContentParser> contentParserProvider) {
+        return List.copyOf(contentParserProvider.orderedStream().toList());
     }
 
     @Bean

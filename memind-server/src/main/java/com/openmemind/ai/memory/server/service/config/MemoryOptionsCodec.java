@@ -13,24 +13,24 @@
  */
 package com.openmemind.ai.memory.server.service.config;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.builder.ExtractionOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalOptions;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 public final class MemoryOptionsCodec {
 
     private final ObjectMapper objectMapper;
 
     public MemoryOptionsCodec(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper.copy().findAndRegisterModules();
+        this.objectMapper = objectMapper.rebuild().build();
     }
 
     public String write(MemoryBuildOptions options) {
         try {
             return objectMapper.writeValueAsString(PersistedMemoryOptions.from(options));
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Failed to serialize memory options", e);
         }
     }
@@ -38,7 +38,7 @@ public final class MemoryOptionsCodec {
     public MemoryBuildOptions read(String json) {
         try {
             return objectMapper.readValue(json, PersistedMemoryOptions.class).toOptions();
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Failed to deserialize memory options", e);
         }
     }

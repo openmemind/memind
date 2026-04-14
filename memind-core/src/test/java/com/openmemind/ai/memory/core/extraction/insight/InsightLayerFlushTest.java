@@ -19,6 +19,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
@@ -32,6 +34,26 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
 class InsightLayerFlushTest {
+
+    @Test
+    void flushSkipsWhenNoInsightTypesConfigured() {
+        MemoryStore memoryStore = mock(MemoryStore.class);
+        InsightOperations insightOperations = mock(InsightOperations.class);
+        InsightBuildScheduler scheduler = mock(InsightBuildScheduler.class);
+        MemoryId memoryId = com.openmemind.ai.memory.core.data.DefaultMemoryId.of("user", "agent");
+
+        when(memoryStore.insightOperations()).thenReturn(insightOperations);
+        when(insightOperations.listInsightTypes()).thenReturn(List.of());
+
+        InsightLayer layer = new InsightLayer(memoryStore, scheduler);
+
+        layer.flush(memoryId);
+
+        verify(scheduler).awaitPending(memoryId, 5, java.util.concurrent.TimeUnit.MINUTES);
+        verify(scheduler, never()).flushSync(eq(memoryId), any(String.class), eq(null));
+        verify(scheduler, never()).forceResummarizeBranchIfEmpty(eq(memoryId), any(), eq(null));
+        verify(scheduler).drainRootTasks(memoryId, 5, java.util.concurrent.TimeUnit.MINUTES);
+    }
 
     @Test
     void flushesInsightTypesSequentiallyBeforeRootDrain() {

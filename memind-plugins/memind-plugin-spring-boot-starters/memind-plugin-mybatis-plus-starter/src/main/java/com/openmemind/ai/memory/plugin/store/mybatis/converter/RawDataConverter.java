@@ -13,9 +13,9 @@
  */
 package com.openmemind.ai.memory.plugin.store.mybatis.converter;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
@@ -36,11 +36,13 @@ public final class RawDataConverter {
         dataObject.setAgentId(memoryId.getAttribute("agentId"));
         dataObject.setMemoryId(memoryId.toIdentifier());
         dataObject.setType(
-                record.contentType() != null ? record.contentType() : ContentTypes.CONVERSATION);
+                record.contentType() != null ? record.contentType() : ConversationContent.TYPE);
         dataObject.setContentId(record.contentId());
         dataObject.setCaption(record.caption());
         dataObject.setCaptionVectorId(record.captionVectorId());
         dataObject.setMetadata(record.metadata());
+        dataObject.setResourceId(record.resourceId());
+        dataObject.setMimeType(record.mimeType());
         dataObject.setCreatedAt(record.createdAt() != null ? record.createdAt() : Instant.now());
         dataObject.setUpdatedAt(Instant.now());
         if (record.segment() != null) {
@@ -65,6 +67,8 @@ public final class RawDataConverter {
                 dataObject.getCaption(),
                 dataObject.getCaptionVectorId(),
                 dataObject.getMetadata(),
+                dataObject.getResourceId(),
+                dataObject.getMimeType(),
                 dataObject.getCreatedAt(),
                 dataObject.getStartTime(),
                 dataObject.getEndTime());
@@ -72,7 +76,7 @@ public final class RawDataConverter {
 
     private static String parseContentType(String value) {
         if (value == null || value.isBlank()) {
-            return ContentTypes.CONVERSATION;
+            return ConversationContent.TYPE;
         }
         return value;
     }

@@ -16,13 +16,14 @@ package com.openmemind.ai.memory.core.data;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public record MemoryRawData(
         String id,
         String memoryId,
 
-        /* Content type identifier (e.g. ContentTypes.CONVERSATION) */
+        /* Content type identifier (e.g. ConversationContent.TYPE) */
         String contentType,
 
         /* Original content ID */
@@ -40,6 +41,12 @@ public record MemoryRawData(
         /* Additional metadata */
         Map<String, Object> metadata,
 
+        /* Logical reference to MemoryResource.id */
+        String resourceId,
+
+        /* MIME type of the source resource */
+        String mimeType,
+
         /* Creation time */
         Instant createdAt,
 
@@ -48,6 +55,22 @@ public record MemoryRawData(
 
         /* Timestamp of the last message in this segment */
         Instant endTime) {
+
+    public MemoryRawData {
+        var normalizedMetadata = new LinkedHashMap<String, Object>();
+        if (metadata != null) {
+            normalizedMetadata.putAll(metadata);
+        }
+        if (resourceId != null && !normalizedMetadata.containsKey("resourceId")) {
+            normalizedMetadata.put("resourceId", resourceId);
+        }
+        if (mimeType != null && !normalizedMetadata.containsKey("mimeType")) {
+            normalizedMetadata.put("mimeType", mimeType);
+        }
+        metadata = Map.copyOf(normalizedMetadata);
+        resourceId = projectString(metadata, "resourceId");
+        mimeType = projectString(metadata, "mimeType");
+    }
 
     /**
      * Returns a new {@link MemoryRawData} instance, using the given vector ID, and merging patches in the metadata.
@@ -70,6 +93,8 @@ public record MemoryRawData(
                 caption,
                 vectorId,
                 merged,
+                null,
+                null,
                 createdAt,
                 startTime,
                 endTime);
@@ -88,8 +113,22 @@ public record MemoryRawData(
                 caption,
                 captionVectorId,
                 metadata,
+                null,
+                null,
                 createdAt,
                 startTime,
                 endTime);
+    }
+
+    private static String projectString(Map<String, Object> metadata, String key) {
+        if (metadata == null) {
+            return null;
+        }
+        Object value = metadata.get(key);
+        if (value == null) {
+            return null;
+        }
+        String text = value.toString();
+        return text.isBlank() ? null : text;
     }
 }

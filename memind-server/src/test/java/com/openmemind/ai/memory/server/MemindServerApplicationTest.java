@@ -19,6 +19,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeManager;
 import com.openmemind.ai.memory.server.support.NoopRuntimeTestConfiguration;
@@ -87,6 +88,15 @@ class MemindServerApplicationTest {
                 .isNotNull();
         assertThat(applicationContext.getBeanProvider(MemoryVector.class).getIfAvailable())
                 .isNotNull();
+        assertThat(applicationContext.containsBean("audioRawDataPlugin")).isTrue();
+        assertThat(applicationContext.getBean("audioRawDataPlugin"))
+                .isInstanceOf(RawDataPlugin.class);
+        assertThat(applicationContext.containsBean("imageRawDataPlugin")).isTrue();
+        assertThat(applicationContext.getBean("imageRawDataPlugin"))
+                .isInstanceOf(RawDataPlugin.class);
+        assertThat(applicationContext.containsBean("toolCallRawDataPlugin")).isTrue();
+        assertThat(applicationContext.getBean("toolCallRawDataPlugin"))
+                .isInstanceOf(RawDataPlugin.class);
 
         try (var lease = runtimeManager.acquire()) {
             assertThat(lease.handle().memory()).isNotNull();
@@ -104,6 +114,124 @@ class MemindServerApplicationTest {
                                         {
                                           "userId": "u1",
                                           "agentId": "a1"
+                                        }
+                                        """))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void
+            extractApiAcceptsPluginOwnedImageAudioDocumentAndToolCallRawContentViaApplicationObjectMapper()
+                    throws Exception {
+        mockMvc.perform(
+                        post("/open/v1/memory/extract")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1",
+                                          "rawContent": {
+                                            "type": "conversation",
+                                            "messages": [
+                                              {
+                                                "role": "USER",
+                                                "content": [
+                                                  {
+                                                    "type": "text",
+                                                    "text": "hello"
+                                                  }
+                                                ],
+                                                "timestamp": "2026-03-31T10:00:00Z"
+                                              }
+                                            ]
+                                          }
+                                        }
+                                        """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(
+                        post("/open/v1/memory/extract")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1",
+                                          "rawContent": {
+                                            "type": "audio",
+                                            "mimeType": "audio/mpeg",
+                                            "transcript": "team sync summary",
+                                            "segments": [],
+                                            "metadata": {}
+                                          }
+                                        }
+                                        """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(
+                        post("/open/v1/memory/extract")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1",
+                                          "rawContent": {
+                                            "type": "image",
+                                            "mimeType": "image/png",
+                                            "description": "dashboard screenshot",
+                                            "ocrText": "total revenue 30%",
+                                            "metadata": {}
+                                          }
+                                        }
+                                        """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(
+                        post("/open/v1/memory/extract")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1",
+                                          "rawContent": {
+                                            "type": "document",
+                                            "title": "Guide",
+                                            "mimeType": "text/plain",
+                                            "parsedText": "hello",
+                                            "sections": [],
+                                            "metadata": {}
+                                          }
+                                        }
+                                        """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(
+                        post("/open/v1/memory/extract")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1",
+                                          "rawContent": {
+                                            "type": "tool_call",
+                                            "calls": [
+                                              {
+                                                "toolName": "search",
+                                                "input": "{}",
+                                                "output": "ok",
+                                                "status": "SUCCESS",
+                                                "durationMs": 1,
+                                                "inputTokens": 1,
+                                                "outputTokens": 1,
+                                                "contentHash": "abc",
+                                                "calledAt": "2026-04-12T00:00:00Z"
+                                              }
+                                            ]
+                                          }
                                         }
                                         """))
                 .andExpect(status().isOk());

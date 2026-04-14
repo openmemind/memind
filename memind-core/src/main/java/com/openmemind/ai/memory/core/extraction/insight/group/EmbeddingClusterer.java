@@ -13,7 +13,7 @@
  */
 package com.openmemind.ai.memory.core.extraction.insight.group;
 
-import com.openmemind.ai.memory.core.utils.VectorMath;
+import com.openmemind.ai.memory.core.utils.VectorUtils;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -105,7 +105,7 @@ public final class EmbeddingClusterer {
                 }
 
                 // Semantic gating
-                double sim = VectorMath.cosineSimilarity(embedding, cluster.centroid);
+                double sim = VectorUtils.cosineSimilarity(embedding, cluster.centroid);
                 if (sim >= config.similarityThreshold() && sim > bestSimilarity) {
                     bestSimilarity = sim;
                     bestCluster = c;
@@ -147,9 +147,9 @@ public final class EmbeddingClusterer {
 
         void addMember(T item, List<Float> embedding, long timestamp) {
             members.add(item);
-            sum = VectorMath.add(sum, embedding);
+            sum = VectorUtils.add(sum, embedding);
             count++;
-            centroid = VectorMath.divide(sum, count);
+            centroid = VectorUtils.divide(sum, count);
             lastTimestamp = Math.max(lastTimestamp, timestamp);
         }
     }

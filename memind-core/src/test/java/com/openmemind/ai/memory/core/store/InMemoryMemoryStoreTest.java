@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.store;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryId;
@@ -22,6 +23,7 @@ import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
+import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
@@ -39,6 +41,17 @@ class InMemoryMemoryStoreTest {
 
     private static final MemoryId MEMORY_ID = DefaultMemoryId.of("user-1", "agent-1");
     private static final Instant BASE_TIME = Instant.parse("2026-03-21T00:00:00Z");
+
+    @Test
+    @DisplayName("constructor bootstraps default insight taxonomy once")
+    void constructorBootstrapsDefaultInsightTaxonomyOnce() {
+        var store = new InMemoryMemoryStore();
+
+        assertThat(store.insightOperations().listInsightTypes())
+                .extracting(MemoryInsightType::name)
+                .containsExactlyInAnyOrderElementsOf(
+                        DefaultInsightTypes.all().stream().map(MemoryInsightType::name).toList());
+    }
 
     @Test
     @DisplayName("upsertRawData replaces an existing record")
@@ -79,10 +92,14 @@ class InMemoryMemoryStoreTest {
         store.insightOperations()
                 .upsertInsightTypes(List.of(insightType(1L, "profile"), insightType(2L, "agent")));
 
-        assertThat(store.insightOperations().getInsightType("profile")).isPresent();
+        assertThat(store.insightOperations().getInsightType("profile"))
+                .get()
+                .extracting(MemoryInsightType::description)
+                .isEqualTo("description-profile");
+        assertThat(store.insightOperations().getInsightType("agent")).isPresent();
         assertThat(store.insightOperations().listInsightTypes())
                 .extracting(MemoryInsightType::name)
-                .containsExactlyInAnyOrder("profile", "agent");
+                .contains("profile", "agent");
     }
 
     @Test
@@ -114,6 +131,28 @@ class InMemoryMemoryStoreTest {
                 .containsExactly(10L);
     }
 
+    @Test
+    @DisplayName("resourceOperations upserts and loads resources")
+    void resourceOperationsUpsertsAndLoadsResources() {
+        var store = new InMemoryMemoryStore();
+        var resource =
+                new MemoryResource(
+                        "res-1",
+                        MEMORY_ID.toIdentifier(),
+                        "file:///tmp/report.pdf",
+                        null,
+                        "report.pdf",
+                        "application/pdf",
+                        "abc",
+                        123L,
+                        Map.of("pages", 2),
+                        BASE_TIME);
+
+        store.resourceOperations().upsertResources(MEMORY_ID, List.of(resource));
+
+        assertThat(store.resourceOperations().getResource(MEMORY_ID, "res-1")).contains(resource);
+    }
+
     private static MemoryRawData rawData(
             String id, String caption, String contentId, Map<String, Object> metadata) {
         return new MemoryRawData(
@@ -125,6 +164,8 @@ class InMemoryMemoryStoreTest {
                 caption,
                 null,
                 metadata,
+                null,
+                null,
                 BASE_TIME,
                 BASE_TIME,
                 BASE_TIME.plusSeconds(30));
@@ -143,8 +184,7 @@ class InMemoryMemoryStoreTest {
                 BASE_TIME,
                 InsightAnalysisMode.BRANCH,
                 null,
-                MemoryScope.USER,
-                List.of("conversation"));
+                MemoryScope.USER);
     }
 
     private static MemoryItem item(Long id) {

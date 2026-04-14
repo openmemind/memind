@@ -14,7 +14,6 @@
 package com.openmemind.ai.memory.core.extraction.item.strategy;
 
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
-import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionStrategy;
@@ -35,7 +34,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -50,22 +48,17 @@ import reactor.util.retry.Retry;
 public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
 
     private final StructuredChatClient structuredChatClient;
-    private final Set<MemoryCategory> categories;
     private final PromptRegistry promptRegistry;
 
-    public LlmItemExtractionStrategy(
-            StructuredChatClient structuredChatClient, Set<MemoryCategory> categories) {
-        this(structuredChatClient, categories, PromptRegistry.EMPTY);
+    public LlmItemExtractionStrategy(StructuredChatClient structuredChatClient) {
+        this(structuredChatClient, PromptRegistry.EMPTY);
     }
 
     public LlmItemExtractionStrategy(
-            StructuredChatClient structuredChatClient,
-            Set<MemoryCategory> categories,
-            PromptRegistry promptRegistry) {
+            StructuredChatClient structuredChatClient, PromptRegistry promptRegistry) {
         this.structuredChatClient =
                 Objects.requireNonNull(
                         structuredChatClient, "structuredChatClient must not be null");
-        this.categories = categories;
         this.promptRegistry =
                 Objects.requireNonNull(promptRegistry, "promptRegistry must not be null");
     }
@@ -81,7 +74,7 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
 
         Mono<List<ExtractedMemoryEntry>> factMono =
                 Flux.fromIterable(segments)
-                        .flatMap(segment -> extractFact(insightTypes, segment, language))
+                        .flatMap(segment -> extractFact(insightTypes, segment, config, language))
                         .flatMapIterable(list -> list)
                         .collectList();
 
@@ -104,7 +97,10 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
     }
 
     private Mono<List<ExtractedMemoryEntry>> extractFact(
-            List<MemoryInsightType> insightTypes, ParsedSegment segment, String language) {
+            List<MemoryInsightType> insightTypes,
+            ParsedSegment segment,
+            ItemExtractionConfig config,
+            String language) {
         var referenceTime = resolveReferenceTime(segment);
 
         return Mono.fromCallable(
@@ -116,7 +112,7 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
                                             segment.text(),
                                             referenceTime,
                                             userName,
-                                            categories)
+                                            config.allowedCategories())
                                     .render(language);
                         })
                 .subscribeOn(Schedulers.boundedElastic())

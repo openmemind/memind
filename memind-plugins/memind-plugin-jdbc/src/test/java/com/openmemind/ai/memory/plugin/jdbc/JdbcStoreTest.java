@@ -44,6 +44,8 @@ class JdbcStoreTest {
         assertThat(jdbc.store().rawDataOperations()).isInstanceOf(SqliteMemoryStore.class);
         assertThat(jdbc.store().itemOperations()).isInstanceOf(SqliteMemoryStore.class);
         assertThat(jdbc.store().insightOperations()).isInstanceOf(SqliteMemoryStore.class);
+        assertThat(jdbc.store().resourceOperations()).isInstanceOf(SqliteMemoryStore.class);
+        assertThat(jdbc.store().resourceStore()).isNull();
         assertThat(jdbc.buffer().insightBuffer()).isInstanceOf(SqliteInsightBuffer.class);
         assertThat(jdbc.buffer().pendingConversationBuffer())
                 .isInstanceOf(SqliteConversationBuffer.class);

@@ -20,22 +20,29 @@ import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
+import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
+import com.openmemind.ai.memory.core.resource.ResourceStore;
+import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
+import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.InsightConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.InsightTypeConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.ItemConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.RawDataConverter;
+import com.openmemind.ai.memory.plugin.store.mybatis.converter.ResourceConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryInsightDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryInsightTypeDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryItemDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryRawDataDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryResourceDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightTypeMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryRawDataMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryResourceMapper;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
@@ -48,28 +55,81 @@ import java.util.stream.Collectors;
 import org.springframework.transaction.annotation.Transactional;
 
 public class MybatisPlusMemoryStore
-        implements RawDataOperations, ItemOperations, InsightOperations {
+        implements MemoryStore,
+                RawDataOperations,
+                ItemOperations,
+                InsightOperations,
+                ResourceOperations {
 
     private final MemoryRawDataMapper rawDataMapper;
     private final MemoryItemMapper itemMapper;
     private final MemoryInsightTypeMapper insightTypeMapper;
     private final MemoryInsightMapper insightMapper;
+    private final MemoryResourceMapper resourceMapper;
+    private final ResourceStore resourceStore;
 
     public MybatisPlusMemoryStore(
             MemoryRawDataMapper rawDataMapper,
             MemoryItemMapper itemMapper,
             MemoryInsightTypeMapper insightTypeMapper,
             MemoryInsightMapper insightMapper) {
+        this(rawDataMapper, itemMapper, insightTypeMapper, insightMapper, null, null);
+    }
+
+    public MybatisPlusMemoryStore(
+            MemoryRawDataMapper rawDataMapper,
+            MemoryItemMapper itemMapper,
+            MemoryInsightTypeMapper insightTypeMapper,
+            MemoryInsightMapper insightMapper,
+            MemoryResourceMapper resourceMapper,
+            ResourceStore resourceStore) {
         this.rawDataMapper = rawDataMapper;
         this.itemMapper = itemMapper;
         this.insightTypeMapper = insightTypeMapper;
         this.insightMapper = insightMapper;
+        this.resourceMapper = resourceMapper;
+        this.resourceStore = resourceStore;
+    }
+
+    @Override
+    public RawDataOperations rawDataOperations() {
+        return this;
+    }
+
+    @Override
+    public ItemOperations itemOperations() {
+        return this;
+    }
+
+    @Override
+    public InsightOperations insightOperations() {
+        return this;
+    }
+
+    @Override
+    public ResourceOperations resourceOperations() {
+        return this;
+    }
+
+    @Override
+    public ResourceStore resourceStore() {
+        return resourceStore;
     }
 
     // ===== MemoryRawData =====
 
     @Override
     public void upsertRawData(MemoryId id, List<MemoryRawData> rawDataList) {
+        upsertRawDataWithResources(id, List.of(), rawDataList);
+    }
+
+    @Override
+    @Transactional
+    public void upsertRawDataWithResources(
+            MemoryId id, List<MemoryResource> resources, List<MemoryRawData> rawDataList) {
+        if (resources != null && !resources.isEmpty()) {
+            upsertResources(id, resources);
+        }
         if (rawDataList == null || rawDataList.isEmpty()) {
             return;
         }
@@ -97,6 +157,62 @@ public class MybatisPlusMemoryStore
                         rawDataMapper.insert(dataObject);
                     }
                 });
+    }
+
+    @Override
+    @Transactional
+    public void upsertResources(MemoryId id, List<MemoryResource> resources) {
+        if (resources == null || resources.isEmpty()) {
+            return;
+        }
+        if (resourceMapper == null) {
+            throw new IllegalStateException("MemoryResourceMapper is required");
+        }
+
+        Map<String, MemoryResourceDO> existingByBizId =
+                resourceMapper
+                        .selectList(
+                                memoryQuery(id, MemoryResourceDO.class)
+                                        .in(
+                                                "biz_id",
+                                                resources.stream()
+                                                        .map(MemoryResource::id)
+                                                        .toList()))
+                        .stream()
+                        .collect(Collectors.toMap(MemoryResourceDO::getBizId, Function.identity()));
+
+        resources.forEach(
+                resource -> {
+                    MemoryResourceDO dataObject = ResourceConverter.toDO(id, resource);
+                    MemoryResourceDO existing = existingByBizId.get(resource.id());
+                    if (existing != null) {
+                        dataObject.setId(existing.getId());
+                        resourceMapper.updateById(dataObject);
+                    } else {
+                        resourceMapper.insert(dataObject);
+                    }
+                });
+    }
+
+    @Override
+    public Optional<MemoryResource> getResource(MemoryId id, String resourceId) {
+        if (resourceMapper == null) {
+            return Optional.empty();
+        }
+        MemoryResourceDO dataObject =
+                resourceMapper.selectOne(
+                        memoryQuery(id, MemoryResourceDO.class).eq("biz_id", resourceId));
+        return Optional.ofNullable(dataObject).map(ResourceConverter::toRecord);
+    }
+
+    @Override
+    public List<MemoryResource> listResources(MemoryId id) {
+        if (resourceMapper == null) {
+            return List.of();
+        }
+        return resourceMapper.selectList(memoryQuery(id, MemoryResourceDO.class)).stream()
+                .map(ResourceConverter::toRecord)
+                .toList();
     }
 
     @Override

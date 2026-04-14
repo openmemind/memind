@@ -21,26 +21,22 @@ import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.RerankOptions;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
-import com.openmemind.ai.memory.core.data.ToolCallStats;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
-import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
+import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.ContextRequest;
 import com.openmemind.ai.memory.core.extraction.context.ContextWindow;
 import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ToolCallContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
-import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
@@ -60,7 +56,7 @@ import reactor.core.publisher.Mono;
 /**
  * Memory default implementation
  *
- * <p>Internally combines MemoryExtractionPipeline + MemoryRetriever + MemoryStore,
+ * <p>Internally combines MemoryExtractor + MemoryRetriever + MemoryStore,
  * unifying all memory operations into a single facade.
  *
  */
@@ -68,64 +64,22 @@ public class DefaultMemory implements Memory {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultMemory.class);
 
-    private final MemoryExtractionPipeline extractor;
+    private final MemoryExtractor extractor;
     private final MemoryRetriever retriever;
     private final MemoryStore memoryStore;
     private final MemoryBuffer memoryBuffer;
     private final MemoryVector vector;
-    private final ToolStatsService toolStatsService;
     private final InsightLayer insightLayer;
     private final AutoCloseable lifecycle;
     private final MemoryBuildOptions buildOptions;
     private final AtomicBoolean closed = new AtomicBoolean();
 
     public DefaultMemory(
-            MemoryExtractionPipeline extractor,
+            MemoryExtractor extractor,
             MemoryRetriever retriever,
             MemoryStore memoryStore,
             MemoryBuffer memoryBuffer,
             MemoryVector vector,
-            ToolStatsService toolStatsService) {
-        this(
-                extractor,
-                retriever,
-                memoryStore,
-                memoryBuffer,
-                vector,
-                toolStatsService,
-                null,
-                null,
-                MemoryBuildOptions.defaults());
-    }
-
-    public DefaultMemory(
-            MemoryExtractionPipeline extractor,
-            MemoryRetriever retriever,
-            MemoryStore memoryStore,
-            MemoryBuffer memoryBuffer,
-            MemoryVector vector,
-            ToolStatsService toolStatsService,
-            InsightLayer insightLayer,
-            AutoCloseable lifecycle) {
-        this(
-                extractor,
-                retriever,
-                memoryStore,
-                memoryBuffer,
-                vector,
-                toolStatsService,
-                insightLayer,
-                lifecycle,
-                MemoryBuildOptions.defaults());
-    }
-
-    public DefaultMemory(
-            MemoryExtractionPipeline extractor,
-            MemoryRetriever retriever,
-            MemoryStore memoryStore,
-            MemoryBuffer memoryBuffer,
-            MemoryVector vector,
-            ToolStatsService toolStatsService,
             InsightLayer insightLayer,
             AutoCloseable lifecycle,
             MemoryBuildOptions buildOptions) {
@@ -134,14 +88,22 @@ public class DefaultMemory implements Memory {
         this.memoryStore = Objects.requireNonNull(memoryStore, "memoryStore must not be null");
         this.memoryBuffer = Objects.requireNonNull(memoryBuffer, "memoryBuffer must not be null");
         this.vector = Objects.requireNonNull(vector, "vector must not be null");
-        this.toolStatsService =
-                Objects.requireNonNull(toolStatsService, "toolStatsService must not be null");
         this.insightLayer = insightLayer;
         this.lifecycle = lifecycle;
         this.buildOptions = Objects.requireNonNull(buildOptions, "buildOptions must not be null");
     }
 
     // ===== Generic extraction =====
+
+    @Override
+    public Mono<ExtractionResult> extract(ExtractionRequest request) {
+        Objects.requireNonNull(request, "request must not be null");
+        var config =
+                ExtractionConfig.defaults().equals(request.config())
+                        ? defaultExtractionConfig()
+                        : request.config();
+        return extractor.extract(request.withConfig(config));
+    }
 
     @Override
     public Mono<ExtractionResult> extract(MemoryId memoryId, RawContent content) {
@@ -432,30 +394,6 @@ public class DefaultMemory implements Memory {
     @Override
     public Mono<Void> invalidate(MemoryId memoryId) {
         return Mono.<Void>fromRunnable(() -> retriever.onDataChanged(memoryId));
-    }
-
-    // ===== Agent memory reporting =====
-
-    @Override
-    public Mono<ExtractionResult> reportToolCall(MemoryId memoryId, ToolCallRecord record) {
-        return reportToolCalls(memoryId, List.of(record));
-    }
-
-    @Override
-    public Mono<ExtractionResult> reportToolCalls(MemoryId memoryId, List<ToolCallRecord> records) {
-        var content = new ToolCallContent(records);
-        var request = ExtractionRequest.toolCall(memoryId, content);
-        return extractor.extract(request);
-    }
-
-    @Override
-    public Mono<ToolCallStats> getToolStats(MemoryId memoryId, String toolName) {
-        return toolStatsService.getToolStats(memoryId, toolName);
-    }
-
-    @Override
-    public Mono<Map<String, ToolCallStats>> getAllToolStats(MemoryId memoryId) {
-        return toolStatsService.getAllToolStats(memoryId);
     }
 
     @Override

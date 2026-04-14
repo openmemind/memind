@@ -65,7 +65,6 @@ class PromptBuilderSupportTest {
                         null,
                         null,
                         null,
-                        null,
                         null);
 
         assertThat(PromptBuilderSupport.descriptionOrName(insightType)).isEqualTo("identity");

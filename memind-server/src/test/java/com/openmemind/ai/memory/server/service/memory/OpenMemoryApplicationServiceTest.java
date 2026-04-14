@@ -23,7 +23,6 @@ import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
-import com.openmemind.ai.memory.core.data.ToolCallStats;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
@@ -35,7 +34,6 @@ import com.openmemind.ai.memory.core.extraction.context.ContextRequest;
 import com.openmemind.ai.memory.core.extraction.context.ContextWindow;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.tool.ToolCallRecord;
 import com.openmemind.ai.memory.core.extraction.result.InsightResult;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
@@ -198,6 +196,8 @@ class OpenMemoryApplicationServiceTest {
                                         "user mentioned coffee",
                                         "vec-1",
                                         Map.of(),
+                                        null,
+                                        null,
                                         Instant.parse("2026-03-31T10:00:00Z"),
                                         Instant.parse("2026-03-31T10:00:00Z"),
                                         Instant.parse("2026-03-31T10:01:00Z"))),
@@ -343,27 +343,6 @@ class OpenMemoryApplicationServiceTest {
 
         @Override
         public Mono<Void> deleteInsights(MemoryId memoryId, Collection<Long> insightIds) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Mono<ExtractionResult> reportToolCall(MemoryId memoryId, ToolCallRecord record) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Mono<ExtractionResult> reportToolCalls(
-                MemoryId memoryId, List<ToolCallRecord> records) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Mono<ToolCallStats> getToolStats(MemoryId memoryId, String toolName) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Mono<Map<String, ToolCallStats>> getAllToolStats(MemoryId memoryId) {
             throw new UnsupportedOperationException();
         }
 

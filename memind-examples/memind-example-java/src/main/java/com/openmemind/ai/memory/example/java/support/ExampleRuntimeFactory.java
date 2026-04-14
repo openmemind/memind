@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.example.java.support;
 
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.builder.MemoryBuilder;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.LlmReranker;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
@@ -23,6 +24,8 @@ import com.openmemind.ai.memory.plugin.ai.spring.SpringAiFileVector;
 import com.openmemind.ai.memory.plugin.ai.spring.SpringAiStructuredChatClient;
 import com.openmemind.ai.memory.plugin.jdbc.JdbcMemoryAccess;
 import com.openmemind.ai.memory.plugin.jdbc.JdbcStore;
+import com.openmemind.ai.memory.plugin.rawdata.document.plugin.DocumentRawDataPlugin;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.plugin.ToolCallRawDataPlugin;
 import io.micrometer.observation.ObservationRegistry;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -57,7 +60,7 @@ public final class ExampleRuntimeFactory {
             JdbcMemoryAccess jdbc = createJdbcAccess(settings.store());
             EmbeddingModel embeddingModel = createEmbeddingModel(settings.openAi());
 
-            Memory memory =
+            MemoryBuilder memoryBuilder =
                     Memory.builder()
                             .chatClient(createChatClient(settings.openAi()))
                             .store(jdbc.store())
@@ -69,8 +72,9 @@ public final class ExampleRuntimeFactory {
                                                     settings.runtime().vectorStoreFileName()),
                                             embeddingModel))
                             .reranker(createReranker(settings.rerank()))
-                            .options(options)
-                            .build();
+                            .options(options);
+            memoryBuilder = applyScenarioPlugins(memoryBuilder, scenario);
+            Memory memory = memoryBuilder.build();
 
             return new ExampleRuntime(
                     memory,
@@ -83,6 +87,17 @@ public final class ExampleRuntimeFactory {
             throw new IllegalStateException(
                     "Failed to create Java example runtime for scenario: " + scenario, exception);
         }
+    }
+
+    static MemoryBuilder applyScenarioPlugins(MemoryBuilder memoryBuilder, String scenario) {
+        Objects.requireNonNull(memoryBuilder, "memoryBuilder");
+        Objects.requireNonNull(scenario, "scenario");
+
+        return switch (scenario.toLowerCase(Locale.ROOT)) {
+            case "tool" -> memoryBuilder.rawDataPlugin(new ToolCallRawDataPlugin());
+            case "document" -> memoryBuilder.rawDataPlugin(new DocumentRawDataPlugin());
+            default -> memoryBuilder;
+        };
     }
 
     static Path prepareRuntimeLayout(String scenario, ExampleSettings settings) throws Exception {

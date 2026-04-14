@@ -19,10 +19,14 @@ import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
+import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
+import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
+import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
+import java.util.List;
 import java.util.Objects;
 
 record MemoryAssemblyContext(
@@ -33,7 +37,10 @@ record MemoryAssemblyContext(
         MemoryVector memoryVector,
         Reranker reranker,
         PromptRegistry promptRegistry,
-        MemoryBuildOptions options) {
+        MemoryBuildOptions options,
+        ContentParserRegistry contentParserRegistry,
+        ResourceFetcher resourceFetcher,
+        List<RawDataPlugin> rawDataPlugins) {
 
     MemoryAssemblyContext {
         Objects.requireNonNull(chatClientRegistry, "chatClientRegistry");
@@ -52,6 +59,7 @@ record MemoryAssemblyContext(
         Objects.requireNonNull(reranker, "reranker");
         Objects.requireNonNull(promptRegistry, "promptRegistry");
         Objects.requireNonNull(options, "options");
+        rawDataPlugins = List.copyOf(Objects.requireNonNull(rawDataPlugins, "rawDataPlugins"));
     }
 
     InsightBuffer insightBuffer() {

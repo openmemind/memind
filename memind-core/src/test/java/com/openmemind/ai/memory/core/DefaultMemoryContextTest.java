@@ -40,9 +40,9 @@ import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
-import com.openmemind.ai.memory.core.extraction.MemoryExtractionPipeline;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.ContextRequest;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
@@ -54,7 +54,6 @@ import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
-import com.openmemind.ai.memory.core.stats.ToolStatsService;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Duration;
@@ -79,11 +78,10 @@ import reactor.test.StepVerifier;
 @DisplayName("DefaultMemory — getContext / commit")
 class DefaultMemoryContextTest {
 
-    @Mock MemoryExtractionPipeline extractor;
+    @Mock MemoryExtractor extractor;
     @Mock MemoryRetriever retriever;
     @Mock MemoryStore memoryStore;
     @Mock MemoryVector vector;
-    @Mock ToolStatsService toolStatsService;
 
     PendingConversationBuffer pendingConversationBuffer;
     RecentConversationBuffer recentConversationBuffer;
@@ -102,7 +100,14 @@ class DefaultMemoryContextTest {
                         recentConversationBuffer);
         memory =
                 new DefaultMemory(
-                        extractor, retriever, memoryStore, memoryBuffer, vector, toolStatsService);
+                        extractor,
+                        retriever,
+                        memoryStore,
+                        memoryBuffer,
+                        vector,
+                        null,
+                        null,
+                        MemoryBuildOptions.defaults());
         memoryId = DefaultMemoryId.of("user1", "agent1");
     }
 
@@ -197,7 +202,6 @@ class DefaultMemoryContextTest {
                             memoryStore,
                             memoryBuffer,
                             vector,
-                            toolStatsService,
                             null,
                             null,
                             MemoryBuildOptions.builder()
@@ -351,7 +355,6 @@ class DefaultMemoryContextTest {
                             memoryStore,
                             memoryBuffer,
                             vector,
-                            toolStatsService,
                             null,
                             null,
                             MemoryBuildOptions.builder()
@@ -403,7 +406,7 @@ class DefaultMemoryContextTest {
             localRecentConversationBuffer.append("user1:agent1", existing);
 
             var localExtractor =
-                    new MemoryExtractor(
+                    new DefaultMemoryExtractor(
                             (mid, content, contentType, metadata) ->
                                     Mono.fromCallable(
                                             () -> {
@@ -438,7 +441,9 @@ class DefaultMemoryContextTest {
                             memoryStore,
                             localMemoryBuffer,
                             vector,
-                            toolStatsService);
+                            null,
+                            null,
+                            MemoryBuildOptions.defaults());
 
             try (var executor = Executors.newFixedThreadPool(2)) {
                 var addMessageFuture =

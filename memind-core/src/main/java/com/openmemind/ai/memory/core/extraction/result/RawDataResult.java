@@ -27,6 +27,10 @@ import java.util.List;
 public record RawDataResult(
         List<MemoryRawData> rawDataList, List<ParsedSegment> segments, boolean existed) {
 
+    public RawDataResult withSegments(List<ParsedSegment> adjustedSegments) {
+        return new RawDataResult(rawDataList, List.copyOf(adjustedSegments), existed);
+    }
+
     /**
      * Create an empty result
      */

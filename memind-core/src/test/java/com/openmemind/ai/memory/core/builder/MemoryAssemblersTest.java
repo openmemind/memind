@@ -19,25 +19,33 @@ import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
-import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
+import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
+import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
+import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
+import com.openmemind.ai.memory.core.resource.ResourceFetcher;
+import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
+import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.lang.reflect.Proxy;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
@@ -49,6 +57,7 @@ class MemoryAssemblersTest {
     private static final RawDataOperations RAW_DATA_OPERATIONS = proxy(RawDataOperations.class);
     private static final ItemOperations ITEM_OPERATIONS = proxy(ItemOperations.class);
     private static final InsightOperations INSIGHT_OPERATIONS = proxy(InsightOperations.class);
+    private static final ResourceOperations RESOURCE_OPERATIONS = proxy(ResourceOperations.class);
     private static final MemoryTextSearch TEXT_SEARCH = proxy(MemoryTextSearch.class);
     private static final InsightBuffer INSIGHT_BUFFER = proxy(InsightBuffer.class);
     private static final PendingConversationBuffer PENDING_CONVERSATION_BUFFER =
@@ -59,6 +68,10 @@ class MemoryAssemblersTest {
             MemoryBuffer.of(
                     INSIGHT_BUFFER, PENDING_CONVERSATION_BUFFER, RECENT_CONVERSATION_BUFFER);
     private static final MemoryVector MEMORY_VECTOR = proxy(MemoryVector.class);
+    private static final ResourceStore RESOURCE_STORE = proxy(ResourceStore.class);
+    private static final ContentParserRegistry CONTENT_PARSER_REGISTRY =
+            proxy(ContentParserRegistry.class);
+    private static final ResourceFetcher RESOURCE_FETCHER = proxy(ResourceFetcher.class);
     private static final MemoryStore MEMORY_STORE =
             new MemoryStore() {
                 @Override
@@ -75,11 +88,22 @@ class MemoryAssemblersTest {
                 public InsightOperations insightOperations() {
                     return INSIGHT_OPERATIONS;
                 }
+
+                @Override
+                public ResourceOperations resourceOperations() {
+                    return RESOURCE_OPERATIONS;
+                }
+
+                @Override
+                public ResourceStore resourceStore() {
+                    return RESOURCE_STORE;
+                }
             };
     private static final CommitDetectorConfig CUSTOM_COMMIT_DETECTION =
             new CommitDetectorConfig(6, 2048, 4);
     private static final InsightBuildConfig CUSTOM_INSIGHT_BUILD =
             new InsightBuildConfig(7, 5, 3, 2);
+    private static final int CUSTOM_VECTOR_BATCH_SIZE = 17;
 
     @Test
     void extractionAssemblerUsesNestedBuildOptionsForBoundaryAndInsightSchedulers() {
@@ -93,14 +117,17 @@ class MemoryAssemblersTest {
                                                         com.openmemind.ai.memory.core.extraction
                                                                 .rawdata.chunk
                                                                 .ConversationChunkingConfig.DEFAULT,
-                                                        CUSTOM_COMMIT_DETECTION),
+                                                        CUSTOM_COMMIT_DETECTION,
+                                                        CUSTOM_VECTOR_BATCH_SIZE),
                                                 ItemExtractionOptions.defaults(),
                                                 new InsightExtractionOptions(
                                                         true, CUSTOM_INSIGHT_BUILD)))
-                                .build());
+                                .build(),
+                        CONTENT_PARSER_REGISTRY,
+                        RESOURCE_FETCHER);
 
         var assembly = new MemoryExtractionAssembler().assemble(context);
-        var extractor = (MemoryExtractor) assembly.pipeline();
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
         var rawDataLayer = readField(extractor, "rawDataStep", RawDataLayer.class);
         var boundaryDetector =
                 readField(extractor, "contextCommitDetector", LlmContextCommitDetector.class);
@@ -112,12 +139,29 @@ class MemoryAssemblersTest {
         assertThat(readField(scheduler, "config", InsightBuildConfig.class))
                 .isEqualTo(CUSTOM_INSIGHT_BUILD);
         assertThat(rawDataLayer).isNotNull();
+        assertThat(readField(extractor, "contentParserRegistry", ContentParserRegistry.class))
+                .isSameAs(CONTENT_PARSER_REGISTRY);
+        assertThat(readField(extractor, "resourceStore", ResourceStore.class))
+                .isSameAs(RESOURCE_STORE);
+        assertThat(readField(extractor, "resourceFetcher", ResourceFetcher.class))
+                .isSameAs(RESOURCE_FETCHER);
+        assertThat(readField(extractor, "rawDataExtractionOptions", RawDataExtractionOptions.class))
+                .isEqualTo(context.options().extraction().rawdata());
+        assertThat(readField(rawDataLayer, "vectorBatchSize", Integer.class))
+                .isEqualTo(CUSTOM_VECTOR_BATCH_SIZE);
+        assertThat(readField(extractor, "itemExtractionOptions", ItemExtractionOptions.class))
+                .isEqualTo(context.options().extraction().item());
+
+        var processorRegistry =
+                readField(rawDataLayer, "processorRegistry", RawContentProcessorRegistry.class);
+        assertDefaultCoreProcessors(processorRegistry);
     }
 
     @Test
     void retrievalAssemblerRegistersBothBuiltInStrategies() {
         var retriever =
-                new MemoryRetrievalAssembler().assemble(context(MemoryBuildOptions.defaults()));
+                new MemoryRetrievalAssembler()
+                        .assemble(context(MemoryBuildOptions.defaults(), null, null));
 
         @SuppressWarnings("unchecked")
         var strategies = readField(retriever, "strategies", Map.class);
@@ -127,7 +171,62 @@ class MemoryAssemblersTest {
                         RetrievalStrategies.SIMPLE, RetrievalStrategies.DEEP_RETRIEVAL);
     }
 
-    private static MemoryAssemblyContext context(MemoryBuildOptions options) {
+    @Test
+    void extractionAssemblerFallsBackToDefaultResourceFetcherWhenMissing() {
+        var assembly =
+                new MemoryExtractionAssembler()
+                        .assemble(context(MemoryBuildOptions.defaults(), null, null));
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
+
+        assertThat(readField(extractor, "resourceFetcher", ResourceFetcher.class)).isNotNull();
+    }
+
+    @Test
+    void extractionAssemblerSharesProcessorRegistryBetweenRawDataLayerAndExtractor() {
+        var assembly =
+                new MemoryExtractionAssembler()
+                        .assemble(context(MemoryBuildOptions.defaults(), null, null));
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
+        var rawDataLayer = readField(extractor, "rawDataStep", RawDataLayer.class);
+
+        assertThat(
+                        readField(
+                                extractor,
+                                "rawContentProcessorRegistry",
+                                RawContentProcessorRegistry.class))
+                .isSameAs(
+                        readField(
+                                rawDataLayer,
+                                "processorRegistry",
+                                RawContentProcessorRegistry.class));
+    }
+
+    @Test
+    void extractionAssemblerBuildsOnlyConversationProcessorWithoutExplicitPlugins() {
+        var assembly =
+                new MemoryExtractionAssembler()
+                        .assemble(context(MemoryBuildOptions.defaults(), null, null, List.of()));
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
+        var rawDataLayer = readField(extractor, "rawDataStep", RawDataLayer.class);
+
+        var processorRegistry =
+                readField(rawDataLayer, "processorRegistry", RawContentProcessorRegistry.class);
+
+        assertDefaultCoreProcessors(processorRegistry);
+    }
+
+    static MemoryAssemblyContext context(
+            MemoryBuildOptions options,
+            ContentParserRegistry contentParserRegistry,
+            ResourceFetcher resourceFetcher) {
+        return context(options, contentParserRegistry, resourceFetcher, List.of());
+    }
+
+    static MemoryAssemblyContext context(
+            MemoryBuildOptions options,
+            ContentParserRegistry contentParserRegistry,
+            ResourceFetcher resourceFetcher,
+            List<RawDataPlugin> rawDataPlugins) {
         return new MemoryAssemblyContext(
                 new ChatClientRegistry(CHAT_CLIENT, Map.<ChatClientSlot, StructuredChatClient>of()),
                 MEMORY_STORE,
@@ -136,7 +235,10 @@ class MemoryAssemblersTest {
                 MEMORY_VECTOR,
                 new NoopReranker(),
                 PromptRegistry.EMPTY,
-                options);
+                options,
+                contentParserRegistry,
+                resourceFetcher,
+                rawDataPlugins);
     }
 
     @SuppressWarnings("unchecked")
@@ -197,7 +299,7 @@ class MemoryAssemblersTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> T readField(Object target, String fieldName, Class<T> fieldType) {
+    static <T> T readField(Object target, String fieldName, Class<T> fieldType) {
         try {
             var field = target.getClass().getDeclaredField(fieldName);
             field.setAccessible(true);
@@ -206,5 +308,11 @@ class MemoryAssemblersTest {
             throw new AssertionError(
                     "Failed to read field '" + fieldName + "' from " + target.getClass(), e);
         }
+    }
+
+    private static void assertDefaultCoreProcessors(RawContentProcessorRegistry processorRegistry) {
+        assertThat(processorRegistry.all())
+                .extracting(RawContentProcessor::contentType)
+                .containsExactly("CONVERSATION");
     }
 }

@@ -23,6 +23,20 @@ import org.junit.jupiter.api.Test;
 class HashUtilsTest {
 
     @Nested
+    @DisplayName("sha256(bytes)")
+    class Sha256BytesTests {
+
+        @Test
+        @DisplayName("Byte array should produce full SHA-256 checksum")
+        void byteArrayShouldProduceFullSha256Checksum() {
+            var checksum = HashUtils.sha256(new byte[] {1, 2, 3});
+
+            assertThat(checksum)
+                    .isEqualTo("039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81");
+        }
+    }
+
+    @Nested
     @DisplayName("contentHash(content)")
     class ContentHashTests {
 

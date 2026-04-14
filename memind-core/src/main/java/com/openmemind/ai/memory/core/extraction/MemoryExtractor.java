@@ -13,361 +13,39 @@
  */
 package com.openmemind.ai.memory.core.extraction;
 
-import com.openmemind.ai.memory.core.buffer.ConversationBufferLocks;
-import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
-import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.MemoryId;
-import com.openmemind.ai.memory.core.extraction.context.CommitDecision;
-import com.openmemind.ai.memory.core.extraction.context.CommitDetectionContext;
-import com.openmemind.ai.memory.core.extraction.context.CommitDetectionInput;
-import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
-import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
-import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
-import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
-import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
-import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
-import com.openmemind.ai.memory.core.extraction.result.InsightResult;
-import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
-import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
-import com.openmemind.ai.memory.core.extraction.step.InsightExtractStep;
-import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
-import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
-import com.openmemind.ai.memory.core.extraction.step.SegmentProcessor;
-import com.openmemind.ai.memory.core.utils.HashUtils;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.stream.Collectors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 /**
- * Memory Extractor
+ * Memory extraction pipeline interface.
  *
- * <p>Executes a three-stage memory extraction process: RawData → MemoryItem → Insight
+ * <p>Defines the memory extraction contract: batch extraction via {@link #extract(ExtractionRequest)}
+ * and context single-message extraction via {@link #addMessage(MemoryId, Message, ExtractionConfig)}.
  *
+ * <p>The primary implementation is {@link DefaultMemoryExtractor}. Decorators (e.g., tracing) wrap this
+ * interface to add cross-cutting concerns.
  */
-public class MemoryExtractor implements MemoryExtractionPipeline {
-
-    private static final Logger log = LoggerFactory.getLogger(MemoryExtractor.class);
-
-    private final RawDataExtractStep rawDataStep;
-    private final MemoryItemExtractStep memoryItemStep;
-    private final InsightExtractStep insightStep;
-    private final SegmentProcessor segmentProcessor;
-    private final ContextCommitDetector contextCommitDetector;
-    private final PendingConversationBuffer pendingConversationBuffer;
-    private final RecentConversationBuffer recentConversationBuffer;
-
-    public MemoryExtractor(
-            RawDataExtractStep rawDataStep,
-            MemoryItemExtractStep memoryItemStep,
-            InsightExtractStep insightStep) {
-        this.rawDataStep = Objects.requireNonNull(rawDataStep, "rawDataStep is required");
-        this.memoryItemStep = Objects.requireNonNull(memoryItemStep, "memoryItemStep is required");
-        this.insightStep = Objects.requireNonNull(insightStep, "insightStep is required");
-        this.segmentProcessor = null;
-        this.contextCommitDetector = null;
-        this.pendingConversationBuffer = null;
-        this.recentConversationBuffer = null;
-    }
-
-    public MemoryExtractor(
-            RawDataExtractStep rawDataStep,
-            MemoryItemExtractStep memoryItemStep,
-            InsightExtractStep insightStep,
-            SegmentProcessor segmentProcessor) {
-        this.rawDataStep = Objects.requireNonNull(rawDataStep, "rawDataStep is required");
-        this.memoryItemStep = Objects.requireNonNull(memoryItemStep, "memoryItemStep is required");
-        this.insightStep = Objects.requireNonNull(insightStep, "insightStep is required");
-        this.segmentProcessor = segmentProcessor;
-        this.contextCommitDetector = null;
-        this.pendingConversationBuffer = null;
-        this.recentConversationBuffer = null;
-    }
-
-    public MemoryExtractor(
-            RawDataExtractStep rawDataStep,
-            MemoryItemExtractStep memoryItemStep,
-            InsightExtractStep insightStep,
-            SegmentProcessor segmentProcessor,
-            ContextCommitDetector contextCommitDetector,
-            PendingConversationBuffer pendingConversationBuffer,
-            RecentConversationBuffer recentConversationBuffer) {
-        this.rawDataStep = Objects.requireNonNull(rawDataStep, "rawDataStep is required");
-        this.memoryItemStep = Objects.requireNonNull(memoryItemStep, "memoryItemStep is required");
-        this.insightStep = Objects.requireNonNull(insightStep, "insightStep is required");
-        this.segmentProcessor = segmentProcessor;
-        this.contextCommitDetector = contextCommitDetector;
-        this.pendingConversationBuffer = pendingConversationBuffer;
-        this.recentConversationBuffer = recentConversationBuffer;
-    }
+public interface MemoryExtractor {
 
     /**
-     * Execute the complete memory extraction process
+     * Execute the complete memory extraction process (batch mode).
      *
-     * @param request Extraction request
-     * @return Extraction result
+     * @param request extraction request containing content, config, and metadata
+     * @return extraction result
      */
-    public Mono<ExtractionResult> extract(ExtractionRequest request) {
-        Objects.requireNonNull(request, "request is required");
-        Objects.requireNonNull(request.memoryId(), "memoryId is required");
-        Objects.requireNonNull(request.content(), "content is required");
-
-        var startTime = Instant.now();
-
-        return extractRawData(request)
-                .doOnNext(r -> log.info("RawData completed: segments={}", r.segments().size()))
-                .flatMap(rawResult -> extractMemoryItem(request, rawResult))
-                .doOnNext(
-                        p ->
-                                log.info(
-                                        "MemoryItem completed: newItems={}",
-                                        p.itemResult().newItems().size()))
-                .flatMap(pair -> extractInsight(request, pair))
-                .doOnNext(
-                        t ->
-                                log.info(
-                                        "Insight completed: count={}",
-                                        t.insightResult().totalCount()))
-                .map(triple -> toSuccessResult(request.memoryId(), triple, startTime))
-                .timeout(request.config().timeout())
-                .onErrorResume(e -> toErrorResult(request.memoryId(), e, startTime));
-    }
+    Mono<ExtractionResult> extract(ExtractionRequest request);
 
     /**
-     * Extract memory from archived conversation segments (internal context entry)
+     * Process a single message in context mode.
      *
-     * <p>Skip normalize + chunk, directly execute: build Segment → caption → vectorize → persist → Item → Insight
-     */
-    private Mono<ExtractionResult> extractConversationSegment(
-            MemoryId memoryId, List<Message> messages, ExtractionConfig config) {
-        return extractConversationSegment(memoryId, messages, config, Map.of());
-    }
-
-    /**
-     * Extract memory from archived conversation segments (internal context entry, supports cross seal context)
-     */
-    private Mono<ExtractionResult> extractConversationSegment(
-            MemoryId memoryId,
-            List<Message> messages,
-            ExtractionConfig config,
-            Map<String, Object> sealMetadata) {
-        Objects.requireNonNull(memoryId, "memoryId is required");
-        Objects.requireNonNull(messages, "messages is required");
-        Objects.requireNonNull(config, "config is required");
-        Objects.requireNonNull(sealMetadata, "sealMetadata is required");
-
-        if (segmentProcessor == null) {
-            return Mono.error(
-                    new IllegalStateException(
-                            "segmentProcessor is required for extractConversationSegment"));
-        }
-
-        var startTime = Instant.now();
-
-        // Build Segment, merge sealMetadata into segment.metadata()
-        String content =
-                messages.stream()
-                        .map(ConversationContent::formatMessage)
-                        .collect(Collectors.joining("\n"));
-        int startMessage = 0;
-        int endMessage = messages.size();
-        Segment segment =
-                new Segment(
-                        content,
-                        null,
-                        new MessageBoundary(startMessage, endMessage),
-                        sealMetadata,
-                        SegmentRuntimeContext.fromConversationMessages(messages));
-        String contentId = HashUtils.sampledSha256(content);
-
-        var request =
-                new ExtractionRequest(memoryId, null, ContentTypes.CONVERSATION, Map.of(), config);
-
-        return segmentProcessor
-                .processSegment(
-                        memoryId,
-                        segment,
-                        "CONVERSATION",
-                        contentId,
-                        sealMetadata,
-                        config.language())
-                .flatMap(rawResult -> extractMemoryItem(request, rawResult))
-                .flatMap(pair -> extractInsight(request, pair))
-                .map(triple -> toSuccessResult(memoryId, triple, startTime))
-                .timeout(config.timeout())
-                .onErrorResume(e -> toErrorResult(memoryId, e, startTime));
-    }
-
-    /**
-     * Streaming single message extraction entry
+     * <p>Messages are buffered internally. When boundary detection triggers sealing,
+     * the buffered messages are extracted as a conversation segment.
      *
-     * <p>Use memoryId as buffer key, determine whether to trigger extraction through boundary detection.
-     *
-     * @param memoryId Memory identifier (as buffer key)
-     * @param message Single message
-     * @param config Extraction configuration
-     * @return Emits an {@link ExtractionResult} when extraction is triggered; emits an empty signal ({@code Mono.empty()}) when not triggered,
-     *         the caller should handle the no result case using {@code switchIfEmpty} or {@code defaultIfEmpty}
+     * @param memoryId memory identifier (used as buffer key)
+     * @param message single message to process
+     * @param config extraction configuration
+     * @return extraction result when sealing is triggered; empty Mono when buffered without extraction
      */
-    public Mono<ExtractionResult> addMessage(
-            MemoryId memoryId, Message message, ExtractionConfig config) {
-        Objects.requireNonNull(memoryId, "memoryId is required");
-        Objects.requireNonNull(message, "message is required");
-        Objects.requireNonNull(config, "config is required");
-
-        if (contextCommitDetector == null
-                || pendingConversationBuffer == null
-                || recentConversationBuffer == null) {
-            return Mono.error(
-                    new IllegalStateException(
-                            "contextCommitDetector, pendingConversationBuffer, and"
-                                    + " recentConversationBuffer are required for addMessage"));
-        }
-
-        var bufferKey = memoryId.toIdentifier();
-
-        return Mono.fromCallable(
-                        () -> {
-                            return ConversationBufferLocks.withLock(
-                                    bufferKey,
-                                    () -> {
-                                        recentConversationBuffer.append(bufferKey, message);
-                                        if (message.role() == Message.Role.ASSISTANT) {
-                                            appendToPendingBuffer(bufferKey, message);
-                                            return Optional.<PendingExtraction>empty();
-                                        }
-
-                                        var snapshot = pendingConversationBuffer.load(bufferKey);
-                                        if (snapshot.isEmpty()) {
-                                            appendToPendingBuffer(bufferKey, message);
-                                            return Optional.<PendingExtraction>empty();
-                                        }
-
-                                        var detectionInput =
-                                                new CommitDetectionInput(
-                                                        snapshot,
-                                                        List.of(message),
-                                                        CommitDetectionContext.empty());
-                                        var decision =
-                                                contextCommitDetector
-                                                        .shouldCommit(detectionInput)
-                                                        .defaultIfEmpty(CommitDecision.hold())
-                                                        .block();
-
-                                        if (decision == null || !decision.shouldSeal()) {
-                                            appendToPendingBuffer(bufferKey, message);
-                                            return Optional.<PendingExtraction>empty();
-                                        }
-
-                                        log.debug(
-                                                "Boundary detection triggered sealing: memoryId={},"
-                                                        + " reason={}, confidence={}",
-                                                bufferKey,
-                                                decision.reason(),
-                                                decision.confidence());
-
-                                        var sealedMessages = List.copyOf(snapshot);
-                                        pendingConversationBuffer.clear(bufferKey);
-                                        pendingConversationBuffer.append(bufferKey, message);
-
-                                        return Optional.of(
-                                                new PendingExtraction(
-                                                        sealedMessages, new HashMap<>()));
-                                    });
-                        })
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(
-                        pending ->
-                                pending.map(
-                                                extraction ->
-                                                        extractConversationSegment(
-                                                                memoryId,
-                                                                extraction.messages(),
-                                                                config,
-                                                                extraction.sealMetadata()))
-                                        .orElseGet(Mono::empty));
-    }
-
-    private void appendToPendingBuffer(String bufferKey, Message message) {
-        pendingConversationBuffer.append(bufferKey, message);
-    }
-
-    private record PendingExtraction(List<Message> messages, Map<String, Object> sealMetadata) {}
-
-    private Mono<RawDataResult> extractRawData(ExtractionRequest request) {
-        return rawDataStep.extract(
-                request.memoryId(),
-                request.content(),
-                request.contentType(),
-                request.metadata(),
-                request.config().language());
-    }
-
-    private Mono<StepPair> extractMemoryItem(ExtractionRequest request, RawDataResult rawResult) {
-        if (rawResult.isEmpty()) {
-            return Mono.just(new StepPair(rawResult, MemoryItemResult.empty()));
-        }
-
-        return memoryItemStep
-                .extract(
-                        request.memoryId(),
-                        rawResult,
-                        ItemExtractionConfig.from(request.config(), request.contentType()))
-                .map(itemResult -> new StepPair(rawResult, itemResult));
-    }
-
-    private Mono<StepTriple> extractInsight(ExtractionRequest request, StepPair pair) {
-        if (!request.config().enableInsight()) {
-            log.debug("Insight skipped: enableInsight=false");
-            return Mono.just(
-                    new StepTriple(pair.rawResult(), pair.itemResult(), InsightResult.empty()));
-        }
-        if (pair.itemResult() == null || pair.itemResult().isEmpty()) {
-            log.debug(
-                    "Insight skipped: itemResult is empty (itemResult={})",
-                    pair.itemResult() == null ? "null" : "empty");
-            return Mono.just(
-                    new StepTriple(pair.rawResult(), pair.itemResult(), InsightResult.empty()));
-        }
-
-        return insightStep
-                .extract(request.memoryId(), pair.itemResult(), request.config().language())
-                .map(
-                        insightResult ->
-                                new StepTriple(pair.rawResult(), pair.itemResult(), insightResult));
-    }
-
-    private ExtractionResult toSuccessResult(
-            MemoryId memoryId, StepTriple triple, Instant startTime) {
-        return ExtractionResult.success(
-                memoryId,
-                triple.rawResult(),
-                triple.itemResult(),
-                triple.insightResult(),
-                Duration.between(startTime, Instant.now()));
-    }
-
-    private Mono<ExtractionResult> toErrorResult(
-            MemoryId memoryId, Throwable error, Instant startTime) {
-        return Mono.just(
-                ExtractionResult.failed(
-                        memoryId, Duration.between(startTime, Instant.now()), error.getMessage()));
-    }
-
-    // ===== Internal Data Classes =====
-
-    private record StepPair(RawDataResult rawResult, MemoryItemResult itemResult) {}
-
-    private record StepTriple(
-            RawDataResult rawResult, MemoryItemResult itemResult, InsightResult insightResult) {}
+    Mono<ExtractionResult> addMessage(MemoryId memoryId, Message message, ExtractionConfig config);
 }

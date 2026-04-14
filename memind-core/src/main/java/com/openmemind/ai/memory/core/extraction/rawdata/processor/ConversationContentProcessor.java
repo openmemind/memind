@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.core.extraction.rawdata.processor;
 
+import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionStrategy;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
@@ -21,7 +22,10 @@ import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunki
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunkingConfig.ConversationSegmentStrategy;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
 import reactor.core.publisher.Mono;
@@ -94,6 +98,49 @@ public class ConversationContentProcessor implements RawContentProcessor<Convers
     @Override
     public ItemExtractionStrategy itemExtractionStrategy() {
         return itemExtractionStrategy;
+    }
+
+    @Override
+    public java.util.Set<MemoryCategory> allowedCategories() {
+        return EnumSet.of(
+                MemoryCategory.PROFILE,
+                MemoryCategory.BEHAVIOR,
+                MemoryCategory.EVENT,
+                MemoryCategory.DIRECTIVE,
+                MemoryCategory.PLAYBOOK,
+                MemoryCategory.RESOLUTION);
+    }
+
+    @Override
+    public Instant resolveSegmentStartTime(
+            ConversationContent content, Segment segment, Instant fallback) {
+        if (segment.runtimeContext() != null && segment.runtimeContext().startTime() != null) {
+            return segment.runtimeContext().startTime();
+        }
+        if (segment.boundary() instanceof MessageBoundary boundary) {
+            int index = boundary.startMessage();
+            if (index >= 0 && index < content.getMessages().size()) {
+                Instant timestamp = content.getMessages().get(index).timestamp();
+                return timestamp != null ? timestamp : fallback;
+            }
+        }
+        return fallback;
+    }
+
+    @Override
+    public Instant resolveSegmentEndTime(
+            ConversationContent content, Segment segment, Instant fallback) {
+        if (segment.runtimeContext() != null && segment.runtimeContext().observedAt() != null) {
+            return segment.runtimeContext().observedAt();
+        }
+        if (segment.boundary() instanceof MessageBoundary boundary) {
+            int index = boundary.endMessage() - 1;
+            if (index >= 0 && index < content.getMessages().size()) {
+                Instant timestamp = content.getMessages().get(index).timestamp();
+                return timestamp != null ? timestamp : fallback;
+            }
+        }
+        return fallback;
     }
 
     @Override

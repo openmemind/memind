@@ -14,8 +14,10 @@
 package com.openmemind.ai.memory.plugin.jdbc.autoconfigure;
 
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBufferAccessor;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlInsightBuffer;
@@ -35,16 +37,18 @@ import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryStore;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryTextSearch;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteRecentConversationBuffer;
 import javax.sql.DataSource;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.env.Environment;
+import tools.jackson.databind.ObjectMapper;
 
 @AutoConfiguration(
         afterName = {
             "org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration",
+            "org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration",
             "com.openmemind.ai.memory.plugin.store.mybatis.MemoryMybatisPlusAutoConfiguration"
         })
 @ConditionalOnBean(DataSource.class)
@@ -52,21 +56,27 @@ public class JdbcPluginAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(MemoryStore.class)
-    public MemoryStore memoryStore(DataSource dataSource, Environment environment) {
+    public MemoryStore memoryStore(
+            DataSource dataSource,
+            Environment environment,
+            ObjectProvider<ResourceStore> resourceStoreProvider,
+            ObjectProvider<ObjectMapper> objectMapperProvider) {
         boolean createIfNotExist =
                 environment.getProperty("memind.store.init-schema", Boolean.class, true);
+        ResourceStore resourceStore = resourceStoreProvider.getIfAvailable();
+        ObjectMapper objectMapper = resolveObjectMapper(objectMapperProvider);
         return switch (detectDialect(dataSource)) {
             case SQLITE -> {
-                var store = new SqliteMemoryStore(dataSource, createIfNotExist);
-                yield MemoryStore.of(store, store, store);
+                yield new SqliteMemoryStore(
+                        dataSource, resourceStore, objectMapper, createIfNotExist);
             }
             case MYSQL -> {
-                var store = new MysqlMemoryStore(dataSource, createIfNotExist);
-                yield MemoryStore.of(store, store, store);
+                yield new MysqlMemoryStore(
+                        dataSource, resourceStore, objectMapper, createIfNotExist);
             }
             case POSTGRESQL -> {
-                var store = new PostgresqlMemoryStore(dataSource, createIfNotExist);
-                yield MemoryStore.of(store, store, store);
+                yield new PostgresqlMemoryStore(
+                        dataSource, resourceStore, objectMapper, createIfNotExist);
             }
         };
     }
@@ -116,17 +126,12 @@ public class JdbcPluginAutoConfiguration {
         };
     }
 
-    @Bean
-    @ConditionalOnMissingBean(DefaultTaxonomySeeder.class)
-    @ConditionalOnProperty(
-            name = "memind.store.init-schema",
-            havingValue = "true",
-            matchIfMissing = true)
-    public DefaultTaxonomySeeder defaultTaxonomySeeder(MemoryStore memoryStore) {
-        return new DefaultTaxonomySeeder(memoryStore);
-    }
-
     private JdbcDialect detectDialect(DataSource dataSource) {
         return new JdbcDialectDetector().detect(dataSource);
+    }
+
+    private ObjectMapper resolveObjectMapper(ObjectProvider<ObjectMapper> objectMapperProvider) {
+        ObjectMapper objectMapper = objectMapperProvider.getIfAvailable();
+        return objectMapper != null ? objectMapper.rebuild().build() : JsonUtils.newMapper();
     }
 }

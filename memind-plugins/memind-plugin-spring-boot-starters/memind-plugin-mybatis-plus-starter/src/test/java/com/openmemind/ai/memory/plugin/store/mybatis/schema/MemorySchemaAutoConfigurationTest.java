@@ -59,7 +59,8 @@ class MemorySchemaAutoConfigurationTest {
                             assertThat(ddl.getSqlFiles())
                                     .containsExactly(
                                             "db/migration/sqlite/V1__init_store.sql",
-                                            "db/migration/sqlite/V2__init_text_search.sql");
+                                            "db/migration/sqlite/V2__init_text_search.sql",
+                                            "db/migration/sqlite/V3__multimodal.sql");
 
                             DdlApplicationRunner runner =
                                     context.getBean(DdlApplicationRunner.class);

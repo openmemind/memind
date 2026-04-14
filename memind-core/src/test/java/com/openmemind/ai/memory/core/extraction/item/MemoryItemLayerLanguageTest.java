@@ -19,25 +19,28 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.openmemind.ai.memory.core.data.ContentTypes;
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
+import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.item.dedup.DeduplicationResult;
 import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicator;
 import com.openmemind.ai.memory.core.extraction.item.extractor.MemoryItemExtractor;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
+import com.openmemind.ai.memory.core.support.TestDocumentContent;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -83,7 +86,7 @@ class MemoryItemLayerLanguageTest {
                         null);
         var config =
                 new ItemExtractionConfig(
-                        MemoryScope.USER, ContentTypes.CONVERSATION, false, "zh-CN");
+                        MemoryScope.USER, ConversationContent.TYPE, false, "zh-CN");
 
         when(memoryStore.insightOperations()).thenReturn(insightOperations);
         when(insightOperations.listInsightTypes()).thenReturn(DefaultInsightTypes.all());
@@ -105,6 +108,87 @@ class MemoryItemLayerLanguageTest {
         assertThat(selfVerificationStep.capturedLanguage()).isEqualTo("zh-CN");
         assertThat(selfVerificationStep.capturedObservedAt())
                 .isEqualTo(Instant.parse("2024-03-15T10:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("Entries outside allowed categories should be dropped before deduplication")
+    void entriesOutsideAllowedCategoriesAreDroppedBeforeDeduplication() {
+        MemoryItemExtractor extractor = mock(MemoryItemExtractor.class);
+        MemoryItemDeduplicator deduplicator = mock(MemoryItemDeduplicator.class);
+        MemoryStore memoryStore = mock(MemoryStore.class);
+        InsightOperations insightOperations = mock(InsightOperations.class);
+        MemoryVector vector = mock(MemoryVector.class);
+        var layer = new MemoryItemLayer(extractor, deduplicator, memoryStore, vector);
+
+        var segment =
+                new ParsedSegment(
+                        "document text",
+                        "caption",
+                        0,
+                        1,
+                        "raw-001",
+                        java.util.Map.of(),
+                        new SegmentRuntimeContext(
+                                Instant.parse("2024-03-15T10:00:00Z"),
+                                Instant.parse("2024-03-15T10:00:00Z"),
+                                "User"));
+        var directiveEntry =
+                new ExtractedMemoryEntry(
+                        "always answer in Chinese",
+                        0.9f,
+                        null,
+                        Instant.parse("2024-03-15T10:00:00Z"),
+                        "raw-001",
+                        null,
+                        List.of(),
+                        java.util.Map.of(),
+                        null,
+                        "directive");
+        var profileEntry =
+                new ExtractedMemoryEntry(
+                        "User writes Java",
+                        0.9f,
+                        null,
+                        Instant.parse("2024-03-15T10:00:00Z"),
+                        "raw-001",
+                        null,
+                        List.of(),
+                        java.util.Map.of(),
+                        null,
+                        "profile");
+        var config =
+                new ItemExtractionConfig(
+                        MemoryScope.USER,
+                        TestDocumentContent.TYPE,
+                        MemoryCategory.userCategories(),
+                        false,
+                        "zh-CN");
+
+        when(memoryStore.insightOperations()).thenReturn(insightOperations);
+        when(insightOperations.listInsightTypes()).thenReturn(DefaultInsightTypes.all());
+        when(extractor.extract(eq(List.of(segment)), anyList(), eq(config)))
+                .thenReturn(Mono.just(List.of(directiveEntry, profileEntry)));
+        when(deduplicator.deduplicate(
+                        org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(Mono.just(new DeduplicationResult(List.of(), List.of())));
+        when(deduplicator.spanName()).thenReturn("test");
+
+        StepVerifier.create(
+                        layer.extract(
+                                DefaultMemoryId.of("user1", "agent1"),
+                                new RawDataResult(List.of(), List.of(segment), false),
+                                config))
+                .assertNext(result -> assertThat(result.isEmpty()).isTrue())
+                .verifyComplete();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ExtractedMemoryEntry>> dedupEntriesCaptor =
+                ArgumentCaptor.forClass(List.class);
+        org.mockito.Mockito.verify(deduplicator)
+                .deduplicate(org.mockito.ArgumentMatchers.any(), dedupEntriesCaptor.capture());
+        assertThat(dedupEntriesCaptor.getValue())
+                .extracting(ExtractedMemoryEntry::category)
+                .containsExactly("profile");
     }
 
     private static final class CapturingSelfVerificationStep extends LlmSelfVerificationStep {

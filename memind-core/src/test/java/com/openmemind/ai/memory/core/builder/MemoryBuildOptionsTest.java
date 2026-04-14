@@ -14,8 +14,10 @@
 package com.openmemind.ai.memory.core.builder;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
@@ -43,5 +45,39 @@ class MemoryBuildOptionsTest {
 
         assertThat(options.extraction()).isEqualTo(customExtraction);
         assertThat(options.retrieval()).isEqualTo(retrievalDefaults);
+    }
+
+    @Test
+    void rawDataDefaultsExposeOnlySharedCorePolicies() {
+        var defaults = RawDataExtractionOptions.defaults();
+        var componentNames =
+                java.util.Arrays.stream(RawDataExtractionOptions.class.getRecordComponents())
+                        .map(java.lang.reflect.RecordComponent::getName)
+                        .toList();
+
+        assertThat(componentNames)
+                .containsExactly("conversation", "commitDetection", "vectorBatchSize");
+        assertThat(defaults.vectorBatchSize()).isEqualTo(64);
+    }
+
+    @Test
+    void rawDataOptionsRejectNonPositiveVectorBatchSize() {
+        assertThatThrownBy(
+                        () ->
+                                new RawDataExtractionOptions(
+                                        com.openmemind.ai.memory.core.extraction.rawdata.chunk
+                                                .ConversationChunkingConfig.DEFAULT,
+                                        CommitDetectorConfig.defaults(),
+                                        0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("vectorBatchSize");
+    }
+
+    @Test
+    void itemDefaultsExposePromptBudget() {
+        var defaults = ItemExtractionOptions.defaults();
+
+        assertThat(defaults.promptBudget().maxInputTokens()).isEqualTo(8192);
+        assertThat(defaults.promptBudget().reservedOutputTokens()).isEqualTo(1200);
     }
 }

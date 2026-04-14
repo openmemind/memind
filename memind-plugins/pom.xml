@@ -30,6 +30,7 @@
     <modules>
         <module>memind-plugin-ai-spring-ai</module>
         <module>memind-plugin-jdbc</module>
+        <module>memind-plugin-rawdatas</module>
         <module>memind-plugin-spring-boot-starters</module>
         <module>memind-plugin-tracing-opentelemetry</module>
     </modules>

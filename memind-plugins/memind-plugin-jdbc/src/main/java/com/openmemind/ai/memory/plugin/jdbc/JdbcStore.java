@@ -143,7 +143,7 @@ public final class JdbcStore {
                                 new SqliteConversationBuffer(conversationBufferAccessor),
                                 new SqliteRecentConversationBuffer(conversationBufferAccessor));
                 yield new DefaultJdbcMemoryAccess(
-                        MemoryStore.of(store, store, store),
+                        store,
                         memoryBuffer,
                         new SqliteMemoryTextSearch(dataSource, createIfNotExist),
                         dataSource);
@@ -159,7 +159,7 @@ public final class JdbcStore {
                                 new MysqlConversationBuffer(conversationBufferAccessor),
                                 new MysqlRecentConversationBuffer(conversationBufferAccessor));
                 yield new DefaultJdbcMemoryAccess(
-                        MemoryStore.of(store, store, store),
+                        store,
                         memoryBuffer,
                         new MysqlMemoryTextSearch(dataSource, createIfNotExist),
                         dataSource);
@@ -175,7 +175,7 @@ public final class JdbcStore {
                                 new PostgresqlConversationBuffer(conversationBufferAccessor),
                                 new PostgresqlRecentConversationBuffer(conversationBufferAccessor));
                 yield new DefaultJdbcMemoryAccess(
-                        MemoryStore.of(store, store, store),
+                        store,
                         memoryBuffer,
                         new PostgresqlMemoryTextSearch(dataSource, createIfNotExist),
                         dataSource);

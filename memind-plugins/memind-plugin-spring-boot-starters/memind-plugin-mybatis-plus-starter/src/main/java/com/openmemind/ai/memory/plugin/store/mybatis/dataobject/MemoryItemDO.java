@@ -17,7 +17,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
+import com.baomidou.mybatisplus.extension.handlers.Jackson3TypeHandler;
 import com.openmemind.ai.memory.plugin.store.mybatis.handler.InstantTypeHandler;
 import java.time.Instant;
 import java.util.Map;
@@ -44,7 +44,7 @@ public class MemoryItemDO extends BaseDO {
     @TableField(typeHandler = InstantTypeHandler.class)
     private Instant observedAt;
 
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(typeHandler = Jackson3TypeHandler.class)
     private Map<String, Object> metadata;
 
     private String type;

@@ -15,7 +15,6 @@ package com.openmemind.ai.memory.core.retrieval.tier;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
@@ -31,7 +30,9 @@ import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -56,15 +57,6 @@ import reactor.core.publisher.Mono;
 public class InsightTierRetriever {
 
     private static final Logger log = LoggerFactory.getLogger(InsightTierRetriever.class);
-
-    private static final Map<MemoryCategory, Set<String>> CATEGORY_TO_INSIGHT_TYPES =
-            Map.of(
-                    MemoryCategory.PROFILE, Set.of("identity", "preferences", "relationships"),
-                    MemoryCategory.BEHAVIOR, Set.of("behavior"),
-                    MemoryCategory.EVENT, Set.of("experiences"),
-                    MemoryCategory.DIRECTIVE, Set.of("directives"),
-                    MemoryCategory.PLAYBOOK, Set.of("playbooks"),
-                    MemoryCategory.RESOLUTION, Set.of("resolutions"));
 
     private final MemoryStore memoryStore;
     private final MemoryVector memoryVector;
@@ -136,38 +128,7 @@ public class InsightTierRetriever {
 
         // Load insight types to distinguish ROOT / BRANCH
         List<MemoryInsightType> insightTypes = memoryStore.insightOperations().listInsightTypes();
-        if (insightTypes.isEmpty()) {
-            insightTypes = DefaultInsightTypes.all();
-        }
-        Map<String, InsightAnalysisMode> typeNameToMode =
-                insightTypes.stream()
-                        .collect(
-                                Collectors.toMap(
-                                        MemoryInsightType::name,
-                                        t ->
-                                                t.insightAnalysisMode() != null
-                                                        ? t.insightAnalysisMode()
-                                                        : InsightAnalysisMode.BRANCH));
-        Map<String, String> typeNameToDescription =
-                insightTypes.stream()
-                        .filter(
-                                t ->
-                                        typeNameToMode.getOrDefault(
-                                                        t.name(), InsightAnalysisMode.BRANCH)
-                                                == InsightAnalysisMode.BRANCH)
-                        .collect(
-                                Collectors.toMap(
-                                        MemoryInsightType::name,
-                                        t -> t.description() != null ? t.description() : t.name()));
-
-        Map<String, MemoryScope> typeNameToScope =
-                insightTypes.stream()
-                        .filter(t -> t.scope() != null)
-                        .collect(
-                                Collectors.toMap(
-                                        MemoryInsightType::name,
-                                        MemoryInsightType::scope,
-                                        (a, b) -> a));
+        InsightTypeRuntimeView typeView = buildTypeView(insightTypes, candidateInsights);
 
         List<MemoryInsight> filteredInsights = candidateInsights;
         if (context.scope() != null) {
@@ -175,9 +136,9 @@ public class InsightTierRetriever {
                     filteredInsights.stream()
                             .filter(
                                     insight -> {
-                                        var insightScope = typeNameToScope.get(insight.type());
-                                        return insightScope == null
-                                                || insightScope.equals(context.scope());
+                                        var effectiveScope = resolveScope(insight, typeView);
+                                        return effectiveScope == null
+                                                || effectiveScope.equals(context.scope());
                                     })
                             .toList();
         }
@@ -187,7 +148,8 @@ public class InsightTierRetriever {
                     context.categories().stream()
                             .flatMap(
                                     cat ->
-                                            CATEGORY_TO_INSIGHT_TYPES
+                                            typeView
+                                                    .categoryToTypes()
                                                     .getOrDefault(cat, Set.of())
                                                     .stream())
                             .collect(Collectors.toSet());
@@ -202,8 +164,10 @@ public class InsightTierRetriever {
         List<MemoryInsight> branchInsights = new ArrayList<>();
 
         for (MemoryInsight insight : filteredInsights) {
-            InsightAnalysisMode mode =
-                    typeNameToMode.getOrDefault(insight.type(), InsightAnalysisMode.BRANCH);
+            if (insight.tier() == InsightTier.LEAF) {
+                continue;
+            }
+            InsightAnalysisMode mode = resolveAnalysisMode(insight, typeView);
             if (mode == InsightAnalysisMode.ROOT) {
                 rootResults.add(
                         new ScoredResult(
@@ -217,14 +181,19 @@ public class InsightTierRetriever {
             }
         }
 
+        Map<String, String> routedTypeDescriptions =
+                buildRoutedTypeDescriptions(branchInsights, typeView);
+
         // If there are no BRANCH insights or no routable types, return ROOT directly
-        if (branchInsights.isEmpty() || typeNameToDescription.isEmpty()) {
+        if (branchInsights.isEmpty() || routedTypeDescriptions.isEmpty()) {
             return Mono.just(new TierResult(rootResults, List.of(), List.of()));
         }
 
         // ③ Call router to select related BRANCH types
         return router.route(
-                        context.searchQuery(), context.conversationHistory(), typeNameToDescription)
+                        context.searchQuery(),
+                        context.conversationHistory(),
+                        routedTypeDescriptions)
                 .flatMap(
                         routedTypes -> {
                             // ④ If LLM returns an empty list → only return ROOT
@@ -239,8 +208,7 @@ public class InsightTierRetriever {
                             List<ScoredResult> branchResults = new ArrayList<>();
                             List<MemoryInsight> matchedBranches = new ArrayList<>();
                             for (MemoryInsight insight : branchInsights) {
-                                if (routedTypes.contains(insight.type())
-                                        && insight.tier() == InsightTier.BRANCH) {
+                                if (routedTypes.contains(insight.type())) {
                                     branchResults.add(
                                             new ScoredResult(
                                                     ScoredResult.SourceType.INSIGHT,
@@ -325,6 +293,115 @@ public class InsightTierRetriever {
                                     "Tier 1 (Insight) retrieval failed, returning empty result", e);
                             return Mono.just(TierResult.empty());
                         });
+    }
+
+    private InsightTypeRuntimeView buildTypeView(
+            List<MemoryInsightType> insightTypes, List<MemoryInsight> insights) {
+        Map<String, InsightAnalysisMode> modes = new LinkedHashMap<>();
+        Map<String, String> descriptions = new LinkedHashMap<>();
+        Map<String, MemoryScope> scopes = new LinkedHashMap<>();
+        Map<MemoryCategory, Set<String>> categoryToTypes = new EnumMap<>(MemoryCategory.class);
+        Set<String> configuredTypes = new LinkedHashSet<>();
+
+        for (MemoryInsightType type : insightTypes) {
+            configuredTypes.add(type.name());
+            modes.put(
+                    type.name(),
+                    type.insightAnalysisMode() != null
+                            ? type.insightAnalysisMode()
+                            : InsightAnalysisMode.BRANCH);
+            descriptions.put(type.name(), resolveDescription(type.name(), type.description()));
+            if (type.scope() != null) {
+                scopes.put(type.name(), type.scope());
+            }
+            if (type.categories() == null) {
+                continue;
+            }
+            for (String category : type.categories()) {
+                MemoryCategory.byName(category)
+                        .ifPresent(
+                                cat ->
+                                        categoryToTypes
+                                                .computeIfAbsent(
+                                                        cat, ignored -> new LinkedHashSet<>())
+                                                .add(type.name()));
+            }
+        }
+
+        for (MemoryInsight insight : insights) {
+            if (configuredTypes.contains(insight.type())) {
+                continue;
+            }
+            descriptions.putIfAbsent(
+                    insight.type(), resolveDescription(insight.type(), insight.name()));
+            if (insight.scope() != null) {
+                scopes.putIfAbsent(insight.type(), insight.scope());
+            }
+            if (insight.categories() == null) {
+                continue;
+            }
+            for (String category : insight.categories()) {
+                MemoryCategory.byName(category)
+                        .ifPresent(
+                                cat ->
+                                        categoryToTypes
+                                                .computeIfAbsent(
+                                                        cat, ignored -> new LinkedHashSet<>())
+                                                .add(insight.type()));
+            }
+        }
+
+        return new InsightTypeRuntimeView(
+                Set.copyOf(configuredTypes),
+                Map.copyOf(modes),
+                Map.copyOf(descriptions),
+                Map.copyOf(scopes),
+                immutableCategoryToTypes(categoryToTypes));
+    }
+
+    private Map<MemoryCategory, Set<String>> immutableCategoryToTypes(
+            Map<MemoryCategory, Set<String>> categoryToTypes) {
+        Map<MemoryCategory, Set<String>> immutable = new EnumMap<>(MemoryCategory.class);
+        categoryToTypes.forEach((category, types) -> immutable.put(category, Set.copyOf(types)));
+        return Map.copyOf(immutable);
+    }
+
+    private Map<String, String> buildRoutedTypeDescriptions(
+            List<MemoryInsight> branchInsights, InsightTypeRuntimeView typeView) {
+        Map<String, String> descriptions = new LinkedHashMap<>();
+        for (MemoryInsight insight : branchInsights) {
+            if (resolveAnalysisMode(insight, typeView) != InsightAnalysisMode.BRANCH) {
+                continue;
+            }
+            descriptions.putIfAbsent(
+                    insight.type(),
+                    typeView.descriptions()
+                            .getOrDefault(
+                                    insight.type(),
+                                    resolveDescription(insight.type(), insight.name())));
+        }
+        return Map.copyOf(descriptions);
+    }
+
+    private InsightAnalysisMode resolveAnalysisMode(
+            MemoryInsight insight, InsightTypeRuntimeView typeView) {
+        if (typeView.configuredTypes().contains(insight.type())) {
+            return typeView.modes().getOrDefault(insight.type(), InsightAnalysisMode.BRANCH);
+        }
+        return insight.tier() == InsightTier.ROOT
+                ? InsightAnalysisMode.ROOT
+                : InsightAnalysisMode.BRANCH;
+    }
+
+    private MemoryScope resolveScope(MemoryInsight insight, InsightTypeRuntimeView typeView) {
+        if (typeView.configuredTypes().contains(insight.type())) {
+            return typeView.scopes().get(insight.type());
+        }
+        return insight.scope();
+    }
+
+    private String resolveDescription(String typeName, String description) {
+        return description != null && !description.isBlank() ? description : typeName;
     }
 
     private Mono<List<List<Float>>> resolveLeafEmbeddings(List<MemoryInsight> leafInsights) {
@@ -436,4 +513,11 @@ public class InsightTierRetriever {
     private record PendingLeafEmbedding(int index, String text) {}
 
     private record ScoredLeaf(MemoryInsight insight, double score) {}
+
+    private record InsightTypeRuntimeView(
+            Set<String> configuredTypes,
+            Map<String, InsightAnalysisMode> modes,
+            Map<String, String> descriptions,
+            Map<String, MemoryScope> scopes,
+            Map<MemoryCategory, Set<String>> categoryToTypes) {}
 }

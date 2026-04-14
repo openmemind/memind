@@ -15,11 +15,21 @@ package com.openmemind.ai.memory.plugin.jdbc.internal.support;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.ToolCallRawContentTypeRegistrar;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.content.ToolCallContent;
+import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallRecord;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 class JsonCodecTest {
 
@@ -57,5 +67,78 @@ class JsonCodecTest {
         assertThat(restored).containsExactly("alpha", "beta");
     }
 
+    @Test
+    void defaultCodecRoundTripsCoreConversationRawContent() {
+        RawContent payload = new ConversationContent(List.of(Message.user("hello")));
+
+        String json = jsonCodec.toJson(payload);
+        RawContent restored = jsonCodec.fromJson(json, RawContent.class);
+
+        assertThat(restored).isInstanceOf(ConversationContent.class);
+        assertThat(restored.toContentString()).contains("hello");
+    }
+
+    @Test
+    void codecRoundTripsToolCallWhenPluginSubtypeIsExplicitlyRegistered() {
+        ObjectMapper mapper = JsonCodec.createDefaultObjectMapper();
+        mapper = RawContentJackson.registerCoreSubtypes(mapper);
+        mapper =
+                RawContentJackson.registerPluginSubtypes(
+                        mapper, List.of(new ToolCallRawContentTypeRegistrar()));
+        JsonCodec codec = new JsonCodec(mapper);
+        RawContent payload =
+                new ToolCallContent(
+                        List.of(
+                                new ToolCallRecord(
+                                        "search",
+                                        "{}",
+                                        "ok",
+                                        "SUCCESS",
+                                        1L,
+                                        1,
+                                        1,
+                                        "abc",
+                                        Instant.parse("2026-04-12T00:00:00Z"))));
+
+        String json = codec.toJson(payload);
+        RawContent restored = codec.fromJson(json, RawContent.class);
+
+        assertThat(restored).isInstanceOf(ToolCallContent.class);
+        assertThat(((ToolCallContent) restored).calls())
+                .singleElement()
+                .extracting(ToolCallRecord::toolName, ToolCallRecord::status)
+                .containsExactly("search", "SUCCESS");
+    }
+
     record SamplePayload(String name, Instant createdAt) {}
+
+    private static final class TestRawContent extends RawContent {
+
+        private final String text;
+
+        @JsonCreator
+        private TestRawContent(@JsonProperty("text") String text) {
+            this.text = text == null ? "" : text;
+        }
+
+        @JsonProperty("text")
+        private String text() {
+            return text;
+        }
+
+        @Override
+        public String contentType() {
+            return "TEST_RAW";
+        }
+
+        @Override
+        public String toContentString() {
+            return text;
+        }
+
+        @Override
+        public String getContentId() {
+            return text;
+        }
+    }
 }

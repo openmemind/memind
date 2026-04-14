@@ -116,7 +116,6 @@ class LlmInsightGroupClassifierTest {
                 null,
                 null,
                 null,
-                null,
                 null);
     }
 

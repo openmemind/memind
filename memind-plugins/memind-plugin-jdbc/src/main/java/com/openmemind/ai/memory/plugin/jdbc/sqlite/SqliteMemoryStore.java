@@ -13,31 +13,36 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.sqlite;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.openmemind.ai.memory.core.data.ContentTypes;
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
+import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeConfig;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentBoundary;
+import com.openmemind.ai.memory.core.resource.ResourceStore;
+import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
+import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaBootstrap;
+import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaInitResult;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JdbcExecutor;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JsonCodec;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -60,8 +65,15 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
-public class SqliteMemoryStore implements RawDataOperations, ItemOperations, InsightOperations {
+public class SqliteMemoryStore
+        implements MemoryStore,
+                RawDataOperations,
+                ItemOperations,
+                InsightOperations,
+                ResourceOperations {
 
     private static final TypeReference<Map<String, Object>> OBJECT_MAP_TYPE =
             new TypeReference<>() {};
@@ -80,25 +92,72 @@ public class SqliteMemoryStore implements RawDataOperations, ItemOperations, Ins
 
     private final DataSource dataSource;
     private final JsonCodec jsonHelper;
+    private final ResourceStore resourceStore;
 
     public SqliteMemoryStore(DataSource dataSource) {
-        this(dataSource, true);
+        this(dataSource, null, true);
     }
 
     public SqliteMemoryStore(DataSource dataSource, boolean createIfNotExist) {
-        this(dataSource, JsonCodec.createDefaultObjectMapper(), createIfNotExist);
+        this(dataSource, null, createIfNotExist);
     }
 
-    private SqliteMemoryStore(
-            DataSource dataSource, ObjectMapper objectMapper, boolean createIfNotExist) {
+    public SqliteMemoryStore(
+            DataSource dataSource, ResourceStore resourceStore, boolean createIfNotExist) {
+        this(dataSource, resourceStore, JsonCodec.createDefaultObjectMapper(), createIfNotExist);
+    }
+
+    public SqliteMemoryStore(
+            DataSource dataSource,
+            ResourceStore resourceStore,
+            ObjectMapper objectMapper,
+            boolean createIfNotExist) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
-        StoreSchemaBootstrap.ensureSqlite(this.dataSource, createIfNotExist);
         this.jsonHelper = new JsonCodec(Objects.requireNonNull(objectMapper, "objectMapper"));
+        this.resourceStore = resourceStore;
+        StoreSchemaInitResult initResult =
+                StoreSchemaBootstrap.ensureSqlite(this.dataSource, createIfNotExist);
+        if (initResult.createdInsightTypeTable()) {
+            upsertInsightTypes(DefaultInsightTypes.all());
+        }
+    }
+
+    @Override
+    public RawDataOperations rawDataOperations() {
+        return this;
+    }
+
+    @Override
+    public ItemOperations itemOperations() {
+        return this;
+    }
+
+    @Override
+    public InsightOperations insightOperations() {
+        return this;
+    }
+
+    @Override
+    public ResourceOperations resourceOperations() {
+        return this;
+    }
+
+    @Override
+    public ResourceStore resourceStore() {
+        return resourceStore;
     }
 
     @Override
     public void upsertRawData(MemoryId memoryId, List<MemoryRawData> rawDataList) {
-        if (rawDataList == null || rawDataList.isEmpty()) {
+        upsertRawDataWithResources(memoryId, List.of(), rawDataList);
+    }
+
+    @Override
+    public void upsertRawDataWithResources(
+            MemoryId memoryId, List<MemoryResource> resources, List<MemoryRawData> rawDataList) {
+        boolean noResources = resources == null || resources.isEmpty();
+        boolean noRawData = rawDataList == null || rawDataList.isEmpty();
+        if (noResources && noRawData) {
             return;
         }
 
@@ -106,37 +165,57 @@ public class SqliteMemoryStore implements RawDataOperations, ItemOperations, Ins
         JdbcExecutor.inTransaction(
                 dataSource,
                 connection -> {
-                    try (PreparedStatement statement =
-                            connection.prepareStatement(
-                                    """
-                                    INSERT INTO memory_raw_data
-                                        (biz_id, user_id, agent_id, memory_id, type, content_id, segment,
-                                         caption, caption_vector_id, metadata, start_time, end_time,
-                                         created_at, updated_at, deleted)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-                                    ON CONFLICT(user_id, agent_id, biz_id) DO UPDATE SET
-                                        memory_id = excluded.memory_id,
-                                        type = excluded.type,
-                                        content_id = excluded.content_id,
-                                        segment = excluded.segment,
-                                        caption = excluded.caption,
-                                        caption_vector_id = excluded.caption_vector_id,
-                                        metadata = excluded.metadata,
-                                        start_time = excluded.start_time,
-                                        end_time = excluded.end_time,
-                                        created_at = excluded.created_at,
-                                        updated_at = excluded.updated_at,
-                                        deleted = 0
-                                    """)) {
-                        Instant now = Instant.now();
-                        for (MemoryRawData rawData : rawDataList) {
-                            bindRawDataUpsert(statement, scope, rawData, now);
-                            statement.addBatch();
-                        }
-                        statement.executeBatch();
-                    }
+                    upsertResources(connection, scope, resources);
+                    upsertRawData(connection, scope, rawDataList);
                     return null;
                 });
+    }
+
+    @Override
+    public void upsertResources(MemoryId memoryId, List<MemoryResource> resources) {
+        if (resources == null || resources.isEmpty()) {
+            return;
+        }
+
+        ScopeContext scope = scopeOf(memoryId);
+        JdbcExecutor.inTransaction(
+                dataSource,
+                connection -> {
+                    upsertResources(connection, scope, resources);
+                    return null;
+                });
+    }
+
+    @Override
+    public Optional<MemoryResource> getResource(MemoryId memoryId, String resourceId) {
+        ScopeContext scope = scopeOf(memoryId);
+        return Optional.ofNullable(
+                JdbcExecutor.queryOne(
+                        dataSource,
+                        """
+                        SELECT * FROM memory_resource
+                        WHERE user_id = ? AND agent_id = ? AND biz_id = ? AND deleted = 0
+                        LIMIT 1
+                        """,
+                        this::mapResource,
+                        scope.userId(),
+                        scope.agentId(),
+                        resourceId));
+    }
+
+    @Override
+    public List<MemoryResource> listResources(MemoryId memoryId) {
+        ScopeContext scope = scopeOf(memoryId);
+        return JdbcExecutor.queryList(
+                dataSource,
+                """
+                SELECT * FROM memory_resource
+                WHERE user_id = ? AND agent_id = ? AND deleted = 0
+                ORDER BY id ASC
+                """,
+                this::mapResource,
+                scope.userId(),
+                scope.agentId());
     }
 
     @Override
@@ -670,6 +749,80 @@ public class SqliteMemoryStore implements RawDataOperations, ItemOperations, Ins
                         group));
     }
 
+    private void upsertRawData(
+            Connection connection, ScopeContext scope, List<MemoryRawData> rawDataList)
+            throws SQLException {
+        if (rawDataList == null || rawDataList.isEmpty()) {
+            return;
+        }
+        try (PreparedStatement statement =
+                connection.prepareStatement(
+                        """
+                        INSERT INTO memory_raw_data
+                            (biz_id, user_id, agent_id, memory_id, type, content_id, segment,
+                             caption, caption_vector_id, metadata, resource_id, mime_type,
+                             start_time, end_time, created_at, updated_at, deleted)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        ON CONFLICT(user_id, agent_id, biz_id) DO UPDATE SET
+                            memory_id = excluded.memory_id,
+                            type = excluded.type,
+                            content_id = excluded.content_id,
+                            segment = excluded.segment,
+                            caption = excluded.caption,
+                            caption_vector_id = excluded.caption_vector_id,
+                            metadata = excluded.metadata,
+                            resource_id = excluded.resource_id,
+                            mime_type = excluded.mime_type,
+                            start_time = excluded.start_time,
+                            end_time = excluded.end_time,
+                            created_at = excluded.created_at,
+                            updated_at = excluded.updated_at,
+                            deleted = 0
+                        """)) {
+            Instant now = Instant.now();
+            for (MemoryRawData rawData : rawDataList) {
+                bindRawDataUpsert(statement, scope, rawData, now);
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        }
+    }
+
+    private void upsertResources(
+            Connection connection, ScopeContext scope, List<MemoryResource> resources)
+            throws SQLException {
+        if (resources == null || resources.isEmpty()) {
+            return;
+        }
+        try (PreparedStatement statement =
+                connection.prepareStatement(
+                        """
+                        INSERT INTO memory_resource
+                            (biz_id, user_id, agent_id, memory_id, source_uri, storage_uri, file_name,
+                             mime_type, checksum, size_bytes, metadata, created_at, updated_at, deleted)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        ON CONFLICT(user_id, agent_id, biz_id) DO UPDATE SET
+                            memory_id = excluded.memory_id,
+                            source_uri = excluded.source_uri,
+                            storage_uri = excluded.storage_uri,
+                            file_name = excluded.file_name,
+                            mime_type = excluded.mime_type,
+                            checksum = excluded.checksum,
+                            size_bytes = excluded.size_bytes,
+                            metadata = excluded.metadata,
+                            created_at = excluded.created_at,
+                            updated_at = excluded.updated_at,
+                            deleted = 0
+                        """)) {
+            Instant now = Instant.now();
+            for (MemoryResource resource : resources) {
+                bindResourceUpsert(statement, scope, resource, now);
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        }
+    }
+
     private void bindRawDataUpsert(
             PreparedStatement statement, ScopeContext scope, MemoryRawData rawData, Instant now)
             throws SQLException {
@@ -679,17 +832,38 @@ public class SqliteMemoryStore implements RawDataOperations, ItemOperations, Ins
         statement.setString(4, scope.memoryId());
         statement.setString(
                 5,
-                rawData.contentType() != null ? rawData.contentType() : ContentTypes.CONVERSATION);
+                rawData.contentType() != null ? rawData.contentType() : ConversationContent.TYPE);
         statement.setString(6, rawData.contentId());
         statement.setString(7, toSegmentJson(rawData.segment()));
         statement.setString(8, rawData.caption());
         statement.setString(9, rawData.captionVectorId());
         statement.setString(10, jsonHelper.toJson(rawData.metadata()));
-        statement.setString(11, writeInstant(rawData.startTime()));
-        statement.setString(12, writeInstant(rawData.endTime()));
+        statement.setString(11, rawData.resourceId());
+        statement.setString(12, rawData.mimeType());
+        statement.setString(13, writeInstant(rawData.startTime()));
+        statement.setString(14, writeInstant(rawData.endTime()));
         statement.setString(
-                13, writeInstant(rawData.createdAt() != null ? rawData.createdAt() : now));
-        statement.setString(14, writeInstant(now));
+                15, writeInstant(rawData.createdAt() != null ? rawData.createdAt() : now));
+        statement.setString(16, writeInstant(now));
+    }
+
+    private void bindResourceUpsert(
+            PreparedStatement statement, ScopeContext scope, MemoryResource resource, Instant now)
+            throws SQLException {
+        statement.setString(1, resource.id());
+        statement.setString(2, scope.userId());
+        statement.setString(3, scope.agentId());
+        statement.setString(4, scope.memoryId());
+        statement.setString(5, resource.sourceUri());
+        statement.setString(6, resource.storageUri());
+        statement.setString(7, resource.fileName());
+        statement.setString(8, resource.mimeType());
+        statement.setString(9, resource.checksum());
+        statement.setObject(10, resource.sizeBytes());
+        statement.setString(11, jsonHelper.toJson(resource.metadata()));
+        statement.setString(
+                12, writeInstant(resource.createdAt() != null ? resource.createdAt() : now));
+        statement.setString(13, writeInstant(now));
     }
 
     private void bindItemInsert(
@@ -710,7 +884,7 @@ public class SqliteMemoryStore implements RawDataOperations, ItemOperations, Ins
         statement.setString(
                 13, item.type() != null ? item.type().name() : MemoryItemType.FACT.name());
         statement.setString(
-                14, item.contentType() != null ? item.contentType() : ContentTypes.CONVERSATION);
+                14, item.contentType() != null ? item.contentType() : ConversationContent.TYPE);
         statement.setString(15, jsonHelper.toJson(item.metadata()));
         statement.setString(16, writeInstant(item.createdAt() != null ? item.createdAt() : now));
         statement.setString(17, writeInstant(now));
@@ -774,9 +948,25 @@ public class SqliteMemoryStore implements RawDataOperations, ItemOperations, Ins
                 resultSet.getString("caption"),
                 resultSet.getString("caption_vector_id"),
                 jsonHelper.fromJson(resultSet.getString("metadata"), OBJECT_MAP_TYPE),
+                resultSet.getString("resource_id"),
+                resultSet.getString("mime_type"),
                 parseInstant(resultSet.getString("created_at")),
                 parseInstant(resultSet.getString("start_time")),
                 parseInstant(resultSet.getString("end_time")));
+    }
+
+    private MemoryResource mapResource(ResultSet resultSet) throws SQLException {
+        return new MemoryResource(
+                resultSet.getString("biz_id"),
+                resultSet.getString("memory_id"),
+                resultSet.getString("source_uri"),
+                resultSet.getString("storage_uri"),
+                resultSet.getString("file_name"),
+                resultSet.getString("mime_type"),
+                resultSet.getString("checksum"),
+                nullableLong(resultSet, "size_bytes"),
+                jsonHelper.fromJson(resultSet.getString("metadata"), OBJECT_MAP_TYPE),
+                parseInstant(resultSet.getString("created_at")));
     }
 
     private MemoryItem mapItem(ResultSet resultSet) throws SQLException {
@@ -810,8 +1000,7 @@ public class SqliteMemoryStore implements RawDataOperations, ItemOperations, Ins
                 parseInstant(resultSet.getString("updated_at")),
                 parseInsightAnalysisMode(resultSet.getString("analysis_mode")),
                 jsonHelper.fromJson(resultSet.getString("tree_config"), InsightTreeConfig.class),
-                parseScope(resultSet.getString("scope")),
-                null);
+                parseScope(resultSet.getString("scope")));
     }
 
     private MemoryInsight mapInsight(ResultSet resultSet) throws SQLException {
@@ -941,7 +1130,7 @@ public class SqliteMemoryStore implements RawDataOperations, ItemOperations, Ins
 
     private String parseContentType(String value) {
         if (value == null || value.isBlank()) {
-            return ContentTypes.CONVERSATION;
+            return ConversationContent.TYPE;
         }
         return value;
     }

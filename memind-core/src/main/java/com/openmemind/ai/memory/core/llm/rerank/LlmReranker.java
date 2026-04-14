@@ -15,7 +15,6 @@ package com.openmemind.ai.memory.core.llm.rerank;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig.RerankConfig;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import java.net.URI;
@@ -31,6 +30,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Reranker based on Rerank API

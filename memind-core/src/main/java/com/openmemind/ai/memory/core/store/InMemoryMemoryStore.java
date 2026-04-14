@@ -13,12 +13,15 @@
  */
 package com.openmemind.ai.memory.core.store;
 
+import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.store.insight.InMemoryInsightOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.InMemoryItemOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.InMemoryRawDataOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
+import com.openmemind.ai.memory.core.store.resource.InMemoryResourceOperations;
+import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 
 /**
  * In-memory implementation of {@link MemoryStore}.
@@ -28,6 +31,11 @@ public class InMemoryMemoryStore implements MemoryStore {
     private final RawDataOperations rawDataOperations = new InMemoryRawDataOperations();
     private final ItemOperations itemOperations = new InMemoryItemOperations();
     private final InsightOperations insightOperations = new InMemoryInsightOperations();
+    private final ResourceOperations resourceOperations = new InMemoryResourceOperations();
+
+    public InMemoryMemoryStore() {
+        insightOperations.upsertInsightTypes(DefaultInsightTypes.all());
+    }
 
     @Override
     public RawDataOperations rawDataOperations() {
@@ -42,5 +50,10 @@ public class InMemoryMemoryStore implements MemoryStore {
     @Override
     public InsightOperations insightOperations() {
         return insightOperations;
+    }
+
+    @Override
+    public ResourceOperations resourceOperations() {
+        return resourceOperations;
     }
 }

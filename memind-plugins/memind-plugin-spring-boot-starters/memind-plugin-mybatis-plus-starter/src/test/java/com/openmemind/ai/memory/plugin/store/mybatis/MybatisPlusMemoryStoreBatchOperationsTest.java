@@ -23,6 +23,7 @@ import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
+import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
@@ -180,6 +181,62 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
     }
 
     @Test
+    @DisplayName("upsertRawDataWithResources persists resource rows and raw-data references")
+    void upsertRawDataWithResourcesPersistsResourceRowsAndRawDataReferences() {
+        newContextRunner(tempDir.resolve("raw-data-with-resources.db"))
+                .run(
+                        context -> {
+                            MemoryStore store = context.getBean(MemoryStore.class);
+                            var resource =
+                                    new MemoryResource(
+                                            "res-1",
+                                            MEMORY_ID.toIdentifier(),
+                                            "https://example.com/report.pdf",
+                                            "file:///tmp/memind/report.pdf",
+                                            "report.pdf",
+                                            "application/pdf",
+                                            "checksum-1",
+                                            2048L,
+                                            Map.of("pages", 3),
+                                            BASE_TIME.minusSeconds(90));
+                            var rawData =
+                                    new MemoryRawData(
+                                            "raw-1",
+                                            MEMORY_ID.toIdentifier(),
+                                            "DOCUMENT",
+                                            "content-raw-1",
+                                            Segment.single("hello multimodal"),
+                                            "caption",
+                                            null,
+                                            Map.of("source", "document"),
+                                            "res-1",
+                                            "application/pdf",
+                                            BASE_TIME,
+                                            BASE_TIME,
+                                            BASE_TIME.plusSeconds(60));
+
+                            store.upsertRawDataWithResources(
+                                    MEMORY_ID, List.of(resource), List.of(rawData));
+
+                            assertThat(store.resourceOperations().getResource(MEMORY_ID, "res-1"))
+                                    .contains(resource);
+                            assertThat(store.rawDataOperations().getRawData(MEMORY_ID, "raw-1"))
+                                    .get()
+                                    .satisfies(
+                                            persisted -> {
+                                                assertThat(persisted.resourceId())
+                                                        .isEqualTo("res-1");
+                                                assertThat(persisted.mimeType())
+                                                        .isEqualTo("application/pdf");
+                                                assertThat(persisted.metadata())
+                                                        .containsEntry("resourceId", "res-1")
+                                                        .containsEntry(
+                                                                "mimeType", "application/pdf");
+                                            });
+                        });
+    }
+
+    @Test
     @DisplayName("insertItems rolls back the whole batch when one insert fails")
     void insertItemsRollsBackWholeBatchWhenInsertFails() {
         newContextRunner(tempDir.resolve("add-items-tx.db"))
@@ -253,6 +310,8 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
                 caption,
                 null,
                 metadata,
+                null,
+                null,
                 BASE_TIME,
                 BASE_TIME,
                 BASE_TIME.plusSeconds(60));
