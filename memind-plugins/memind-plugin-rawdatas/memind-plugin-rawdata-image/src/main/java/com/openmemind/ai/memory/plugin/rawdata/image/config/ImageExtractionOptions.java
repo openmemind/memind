@@ -15,32 +15,22 @@ package com.openmemind.ai.memory.plugin.rawdata.image.config;
 
 import com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions;
 import com.openmemind.ai.memory.core.builder.SourceLimitOptions;
-import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
 import java.util.Objects;
 
 /**
  * Governance options for image ingestion.
  */
 public record ImageExtractionOptions(
-        SourceLimitOptions sourceLimit,
-        ParsedContentLimitOptions parsedLimit,
-        TokenChunkingOptions chunking,
-        int captionOcrMergeMaxTokens) {
+        SourceLimitOptions sourceLimit, ParsedContentLimitOptions parsedLimit) {
 
     public ImageExtractionOptions {
         sourceLimit = Objects.requireNonNull(sourceLimit, "sourceLimit");
         parsedLimit = Objects.requireNonNull(parsedLimit, "parsedLimit");
-        chunking = Objects.requireNonNull(chunking, "chunking");
-        if (captionOcrMergeMaxTokens < 0) {
-            throw new IllegalArgumentException("captionOcrMergeMaxTokens must be >= 0");
-        }
     }
 
     public static ImageExtractionOptions defaults() {
         return new ImageExtractionOptions(
                 new SourceLimitOptions(10L * 1024 * 1024),
-                new ParsedContentLimitOptions(4_000, null, null, null),
-                new TokenChunkingOptions(800, 1200),
-                400);
+                new ParsedContentLimitOptions(4_000, null, null, null));
     }
 }

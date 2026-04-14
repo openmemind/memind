@@ -15,37 +15,64 @@ package com.openmemind.ai.memory.plugin.rawdata.image.caption;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
+import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import reactor.test.StepVerifier;
 
 class ImageCaptionGeneratorTest {
 
     @Test
-    void mergedCaptionPrefersDescription() {
-        var generator = new ImageCaptionGenerator();
+    void generateForSegmentsPreservesPrefilledCaption() {
+        var generator = new ImageCaptionGenerator(80);
+        var segment =
+                new Segment(
+                        "dashboard screenshot showing Total Revenue 30%",
+                        "Revenue dashboard screenshot", new CharBoundary(0, 44), Map.of());
 
-        assertThat(
-                        generator
-                                .generate(
-                                        "Dashboard screenshot\nQ1 revenue 20%",
-                                        Map.of("segmentRole", "caption_ocr"))
-                                .block())
-                .isEqualTo("Dashboard screenshot");
+        StepVerifier.create(generator.generateForSegments(List.of(segment)))
+                .assertNext(
+                        segments ->
+                                assertThat(segments)
+                                        .singleElement()
+                                        .extracting(Segment::caption)
+                                        .isEqualTo("Revenue dashboard screenshot"))
+                .verifyComplete();
     }
 
     @Test
-    void ocrCaptionUsesStablePrefix() {
-        var generator = new ImageCaptionGenerator();
+    void generateForSegmentsWithLanguagePreservesPrefilledCaption() {
+        var generator = new ImageCaptionGenerator(80);
+        var segment =
+                new Segment(
+                        "dashboard screenshot showing Total Revenue 30%",
+                        "Revenue dashboard screenshot", new CharBoundary(0, 44), Map.of());
 
-        assertThat(generator.generate("Q1 revenue 20%", Map.of("segmentRole", "ocr")).block())
-                .isEqualTo("Image text: Q1 revenue 20%");
+        StepVerifier.create(generator.generateForSegments(List.of(segment), "zh-CN"))
+                .assertNext(
+                        segments ->
+                                assertThat(segments)
+                                        .singleElement()
+                                        .extracting(Segment::caption)
+                                        .isEqualTo("Revenue dashboard screenshot"))
+                .verifyComplete();
     }
 
     @Test
-    void descriptionCaptionTruncatesWhenTooLong() {
+    void generateForSegmentsTruncatesLongPrefilledCaption() {
         var generator = new ImageCaptionGenerator(12);
+        var segment =
+                new Segment("description", "123456789012345", new CharBoundary(0, 11), Map.of());
 
-        assertThat(generator.generate("123456789012345", Map.of()).block())
-                .isEqualTo("123456789...");
+        StepVerifier.create(generator.generateForSegments(List.of(segment)))
+                .assertNext(
+                        segments ->
+                                assertThat(segments)
+                                        .singleElement()
+                                        .extracting(Segment::caption)
+                                        .isEqualTo("123456789..."))
+                .verifyComplete();
     }
 }

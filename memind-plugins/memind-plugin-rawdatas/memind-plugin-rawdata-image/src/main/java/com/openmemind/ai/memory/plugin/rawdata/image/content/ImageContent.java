@@ -29,7 +29,7 @@ public final class ImageContent extends RawContent {
 
     private final String mimeType;
     private final String description;
-    private final String ocrText;
+    private final String caption;
     private final String sourceUri;
     private final Map<String, Object> metadata;
 
@@ -37,12 +37,12 @@ public final class ImageContent extends RawContent {
     public ImageContent(
             @JsonProperty("mimeType") String mimeType,
             @JsonProperty("description") String description,
-            @JsonProperty("ocrText") String ocrText,
+            @JsonProperty("caption") String caption,
             @JsonProperty("sourceUri") String sourceUri,
             @JsonProperty("metadata") Map<String, Object> metadata) {
         this.mimeType = mimeType;
         this.description = description;
-        this.ocrText = ocrText;
+        this.caption = caption;
         this.sourceUri = sourceUri;
         this.metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
     }
@@ -58,11 +58,7 @@ public final class ImageContent extends RawContent {
 
     @Override
     public String toContentString() {
-        if (ocrText == null || ocrText.isBlank()) {
-            return description == null ? "" : description;
-        }
-        String prefix = description == null ? "" : description;
-        return prefix.isBlank() ? ocrText : prefix + "\n" + ocrText;
+        return description == null ? "" : description;
     }
 
     @Override
@@ -77,7 +73,7 @@ public final class ImageContent extends RawContent {
 
     @Override
     public RawContent withMetadata(Map<String, Object> metadata) {
-        return new ImageContent(mimeType, description, ocrText, sourceUri, metadata);
+        return new ImageContent(mimeType, description, caption, sourceUri, metadata);
     }
 
     @Override
@@ -101,9 +97,9 @@ public final class ImageContent extends RawContent {
         return description;
     }
 
-    @JsonProperty("ocrText")
-    public String ocrText() {
-        return ocrText;
+    @JsonProperty("caption")
+    public String caption() {
+        return caption;
     }
 
     @Override

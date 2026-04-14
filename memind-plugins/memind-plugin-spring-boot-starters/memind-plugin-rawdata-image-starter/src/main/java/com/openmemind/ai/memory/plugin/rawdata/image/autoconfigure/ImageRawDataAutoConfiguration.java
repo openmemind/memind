@@ -14,7 +14,12 @@
 package com.openmemind.ai.memory.plugin.rawdata.image.autoconfigure;
 
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
+import com.openmemind.ai.memory.core.resource.ContentParser;
+import com.openmemind.ai.memory.plugin.rawdata.image.parser.VisionImageContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.image.plugin.ImageRawDataPlugin;
+import java.util.List;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -34,7 +39,13 @@ public class ImageRawDataAutoConfiguration {
 
     @Bean("imageRawDataPlugin")
     @ConditionalOnMissingBean(name = "imageRawDataPlugin")
-    RawDataPlugin imageRawDataPlugin(ImageRawDataProperties properties) {
-        return new ImageRawDataPlugin(properties.extractionOptions());
+    RawDataPlugin imageRawDataPlugin(
+            ImageRawDataProperties properties, ObjectProvider<ChatModel> chatModelProvider) {
+        ChatModel chatModel = chatModelProvider.getIfAvailable();
+        List<ContentParser> parsers =
+                properties.isParserEnabled() && chatModel != null
+                        ? List.of(new VisionImageContentParser(chatModel))
+                        : List.of();
+        return new ImageRawDataPlugin(properties.extractionOptions(), parsers);
     }
 }

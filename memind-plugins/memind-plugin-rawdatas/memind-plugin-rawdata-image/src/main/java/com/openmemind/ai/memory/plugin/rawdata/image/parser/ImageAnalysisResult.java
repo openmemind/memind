@@ -19,7 +19,7 @@ import java.util.Map;
  * Image parser result before conversion into rawdata {@code ImageContent}.
  */
 public record ImageAnalysisResult(
-        String description, String ocrText, Map<String, Object> metadata) {
+        String description, String caption, Map<String, Object> metadata) {
 
     public ImageAnalysisResult {
         metadata = metadata == null ? Map.of() : Map.copyOf(metadata);

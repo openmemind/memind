@@ -41,8 +41,8 @@ class ImageExtractionRequestsTest {
         var content =
                 new ImageContent(
                         "image/png",
-                        "dashboard screenshot",
-                        "total revenue 30%",
+                        "dashboard screenshot showing total revenue 30%",
+                        "Revenue dashboard screenshot",
                         "file:///tmp/dashboard.png",
                         Map.of("width", 1280));
 

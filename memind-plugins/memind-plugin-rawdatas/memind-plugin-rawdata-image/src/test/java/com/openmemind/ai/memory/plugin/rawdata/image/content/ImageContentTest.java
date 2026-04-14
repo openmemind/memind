@@ -37,22 +37,23 @@ class ImageContentTest {
     }
 
     @Test
-    void contentIdShouldTrackVisibleSourceTextIncludingOcr() {
+    void contentIdShouldTrackDescriptionOnly() {
         var content =
                 new ImageContent(
                         "image/png",
-                        "A screenshot of the dashboard",
-                        "Total Revenue 30%",
+                        "A screenshot of the dashboard showing Total Revenue 30%",
+                        "Revenue dashboard screenshot",
                         "file:///tmp/dashboard.png",
                         Map.of("width", 1280));
 
         assertThat(content.contentType()).isEqualTo(ImageContent.TYPE);
         assertThat(content.toContentString())
-                .isEqualTo("A screenshot of the dashboard\nTotal Revenue 30%");
+                .isEqualTo("A screenshot of the dashboard showing Total Revenue 30%");
         assertThat(content.getContentId())
                 .isEqualTo(
                         HashUtils.sampledSha256(
-                                "A screenshot of the dashboard\nTotal Revenue 30%"));
+                                "A screenshot of the dashboard showing Total Revenue 30%"));
+        assertThat(content.caption()).isEqualTo("Revenue dashboard screenshot");
     }
 
     @Test
@@ -60,7 +61,7 @@ class ImageContentTest {
         var content = ImageContent.of("A screenshot of the dashboard");
 
         assertThat(content.mimeType()).isNull();
-        assertThat(content.ocrText()).isNull();
+        assertThat(content.caption()).isNull();
         assertThat(content.sourceUri()).isNull();
         assertThat(content.metadata()).isEmpty();
     }
@@ -71,7 +72,7 @@ class ImageContentTest {
                 new ImageContent(
                         "image/png",
                         "chart screenshot",
-                        "Q1 revenue",
+                        "Revenue chart screenshot",
                         "file:///tmp/chart.png",
                         Map.of("width", 1280));
 
@@ -85,12 +86,12 @@ class ImageContentTest {
     }
 
     @Test
-    void jacksonRoundTripPreservesSubtypeAndMimeType() throws Exception {
+    void jacksonRoundTripPreservesDescriptionCaptionAndSubtype() throws Exception {
         var content =
                 new ImageContent(
                         "image/png",
-                        "A screenshot of the dashboard",
-                        "Total Revenue 30%",
+                        "A screenshot of the dashboard showing Total Revenue 30%",
+                        "Revenue dashboard screenshot",
                         "file:///tmp/dashboard.png",
                         Map.of("width", 1280));
 
@@ -103,12 +104,12 @@ class ImageContentTest {
                 .extracting(
                         ImageContent::mimeType,
                         ImageContent::description,
-                        ImageContent::ocrText,
+                        ImageContent::caption,
                         ImageContent::sourceUri)
                 .containsExactly(
                         "image/png",
-                        "A screenshot of the dashboard",
-                        "Total Revenue 30%",
+                        "A screenshot of the dashboard showing Total Revenue 30%",
+                        "Revenue dashboard screenshot",
                         "file:///tmp/dashboard.png");
     }
 }

@@ -40,8 +40,8 @@ public final class VisionImageContentParser implements ContentParser {
 
     private static final String RESPONSE_INSTRUCTION = "Return JSON only.";
     private static final String DEFAULT_INSTRUCTION =
-            "Describe the image faithfully and extract any visible text. "
-                    + "Return concise semantic description plus OCR text only.";
+            "Describe the image faithfully, including any visible text in the description. "
+                    + "Also provide a single-sentence caption. Return JSON only.";
     private static final Set<String> SUPPORTED_MIME_TYPES =
             Set.of("image/png", "image/jpeg", "image/webp", "image/gif");
     private static final Set<String> SUPPORTED_EXTENSIONS =
@@ -117,9 +117,14 @@ public final class VisionImageContentParser implements ContentParser {
                             ImageAnalysisResult parsed =
                                     JsonUtils.fromJson(
                                             stripMarkdownFence(payload), ImageAnalysisResult.class);
-                            if (parsed == null) {
+                            if (parsed == null
+                                    || parsed.description() == null
+                                    || parsed.description().isBlank()
+                                    || parsed.caption() == null
+                                    || parsed.caption().isBlank()) {
                                 throw new IllegalStateException(
-                                        "Image analysis response could not be parsed");
+                                        "Image analysis response must include description and"
+                                                + " caption");
                             }
                             var metadata =
                                     new LinkedHashMap<String, Object>(
@@ -129,8 +134,8 @@ public final class VisionImageContentParser implements ContentParser {
                             metadata.put("parser", "vision");
                             return new ImageContent(
                                     resolvedMimeType,
-                                    parsed.description(),
-                                    parsed.ocrText(),
+                                    parsed.description().trim(),
+                                    parsed.caption().trim(),
                                     source.sourceUrl(),
                                     metadata);
                         });
@@ -152,7 +157,8 @@ public final class VisionImageContentParser implements ContentParser {
 
     private static String defaultInstruction(String instruction) {
         if (instruction == null || instruction.isBlank()) {
-            return "Describe the image faithfully and extract any visible text.";
+            return "Describe the image faithfully, including any visible text in the description. "
+                    + "Also provide a single-sentence caption. Return JSON only.";
         }
         return instruction;
     }

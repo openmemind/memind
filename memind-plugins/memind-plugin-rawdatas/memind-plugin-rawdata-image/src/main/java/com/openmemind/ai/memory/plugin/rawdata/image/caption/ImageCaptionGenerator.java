@@ -14,15 +14,16 @@
 package com.openmemind.ai.memory.plugin.rawdata.image.caption;
 
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
+import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import java.util.List;
 import java.util.Map;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
  * Deterministic caption generator for parsed image segments.
  */
 public final class ImageCaptionGenerator implements CaptionGenerator {
-
-    private static final String OCR_PREFIX = "Image text: ";
 
     private final int maxLength;
 
@@ -35,50 +36,40 @@ public final class ImageCaptionGenerator implements CaptionGenerator {
     }
 
     @Override
+    public Mono<List<Segment>> generateForSegments(List<Segment> segments) {
+        return preserveOrGenerate(segments);
+    }
+
+    @Override
+    public Mono<List<Segment>> generateForSegments(List<Segment> segments, String language) {
+        return preserveOrGenerate(segments);
+    }
+
+    @Override
     public Mono<String> generate(String content, Map<String, Object> metadata) {
-        String segmentRole = metadata == null ? null : asText(metadata.get("segmentRole"));
-        String caption;
-        if ("ocr".equals(segmentRole)) {
-            caption = buildOcrCaption(content);
-        } else if ("caption_ocr".equals(segmentRole)) {
-            caption = buildMergedCaption(content);
-        } else {
-            caption = buildDescriptionCaption(content);
-        }
-        return Mono.just(caption);
+        return Mono.just(truncate(normalizeWhitespace(content)));
     }
 
-    private String buildMergedCaption(String content) {
-        String description = normalizeWhitespace(textBeforeFirstLineBreak(content));
-        if (!description.isBlank()) {
-            return truncate(description);
-        }
-        return buildOcrCaption(content);
+    @Override
+    public Mono<String> generate(String content, Map<String, Object> metadata, String language) {
+        return generate(content, metadata);
     }
 
-    private String buildDescriptionCaption(String content) {
-        String normalized = normalizeWhitespace(content);
-        if (normalized.isBlank()) {
-            return "";
+    private Mono<List<Segment>> preserveOrGenerate(List<Segment> segments) {
+        if (segments.isEmpty()) {
+            return Mono.just(List.of());
         }
-        return truncate(normalized);
-    }
 
-    private String buildOcrCaption(String content) {
-        String normalized = normalizeWhitespace(content);
-        if (normalized.isBlank()) {
-            return "";
-        }
-        int available = Math.max(0, maxLength - OCR_PREFIX.length());
-        return OCR_PREFIX + truncate(normalized, available);
-    }
-
-    private String textBeforeFirstLineBreak(String content) {
-        if (content == null || content.isBlank()) {
-            return "";
-        }
-        int lineBreakIndex = content.indexOf('\n');
-        return lineBreakIndex >= 0 ? content.substring(0, lineBreakIndex) : content;
+        return Flux.fromIterable(segments)
+                .map(
+                        segment -> {
+                            String candidate =
+                                    segment.caption() != null && !segment.caption().isBlank()
+                                            ? segment.caption()
+                                            : segment.content();
+                            return segment.withCaption(truncate(normalizeWhitespace(candidate)));
+                        })
+                .collectList();
     }
 
     private String normalizeWhitespace(String content) {
@@ -97,13 +88,5 @@ public final class ImageCaptionGenerator implements CaptionGenerator {
             return "";
         }
         return content.length() <= limit ? content : content.substring(0, limit - 3) + "...";
-    }
-
-    private String asText(Object value) {
-        if (value == null) {
-            return null;
-        }
-        String text = value.toString();
-        return text.isBlank() ? null : text;
     }
 }

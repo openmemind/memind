@@ -14,11 +14,12 @@
 package com.openmemind.ai.memory.plugin.rawdata.image.plugin;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions;
 import com.openmemind.ai.memory.core.builder.SourceLimitOptions;
-import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
@@ -26,6 +27,7 @@ import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
+import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.image.ImageSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.image.config.ImageExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.image.content.ImageContent;
@@ -58,16 +60,14 @@ class ImageRawDataPluginTest {
         var options =
                 new ImageExtractionOptions(
                         new SourceLimitOptions(4096),
-                        new ParsedContentLimitOptions(321, null, null, null),
-                        new TokenChunkingOptions(111, 222),
-                        12);
+                        new ParsedContentLimitOptions(321, null, null, null));
         var plugin = new ImageRawDataPlugin(options);
 
         assertThat(
                         readField(plugin, "options", ImageExtractionOptions.class)
-                                .chunking()
-                                .hardMaxTokens())
-                .isEqualTo(222);
+                                .parsedLimit()
+                                .maxTokens())
+                .isEqualTo(321);
         assertThat(plugin.ingestionPolicies())
                 .singleElement()
                 .satisfies(
@@ -79,7 +79,17 @@ class ImageRawDataPluginTest {
     }
 
     @Test
-    void pluginDoesNotExposeParserDirectly() {
+    void pluginExposesProvidedParsers() {
+        ContentParser parser = mock(ContentParser.class);
+        when(parser.parserId()).thenReturn("image-vision");
+
+        var plugin = new ImageRawDataPlugin(ImageExtractionOptions.defaults(), List.of(parser));
+
+        assertThat(plugin.parsers(pluginContext())).containsExactly(parser);
+    }
+
+    @Test
+    void pluginWithoutSuppliedParserExposesNoParsers() {
         var plugin = new ImageRawDataPlugin(ImageExtractionOptions.defaults());
 
         assertThat(plugin.parsers(pluginContext())).isEmpty();

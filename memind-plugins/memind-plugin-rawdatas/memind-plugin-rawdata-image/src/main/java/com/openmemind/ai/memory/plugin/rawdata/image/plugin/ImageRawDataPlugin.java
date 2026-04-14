@@ -18,8 +18,8 @@ import com.openmemind.ai.memory.core.extraction.rawdata.RawContentTypeRegistrar;
 import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicy;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
+import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.image.ImageSemantics;
-import com.openmemind.ai.memory.plugin.rawdata.image.chunk.ImageSegmentComposer;
 import com.openmemind.ai.memory.plugin.rawdata.image.config.ImageExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.image.content.ImageContent;
 import com.openmemind.ai.memory.plugin.rawdata.image.processor.ImageContentProcessor;
@@ -28,13 +28,19 @@ import java.util.List;
 public final class ImageRawDataPlugin implements RawDataPlugin {
 
     private final ImageExtractionOptions options;
+    private final List<ContentParser> parsers;
 
     public ImageRawDataPlugin() {
-        this(ImageExtractionOptions.defaults());
+        this(ImageExtractionOptions.defaults(), List.of());
     }
 
     public ImageRawDataPlugin(ImageExtractionOptions options) {
+        this(options, List.of());
+    }
+
+    public ImageRawDataPlugin(ImageExtractionOptions options, List<ContentParser> parsers) {
         this.options = options == null ? ImageExtractionOptions.defaults() : options;
+        this.parsers = parsers == null ? List.of() : List.copyOf(parsers);
     }
 
     @Override
@@ -43,8 +49,13 @@ public final class ImageRawDataPlugin implements RawDataPlugin {
     }
 
     @Override
+    public List<ContentParser> parsers(RawDataPluginContext context) {
+        return parsers;
+    }
+
+    @Override
     public List<RawContentProcessor<?>> processors(RawDataPluginContext context) {
-        return List.of(new ImageContentProcessor(new ImageSegmentComposer(), options));
+        return List.of(new ImageContentProcessor(options));
     }
 
     @Override

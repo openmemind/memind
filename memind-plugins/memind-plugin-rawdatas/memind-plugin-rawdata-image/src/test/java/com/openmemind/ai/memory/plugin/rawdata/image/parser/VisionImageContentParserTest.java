@@ -34,7 +34,7 @@ class VisionImageContentParserTest {
                 new VisionImageContentParser(
                         chatModel(
                                 """
-                                {"description":"desc","ocrText":"ocr","metadata":{"provider":"spring-ai"}}
+                                {"description":"desc","caption":"chart screenshot","metadata":{"provider":"spring-ai"}}
                                 """));
 
         assertThat(
@@ -55,8 +55,8 @@ class VisionImageContentParserTest {
                         chatModel(
                                 """
                                 {
-                                  "description":"dashboard screenshot",
-                                  "ocrText":"total revenue 30%",
+                                  "description":"dashboard screenshot showing Total Revenue 30%",
+                                  "caption":"Revenue dashboard screenshot",
                                   "metadata":{"provider":"spring-ai"}
                                 }
                                 """));
@@ -74,8 +74,11 @@ class VisionImageContentParserTest {
                                 .block();
 
         assertThat(content).isNotNull();
-        assertThat(content.description()).isEqualTo("dashboard screenshot");
-        assertThat(content.ocrText()).isEqualTo("total revenue 30%");
+        assertThat(content.description())
+                .isEqualTo("dashboard screenshot showing Total Revenue 30%");
+        assertThat(content.caption()).isEqualTo("Revenue dashboard screenshot");
+        assertThat(content.toContentString())
+                .isEqualTo("dashboard screenshot showing Total Revenue 30%");
         assertThat(content.metadata())
                 .containsEntry("parserId", "image-vision")
                 .containsEntry("contentProfile", "image.caption-ocr")

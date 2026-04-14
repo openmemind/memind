@@ -16,14 +16,13 @@ package com.openmemind.ai.memory.plugin.rawdata.image.processor;
 import com.openmemind.ai.memory.core.exception.ParsedContentTooLargeException;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
+import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import com.openmemind.ai.memory.plugin.rawdata.image.ImageSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.image.caption.ImageCaptionGenerator;
-import com.openmemind.ai.memory.plugin.rawdata.image.chunk.ImageSegmentComposer;
 import com.openmemind.ai.memory.plugin.rawdata.image.config.ImageExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.image.content.ImageContent;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -32,21 +31,16 @@ import reactor.core.publisher.Mono;
 /**
  * Processor for parsed image content.
  */
-public class ImageContentProcessor implements RawContentProcessor<ImageContent> {
+public final class ImageContentProcessor implements RawContentProcessor<ImageContent> {
 
-    private final ImageSegmentComposer imageSegmentComposer;
     private final ImageExtractionOptions options;
     private final CaptionGenerator captionGenerator;
 
     public ImageContentProcessor() {
-        this(new ImageSegmentComposer(), ImageExtractionOptions.defaults());
+        this(ImageExtractionOptions.defaults());
     }
 
-    public ImageContentProcessor(
-            ImageSegmentComposer imageSegmentComposer, ImageExtractionOptions options) {
-        this.imageSegmentComposer =
-                Objects.requireNonNull(
-                        imageSegmentComposer, "imageSegmentComposer must not be null");
+    public ImageContentProcessor(ImageExtractionOptions options) {
         this.options = Objects.requireNonNull(options, "options must not be null");
         this.captionGenerator = new ImageCaptionGenerator();
     }
@@ -79,10 +73,20 @@ public class ImageContentProcessor implements RawContentProcessor<ImageContent> 
 
     @Override
     public Mono<List<Segment>> chunk(ImageContent content) {
+        String description = content.description() == null ? "" : content.description().trim();
+        if (description.isBlank()) {
+            return Mono.just(List.of());
+        }
+
+        Map<String, Object> metadata =
+                content.metadata() == null ? Map.of() : Map.copyOf(content.metadata());
         return Mono.just(
-                imageSegmentComposer.compose(content, options).stream()
-                        .map(segment -> mergeMetadata(segment, content.metadata()))
-                        .toList());
+                List.of(
+                        new Segment(
+                                description,
+                                content.caption(),
+                                new CharBoundary(0, description.length()),
+                                metadata)));
     }
 
     @Override
@@ -98,19 +102,5 @@ public class ImageContentProcessor implements RawContentProcessor<ImageContent> 
         return content.directContentProfile() != null
                 ? content.directContentProfile()
                 : ImageSemantics.PROFILE_CAPTION_OCR;
-    }
-
-    private Segment mergeMetadata(Segment segment, Map<String, Object> contentMetadata) {
-        if (contentMetadata == null || contentMetadata.isEmpty()) {
-            return segment;
-        }
-        Map<String, Object> metadata = new LinkedHashMap<>(contentMetadata);
-        metadata.putAll(segment.metadata());
-        return new Segment(
-                segment.content(),
-                segment.caption(),
-                segment.boundary(),
-                Map.copyOf(metadata),
-                segment.runtimeContext());
     }
 }

@@ -15,7 +15,6 @@ package com.openmemind.ai.memory.plugin.rawdata.image.autoconfigure;
 
 import com.openmemind.ai.memory.core.builder.ParsedContentLimitOptions;
 import com.openmemind.ai.memory.core.builder.SourceLimitOptions;
-import com.openmemind.ai.memory.core.builder.TokenChunkingOptions;
 import com.openmemind.ai.memory.plugin.rawdata.image.config.ImageExtractionOptions;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -59,9 +58,6 @@ public class ImageRawDataProperties {
                 new SourceLimitProperties(DEFAULT_EXTRACTION.sourceLimit());
         private final ParsedContentLimitProperties parsedLimit =
                 new ParsedContentLimitProperties(DEFAULT_EXTRACTION.parsedLimit());
-        private final TokenChunkingProperties chunking =
-                new TokenChunkingProperties(DEFAULT_EXTRACTION.chunking());
-        private int captionOcrMergeMaxTokens = DEFAULT_EXTRACTION.captionOcrMergeMaxTokens();
 
         public SourceLimitProperties getSourceLimit() {
             return sourceLimit;
@@ -71,24 +67,8 @@ public class ImageRawDataProperties {
             return parsedLimit;
         }
 
-        public TokenChunkingProperties getChunking() {
-            return chunking;
-        }
-
-        public int getCaptionOcrMergeMaxTokens() {
-            return captionOcrMergeMaxTokens;
-        }
-
-        public void setCaptionOcrMergeMaxTokens(int captionOcrMergeMaxTokens) {
-            this.captionOcrMergeMaxTokens = captionOcrMergeMaxTokens;
-        }
-
         ImageExtractionOptions toOptions() {
-            return new ImageExtractionOptions(
-                    sourceLimit.toOptions(),
-                    parsedLimit.toOptions(),
-                    chunking.toOptions(),
-                    captionOcrMergeMaxTokens);
+            return new ImageExtractionOptions(sourceLimit.toOptions(), parsedLimit.toOptions());
         }
     }
 
@@ -161,37 +141,6 @@ public class ImageRawDataProperties {
 
         ParsedContentLimitOptions toOptions() {
             return new ParsedContentLimitOptions(maxTokens, maxSections, maxPages, maxDuration);
-        }
-    }
-
-    public static final class TokenChunkingProperties {
-
-        private int targetTokens;
-        private int hardMaxTokens;
-
-        private TokenChunkingProperties(TokenChunkingOptions defaults) {
-            this.targetTokens = defaults.targetTokens();
-            this.hardMaxTokens = defaults.hardMaxTokens();
-        }
-
-        public int getTargetTokens() {
-            return targetTokens;
-        }
-
-        public void setTargetTokens(int targetTokens) {
-            this.targetTokens = targetTokens;
-        }
-
-        public int getHardMaxTokens() {
-            return hardMaxTokens;
-        }
-
-        public void setHardMaxTokens(int hardMaxTokens) {
-            this.hardMaxTokens = hardMaxTokens;
-        }
-
-        TokenChunkingOptions toOptions() {
-            return new TokenChunkingOptions(targetTokens, hardMaxTokens);
         }
     }
 }
