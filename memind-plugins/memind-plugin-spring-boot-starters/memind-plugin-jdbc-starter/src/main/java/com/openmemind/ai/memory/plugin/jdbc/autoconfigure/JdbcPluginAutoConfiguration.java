@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.autoconfigure;
 
-import tools.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -44,6 +43,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.env.Environment;
+import tools.jackson.databind.ObjectMapper;
 
 @AutoConfiguration(
         afterName = {

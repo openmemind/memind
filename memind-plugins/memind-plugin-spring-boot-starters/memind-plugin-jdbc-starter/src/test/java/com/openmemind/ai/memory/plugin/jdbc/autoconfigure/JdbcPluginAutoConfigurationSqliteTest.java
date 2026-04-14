@@ -17,7 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import tools.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
@@ -54,6 +53,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.sqlite.SQLiteDataSource;
 import reactor.core.publisher.Mono;
+import tools.jackson.databind.ObjectMapper;
 
 @DisplayName("JDBC starter SQLite auto-configuration")
 class JdbcPluginAutoConfigurationSqliteTest {
@@ -371,8 +371,9 @@ class JdbcPluginAutoConfigurationSqliteTest {
         ObjectMapper objectMapper() {
             ObjectMapper mapper = new ObjectMapper();
             mapper = RawContentJackson.registerCoreSubtypes(mapper);
-            mapper = RawContentJackson.registerPluginSubtypes(
-                    mapper, List.of(() -> Map.of("test_raw", TestRawContent.class)));
+            mapper =
+                    RawContentJackson.registerPluginSubtypes(
+                            mapper, List.of(() -> Map.of("test_raw", TestRawContent.class)));
             return mapper;
         }
     }
