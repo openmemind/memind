@@ -79,6 +79,7 @@ class SqliteMemoryStoreTest {
         assertThat(tableExists(emptyDataSource, "memory_insight")).isTrue();
         assertThat(tableExists(emptyDataSource, "memory_insight_bubble_state")).isTrue();
         assertThat(tableExists(emptyDataSource, "memory_resource")).isTrue();
+        assertThat(columnExists(emptyDataSource, "memory_insight", "confidence")).isFalse();
         assertThat(columnExists(emptyDataSource, "memory_raw_data", "resource_id")).isTrue();
         assertThat(columnExists(emptyDataSource, "memory_raw_data", "mime_type")).isTrue();
     }
@@ -453,7 +454,6 @@ class SqliteMemoryStoreTest {
                         List.of("profile"),
                         List.of(point("leaf point updated")),
                         "group-a",
-                        0.95f,
                         BASE_TIME.minusSeconds(5),
                         List.of(0.8f, 0.9f),
                         BASE_TIME.minusSeconds(20),
@@ -469,7 +469,6 @@ class SqliteMemoryStoreTest {
         assertThat(fetchedLeaf.points())
                 .extracting(InsightPoint::content)
                 .containsExactly("leaf point updated");
-        assertThat(fetchedLeaf.confidence()).isEqualTo(0.95f);
         assertThat(fetchedLeaf.version()).isEqualTo(2);
         assertThat(store.listInsights(memoryId)).hasSize(3);
         assertThat(store.getInsightsByType(memoryId, "profile")).hasSize(3);
@@ -623,7 +622,6 @@ class SqliteMemoryStoreTest {
                 List.of("profile"),
                 List.of(point(pointContent)),
                 group,
-                0.7f,
                 BASE_TIME.minusSeconds(10),
                 List.of(0.1f, 0.2f),
                 BASE_TIME.minusSeconds(20),
@@ -636,11 +634,7 @@ class SqliteMemoryStoreTest {
 
     private InsightPoint point(String content) {
         return new InsightPoint(
-                InsightPoint.PointType.SUMMARY,
-                content,
-                0.8f,
-                List.of("101"),
-                Map.of("kind", "summary"));
+                InsightPoint.PointType.SUMMARY, content, List.of("101"), Map.of("kind", "summary"));
     }
 
     private int itemDeletedFlag(Long itemId) {

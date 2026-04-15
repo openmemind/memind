@@ -93,7 +93,7 @@ public final class InsightLeafPrompts {
             # Workflow
 
             ## Step 1 — Parse & Analyze
-            - Understand each existing point's content, type, confidence, and sourceItemIds.
+            - Understand each existing point's content, type, and sourceItemIds.
             - Read ALL new items together. Identify recurring themes, temporal patterns, \
             causal links, and contradictions.
             - Filter noise: ignore trivial one-time events or exact duplicates.
@@ -158,7 +158,7 @@ public final class InsightLeafPrompts {
             # Workflow
 
             ## Step 1 — Parse & Analyze
-            - Understand each existing point's content, type, confidence, and sourceItemIds.
+            - Understand each existing point's content, type, and sourceItemIds.
             - Read ALL new items together. Identify:
               - Recurring themes: multiple items about the same topic or domain.
               - Temporal patterns: changes, progressions, or trends over time.
@@ -215,14 +215,12 @@ public final class InsightLeafPrompts {
                 {
                   "type": "SUMMARY",
                   "content": "Synthesized observation integrating multiple memory items...",
-                  "confidence": 0.85,
                   "sourceItemIds": ["42", "43", "45"],
                   "point_reason": "Explain which items contribute what and why this is a stable synthesized point."
                 },
                 {
                   "type": "REASONING",
                   "content": "Inference or pattern derived from combining multiple facts...",
-                  "confidence": 0.70,
                   "sourceItemIds": ["10", "11", "15"],
                   "point_reason": "Explain the supporting evidence chain and why this is an inference."
                 }
@@ -232,7 +230,6 @@ public final class InsightLeafPrompts {
             Field descriptions:
             - `type`: "SUMMARY" or "REASONING" (see Type Decision Logic above).
             - `content`: Plain text synthesized statement (1-3 sentences).
-            - `confidence`: Confidence score in [0, 1].
             - `sourceItemIds`: Array of strings. Updated points MUST include both existing and new item IDs.
             - `point_reason`: Reasoning-only field that explains synthesis logic; it will NOT be stored.\
             """;
@@ -251,7 +248,6 @@ public final class InsightLeafPrompts {
                     "pointId": "pt_existing_1",
                     "type": "SUMMARY",
                     "content": "Updated synthesized observation integrating multiple memory items...",
-                    "confidence": 0.85,
                     "sourceItemIds": ["42", "43", "45"]
                   },
                   "reason": "This point remains valid but new items refine it with stronger evidence."
@@ -261,7 +257,6 @@ public final class InsightLeafPrompts {
                   "point": {
                     "type": "REASONING",
                     "content": "Inference or pattern derived from combining multiple facts...",
-                    "confidence": 0.70,
                     "sourceItemIds": ["10", "11", "15"]
                   },
                   "reason": "New cross-item pattern not covered by any existing point."
@@ -282,15 +277,6 @@ public final class InsightLeafPrompts {
             - `point.type`: "SUMMARY" or "REASONING" (see Type Decision Logic above).
             - `point.content`: Plain text synthesized statement (1-3 sentences).
             - `point.pointId`: For UPDATE, keep it identical to `targetPointId`. For ADD, omit it.
-            - `point.confidence`:
-              For SUMMARY:
-                - 0.90+: Theme confirmed across 3+ items with strong consistency.
-                - 0.80-0.89: Clear pattern from 2+ items.
-                - 0.70-0.79: Reasonable consolidation, some items only loosely related.
-              For REASONING:
-                - 0.80+: Strong causal/logical chain supported by multiple items.
-                - 0.65-0.79: Reasonable inference from available evidence.
-                - < 0.65: Speculative — include only if highly valuable.
             - `point.sourceItemIds`: Array of strings. SUMMARY should have 2+ IDs. \
             Updated points MUST include both existing and new item IDs.
             - Return `"operations": []` when analysis finds no durable change.\
@@ -317,7 +303,6 @@ public final class InsightLeafPrompts {
                 {
                   "type": "SUMMARY",
                   "content": "User is enthusiastic about Asian cuisine, especially Sichuan and Thai food, and also cooks Sichuan dishes at home.",
-                  "confidence": 0.90,
                   "sourceItemIds": ["42", "44", "45"],
                   "point_reason": "These items reveal one durable cuisine preference pattern."
                 }
@@ -328,7 +313,7 @@ public final class InsightLeafPrompts {
 
             Input:
             Existing Points:
-            - [SUMMARY] User prefers working from home and values schedule flexibility (confidence: 0.85, sources: [10, 11])
+            - [SUMMARY] User prefers working from home and values schedule flexibility (sourceItemIds: [10, 11])
 
             New items:
             - id: "55", content: User recently started going to the office 3 days a week
@@ -340,7 +325,6 @@ public final class InsightLeafPrompts {
                 {
                   "type": "SUMMARY",
                   "content": "User transitioned from fully remote work to a hybrid schedule. They still value flexibility, but now see in-office collaboration as improving project velocity.",
-                  "confidence": 0.90,
                   "sourceItemIds": ["10", "11", "55", "57"],
                   "point_reason": "The existing point remains valid but must be rewritten with the new evidence."
                 }
@@ -369,7 +353,6 @@ public final class InsightLeafPrompts {
                   "point": {
                     "type": "SUMMARY",
                     "content": "User is enthusiastic about Asian cuisine, especially Sichuan and Thai food, and also cooks Sichuan dishes at home.",
-                    "confidence": 0.90,
                     "sourceItemIds": ["42", "44", "45"]
                   },
                   "reason": "These items form one durable synthesized preference pattern not represented by any existing point."
@@ -384,7 +367,6 @@ public final class InsightLeafPrompts {
             - pointId: pt_existing_1
               type: SUMMARY
               content: User prefers working from home and values schedule flexibility
-              confidence: 0.85
               sourceItemIds: ["10", "11"]
 
             New items:
@@ -401,7 +383,6 @@ public final class InsightLeafPrompts {
                     "pointId": "pt_existing_1",
                     "type": "SUMMARY",
                     "content": "User transitioned from fully remote work to a hybrid schedule. They still value flexibility, but now see in-office collaboration as improving project velocity.",
-                    "confidence": 0.90,
                     "sourceItemIds": ["10", "11", "55", "57"]
                   },
                   "reason": "The existing point remains directionally valid but needs to reflect the new hybrid-work evidence."
@@ -416,7 +397,6 @@ public final class InsightLeafPrompts {
             - pointId: pt_existing_1
               type: SUMMARY
               content: User prefers concise technical answers
-              confidence: 0.90
               sourceItemIds: ["70", "71"]
 
             New items:
@@ -583,15 +563,13 @@ public final class InsightLeafPrompts {
         if (existingPoints != null && !existingPoints.isEmpty()) {
             sb.append("\n# Existing Points\n");
             for (var point : existingPoints) {
-                sb.append("- [")
+                sb.append("- type: ")
                         .append(point.type())
-                        .append("] ")
+                        .append("\n  content: ")
                         .append(point.content())
-                        .append(" (confidence: ")
-                        .append(point.confidence())
-                        .append(", sources: ")
+                        .append("\n  sourceItemIds: ")
                         .append(point.sourceItemIds())
-                        .append(")\n");
+                        .append("\n");
             }
         }
 
@@ -633,10 +611,10 @@ public final class InsightLeafPrompts {
                         .append(p.type())
                         .append("\n  content: ")
                         .append(p.content())
-                        .append("\n  confidence: ")
-                        .append(p.confidence())
                         .append("\n  sourceItemIds: ")
                         .append(p.sourceItemIds())
+                        .append("\n  sourcePointRefs: ")
+                        .append(p.sourcePointRefs())
                         .append("\n");
             }
         }

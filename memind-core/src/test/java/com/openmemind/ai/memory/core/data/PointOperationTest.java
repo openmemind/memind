@@ -44,5 +44,6 @@ class PointOperationTest {
 
         assertThat(operation.targetPointId()).isEqualTo("pt_existing_1");
         assertThat(operation.point().pointId()).isEqualTo("pt_existing_1");
+        assertThat(operation.point().sourcePointRefs()).isEmpty();
     }
 }

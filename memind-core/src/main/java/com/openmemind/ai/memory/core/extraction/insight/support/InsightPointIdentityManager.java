@@ -14,6 +14,7 @@
 package com.openmemind.ai.memory.core.extraction.insight.support;
 
 import com.openmemind.ai.memory.core.data.InsightPoint;
+import com.openmemind.ai.memory.core.data.InsightPointRef;
 import com.openmemind.ai.memory.core.data.PointOperation;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -154,9 +155,17 @@ public final class InsightPointIdentityManager {
         return new PointSignature(
                 point.type(),
                 point.content(),
-                point.sourceItemIds().stream().sorted(Comparator.naturalOrder()).toList());
+                point.sourceItemIds().stream().sorted(Comparator.naturalOrder()).toList(),
+                point.sourcePointRefs().stream()
+                        .sorted(
+                                Comparator.comparing(InsightPointRef::insightId)
+                                        .thenComparing(InsightPointRef::pointId))
+                        .toList());
     }
 
     private record PointSignature(
-            InsightPoint.PointType type, String content, List<String> sourceItemIds) {}
+            InsightPoint.PointType type,
+            String content,
+            List<String> sourceItemIds,
+            List<InsightPointRef> sourcePointRefs) {}
 }

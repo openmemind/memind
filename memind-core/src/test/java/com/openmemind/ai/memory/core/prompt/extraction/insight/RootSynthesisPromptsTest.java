@@ -15,11 +15,17 @@ package com.openmemind.ai.memory.core.prompt.extraction.insight;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.data.InsightPoint;
+import com.openmemind.ai.memory.core.data.InsightPointRef;
+import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
+import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptType;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -30,7 +36,18 @@ class RootSynthesisPromptsTest {
     @DisplayName("system prompt should describe new agent branch taxonomy")
     void shouldDescribeNewAgentBranchTaxonomy() {
         var prompt =
-                RootSynthesisPrompts.build(createRootType("profile"), null, List.of(), 300)
+                RootSynthesisPrompts.build(
+                                createRootType("profile"),
+                                List.of(
+                                        new InsightPoint(
+                                                "pt_root_existing",
+                                                InsightPoint.PointType.REASONING,
+                                                "Existing synthesis",
+                                                List.of(),
+                                                List.of(new InsightPointRef(11L, "pt_branch_1")),
+                                                Map.of("dimension", "convergence"))),
+                                List.of(branchInsight()),
+                                300)
                         .render("English");
 
         assertThat(prompt.systemPrompt())
@@ -39,6 +56,11 @@ class RootSynthesisPromptsTest {
                 .contains("playbooks")
                 .contains("resolutions")
                 .doesNotContain("proc" + "edural: Reusable HOW-TO knowledge");
+        assertThat(prompt.userPrompt())
+                .contains("insightId=")
+                .contains("pointId=")
+                .contains("sourcePointRefs")
+                .doesNotContain("confidence");
     }
 
     @Test
@@ -51,7 +73,7 @@ class RootSynthesisPromptsTest {
 
         var template =
                 RootSynthesisPrompts.build(
-                        registry, createRootType("interaction"), "existing", List.of(), 300);
+                        registry, createRootType("interaction"), List.of(), List.of(), 300);
 
         assertThat(template.describeStructure()).contains("Sections: system");
         assertThat(template.render("English").systemPrompt())
@@ -72,5 +94,35 @@ class RootSynthesisPromptsTest {
                 InsightAnalysisMode.ROOT,
                 null,
                 null);
+    }
+
+    private static MemoryInsight branchInsight() {
+        Instant now = Instant.parse("2026-04-15T00:00:00Z");
+        return new MemoryInsight(
+                11L,
+                "memory-1",
+                "profile",
+                null,
+                "branch-profile",
+                List.of(),
+                List.of(
+                        new InsightPoint(
+                                "pt_branch_1",
+                                InsightPoint.PointType.SUMMARY,
+                                "User consistently optimizes for async-first work.",
+                                List.of(),
+                                List.of(
+                                        new InsightPointRef(101L, "pt_leaf_remote"),
+                                        new InsightPointRef(102L, "pt_leaf_deep_work")),
+                                null)),
+                null,
+                now,
+                null,
+                now,
+                now,
+                InsightTier.BRANCH,
+                null,
+                List.of(101L, 102L),
+                1);
     }
 }

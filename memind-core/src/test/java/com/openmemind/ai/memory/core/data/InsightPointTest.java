@@ -23,55 +23,66 @@ import org.junit.jupiter.api.Test;
 class InsightPointTest {
 
     @Test
-    void deserializeLegacyJsonWithoutPointIdKeepsDataCompatible() throws Exception {
+    void deserializeLegacyConfidenceIsIgnored() throws Exception {
         var mapper = JsonUtils.newMapper();
 
         var point =
                 mapper.readValue(
                         """
                         {
+                          "pointId": "pt_leaf_1",
                           "type": "SUMMARY",
                           "content": "User prefers async communication",
-                          "confidence": 0.9,
+                          "confidence": 0.85,
                           "sourceItemIds": ["10", "11"]
                         }
                         """,
                         InsightPoint.class);
 
-        assertThat(point.pointId()).isNull();
-        assertThat(point.content()).isEqualTo("User prefers async communication");
+        assertThat(point.pointId()).isEqualTo("pt_leaf_1");
         assertThat(point.sourceItemIds()).containsExactly("10", "11");
+        assertThat(point.sourcePointRefs()).isEmpty();
     }
 
     @Test
-    void withPointIdCopiesRecordWithoutChangingOtherFields() {
-        var original =
-                new InsightPoint(
-                        InsightPoint.PointType.SUMMARY,
-                        "User prefers async communication",
-                        0.9f,
-                        List.of("10", "11"));
-
-        var updated = original.withPointId("pt_123");
-
-        assertThat(updated.pointId()).isEqualTo("pt_123");
-        assertThat(updated.type()).isEqualTo(original.type());
-        assertThat(updated.content()).isEqualTo(original.content());
-        assertThat(updated.sourceItemIds()).containsExactly("10", "11");
-    }
-
-    @Test
-    void canonicalConstructorAcceptsExplicitPointIdAndMetadata() {
+    void serializeBranchPointContainsSourcePointRefs() throws Exception {
+        var mapper = JsonUtils.newMapper();
         var point =
                 new InsightPoint(
-                        "pt_456",
+                        "pt_branch_1",
+                        InsightPoint.PointType.SUMMARY,
+                        "User consistently optimizes for async-first work.",
+                        List.of(),
+                        List.of(
+                                new InsightPointRef(101L, "pt_leaf_remote"),
+                                new InsightPointRef(102L, "pt_leaf_deep_work")),
+                        Map.of("dimension", "work_style"));
+
+        String json = mapper.writeValueAsString(point);
+
+        assertThat(json).contains("sourcePointRefs");
+        assertThat(json).doesNotContain("confidence");
+    }
+
+    @Test
+    void withPointIdCopiesRecordWithoutChangingEvidenceFields() {
+        var original =
+                new InsightPoint(
+                        null,
                         InsightPoint.PointType.REASONING,
                         "The user values uninterrupted work blocks",
-                        0.75f,
                         List.of("22", "24"),
+                        List.of(new InsightPointRef(101L, "pt_leaf_focus")),
                         Map.of("dimension", "focus"));
 
-        assertThat(point.pointId()).isEqualTo("pt_456");
-        assertThat(point.metadata()).containsEntry("dimension", "focus");
+        var updated = original.withPointId("pt_456");
+
+        assertThat(updated.pointId()).isEqualTo("pt_456");
+        assertThat(updated.type()).isEqualTo(original.type());
+        assertThat(updated.content()).isEqualTo(original.content());
+        assertThat(updated.sourceItemIds()).containsExactly("22", "24");
+        assertThat(updated.sourcePointRefs())
+                .containsExactly(new InsightPointRef(101L, "pt_leaf_focus"));
+        assertThat(updated.metadata()).containsEntry("dimension", "focus");
     }
 }

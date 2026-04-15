@@ -43,12 +43,14 @@ class StoreSchemaBootstrapTest {
         SqlScriptRunner.execute(dataSource, "db/jdbc/sqlite/store/V1__init.sql");
 
         assertThat(tableExists(dataSource, "memory_resource")).isFalse();
+        assertThat(columnExists(dataSource, "memory_insight", "confidence")).isTrue();
         assertThat(columnExists(dataSource, "memory_raw_data", "resource_id")).isFalse();
         assertThat(columnExists(dataSource, "memory_raw_data", "mime_type")).isFalse();
 
         StoreSchemaInitResult result = StoreSchemaBootstrap.ensureSqlite(dataSource, true);
 
         assertThat(tableExists(dataSource, "memory_resource")).isTrue();
+        assertThat(columnExists(dataSource, "memory_insight", "confidence")).isFalse();
         assertThat(columnExists(dataSource, "memory_raw_data", "resource_id")).isTrue();
         assertThat(columnExists(dataSource, "memory_raw_data", "mime_type")).isTrue();
         assertThat(result.createdInsightTypeTable()).isFalse();

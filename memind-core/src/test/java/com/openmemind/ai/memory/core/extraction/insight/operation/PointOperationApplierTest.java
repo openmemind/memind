@@ -29,22 +29,13 @@ class PointOperationApplierTest {
         var existing =
                 List.of(
                         new InsightPoint(
-                                "pt_keep",
-                                InsightPoint.PointType.SUMMARY,
-                                "keep",
-                                0.8f,
-                                List.of("1")),
+                                "pt_keep", InsightPoint.PointType.SUMMARY, "keep", List.of("1")),
                         new InsightPoint(
-                                "pt_update",
-                                InsightPoint.PointType.SUMMARY,
-                                "old",
-                                0.8f,
-                                List.of("2")),
+                                "pt_update", InsightPoint.PointType.SUMMARY, "old", List.of("2")),
                         new InsightPoint(
                                 "pt_delete",
                                 InsightPoint.PointType.REASONING,
                                 "remove",
-                                0.7f,
                                 List.of("3")));
 
         var result =
@@ -58,7 +49,6 @@ class PointOperationApplierTest {
                                                 "pt_update",
                                                 InsightPoint.PointType.SUMMARY,
                                                 "new",
-                                                0.9f,
                                                 List.of("2", "4")),
                                         null),
                                 new PointOperation(
@@ -81,7 +71,6 @@ class PointOperationApplierTest {
                                 "pt_same",
                                 InsightPoint.PointType.SUMMARY,
                                 "original",
-                                0.8f,
                                 List.of("1")));
 
         var result =
@@ -95,7 +84,6 @@ class PointOperationApplierTest {
                                                 "pt_same",
                                                 InsightPoint.PointType.SUMMARY,
                                                 "updated",
-                                                0.9f,
                                                 List.of("1", "2")),
                                         null),
                                 new PointOperation(

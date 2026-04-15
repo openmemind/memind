@@ -27,6 +27,7 @@ import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerat
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassifier;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupRouter;
 import com.openmemind.ai.memory.core.extraction.insight.operation.PointOperationResolver;
+import com.openmemind.ai.memory.core.extraction.insight.support.InsightPointEvidenceNormalizer;
 import com.openmemind.ai.memory.core.extraction.insight.support.InsightPointIdentityManager;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -79,6 +80,7 @@ public class InsightBuildScheduler implements Closeable {
     private final IdUtils.SnowflakeIdGenerator idGenerator;
     private final InsightBuildConfig config;
     private final InsightPointIdentityManager pointIdentityManager;
+    private final InsightPointEvidenceNormalizer evidenceNormalizer;
     private final MemoryObserver observer;
 
     private final ExecutorService executor;
@@ -134,6 +136,7 @@ public class InsightBuildScheduler implements Closeable {
                 idGenerator,
                 config,
                 new InsightPointIdentityManager(),
+                new InsightPointEvidenceNormalizer(),
                 null);
     }
 
@@ -159,6 +162,7 @@ public class InsightBuildScheduler implements Closeable {
                 idGenerator,
                 config,
                 new InsightPointIdentityManager(),
+                new InsightPointEvidenceNormalizer(),
                 observer);
     }
 
@@ -173,6 +177,7 @@ public class InsightBuildScheduler implements Closeable {
             IdUtils.SnowflakeIdGenerator idGenerator,
             InsightBuildConfig config,
             InsightPointIdentityManager pointIdentityManager,
+            InsightPointEvidenceNormalizer evidenceNormalizer,
             MemoryObserver observer) {
         this.bufferStore = Objects.requireNonNull(bufferStore);
         this.store = Objects.requireNonNull(store);
@@ -184,6 +189,7 @@ public class InsightBuildScheduler implements Closeable {
         this.idGenerator = Objects.requireNonNull(idGenerator);
         this.config = Objects.requireNonNull(config);
         this.pointIdentityManager = Objects.requireNonNull(pointIdentityManager);
+        this.evidenceNormalizer = Objects.requireNonNull(evidenceNormalizer);
         this.observer = observer != null ? observer : new NoopMemoryObserver();
         this.executor = Executors.newVirtualThreadPerTaskExecutor();
         this.semaphore = new Semaphore(config.concurrency());
@@ -605,7 +611,7 @@ public class InsightBuildScheduler implements Closeable {
             return null;
         }
 
-        var points = resolved.points();
+        var points = evidenceNormalizer.normalizeLeafPoints(resolved.points());
         if (existingLeaf != null && points.equals(existingLeaf.points())) {
             bufferStore.markBuilt(memoryId, insightTypeName, unbuiltItemIds);
             return null;
@@ -653,7 +659,9 @@ public class InsightBuildScheduler implements Closeable {
         }
 
         var points =
-                pointIdentityManager.reusePointIdsForFullRewrite(existingPoints, response.points());
+                evidenceNormalizer.normalizeLeafPoints(
+                        pointIdentityManager.reusePointIdsForFullRewrite(
+                                existingPoints, response.points()));
         if (existingLeaf != null && points.equals(existingLeaf.points())) {
             bufferStore.markBuilt(memoryId, insightTypeName, unbuiltItemIds);
             return null;
@@ -699,7 +707,6 @@ public class InsightBuildScheduler implements Closeable {
             leafInsight =
                     existingLeaf
                             .withPoints(points)
-                            .withConfidence(computeConfidence(points))
                             .withLastReasonedAt(now)
                             .withSummaryEmbedding(embedPoints(points))
                             .withUpdatedAt(now)
@@ -722,7 +729,6 @@ public class InsightBuildScheduler implements Closeable {
                             insightType.categories(),
                             points,
                             groupName,
-                            computeConfidence(points),
                             now,
                             embedPoints(points),
                             now,
@@ -807,13 +813,6 @@ public class InsightBuildScheduler implements Closeable {
             log.warn("Embedding calculation failed: {}", e.getMessage());
             return null;
         }
-    }
-
-    private float computeConfidence(List<InsightPoint> points) {
-        if (points == null || points.isEmpty()) {
-            return 0.0f;
-        }
-        return (float) points.stream().mapToDouble(InsightPoint::confidence).average().orElse(0.0);
     }
 
     /**

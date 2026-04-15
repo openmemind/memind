@@ -39,21 +39,16 @@ class InsightPointIdentityManagerTest {
                 manager.normalizePersistedPoints(
                         List.of(
                                 new InsightPoint(
-                                        InsightPoint.PointType.SUMMARY,
-                                        "first",
-                                        0.8f,
-                                        List.of("1")),
+                                        InsightPoint.PointType.SUMMARY, "first", List.of("1")),
                                 new InsightPoint(
                                         "pt_generated",
                                         InsightPoint.PointType.SUMMARY,
                                         "second",
-                                        0.8f,
                                         List.of("2")),
                                 new InsightPoint(
                                         "pt_generated",
                                         InsightPoint.PointType.REASONING,
                                         "duplicate",
-                                        0.7f,
                                         List.of("3"))));
 
         assertThat(normalized)
@@ -77,13 +72,11 @@ class InsightPointIdentityManagerTest {
                                 "pt_existing_1",
                                 InsightPoint.PointType.SUMMARY,
                                 "keep",
-                                0.8f,
                                 List.of("0")),
                         new InsightPoint(
                                 "pt_existing_2",
                                 InsightPoint.PointType.REASONING,
                                 "untouched",
-                                0.7f,
                                 List.of("9")));
 
         var operations =
@@ -96,7 +89,6 @@ class InsightPointIdentityManagerTest {
                                         new InsightPoint(
                                                 InsightPoint.PointType.SUMMARY,
                                                 "new",
-                                                0.8f,
                                                 List.of("1")),
                                         "new signal"),
                                 new PointOperation(
@@ -105,7 +97,6 @@ class InsightPointIdentityManagerTest {
                                         new InsightPoint(
                                                 InsightPoint.PointType.REASONING,
                                                 "second",
-                                                0.7f,
                                                 List.of("2")),
                                         "second signal"),
                                 new PointOperation(
@@ -115,7 +106,6 @@ class InsightPointIdentityManagerTest {
                                                 "pt_wrong",
                                                 InsightPoint.PointType.SUMMARY,
                                                 "updated",
-                                                0.9f,
                                                 List.of("1", "2")),
                                         "merge")));
 
@@ -135,7 +125,6 @@ class InsightPointIdentityManagerTest {
                                 "pt_existing_1",
                                 InsightPoint.PointType.SUMMARY,
                                 "User prefers async communication",
-                                0.8f,
                                 List.of("1", "2")));
 
         var rewritten =
@@ -145,12 +134,10 @@ class InsightPointIdentityManagerTest {
                                 new InsightPoint(
                                         InsightPoint.PointType.SUMMARY,
                                         "User prefers async communication",
-                                        0.9f,
                                         List.of("2", "1")),
                                 new InsightPoint(
                                         InsightPoint.PointType.REASONING,
                                         "The user optimizes for uninterrupted work blocks",
-                                        0.7f,
                                         List.of("3", "4"))));
 
         assertThat(rewritten.getFirst().pointId()).isEqualTo("pt_existing_1");

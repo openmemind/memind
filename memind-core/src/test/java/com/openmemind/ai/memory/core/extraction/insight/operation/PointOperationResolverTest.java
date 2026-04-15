@@ -29,17 +29,9 @@ class PointOperationResolverTest {
         var existing =
                 List.of(
                         new InsightPoint(
-                                "pt_keep",
-                                InsightPoint.PointType.SUMMARY,
-                                "keep",
-                                0.8f,
-                                List.of("1")),
+                                "pt_keep", InsightPoint.PointType.SUMMARY, "keep", List.of("1")),
                         new InsightPoint(
-                                "pt_update",
-                                InsightPoint.PointType.SUMMARY,
-                                "old",
-                                0.8f,
-                                List.of("2")));
+                                "pt_update", InsightPoint.PointType.SUMMARY, "old", List.of("2")));
 
         var resolved =
                 PointOperationResolver.resolve(
@@ -52,7 +44,6 @@ class PointOperationResolverTest {
                                                 "pt_update",
                                                 InsightPoint.PointType.SUMMARY,
                                                 "new",
-                                                0.9f,
                                                 List.of("2", "3")),
                                         "merge")));
 
@@ -70,7 +61,6 @@ class PointOperationResolverTest {
                                 "pt_existing",
                                 InsightPoint.PointType.SUMMARY,
                                 "existing",
-                                0.8f,
                                 List.of("1")));
 
         var resolved =

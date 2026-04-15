@@ -511,10 +511,10 @@ public class PostgresqlMemoryStore
                                     """
                                     INSERT INTO memory_insight
                                         (biz_id, user_id, agent_id, memory_id, type, scope, name,
-                                         categories, content, points, group_name, confidence,
+                                         categories, content, points, group_name,
                                          last_reasoned_at, summary_embedding, tier, parent_insight_id,
                                          child_insight_ids, version, created_at, updated_at, deleted)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)
                                     ON CONFLICT (user_id, agent_id, biz_id) DO UPDATE SET
                                         memory_id = EXCLUDED.memory_id,
                                         type = EXCLUDED.type,
@@ -524,7 +524,6 @@ public class PostgresqlMemoryStore
                                         content = EXCLUDED.content,
                                         points = EXCLUDED.points,
                                         group_name = EXCLUDED.group_name,
-                                        confidence = EXCLUDED.confidence,
                                         last_reasoned_at = EXCLUDED.last_reasoned_at,
                                         summary_embedding = EXCLUDED.summary_embedding,
                                         tier = EXCLUDED.tier,
@@ -911,15 +910,14 @@ public class PostgresqlMemoryStore
         statement.setString(9, insight.pointsContent());
         setJsonb(statement, 10, jsonHelper.toJson(insight.points()));
         statement.setString(11, insight.group());
-        statement.setFloat(12, insight.confidence());
-        setTimestamp(statement, 13, insight.lastReasonedAt());
-        setJsonb(statement, 14, jsonHelper.toJson(insight.summaryEmbedding()));
-        statement.setString(15, insight.tier() != null ? insight.tier().name() : null);
-        statement.setObject(16, insight.parentInsightId());
-        setJsonb(statement, 17, jsonHelper.toJson(insight.childInsightIds()));
-        statement.setInt(18, insight.version());
-        setTimestamp(statement, 19, insight.createdAt() != null ? insight.createdAt() : now);
-        setTimestamp(statement, 20, now);
+        setTimestamp(statement, 12, insight.lastReasonedAt());
+        setJsonb(statement, 13, jsonHelper.toJson(insight.summaryEmbedding()));
+        statement.setString(14, insight.tier() != null ? insight.tier().name() : null);
+        statement.setObject(15, insight.parentInsightId());
+        setJsonb(statement, 16, jsonHelper.toJson(insight.childInsightIds()));
+        statement.setInt(17, insight.version());
+        setTimestamp(statement, 18, insight.createdAt() != null ? insight.createdAt() : now);
+        setTimestamp(statement, 19, now);
     }
 
     private MemoryRawData mapRawData(ResultSet resultSet) throws SQLException {
@@ -1004,7 +1002,6 @@ public class PostgresqlMemoryStore
                 jsonHelper.fromJson(resultSet.getString("categories"), STRING_LIST_TYPE),
                 points,
                 resultSet.getString("group_name"),
-                resultSet.getFloat("confidence"),
                 parseInstant(resultSet.getTimestamp("last_reasoned_at")),
                 jsonHelper.fromJson(resultSet.getString("summary_embedding"), FLOAT_LIST_TYPE),
                 parseInstant(resultSet.getTimestamp("created_at")),

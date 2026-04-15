@@ -107,7 +107,7 @@ class TracingInsightGeneratorTest {
 
         StepVerifier.create(
                         traced.generateRootSynthesis(
-                                insightType, "summary", List.of(memoryInsight()), 100, "zh-CN"))
+                                insightType, List.of(), List.of(memoryInsight()), 100, "zh-CN"))
                 .expectNext(response)
                 .verifyComplete();
 
@@ -152,7 +152,6 @@ class TracingInsightGeneratorTest {
                                                 "pt_add",
                                                 InsightPoint.PointType.SUMMARY,
                                                 "new",
-                                                0.9f,
                                                 List.of("1", "2")),
                                         null),
                                 new PointOperation(
@@ -189,7 +188,6 @@ class TracingInsightGeneratorTest {
                                                 "pt_update",
                                                 InsightPoint.PointType.SUMMARY,
                                                 "updated",
-                                                0.9f,
                                                 List.of("1", "2")),
                                         null)));
         when(delegate.generateBranchPointOps(any(), any(), any(), anyInt(), any()))
@@ -225,7 +223,6 @@ class TracingInsightGeneratorTest {
                 List.of(),
                 List.of(),
                 null,
-                1.0f,
                 null,
                 null,
                 null,

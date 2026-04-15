@@ -40,7 +40,6 @@ class InsightLeafPromptsTest {
                                         new InsightPoint(
                                                 PointType.SUMMARY,
                                                 "Existing point",
-                                                0.8f,
                                                 List.of("1", "2"))),
                                 List.of(),
                                 200)
@@ -50,6 +49,7 @@ class InsightLeafPromptsTest {
                 .contains("\"points\"")
                 .doesNotContain("\"operations\"")
                 .contains("Full Replacement");
+        assertThat(prompt.userPrompt()).doesNotContain("confidence").contains("sourceItemIds");
     }
 
     @Test
@@ -64,13 +64,13 @@ class InsightLeafPromptsTest {
                                                 "pt_existing_1",
                                                 PointType.SUMMARY,
                                                 "Existing point",
-                                                0.8f,
                                                 List.of("1", "2"))),
                                 List.of(),
                                 200)
                         .render("English");
 
         assertThat(prompt.userPrompt()).contains("pointId: pt_existing_1").doesNotContain("P1.");
+        assertThat(prompt.userPrompt()).contains("sourcePointRefs").doesNotContain("confidence");
         assertThat(prompt.systemPrompt())
                 .contains("\"targetPointId\"")
                 .doesNotContain("\"targetIndex\"");

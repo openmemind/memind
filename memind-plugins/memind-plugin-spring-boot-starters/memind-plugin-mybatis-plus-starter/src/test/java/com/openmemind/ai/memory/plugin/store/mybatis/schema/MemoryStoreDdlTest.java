@@ -20,6 +20,8 @@ import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.DisplayName;
@@ -102,6 +104,7 @@ class MemoryStoreDdlTest {
                         .queryForObject("SELECT COUNT(*) FROM memory_insight_type", Integer.class);
 
         assertThat(count).isEqualTo(DefaultInsightTypes.all().size());
+        assertThat(columnExists(dataSource, "memory_insight", "confidence")).isFalse();
     }
 
     @Test
@@ -125,10 +128,28 @@ class MemoryStoreDdlTest {
                         "SELECT COUNT(*) FROM memory_insight_type", Integer.class);
 
         assertThat(count).isZero();
+        assertThat(columnExists(dataSource, "memory_insight", "confidence")).isFalse();
     }
 
     private DataSource dataSource(String productName, String url) {
         return new MetadataDataSource(productName, url);
+    }
+
+    private boolean columnExists(DataSource dataSource, String tableName, String columnName) {
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement("PRAGMA table_info(" + tableName + ")")) {
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    if (columnName.equalsIgnoreCase(resultSet.getString("name"))) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static final class MetadataDataSource extends AbstractDataSource {

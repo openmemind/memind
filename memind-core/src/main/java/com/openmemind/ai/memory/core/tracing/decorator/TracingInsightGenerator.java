@@ -150,7 +150,7 @@ public class TracingInsightGenerator extends TracingSupport implements InsightGe
     @Override
     public Mono<InsightPointGenerateResponse> generateRootSynthesis(
             MemoryInsightType rootInsightType,
-            String existingSummary,
+            List<InsightPoint> existingPoints,
             List<MemoryInsight> branchInsights,
             int targetTokens,
             String language) {
@@ -165,7 +165,7 @@ public class TracingInsightGenerator extends TracingSupport implements InsightGe
                 () ->
                         delegate.generateRootSynthesis(
                                 rootInsightType,
-                                existingSummary,
+                                existingPoints,
                                 branchInsights,
                                 targetTokens,
                                 language));

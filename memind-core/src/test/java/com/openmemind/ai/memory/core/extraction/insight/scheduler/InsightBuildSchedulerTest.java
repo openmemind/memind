@@ -169,7 +169,6 @@ class InsightBuildSchedulerTest {
                                                 new InsightPoint(
                                                         InsightPoint.PointType.SUMMARY,
                                                         "fallback",
-                                                        0.9f,
                                                         List.of("1", "2"))))));
 
         scheduler.flushSync(MEMORY_ID, TYPE_NAME, "English");
@@ -206,7 +205,6 @@ class InsightBuildSchedulerTest {
                                                 new InsightPoint(
                                                         InsightPoint.PointType.SUMMARY,
                                                         "fallback",
-                                                        0.9f,
                                                         List.of("1", "2"))))));
 
         scheduler.flushSync(MEMORY_ID, TYPE_NAME, "English");
@@ -235,7 +233,6 @@ class InsightBuildSchedulerTest {
                                                         new InsightPoint(
                                                                 InsightPoint.PointType.SUMMARY,
                                                                 "invalid",
-                                                                0.9f,
                                                                 List.of("1", "2")),
                                                         "bad target")))));
         when(generator.generatePoints(
@@ -247,7 +244,6 @@ class InsightBuildSchedulerTest {
                                                 new InsightPoint(
                                                         InsightPoint.PointType.SUMMARY,
                                                         "fallback",
-                                                        0.9f,
                                                         List.of("1", "2"))))));
 
         scheduler.flushSync(MEMORY_ID, TYPE_NAME, "English");
@@ -293,10 +289,8 @@ class InsightBuildSchedulerTest {
                                 "pt_existing",
                                 InsightPoint.PointType.SUMMARY,
                                 content,
-                                0.8f,
                                 List.of("1", "2"))),
                 GROUP_NAME,
-                0.8f,
                 Instant.now(),
                 null,
                 Instant.now(),
@@ -317,9 +311,8 @@ class InsightBuildSchedulerTest {
                 List.of("profile"),
                 List.of(
                         new InsightPoint(
-                                InsightPoint.PointType.SUMMARY, content, 0.8f, List.of("1", "2"))),
+                                InsightPoint.PointType.SUMMARY, content, List.of("1", "2"))),
                 GROUP_NAME,
-                0.8f,
                 Instant.now(),
                 null,
                 Instant.now(),

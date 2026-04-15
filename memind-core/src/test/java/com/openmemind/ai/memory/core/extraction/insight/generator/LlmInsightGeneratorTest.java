@@ -201,7 +201,7 @@ class LlmInsightGeneratorTest {
 
         StepVerifier.create(
                         generator.generateRootSynthesis(
-                                rootInsightType("profile"), "", List.of(), 300, "English"))
+                                rootInsightType("profile"), List.of(), List.of(), 300, "English"))
                 .expectNextMatches(response -> response.points().isEmpty())
                 .verifyComplete();
 
@@ -223,7 +223,11 @@ class LlmInsightGeneratorTest {
 
         StepVerifier.create(
                         generator.generateRootSynthesis(
-                                rootInsightType("interaction"), "", List.of(), 300, "English"))
+                                rootInsightType("interaction"),
+                                List.of(),
+                                List.of(),
+                                300,
+                                "English"))
                 .expectNextMatches(response -> response.points().isEmpty())
                 .verifyComplete();
 

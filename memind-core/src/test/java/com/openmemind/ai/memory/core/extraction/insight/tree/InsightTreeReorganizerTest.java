@@ -156,10 +156,7 @@ class InsightTreeReorganizerTest {
 
             var point =
                     new InsightPoint(
-                            InsightPoint.PointType.SUMMARY,
-                            "Comprehensive summary",
-                            0.9f,
-                            List.of());
+                            InsightPoint.PointType.SUMMARY, "Comprehensive summary", List.of());
             when(generator.generateBranchSummary(
                             any(), any(), anyList(), anyInt(), nullable(String.class)))
                     .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(point))));
@@ -213,10 +210,7 @@ class InsightTreeReorganizerTest {
 
             var point =
                     new InsightPoint(
-                            InsightPoint.PointType.SUMMARY,
-                            "Comprehensive summary",
-                            0.9f,
-                            List.of());
+                            InsightPoint.PointType.SUMMARY, "Comprehensive summary", List.of());
             when(generator.generateBranchSummary(
                             any(), any(), anyList(), anyInt(), nullable(String.class)))
                     .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(point))));
@@ -286,10 +280,7 @@ class InsightTreeReorganizerTest {
 
             var point =
                     new InsightPoint(
-                            InsightPoint.PointType.SUMMARY,
-                            "Comprehensive summary",
-                            0.9f,
-                            List.of());
+                            InsightPoint.PointType.SUMMARY, "Comprehensive summary", List.of());
             when(generator.generateBranchSummary(
                             any(), any(), anyList(), anyInt(), nullable(String.class)))
                     .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(point))));
@@ -332,7 +323,6 @@ class InsightTreeReorganizerTest {
                             "pt_branch_existing",
                             InsightPoint.PointType.SUMMARY,
                             "Existing branch summary",
-                            0.9f,
                             List.of("1", "2"));
             var branch = createBranch(10L, List.of(existingPoint), List.of(1L, 2L, 3L));
             var branch2 = createBranchWithType(20L, "other-type");
@@ -409,7 +399,6 @@ class InsightTreeReorganizerTest {
                                                     new InsightPoint(
                                                             InsightPoint.PointType.SUMMARY,
                                                             "fallback",
-                                                            0.9f,
                                                             List.of("1", "2"))))));
             when(vector.embed(anyString())).thenReturn(Mono.just(List.of(0.1f, 0.2f)));
 
@@ -433,7 +422,6 @@ class InsightTreeReorganizerTest {
                     new InsightPoint(
                             InsightPoint.PointType.SUMMARY,
                             "Existing branch summary",
-                            0.9f,
                             List.of("1", "2"));
             var branch = createBranch(10L, List.of(existingPoint), List.of(1L, 2L, 3L));
             var leaf = createLeaf(3L, "Third piece of information");
@@ -468,7 +456,6 @@ class InsightTreeReorganizerTest {
                                                     new InsightPoint(
                                                             InsightPoint.PointType.SUMMARY,
                                                             "fallback",
-                                                            0.9f,
                                                             List.of("1", "2"))))));
             when(vector.embed(anyString())).thenReturn(Mono.just(List.of(0.1f, 0.2f)));
 
@@ -493,7 +480,6 @@ class InsightTreeReorganizerTest {
                             "pt_branch_existing",
                             InsightPoint.PointType.SUMMARY,
                             "Existing branch summary",
-                            0.9f,
                             List.of("1", "2"));
             var branch = createBranch(10L, List.of(existingPoint), List.of(1L, 2L, 3L));
             var leaf = createLeaf(3L, "Third piece of information");
@@ -520,7 +506,6 @@ class InsightTreeReorganizerTest {
                                                             new InsightPoint(
                                                                     InsightPoint.PointType.SUMMARY,
                                                                     "invalid",
-                                                                    0.9f,
                                                                     List.of("1", "2")),
                                                             "bad target")))));
             when(generator.generateBranchSummary(
@@ -532,7 +517,6 @@ class InsightTreeReorganizerTest {
                                                     new InsightPoint(
                                                             InsightPoint.PointType.SUMMARY,
                                                             "fallback",
-                                                            0.9f,
                                                             List.of("1", "2"))))));
             when(vector.embed(anyString())).thenReturn(Mono.just(List.of(0.1f, 0.2f)));
 
@@ -619,8 +603,7 @@ class InsightTreeReorganizerTest {
             when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.empty());
 
             var point =
-                    new InsightPoint(
-                            InsightPoint.PointType.SUMMARY, "BRANCH summary", 0.9f, List.of());
+                    new InsightPoint(InsightPoint.PointType.SUMMARY, "BRANCH summary", List.of());
             when(generator.generateBranchSummary(
                             any(), any(), anyList(), anyInt(), nullable(String.class)))
                     .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(point))));
@@ -661,15 +644,14 @@ class InsightTreeReorganizerTest {
             when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.of(root));
 
             var branchPoint =
-                    new InsightPoint(
-                            InsightPoint.PointType.SUMMARY, "BRANCH summary", 0.9f, List.of());
+                    new InsightPoint(InsightPoint.PointType.SUMMARY, "BRANCH summary", List.of());
             when(generator.generateBranchSummary(
                             any(), any(), anyList(), anyInt(), nullable(String.class)))
                     .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(branchPoint))));
 
             var rootPoint =
                     new InsightPoint(
-                            InsightPoint.PointType.SUMMARY, "ROOT comprehensive", 0.9f, List.of());
+                            InsightPoint.PointType.SUMMARY, "ROOT comprehensive", List.of());
             when(generator.generateRootSynthesis(
                             any(MemoryInsightType.class),
                             any(),
@@ -718,8 +700,7 @@ class InsightTreeReorganizerTest {
             when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.of(root));
 
             var branchPoint =
-                    new InsightPoint(
-                            InsightPoint.PointType.SUMMARY, "BRANCH summary", 0.9f, List.of());
+                    new InsightPoint(InsightPoint.PointType.SUMMARY, "BRANCH summary", List.of());
             when(generator.generateBranchSummary(
                             any(), any(), anyList(), anyInt(), nullable(String.class)))
                     .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(branchPoint))));
@@ -773,15 +754,14 @@ class InsightTreeReorganizerTest {
             when(insightOps.getInsight(memoryId, 200L)).thenReturn(Optional.of(root2));
 
             var branchPoint =
-                    new InsightPoint(
-                            InsightPoint.PointType.SUMMARY, "BRANCH summary", 0.9f, List.of());
+                    new InsightPoint(InsightPoint.PointType.SUMMARY, "BRANCH summary", List.of());
             when(generator.generateBranchSummary(
                             any(), any(), anyList(), anyInt(), nullable(String.class)))
                     .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(branchPoint))));
 
             var rootPoint =
                     new InsightPoint(
-                            InsightPoint.PointType.SUMMARY, "ROOT comprehensive", 0.9f, List.of());
+                            InsightPoint.PointType.SUMMARY, "ROOT comprehensive", List.of());
             when(generator.generateRootSynthesis(
                             any(MemoryInsightType.class),
                             any(),
@@ -841,15 +821,14 @@ class InsightTreeReorganizerTest {
             when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.of(root));
 
             var branchPoint =
-                    new InsightPoint(
-                            InsightPoint.PointType.SUMMARY, "BRANCH summary", 0.9f, List.of());
+                    new InsightPoint(InsightPoint.PointType.SUMMARY, "BRANCH summary", List.of());
             when(generator.generateBranchSummary(
                             any(), any(), anyList(), anyInt(), nullable(String.class)))
                     .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(branchPoint))));
 
             var rootPoint =
                     new InsightPoint(
-                            InsightPoint.PointType.SUMMARY, "ROOT comprehensive", 0.9f, List.of());
+                            InsightPoint.PointType.SUMMARY, "ROOT comprehensive", List.of());
             when(generator.generateRootSynthesis(
                             any(MemoryInsightType.class),
                             any(),
@@ -928,9 +907,8 @@ class InsightTreeReorganizerTest {
                 MemoryScope.USER,
                 "leaf-" + id,
                 List.of("tool"),
-                List.of(new InsightPoint(InsightPoint.PointType.SUMMARY, content, 1.0f, List.of())),
+                List.of(new InsightPoint(InsightPoint.PointType.SUMMARY, content, List.of())),
                 "group-a",
-                0.9f,
                 now,
                 List.of(0.1f, 0.2f),
                 now,
@@ -960,7 +938,6 @@ class InsightTreeReorganizerTest {
                 List.of("tool"),
                 points,
                 null,
-                0.0f,
                 now,
                 null,
                 now,
@@ -982,7 +959,6 @@ class InsightTreeReorganizerTest {
                 List.of("tool"),
                 List.of(),
                 null,
-                0.0f,
                 now,
                 null,
                 now,
@@ -1004,7 +980,6 @@ class InsightTreeReorganizerTest {
                 List.of(),
                 List.of(),
                 null,
-                0.0f,
                 now,
                 null,
                 now,

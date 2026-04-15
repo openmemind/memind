@@ -24,6 +24,7 @@ import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassi
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupRouter;
 import com.openmemind.ai.memory.core.extraction.insight.group.LlmInsightGroupClassifier;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
+import com.openmemind.ai.memory.core.extraction.insight.support.InsightPointEvidenceNormalizer;
 import com.openmemind.ai.memory.core.extraction.insight.support.InsightPointIdentityManager;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTracker;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
@@ -122,6 +123,7 @@ final class MemoryExtractionAssembler {
                         registry.resolve(ChatClientSlot.INSIGHT_GROUP_CLASSIFIER),
                         context.promptRegistry());
         var identityManager = new InsightPointIdentityManager();
+        var evidenceNormalizer = new InsightPointEvidenceNormalizer();
         BubbleTrackerStore bubbleTrackerStore =
                 context.bubbleTrackerStore() != null
                         ? context.bubbleTrackerStore()
@@ -133,7 +135,8 @@ final class MemoryExtractionAssembler {
                         context.memoryStore(),
                         bubbleTrackerStore,
                         IdUtils.snowflake(),
-                        identityManager);
+                        identityManager,
+                        evidenceNormalizer);
         InsightGroupRouter insightGroupRouter = new InsightGroupRouter(insightGroupClassifier);
         InsightBuildScheduler insightBuildScheduler =
                 new InsightBuildScheduler(
@@ -147,6 +150,7 @@ final class MemoryExtractionAssembler {
                         IdUtils.snowflake(),
                         context.options().extraction().insight().build(),
                         identityManager,
+                        evidenceNormalizer,
                         null);
         InsightLayer insightLayer =
                 new InsightLayer(

@@ -22,6 +22,7 @@ import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.operation.PointOperationResolver;
+import com.openmemind.ai.memory.core.extraction.insight.support.InsightPointEvidenceNormalizer;
 import com.openmemind.ai.memory.core.extraction.insight.support.InsightPointIdentityManager;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.utils.IdUtils;
@@ -62,6 +63,7 @@ public class InsightTreeReorganizer {
     private final BubbleTrackerStore bubbleTracker;
     private final IdUtils.SnowflakeIdGenerator idGenerator;
     private final InsightPointIdentityManager pointIdentityManager;
+    private final InsightPointEvidenceNormalizer evidenceNormalizer;
 
     /**
      * Fixed-size strip lock, bucketed by memoryId hash, to avoid ConcurrentHashMap infinite growth
@@ -95,7 +97,8 @@ public class InsightTreeReorganizer {
                 store,
                 bubbleTracker,
                 idGenerator,
-                new InsightPointIdentityManager());
+                new InsightPointIdentityManager(),
+                new InsightPointEvidenceNormalizer());
     }
 
     public InsightTreeReorganizer(
@@ -104,13 +107,15 @@ public class InsightTreeReorganizer {
             MemoryStore store,
             BubbleTrackerStore bubbleTracker,
             IdUtils.SnowflakeIdGenerator idGenerator,
-            InsightPointIdentityManager pointIdentityManager) {
+            InsightPointIdentityManager pointIdentityManager,
+            InsightPointEvidenceNormalizer evidenceNormalizer) {
         this.generator = Objects.requireNonNull(generator);
         this.vector = Objects.requireNonNull(vector);
         this.store = Objects.requireNonNull(store);
         this.bubbleTracker = Objects.requireNonNull(bubbleTracker);
         this.idGenerator = Objects.requireNonNull(idGenerator);
         this.pointIdentityManager = Objects.requireNonNull(pointIdentityManager);
+        this.evidenceNormalizer = Objects.requireNonNull(evidenceNormalizer);
     }
 
     /**
@@ -330,7 +335,6 @@ public class InsightTreeReorganizer {
                 insightType.categories(),
                 List.of(),
                 null,
-                0.0f,
                 now,
                 null,
                 now,
@@ -492,7 +496,6 @@ public class InsightTreeReorganizer {
                                             List.of(),
                                             List.of(),
                                             null,
-                                            0.0f,
                                             now,
                                             null,
                                             now,
@@ -593,7 +596,8 @@ public class InsightTreeReorganizer {
             return branch;
         }
 
-        return embedAndSaveIfChanged(memoryId, branch, resolved.points(), InsightTier.BRANCH);
+        var points = evidenceNormalizer.normalizeBranchPoints(resolved.points(), leafInsights);
+        return embedAndSaveIfChanged(memoryId, branch, points, InsightTier.BRANCH);
     }
 
     private MemoryInsight resummarizeBranchWithFullRewrite(
@@ -621,8 +625,11 @@ public class InsightTreeReorganizer {
         }
 
         var points =
-                pointIdentityManager.reusePointIdsForFullRewrite(
-                        branch.points() != null ? branch.points() : List.of(), response.points());
+                evidenceNormalizer.normalizeBranchPoints(
+                        pointIdentityManager.reusePointIdsForFullRewrite(
+                                branch.points() != null ? branch.points() : List.of(),
+                                response.points()),
+                        leafInsights);
 
         return embedAndSaveIfChanged(memoryId, branch, points, InsightTier.BRANCH);
     }
@@ -659,7 +666,7 @@ public class InsightTreeReorganizer {
                 generator
                         .generateRootSynthesis(
                                 rootType,
-                                root.pointsContent(),
+                                root.points() != null ? root.points() : List.of(),
                                 allBranches,
                                 config.rootTargetTokens(),
                                 language)
@@ -670,7 +677,12 @@ public class InsightTreeReorganizer {
             return root;
         }
 
-        var points = pointIdentityManager.normalizePersistedPoints(response.points());
+        var points =
+                evidenceNormalizer.normalizeRootPoints(
+                        pointIdentityManager.reusePointIdsForFullRewrite(
+                                root.points() != null ? root.points() : List.of(),
+                                response.points()),
+                        allBranches);
 
         return embedAndSave(memoryId, root, points, InsightTier.ROOT);
     }
@@ -706,17 +718,8 @@ public class InsightTreeReorganizer {
         }
 
         var now = Instant.now();
-        float confidence =
-                points.isEmpty()
-                        ? 0f
-                        : (float)
-                                points.stream()
-                                        .mapToDouble(InsightPoint::confidence)
-                                        .average()
-                                        .orElse(0.0);
         var updated =
                 insight.withPoints(points)
-                        .withConfidence(confidence)
                         .withSummaryEmbedding(embedding)
                         .withLastReasonedAt(now)
                         .withUpdatedAt(now)

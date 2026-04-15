@@ -343,12 +343,8 @@ class MemindServerIntegrationTest {
         dataObject.setPoints(
                 List.of(
                         new InsightPoint(
-                                InsightPoint.PointType.SUMMARY,
-                                "point-" + bizId,
-                                0.9F,
-                                List.of())));
+                                InsightPoint.PointType.SUMMARY, "point-" + bizId, List.of())));
         dataObject.setGroupName("group-" + bizId);
-        dataObject.setConfidence(0.95F);
         dataObject.setLastReasonedAt(baseTime);
         dataObject.setSummaryEmbedding(List.of());
         dataObject.setTier(tier);

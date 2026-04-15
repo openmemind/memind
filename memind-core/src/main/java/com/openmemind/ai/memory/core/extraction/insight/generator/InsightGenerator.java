@@ -141,18 +141,18 @@ public interface InsightGenerator {
      */
     default Mono<InsightPointGenerateResponse> generateRootSynthesis(
             MemoryInsightType rootInsightType,
-            String existingSummary,
+            List<InsightPoint> existingPoints,
             List<MemoryInsight> branchInsights,
             int targetTokens) {
         return generateRootSynthesis(
-                rootInsightType, existingSummary, branchInsights, targetTokens, null);
+                rootInsightType, existingPoints, branchInsights, targetTokens, null);
     }
 
     /**
      * Synthesize all BRANCHes to generate ROOT deep insight (with language)
      *
      * @param rootInsightType ROOT mode InsightType
-     * @param existingSummary Existing ROOT summary (null for the first time)
+     * @param existingPoints  Existing ROOT points (empty for the first time)
      * @param branchInsights  All BRANCHes
      * @param targetTokens    Token budget
      * @param language        Output language hint, can be null
@@ -160,7 +160,7 @@ public interface InsightGenerator {
      */
     Mono<InsightPointGenerateResponse> generateRootSynthesis(
             MemoryInsightType rootInsightType,
-            String existingSummary,
+            List<InsightPoint> existingPoints,
             List<MemoryInsight> branchInsights,
             int targetTokens,
             String language);

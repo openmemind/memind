@@ -157,11 +157,8 @@ class AdminInsightControllerTest {
                 "preference",
                 List.of("profile"),
                 "prefers concise answers",
-                List.of(
-                        new InsightPoint(
-                                InsightPoint.PointType.SUMMARY, "point-1", 0.9F, List.of())),
+                List.of(new InsightPoint(InsightPoint.PointType.SUMMARY, "point-1", List.of())),
                 "group-1",
-                0.95F,
                 Instant.parse("2026-03-31T10:00:00Z"),
                 List.of(),
                 "LEAF",

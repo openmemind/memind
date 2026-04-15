@@ -213,11 +213,8 @@ class InMemoryMemoryStoreTest {
                 MemoryScope.USER,
                 "name-" + id,
                 List.of("profile"),
-                List.of(
-                        new InsightPoint(
-                                InsightPoint.PointType.SUMMARY, "point-" + id, 0.9f, List.of())),
+                List.of(new InsightPoint(InsightPoint.PointType.SUMMARY, "point-" + id, List.of())),
                 "group",
-                0.9f,
                 BASE_TIME,
                 List.of(),
                 BASE_TIME,

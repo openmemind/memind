@@ -230,7 +230,7 @@ public class LlmInsightGenerator implements InsightGenerator {
     @Override
     public Mono<InsightPointGenerateResponse> generateRootSynthesis(
             MemoryInsightType rootInsightType,
-            String existingSummary,
+            List<InsightPoint> existingPoints,
             List<MemoryInsight> branchInsights,
             int targetTokens,
             String language) {
@@ -241,14 +241,14 @@ public class LlmInsightGenerator implements InsightGenerator {
                             InteractionGuideSynthesisPrompts.build(
                                     promptRegistry,
                                     rootInsightType,
-                                    existingSummary,
+                                    existingPoints,
                                     branchInsights,
                                     targetTokens);
                     default ->
                             RootSynthesisPrompts.build(
                                     promptRegistry,
                                     rootInsightType,
-                                    existingSummary,
+                                    existingPoints,
                                     branchInsights,
                                     targetTokens);
                 };

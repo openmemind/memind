@@ -253,7 +253,6 @@ class InsightPipelineTracingTest {
                 new InsightPoint(
                         InsightPoint.PointType.SUMMARY,
                         "summary text",
-                        0.9f,
                         List.of(String.valueOf(itemId)));
         var response = new InsightPointGenerateResponse(List.of(point));
         return new InsightGenerator() {
@@ -294,7 +293,7 @@ class InsightPipelineTracingTest {
             @Override
             public Mono<InsightPointGenerateResponse> generateRootSynthesis(
                     MemoryInsightType rootInsightType,
-                    String existingSummary,
+                    List<InsightPoint> existingPoints,
                     List<MemoryInsight> branchInsights,
                     int targetTokens,
                     String language) {
@@ -436,7 +435,7 @@ class InsightPipelineTracingTest {
         @Override
         public Mono<InsightPointGenerateResponse> generateRootSynthesis(
                 MemoryInsightType rootInsightType,
-                String existingSummary,
+                List<InsightPoint> existingPoints,
                 List<MemoryInsight> branchInsights,
                 int targetTokens,
                 String language) {

@@ -163,7 +163,7 @@ public final class ExamplePrinter {
                     if (!branches.isEmpty()) {
                         for (var branch : branches) {
                             log.info("");
-                            log.info("  {} (BRANCH) [confidence: {}]", type, branch.confidence());
+                            log.info("  {} (BRANCH)", type);
                             printInsightPoints(branch, "  ");
 
                             var childIds = branch.childInsightIds();
@@ -182,7 +182,7 @@ public final class ExamplePrinter {
                     if (!roots.isEmpty()) {
                         for (var root : roots) {
                             log.info("");
-                            log.info("  {} (ROOT) [confidence: {}]", type, root.confidence());
+                            log.info("  {} (ROOT)", type);
                             printInsightPoints(root, "  ");
                         }
                     }
@@ -191,7 +191,11 @@ public final class ExamplePrinter {
 
     private static void printInsightPoints(MemoryInsight insight, String indent) {
         for (var point : insight.points()) {
-            log.info("{}  [{}] {} ({})", indent, point.type(), point.content(), point.confidence());
+            String evidence =
+                    !point.sourcePointRefs().isEmpty()
+                            ? "refs=" + point.sourcePointRefs()
+                            : "items=" + point.sourceItemIds();
+            log.info("{}  [{}] {} ({})", indent, point.type(), point.content(), evidence);
         }
     }
 }

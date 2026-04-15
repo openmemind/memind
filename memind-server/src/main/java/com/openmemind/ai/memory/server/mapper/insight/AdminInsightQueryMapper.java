@@ -110,7 +110,6 @@ final class MybatisAdminInsightQueryMapper implements AdminInsightQueryMapper {
                 dataObject.getContent(),
                 dataObject.getPoints(),
                 dataObject.getGroupName(),
-                dataObject.getConfidence(),
                 dataObject.getLastReasonedAt(),
                 dataObject.getSummaryEmbedding(),
                 dataObject.getTier(),

@@ -72,8 +72,9 @@ public final class BranchAggregationPrompts {
             If an existing BRANCH point is still valid, it MUST appear in your output.
             2. Cross-Group Synthesis: Each point must integrate information from multiple \
             LEAF groups. A point that only restates one LEAF is NOT a BRANCH insight.
-            3. Source Tracking: Every point MUST list ALL contributing sourceItemIds — merge \
-            the sourceItemIds from all relevant LEAF points to maintain traceability.
+            3. Source Tracking: Every point MUST list ALL direct supporting LEAF evidence in \
+            `sourcePointRefs`. Each ref must point to an exact LEAF point that justifies the \
+            BRANCH synthesis.
             4. Conflict Resolution: When LEAFs contradict existing BRANCH data, newer LEAF \
             data takes priority. Frame changes historically instead of silently dropping them.
             5. Atomicity: Each point covers exactly ONE coherent cross-group theme.
@@ -90,10 +91,10 @@ public final class BranchAggregationPrompts {
 
             ## Step 2 — Synthesize (Full Rewrite)
             - Start from existing BRANCH points as baseline, then reshape:
-              - Still-valid existing points: keep and merge new sourceItemIds from LEAFs.
+              - Still-valid existing points: keep and merge new supporting sourcePointRefs from LEAFs.
               - Updated by newer LEAFs: rewrite to reflect temporal evolution.
               - Fresh cross-group patterns: create new synthesized points.
-              - Overlapping points: merge into one with combined sourceItemIds.
+              - Overlapping points: merge into one with combined sourcePointRefs.
               - Fully superseded points: drop.
             - Before adding any point, ask: "Does this integrate multiple LEAF groups?" \
             If it only restates one LEAF → not a BRANCH insight, skip or combine.
@@ -101,7 +102,7 @@ public final class BranchAggregationPrompts {
             ## Step 3 — Validate
             Before outputting, verify each point against this checklist:
             - Does this point integrate information from 2+ LEAF groups?
-            - Are sourceItemIds merged from all contributing LEAFs?
+            - Do sourcePointRefs cover every contributing LEAF point?
             - Are there duplicate or overlapping points? If yes → merge.
             - Is the output valid JSON with no markdown fences?
 
@@ -134,9 +135,9 @@ public final class BranchAggregationPrompts {
             4. Cross-Group Synthesis: Each emitted point must integrate information from \
             multiple LEAF groups. A point that only restates one LEAF is NOT a BRANCH \
             insight.
-            5. Source Tracking: Every emitted point MUST list ALL contributing \
-            sourceItemIds — merge the sourceItemIds from all relevant LEAF points to \
-            maintain traceability back to original memory items.
+            5. Source Tracking: Every emitted point MUST list ALL direct supporting LEAF \
+            evidence in `sourcePointRefs`. Each ref must point to an exact LEAF point that \
+            justifies the BRANCH synthesis.
             6. Conflict Resolution: When LEAFs contradict existing BRANCH data, newer LEAF \
             data takes priority. Frame changes historically (e.g., "previously..., \
             recently shifted to...").
@@ -149,7 +150,7 @@ public final class BranchAggregationPrompts {
             # Workflow
 
             ## Step 1 — Parse & Analyze
-            - Read each existing BRANCH point's content, type, confidence, and sourceItemIds.
+            - Read each existing BRANCH point's content, type, and sourcePointRefs.
             - Read each LEAF insight point in its group context.
             - Compare structured LEAF facts with existing BRANCH points.
             - Identify:
@@ -166,7 +167,7 @@ public final class BranchAggregationPrompts {
             point id.
               - Fresh cross-group pattern: emit ADD with a new synthesized point.
               - Overlapping existing points: UPDATE the kept point with merged content and \
-            sourceItemIds, then DELETE the absorbed point.
+            sourcePointRefs, then DELETE the absorbed point.
               - Fully obsolete point with no remaining value: emit DELETE.
             - Before emitting ADD or UPDATE, ask: "Does this integrate multiple LEAF \
             groups?" If it only restates one LEAF → not a BRANCH insight, skip or combine.
@@ -177,7 +178,7 @@ public final class BranchAggregationPrompts {
             - UPDATE and DELETE target an existing BRANCH point id from the input.
             - ADD does not specify a target id.
             - Does every emitted point integrate information from 2+ LEAF groups?
-            - Are sourceItemIds merged from all contributing LEAFs?
+            - Do sourcePointRefs cover every contributing LEAF point?
             - Are there duplicate or overlapping emitted points? If yes → merge first.
             - Is the output valid JSON with no markdown fences?
 
@@ -207,15 +208,19 @@ public final class BranchAggregationPrompts {
                 {
                   "type": "SUMMARY",
                   "content": "Cross-group factual synthesis...",
-                  "confidence": 0.85,
-                  "sourceItemIds": ["42", "43", "45", "50", "51"],
+                  "sourcePointRefs": [
+                    { "insightId": 42, "pointId": "pt_leaf_1" },
+                    { "insightId": 43, "pointId": "pt_leaf_2" }
+                  ],
                   "point_reason": "Explain which LEAF groups contribute what and why this is a stable cross-group synthesis."
                 },
                 {
                   "type": "REASONING",
                   "content": "Cross-group inference...",
-                  "confidence": 0.70,
-                  "sourceItemIds": ["10", "11", "20", "21"],
+                  "sourcePointRefs": [
+                    { "insightId": 10, "pointId": "pt_leaf_3" },
+                    { "insightId": 20, "pointId": "pt_leaf_7" }
+                  ],
                   "point_reason": "Explain the cross-group evidence chain and why this is an inference."
                 }
               ]
@@ -224,8 +229,8 @@ public final class BranchAggregationPrompts {
             Field descriptions:
             - `type`: "SUMMARY" or "REASONING" (see Type Decision Logic above).
             - `content`: Plain text aggregated statement (1-3 sentences).
-            - `confidence`: Confidence score in [0, 1].
-            - `sourceItemIds`: Array of strings. MUST merge sourceItemIds from all contributing LEAF points.
+            - `sourcePointRefs`: Array of `{ "insightId": number, "pointId": string }`. \
+            MUST reference every contributing LEAF point directly.
             - `point_reason`: Reasoning-only field for explaining synthesis logic; it will NOT be stored.\
             """;
 
@@ -243,8 +248,10 @@ public final class BranchAggregationPrompts {
                     "pointId": "pt_branch_1",
                     "type": "SUMMARY",
                     "content": "Cross-group factual synthesis...",
-                    "confidence": 0.85,
-                    "sourceItemIds": ["42", "43", "45", "50", "51"]
+                    "sourcePointRefs": [
+                      { "insightId": 42, "pointId": "pt_leaf_1" },
+                      { "insightId": 43, "pointId": "pt_leaf_2" }
+                    ]
                   },
                   "reason": "This point remains valid but needs to incorporate new cross-group evidence."
                 },
@@ -253,8 +260,10 @@ public final class BranchAggregationPrompts {
                   "point": {
                     "type": "REASONING",
                     "content": "Cross-group inference...",
-                    "confidence": 0.70,
-                    "sourceItemIds": ["10", "11", "20", "21"]
+                    "sourcePointRefs": [
+                      { "insightId": 10, "pointId": "pt_leaf_3" },
+                      { "insightId": 20, "pointId": "pt_leaf_7" }
+                    ]
                   },
                   "reason": "This is a new cross-group conclusion not covered by any existing BRANCH point."
                 }
@@ -270,17 +279,8 @@ public final class BranchAggregationPrompts {
             - `point.type`: "SUMMARY" or "REASONING" (see Type Decision Logic above).
             - `point.content`: Plain text aggregated statement (1-3 sentences).
             - `point.pointId`: For UPDATE, keep it identical to `targetPointId`. For ADD, omit it.
-            - `point.confidence`:
-              For SUMMARY:
-                - 0.90+: Theme confirmed across 3+ LEAF groups.
-                - 0.80-0.89: Clear pattern from 2 LEAF groups.
-                - 0.70-0.79: Reasonable consolidation, groups loosely related.
-              For REASONING:
-                - 0.80+: Strong cross-group inference supported by multiple LEAFs.
-                - 0.65-0.79: Reasonable inference connecting 2+ groups.
-                - < 0.65: Speculative — include only if highly valuable.
-            - `point.sourceItemIds`: Array of strings. MUST merge sourceItemIds from all \
-            contributing LEAF points to maintain traceability to original items.
+            - `point.sourcePointRefs`: Array of `{ "insightId": number, "pointId": string }`. \
+            MUST reference every contributing LEAF point directly.
             - Return `"operations": []` when analysis finds no durable BRANCH change.\
             """;
 
@@ -303,8 +303,11 @@ public final class BranchAggregationPrompts {
                 {
                   "type": "SUMMARY",
                   "content": "User is a senior technical professional with strong education, deep backend experience, and bilingual communication ability.",
-                  "confidence": 0.90,
-                  "sourceItemIds": ["10", "11", "12", "14"],
+                  "sourcePointRefs": [
+                    { "insightId": 10, "pointId": "pt_leaf_1" },
+                    { "insightId": 11, "pointId": "pt_leaf_2" },
+                    { "insightId": 12, "pointId": "pt_leaf_3" }
+                  ],
                   "point_reason": "Multiple LEAF groups contribute different facets of one higher-level identity theme."
                 }
               ]
@@ -314,7 +317,7 @@ public final class BranchAggregationPrompts {
 
             Input:
             Existing BRANCH Points:
-            - [SUMMARY] User is a fully remote backend engineer who values schedule flexibility (confidence: 0.85, sources: [10, 11])
+            - [SUMMARY] User is a fully remote backend engineer who values schedule flexibility (sourcePointRefs: [{ insightId: 10, pointId: pt_leaf_1 }])
 
             LEAF Insights:
             1. [group=work_style] [SUMMARY] User transitioned to hybrid schedule, 3 days in office (sources: [10, 11, 55, 57])
@@ -326,8 +329,11 @@ public final class BranchAggregationPrompts {
                 {
                   "type": "SUMMARY",
                   "content": "User transitioned from fully remote to hybrid work while stepping into a tech lead role, suggesting their work style is adapting to broader leadership responsibilities.",
-                  "confidence": 0.85,
-                  "sourceItemIds": ["10", "11", "55", "57", "60", "61"],
+                  "sourcePointRefs": [
+                    { "insightId": 10, "pointId": "pt_leaf_1" },
+                    { "insightId": 10, "pointId": "pt_leaf_2" },
+                    { "insightId": 20, "pointId": "pt_leaf_1" }
+                  ],
                   "point_reason": "The old BRANCH point remains directionally useful but must be rewritten using the new cross-group evidence."
                 }
               ]
@@ -365,8 +371,12 @@ public final class BranchAggregationPrompts {
             CS 2015) with team leadership experience, AWS certification, and bilingual \
             English-Mandarin proficiency — a well-rounded technical profile with both depth \
             and breadth",
-                    "confidence": 0.90,
-                    "sourceItemIds": ["10", "11", "12", "13", "14"]
+                    "sourcePointRefs": [
+                      { "insightId": 10, "pointId": "pt_leaf_1" },
+                      { "insightId": 10, "pointId": "pt_leaf_2" },
+                      { "insightId": 20, "pointId": "pt_leaf_1" },
+                      { "insightId": 30, "pointId": "pt_leaf_1" }
+                    ]
                   },
                   "reason": "All 4 LEAF groups contribute different facets of the same \
             professional identity, so this is a new BRANCH-level cross-group synthesis."
@@ -379,8 +389,12 @@ public final class BranchAggregationPrompts {
             years backend), leadership experience (team of 5), cloud certification (AWS \
             SA), and bilingual ability positions user well for senior technical leadership \
             roles in international or cross-border engineering organizations",
-                    "confidence": 0.75,
-                    "sourceItemIds": ["10", "11", "12", "13", "14"]
+                    "sourcePointRefs": [
+                      { "insightId": 10, "pointId": "pt_leaf_1" },
+                      { "insightId": 10, "pointId": "pt_leaf_2" },
+                      { "insightId": 20, "pointId": "pt_leaf_1" },
+                      { "insightId": 30, "pointId": "pt_leaf_1" }
+                    ]
                   },
                   "reason": "No single LEAF concludes 'international tech leadership', but \
             connecting the groups reveals that cross-group inference."
@@ -398,8 +412,7 @@ public final class BranchAggregationPrompts {
             - pointId: pt_branch_1
               type: SUMMARY
               content: User is a fully remote backend engineer who values schedule flexibility
-              confidence: 0.85
-              sourceItemIds: ["10", "11"]
+              sourcePointRefs: [{ insightId: 10, pointId: pt_leaf_1 }]
 
             LEAF Insights:
             G1.P1 [SUMMARY] User transitioned to hybrid schedule, 3 days in office. \
@@ -423,8 +436,11 @@ public final class BranchAggregationPrompts {
             in office) coinciding with a promotion to tech lead. The shift to in-office \
             presence aligns with the increased need for in-person collaboration in the \
             leadership role",
-                    "confidence": 0.85,
-                    "sourceItemIds": ["10", "11", "55", "57", "60", "61"]
+                    "sourcePointRefs": [
+                      { "insightId": 10, "pointId": "pt_leaf_1" },
+                      { "insightId": 10, "pointId": "pt_leaf_2" },
+                      { "insightId": 20, "pointId": "pt_leaf_1" }
+                    ]
                   },
                   "reason": "P1 remains directionally valid but needs to reflect the new \
             hybrid-work and leadership evidence."
@@ -436,8 +452,11 @@ public final class BranchAggregationPrompts {
                     "content": "The willingness to adapt to hybrid work despite preferring \
             remote, combined with taking on a leadership role, suggests user prioritizes \
             career advancement over personal comfort preferences",
-                    "confidence": 0.70,
-                    "sourceItemIds": ["10", "11", "56", "58", "60", "61"]
+                    "sourcePointRefs": [
+                      { "insightId": 10, "pointId": "pt_leaf_1" },
+                      { "insightId": 10, "pointId": "pt_leaf_2" },
+                      { "insightId": 20, "pointId": "pt_leaf_1" }
+                    ]
                   },
                   "reason": "Connecting the work-style and career-growth groups reveals a \
             new values-level inference not represented by P1."
@@ -580,27 +599,42 @@ public final class BranchAggregationPrompts {
         if (existingPoints != null && !existingPoints.isEmpty()) {
             sb.append("\n# Existing BRANCH Points\n");
             for (var point : existingPoints) {
-                sb.append("- [")
+                sb.append("- pointId: ")
+                        .append(point.pointId())
+                        .append("\n  type: ")
                         .append(point.type())
-                        .append("] ")
+                        .append("\n  content: ")
                         .append(point.content())
-                        .append(" (confidence: ")
-                        .append(point.confidence())
-                        .append(", sources: ")
-                        .append(point.sourceItemIds())
-                        .append(")\n");
+                        .append("\n  sourcePointRefs: ")
+                        .append(point.sourcePointRefs())
+                        .append("\n");
             }
         }
 
         sb.append("\n# LEAF Insights\n");
         for (int i = 0; i < leafInsights.size(); i++) {
             var leaf = leafInsights.get(i);
-            sb.append(i + 1)
-                    .append(". [group=")
-                    .append(leaf.group())
-                    .append("] ")
-                    .append(leaf.pointsContent())
-                    .append("\n");
+            var groupIndex = i + 1;
+            sb.append("G").append(groupIndex).append(". group=").append(leaf.group()).append("\n");
+            var points = leaf.points() != null ? leaf.points() : List.<InsightPoint>of();
+            for (int j = 0; j < points.size(); j++) {
+                var point = points.get(j);
+                sb.append("G")
+                        .append(groupIndex)
+                        .append(".P")
+                        .append(j + 1)
+                        .append(" insightId=")
+                        .append(leaf.id())
+                        .append(" pointId=")
+                        .append(point.pointId())
+                        .append(" [")
+                        .append(point.type())
+                        .append("] ")
+                        .append(point.content())
+                        .append("\n    sourceItemIds: ")
+                        .append(point.sourceItemIds())
+                        .append("\n");
+            }
         }
 
         return sb.toString();
@@ -630,10 +664,10 @@ public final class BranchAggregationPrompts {
                         .append(point.type())
                         .append("\n  content: ")
                         .append(point.content())
-                        .append("\n  confidence: ")
-                        .append(point.confidence())
                         .append("\n  sourceItemIds: ")
                         .append(point.sourceItemIds())
+                        .append("\n  sourcePointRefs: ")
+                        .append(point.sourcePointRefs())
                         .append("\n");
             }
         }
@@ -650,12 +684,14 @@ public final class BranchAggregationPrompts {
                         .append(groupIndex)
                         .append(".P")
                         .append(j + 1)
+                        .append(" insightId=")
+                        .append(leaf.id())
+                        .append(" pointId=")
+                        .append(point.pointId())
                         .append(" [")
                         .append(point.type())
                         .append("] ")
                         .append(point.content())
-                        .append("\n    confidence: ")
-                        .append(point.confidence())
                         .append("\n    sourceItemIds: ")
                         .append(point.sourceItemIds())
                         .append("\n");
