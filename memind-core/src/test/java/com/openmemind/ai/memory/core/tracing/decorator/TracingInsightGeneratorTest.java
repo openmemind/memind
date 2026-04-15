@@ -13,9 +13,12 @@
  */
 package com.openmemind.ai.memory.core.tracing.decorator;
 
+import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.EXTRACTION_INSIGHT_ADD_COUNT;
+import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.EXTRACTION_INSIGHT_DELETE_COUNT;
 import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.EXTRACTION_INSIGHT_GROUP_NAME;
 import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.EXTRACTION_INSIGHT_LEAF_COUNT;
 import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.EXTRACTION_INSIGHT_TYPE;
+import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.EXTRACTION_INSIGHT_UPDATE_COUNT;
 import static com.openmemind.ai.memory.core.tracing.MemorySpanNames.EXTRACTION_INSIGHT_GENERATE_BRANCH;
 import static com.openmemind.ai.memory.core.tracing.MemorySpanNames.EXTRACTION_INSIGHT_GENERATE_LEAF;
 import static com.openmemind.ai.memory.core.tracing.MemorySpanNames.EXTRACTION_INSIGHT_GENERATE_ROOT;
@@ -25,11 +28,15 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
+import com.openmemind.ai.memory.core.data.PointOperation;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightPointGenerateResponse;
+import com.openmemind.ai.memory.core.extraction.insight.generator.InsightPointOpsResponse;
 import com.openmemind.ai.memory.core.support.RecordingMemoryObserver;
+import com.openmemind.ai.memory.core.tracing.ObservationContext;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
@@ -131,6 +138,75 @@ class TracingInsightGeneratorTest {
         assertThat(observer.monoContexts()).hasSize(1);
     }
 
+    @Test
+    void generateLeafPointOpsPublishesOperationCounts() {
+        var observer = new RecordingMemoryObserver();
+        var delegate = mock(InsightGenerator.class);
+        var response =
+                new InsightPointOpsResponse(
+                        List.of(
+                                new PointOperation(
+                                        PointOperation.OpType.ADD,
+                                        null,
+                                        new InsightPoint(
+                                                InsightPoint.PointType.SUMMARY,
+                                                "new",
+                                                0.9f,
+                                                List.of("1", "2")),
+                                        null),
+                                new PointOperation(PointOperation.OpType.DELETE, 1, null, "drop")));
+        when(delegate.generateLeafPointOps(any(), any(), any(), any(), anyInt(), any(), any()))
+                .thenReturn(Mono.just(response));
+        var insightType = insightType();
+
+        var traced = new TracingInsightGenerator(delegate, observer);
+
+        StepVerifier.create(
+                        traced.generateLeafPointOps(
+                                insightType, "group-a", List.of(), List.of(), 100, null, "zh-CN"))
+                .expectNext(response)
+                .verifyComplete();
+
+        assertThat(extractResultAttributes(observer, response))
+                .containsEntry(EXTRACTION_INSIGHT_ADD_COUNT, 1)
+                .containsEntry(EXTRACTION_INSIGHT_UPDATE_COUNT, 0)
+                .containsEntry(EXTRACTION_INSIGHT_DELETE_COUNT, 1);
+    }
+
+    @Test
+    void generateBranchPointOpsPublishesOperationCounts() {
+        var observer = new RecordingMemoryObserver();
+        var delegate = mock(InsightGenerator.class);
+        var response =
+                new InsightPointOpsResponse(
+                        List.of(
+                                new PointOperation(
+                                        PointOperation.OpType.UPDATE,
+                                        1,
+                                        new InsightPoint(
+                                                InsightPoint.PointType.SUMMARY,
+                                                "updated",
+                                                0.9f,
+                                                List.of("1", "2")),
+                                        null)));
+        when(delegate.generateBranchPointOps(any(), any(), any(), anyInt(), any()))
+                .thenReturn(Mono.just(response));
+        var insightType = insightType();
+
+        var traced = new TracingInsightGenerator(delegate, observer);
+
+        StepVerifier.create(
+                        traced.generateBranchPointOps(
+                                insightType, List.of(), List.of(memoryInsight()), 100, "zh-CN"))
+                .expectNext(response)
+                .verifyComplete();
+
+        assertThat(extractResultAttributes(observer, response))
+                .containsEntry(EXTRACTION_INSIGHT_ADD_COUNT, 0)
+                .containsEntry(EXTRACTION_INSIGHT_UPDATE_COUNT, 1)
+                .containsEntry(EXTRACTION_INSIGHT_DELETE_COUNT, 0);
+    }
+
     private static MemoryInsightType insightType() {
         return new MemoryInsightType(
                 1L, "PROFILE", "desc", null, List.of(), 400, null, null, null, null, null, null);
@@ -155,5 +231,13 @@ class TracingInsightGeneratorTest {
                 null,
                 List.of(),
                 0);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static java.util.Map<String, Object> extractResultAttributes(
+            RecordingMemoryObserver observer, InsightPointOpsResponse response) {
+        var context =
+                (ObservationContext<InsightPointOpsResponse>) observer.monoContexts().getFirst();
+        return context.resultExtractor().extract(response);
     }
 }

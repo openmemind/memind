@@ -55,6 +55,54 @@ class BranchAggregationPromptsTest {
     }
 
     @Test
+    @DisplayName("Rendered full rewrite prompt should keep points contract")
+    void shouldRenderFullRewritePrompt() {
+        var template =
+                BranchAggregationPrompts.build(
+                        createInsightType(),
+                        List.of(
+                                new InsightPoint(
+                                        PointType.SUMMARY,
+                                        "User values schedule flexibility",
+                                        0.85f,
+                                        List.of("10", "11"))),
+                        List.of(createLeafInsight("career_background")),
+                        320);
+        var prompt = template.render("English");
+
+        assertThat(prompt.systemPrompt())
+                .contains("\"points\"")
+                .doesNotContain("\"operations\"")
+                .contains("Full Replacement");
+    }
+
+    @Test
+    @DisplayName("Rendered prompt should use point ops and structured leaf point inputs")
+    void shouldRenderPointOpsPromptWithStructuredLeafInputs() {
+        var template =
+                BranchAggregationPrompts.buildPointOps(
+                        createInsightType(),
+                        List.of(
+                                new InsightPoint(
+                                        PointType.SUMMARY,
+                                        "User values schedule flexibility",
+                                        0.85f,
+                                        List.of("10", "11"))),
+                        List.of(createLeafInsight("career_background")),
+                        320);
+        var prompt = template.render("English");
+
+        assertThat(prompt.systemPrompt())
+                .contains("Point Operations Only")
+                .doesNotContain("Full Replacement");
+        assertThat(prompt.userPrompt())
+                .contains("P1. [SUMMARY] User values schedule flexibility")
+                .contains("G1.P1 [SUMMARY] User has 8 years of backend engineering experience")
+                .contains("sourceItemIds: [10, 14]")
+                .doesNotContain("1. [group=career_background]");
+    }
+
+    @Test
     @DisplayName(
             "build with registry should collapse branch aggregation prompt to a system section")
     void buildWithRegistryUsesOverrideInstruction() {

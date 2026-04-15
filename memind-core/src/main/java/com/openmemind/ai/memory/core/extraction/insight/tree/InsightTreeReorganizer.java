@@ -21,6 +21,7 @@ import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
+import com.openmemind.ai.memory.core.extraction.insight.operation.PointOperationResolver;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.utils.IdUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
@@ -167,6 +168,10 @@ public class InsightTreeReorganizer {
                         config,
                         language);
 
+        if (!pointsChanged(branch, updatedBranch)) {
+            return;
+        }
+
         var rootLock = rootLocks[Math.floorMod(memoryId.toIdentifier().hashCode(), LOCK_STRIPES)];
         rootLock.lock();
         try {
@@ -261,6 +266,10 @@ public class InsightTreeReorganizer {
                         language);
 
         bubbleTracker.reset(dirtyKey);
+
+        if (!pointsChanged(linkedBranch, updatedBranch)) {
+            return;
+        }
 
         // 6. Reuse rootCtx for bubble and possible ROOT re-summarize
         rootLock.lock();
@@ -539,6 +548,41 @@ public class InsightTreeReorganizer {
                 branch.id(),
                 leafInsights.size());
 
+        var existingPoints = branch.points() != null ? branch.points() : List.<InsightPoint>of();
+
+        var opsMono =
+                generator.generateBranchPointOps(
+                        insightType,
+                        existingPoints,
+                        leafInsights,
+                        insightType.targetTokens(),
+                        language);
+        var opsResponse = opsMono != null ? opsMono.block() : null;
+
+        if (opsResponse == null) {
+            return resummarizeBranchWithFullRewrite(
+                    memoryId, insightTypeName, insightType, branch, leafInsights, language);
+        }
+
+        var resolved = PointOperationResolver.resolve(existingPoints, opsResponse.operations());
+        if (resolved.fallbackRequired()) {
+            return resummarizeBranchWithFullRewrite(
+                    memoryId, insightTypeName, insightType, branch, leafInsights, language);
+        }
+        if (resolved.noop()) {
+            return branch;
+        }
+
+        return embedAndSaveIfChanged(memoryId, branch, resolved.points(), InsightTier.BRANCH);
+    }
+
+    private MemoryInsight resummarizeBranchWithFullRewrite(
+            MemoryId memoryId,
+            String insightTypeName,
+            MemoryInsightType insightType,
+            MemoryInsight branch,
+            List<MemoryInsight> leafInsights,
+            String language) {
         var response =
                 generator
                         .generateBranchSummary(
@@ -558,7 +602,7 @@ public class InsightTreeReorganizer {
 
         var points = response.points();
 
-        return embedAndSave(memoryId, branch, points, InsightTier.BRANCH);
+        return embedAndSaveIfChanged(memoryId, branch, points, InsightTier.BRANCH);
     }
 
     private MemoryInsight resummarizeRoot(
@@ -642,6 +686,24 @@ public class InsightTreeReorganizer {
                         .withVersion(insight.version() + 1);
         store.insightOperations().upsertInsights(memoryId, List.of(updated));
         return updated;
+    }
+
+    private MemoryInsight embedAndSaveIfChanged(
+            MemoryId memoryId, MemoryInsight insight, List<InsightPoint> points, InsightTier tier) {
+        return pointsChanged(insight, points)
+                ? embedAndSave(memoryId, insight, points, tier)
+                : insight;
+    }
+
+    private boolean pointsChanged(MemoryInsight insight, List<InsightPoint> points) {
+        var existingPoints = insight.points() != null ? insight.points() : List.<InsightPoint>of();
+        var candidatePoints = points != null ? points : List.<InsightPoint>of();
+        return !existingPoints.equals(candidatePoints);
+    }
+
+    private boolean pointsChanged(MemoryInsight before, MemoryInsight after) {
+        var afterPoints = after != null ? after.points() : List.<InsightPoint>of();
+        return pointsChanged(before, afterPoints);
     }
 
     // ===== Utility Methods =====

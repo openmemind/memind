@@ -26,6 +26,7 @@ import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassifier;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupRouter;
+import com.openmemind.ai.memory.core.extraction.insight.operation.PointOperationResolver;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.tracing.MemoryAttributes;
@@ -527,6 +528,76 @@ public class InsightBuildScheduler implements Closeable {
                         ? existingLeaf.points()
                         : List.<InsightPoint>of();
 
+        var opsResponse =
+                generator
+                        .generateLeafPointOps(
+                                insightType,
+                                groupName,
+                                existingPoints,
+                                items,
+                                insightType.targetTokens(),
+                                null,
+                                language)
+                        .block();
+
+        if (opsResponse == null) {
+            return buildLeafWithFullRewrite(
+                    memoryId,
+                    insightTypeName,
+                    insightType,
+                    groupName,
+                    items,
+                    unbuiltItemIds,
+                    existingLeaf,
+                    existingPoints,
+                    language);
+        }
+
+        var resolved = PointOperationResolver.resolve(existingPoints, opsResponse.operations());
+        if (resolved.fallbackRequired()) {
+            return buildLeafWithFullRewrite(
+                    memoryId,
+                    insightTypeName,
+                    insightType,
+                    groupName,
+                    items,
+                    unbuiltItemIds,
+                    existingLeaf,
+                    existingPoints,
+                    language);
+        }
+        if (resolved.noop()) {
+            bufferStore.markBuilt(memoryId, insightTypeName, unbuiltItemIds);
+            return null;
+        }
+
+        var points = resolved.points();
+        if (existingLeaf != null && points.equals(existingLeaf.points())) {
+            bufferStore.markBuilt(memoryId, insightTypeName, unbuiltItemIds);
+            return null;
+        }
+
+        return saveLeafInsight(
+                memoryId,
+                insightTypeName,
+                insightType,
+                groupName,
+                items,
+                unbuiltItemIds,
+                existingLeaf,
+                points);
+    }
+
+    private MemoryInsight buildLeafWithFullRewrite(
+            MemoryId memoryId,
+            String insightTypeName,
+            MemoryInsightType insightType,
+            String groupName,
+            List<MemoryItem> items,
+            List<Long> unbuiltItemIds,
+            MemoryInsight existingLeaf,
+            List<InsightPoint> existingPoints,
+            String language) {
         var response =
                 generator
                         .generatePoints(
@@ -548,11 +619,34 @@ public class InsightBuildScheduler implements Closeable {
         }
 
         var points = response.points();
+        if (existingLeaf != null && points.equals(existingLeaf.points())) {
+            bufferStore.markBuilt(memoryId, insightTypeName, unbuiltItemIds);
+            return null;
+        }
 
+        return saveLeafInsight(
+                memoryId,
+                insightTypeName,
+                insightType,
+                groupName,
+                items,
+                unbuiltItemIds,
+                existingLeaf,
+                points);
+    }
+
+    private MemoryInsight saveLeafInsight(
+            MemoryId memoryId,
+            String insightTypeName,
+            MemoryInsightType insightType,
+            String groupName,
+            List<MemoryItem> items,
+            List<Long> unbuiltItemIds,
+            MemoryInsight existingLeaf,
+            List<InsightPoint> points) {
         var now = Instant.now();
         MemoryInsight leafInsight;
         if (existingLeaf != null) {
-            // In-place update: keep ID, version +1
             leafInsight =
                     existingLeaf
                             .withPoints(points)
@@ -562,7 +656,6 @@ public class InsightBuildScheduler implements Closeable {
                             .withUpdatedAt(now)
                             .withVersion(existingLeaf.version() + 1);
         } else {
-            // First creation
             MemoryScope leafScope =
                     items.stream()
                             .map(MemoryItem::category)

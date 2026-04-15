@@ -11,27 +11,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.prompt;
+package com.openmemind.ai.memory.core.extraction.insight.operation;
 
-/** Enumerates all customizable prompt families. */
-public enum PromptType {
-    INTENT_ROUTING,
-    QUERY_REWRITE,
-    TYPED_QUERY_EXPAND,
-    INSIGHT_TYPE_ROUTING,
-    SUFFICIENCY_GATE,
-    MEMORY_ITEM_UNIFIED,
-    TOOL_ITEM,
-    FORESIGHT,
-    SELF_VERIFICATION,
-    CAPTION,
-    BOUNDARY_DETECTION,
-    CONVERSATION_SEGMENTATION,
-    INSIGHT_GROUP,
-    INSIGHT_LEAF,
-    INSIGHT_LEAF_POINT_OPS,
-    BRANCH_AGGREGATION,
-    BRANCH_AGGREGATION_POINT_OPS,
-    ROOT_SYNTHESIS,
-    INTERACTION_GUIDE_SYNTHESIS
-}
+import com.openmemind.ai.memory.core.data.InsightPoint;
+import java.util.List;
+
+public record ResolvedPointOperations(
+        List<InsightPoint> points,
+        boolean changed,
+        boolean noop,
+        boolean fallbackRequired,
+        int addCount,
+        int updateCount,
+        int deleteCount,
+        int invalidCount) {}

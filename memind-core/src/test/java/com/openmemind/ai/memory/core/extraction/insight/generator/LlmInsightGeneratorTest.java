@@ -16,6 +16,8 @@ package com.openmemind.ai.memory.core.extraction.insight.generator;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
+import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
+import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
@@ -28,6 +30,164 @@ import reactor.test.StepVerifier;
 
 @DisplayName("LlmInsightGenerator Unit Test")
 class LlmInsightGeneratorTest {
+
+    @Test
+    @DisplayName("generateLeafPointOps should call structured client with ops response type")
+    void generateLeafPointOpsCallsStructuredClientWithOpsResponseType() {
+        var client = new FakeStructuredChatClient(new InsightPointOpsResponse(List.of()));
+        var generator = new LlmInsightGenerator(client);
+
+        StepVerifier.create(
+                        generator.generateLeafPointOps(
+                                rootInsightType("profile"),
+                                "group",
+                                List.of(),
+                                List.of(),
+                                300,
+                                null,
+                                "English"))
+                .expectNextMatches(response -> response.operations().isEmpty())
+                .verifyComplete();
+
+        assertThat(client.lastResponseType()).isEqualTo(InsightPointOpsResponse.class);
+    }
+
+    @Test
+    @DisplayName("generatePoints should keep full rewrite prompt contract")
+    void generatePointsShouldKeepFullRewritePromptContract() {
+        var client = new FakeStructuredChatClient(new InsightPointGenerateResponse(List.of()));
+        var generator = new LlmInsightGenerator(client);
+
+        StepVerifier.create(
+                        generator.generatePoints(
+                                rootInsightType("profile"),
+                                "group",
+                                List.of(),
+                                List.of(),
+                                300,
+                                null,
+                                "English"))
+                .expectNextMatches(response -> response.points().isEmpty())
+                .verifyComplete();
+
+        assertThat(client.lastResponseType()).isEqualTo(InsightPointGenerateResponse.class);
+        assertThat(client.lastMessages().getFirst().content())
+                .contains("\"points\"")
+                .doesNotContain("\"operations\"");
+    }
+
+    @Test
+    @DisplayName("generateLeafPointOps should not convert missing structured response into noop")
+    void generateLeafPointOpsDoesNotConvertMissingStructuredResponseIntoEmptyOperations() {
+        var client = new FakeStructuredChatClient(null);
+        var generator = new LlmInsightGenerator(client);
+
+        StepVerifier.create(
+                        generator.generateLeafPointOps(
+                                rootInsightType("profile"),
+                                "group",
+                                List.of(),
+                                List.of(),
+                                300,
+                                null,
+                                "English"))
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("generateBranchPointOps should call structured client with ops response type")
+    void generateBranchPointOpsCallsStructuredClientWithOpsResponseType() {
+        var client = new FakeStructuredChatClient(new InsightPointOpsResponse(List.of()));
+        var generator = new LlmInsightGenerator(client);
+
+        StepVerifier.create(
+                        generator.generateBranchPointOps(
+                                rootInsightType("profile"), List.of(), List.of(), 300, "English"))
+                .expectNextMatches(response -> response.operations().isEmpty())
+                .verifyComplete();
+
+        assertThat(client.lastResponseType()).isEqualTo(InsightPointOpsResponse.class);
+    }
+
+    @Test
+    @DisplayName("generateBranchSummary should keep full rewrite prompt contract")
+    void generateBranchSummaryShouldKeepFullRewritePromptContract() {
+        var client = new FakeStructuredChatClient(new InsightPointGenerateResponse(List.of()));
+        var generator = new LlmInsightGenerator(client);
+
+        StepVerifier.create(
+                        generator.generateBranchSummary(
+                                rootInsightType("profile"), List.of(), List.of(), 300, "English"))
+                .expectNextMatches(response -> response.points().isEmpty())
+                .verifyComplete();
+
+        assertThat(client.lastResponseType()).isEqualTo(InsightPointGenerateResponse.class);
+        assertThat(client.lastMessages().getFirst().content())
+                .contains("\"points\"")
+                .doesNotContain("\"operations\"");
+    }
+
+    @Test
+    @DisplayName("generateLeafPointOps should use point-op prompt override")
+    void generateLeafPointOpsShouldUsePointOpsOverrideInstruction() {
+        var client = new FakeStructuredChatClient(new InsightPointOpsResponse(List.of()));
+        var registry =
+                InMemoryPromptRegistry.builder()
+                        .override(
+                                PromptType.INSIGHT_LEAF_POINT_OPS,
+                                "Custom insight leaf point-op instruction")
+                        .build();
+        var generator = new LlmInsightGenerator(client, registry);
+
+        StepVerifier.create(
+                        generator.generateLeafPointOps(
+                                rootInsightType("profile"),
+                                "group",
+                                List.of(),
+                                List.of(),
+                                300,
+                                null,
+                                "English"))
+                .expectNextMatches(response -> response.operations().isEmpty())
+                .verifyComplete();
+
+        assertThat(client.lastMessages().getFirst().content())
+                .contains("Custom insight leaf point-op instruction");
+    }
+
+    @Test
+    @DisplayName("generateBranchPointOps should use point-op prompt override")
+    void generateBranchPointOpsShouldUsePointOpsOverrideInstruction() {
+        var client = new FakeStructuredChatClient(new InsightPointOpsResponse(List.of()));
+        var registry =
+                InMemoryPromptRegistry.builder()
+                        .override(
+                                PromptType.BRANCH_AGGREGATION_POINT_OPS,
+                                "Custom branch point-op instruction")
+                        .build();
+        var generator = new LlmInsightGenerator(client, registry);
+
+        StepVerifier.create(
+                        generator.generateBranchPointOps(
+                                rootInsightType("profile"), List.of(), List.of(), 300, "English"))
+                .expectNextMatches(response -> response.operations().isEmpty())
+                .verifyComplete();
+
+        assertThat(client.lastMessages().getFirst().content())
+                .contains("Custom branch point-op instruction");
+    }
+
+    @Test
+    @DisplayName("generateBranchPointOps should not convert missing structured response into noop")
+    void generateBranchPointOpsDoesNotConvertMissingStructuredResponseIntoEmptyOperations() {
+        var client = new FakeStructuredChatClient(null);
+        var generator = new LlmInsightGenerator(client);
+
+        StepVerifier.create(
+                        generator.generateBranchPointOps(
+                                rootInsightType("profile"), List.of(), List.of(), 300, "English"))
+                .verifyComplete();
+    }
 
     @Test
     @DisplayName("generateRootSynthesis should use root synthesis override instruction")
@@ -82,15 +242,16 @@ class LlmInsightGeneratorTest {
                 null,
                 null,
                 null,
+                InsightAnalysisMode.BRANCH,
                 null,
-                null,
-                null);
+                MemoryScope.AGENT);
     }
 
     private static final class FakeStructuredChatClient implements StructuredChatClient {
 
         private final Object response;
         private List<ChatMessage> lastMessages = List.of();
+        private Class<?> lastResponseType;
 
         private FakeStructuredChatClient(Object response) {
             this.response = response;
@@ -105,11 +266,16 @@ class LlmInsightGeneratorTest {
         @SuppressWarnings("unchecked")
         public <T> Mono<T> call(List<ChatMessage> messages, Class<T> responseType) {
             lastMessages = List.copyOf(messages);
+            lastResponseType = responseType;
             return Mono.justOrEmpty((T) response);
         }
 
         private List<ChatMessage> lastMessages() {
             return lastMessages;
+        }
+
+        private Class<?> lastResponseType() {
+            return lastResponseType;
         }
     }
 }

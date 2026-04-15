@@ -11,7 +11,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.extraction.insight.scheduler;
+package com.openmemind.ai.memory.core.extraction.insight.operation;
 
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.PointOperation;
@@ -25,10 +25,10 @@ import java.util.List;
  * <p>targetIndex is 1-based, corresponding to the numbers P1, P2, ... in the prompt. All targetIndex references the original list position before the operation.
  * DELETE takes precedence over UPDATE: when the same index is both UPDATE and DELETE, DELETE takes effect.
  */
-final class PointOperationApplier {
+public final class PointOperationApplier {
     private PointOperationApplier() {}
 
-    static List<InsightPoint> apply(
+    public static List<InsightPoint> apply(
             List<InsightPoint> existingPoints, List<PointOperation> operations) {
 
         // 1. Collect all DELETE indices

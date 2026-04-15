@@ -83,6 +83,20 @@ public interface InsightGenerator {
             String language);
 
     /**
+     * Generate LEAF point operations against the current point list.
+     */
+    default Mono<InsightPointOpsResponse> generateLeafPointOps(
+            MemoryInsightType insightType,
+            String groupName,
+            List<InsightPoint> existingPoints,
+            List<MemoryItem> newItems,
+            int targetTokens,
+            String additionalContext,
+            String language) {
+        return Mono.error(new UnsupportedOperationException("Leaf point ops not implemented"));
+    }
+
+    /**
      * Aggregate all LEAFs under InsightType to generate BRANCH summary (delegated to 5 parameter version)
      */
     default Mono<InsightPointGenerateResponse> generateBranchSummary(
@@ -109,6 +123,18 @@ public interface InsightGenerator {
             List<MemoryInsight> leafInsights,
             int targetTokens,
             String language);
+
+    /**
+     * Generate BRANCH point operations against the current branch point list.
+     */
+    default Mono<InsightPointOpsResponse> generateBranchPointOps(
+            MemoryInsightType insightType,
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> leafInsights,
+            int targetTokens,
+            String language) {
+        return Mono.error(new UnsupportedOperationException("Branch point ops not implemented"));
+    }
 
     /**
      * Synthesize all BRANCHes to generate ROOT deep insight (delegated to 5 parameter version)
