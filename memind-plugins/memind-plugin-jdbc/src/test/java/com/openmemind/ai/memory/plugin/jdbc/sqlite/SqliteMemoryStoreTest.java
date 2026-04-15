@@ -77,6 +77,7 @@ class SqliteMemoryStoreTest {
         assertThat(tableExists(emptyDataSource, "memory_raw_data")).isTrue();
         assertThat(tableExists(emptyDataSource, "memory_item")).isTrue();
         assertThat(tableExists(emptyDataSource, "memory_insight")).isTrue();
+        assertThat(tableExists(emptyDataSource, "memory_insight_bubble_state")).isTrue();
         assertThat(tableExists(emptyDataSource, "memory_resource")).isTrue();
         assertThat(columnExists(emptyDataSource, "memory_raw_data", "resource_id")).isTrue();
         assertThat(columnExists(emptyDataSource, "memory_raw_data", "mime_type")).isTrue();

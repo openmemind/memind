@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.server.configuration;
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
@@ -71,7 +72,8 @@ public class MemindServerRuntimeConfiguration {
             ObjectProvider<Reranker> reranker,
             ObjectProvider<ContentParser> contentParserProvider,
             ObjectProvider<RawDataPlugin> rawDataPluginProvider,
-            ObjectProvider<ResourceFetcher> resourceFetcherProvider) {
+            ObjectProvider<ResourceFetcher> resourceFetcherProvider,
+            ObjectProvider<BubbleTrackerStore> bubbleTrackerStoreProvider) {
         return options -> {
             StructuredChatClient structuredChatClient =
                     requireRuntimeDependency(structuredChatClientProvider);
@@ -82,6 +84,7 @@ public class MemindServerRuntimeConfiguration {
             ContentParserRegistry contentParserRegistry =
                     parsers.isEmpty() ? null : new DefaultContentParserRegistry(parsers);
             ResourceFetcher resourceFetcher = resourceFetcherProvider.getIfAvailable();
+            BubbleTrackerStore bubbleTrackerStore = bubbleTrackerStoreProvider.getIfAvailable();
             var builder =
                     Memory.builder()
                             .chatClient(structuredChatClient)
@@ -90,6 +93,9 @@ public class MemindServerRuntimeConfiguration {
                             .vector(memoryVector)
                             .options(options)
                             .externallyManaged(true);
+            if (bubbleTrackerStore != null) {
+                builder.bubbleTrackerStore(bubbleTrackerStore);
+            }
             if (contentParserRegistry != null) {
                 builder.contentParserRegistry(contentParserRegistry);
             }

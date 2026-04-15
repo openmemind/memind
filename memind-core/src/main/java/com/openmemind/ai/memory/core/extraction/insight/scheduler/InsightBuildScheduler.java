@@ -27,6 +27,7 @@ import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerat
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassifier;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupRouter;
 import com.openmemind.ai.memory.core.extraction.insight.operation.PointOperationResolver;
+import com.openmemind.ai.memory.core.extraction.insight.support.InsightPointIdentityManager;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.tracing.MemoryAttributes;
@@ -77,6 +78,7 @@ public class InsightBuildScheduler implements Closeable {
     private final MemoryVector memoryVector;
     private final IdUtils.SnowflakeIdGenerator idGenerator;
     private final InsightBuildConfig config;
+    private final InsightPointIdentityManager pointIdentityManager;
     private final MemoryObserver observer;
 
     private final ExecutorService executor;
@@ -131,6 +133,7 @@ public class InsightBuildScheduler implements Closeable {
                 memoryVector,
                 idGenerator,
                 config,
+                new InsightPointIdentityManager(),
                 null);
     }
 
@@ -145,6 +148,32 @@ public class InsightBuildScheduler implements Closeable {
             IdUtils.SnowflakeIdGenerator idGenerator,
             InsightBuildConfig config,
             MemoryObserver observer) {
+        this(
+                bufferStore,
+                store,
+                generator,
+                groupClassifier,
+                groupRouter,
+                treeReorganizer,
+                memoryVector,
+                idGenerator,
+                config,
+                new InsightPointIdentityManager(),
+                observer);
+    }
+
+    public InsightBuildScheduler(
+            InsightBuffer bufferStore,
+            MemoryStore store,
+            InsightGenerator generator,
+            InsightGroupClassifier groupClassifier,
+            InsightGroupRouter groupRouter,
+            InsightTreeReorganizer treeReorganizer,
+            MemoryVector memoryVector,
+            IdUtils.SnowflakeIdGenerator idGenerator,
+            InsightBuildConfig config,
+            InsightPointIdentityManager pointIdentityManager,
+            MemoryObserver observer) {
         this.bufferStore = Objects.requireNonNull(bufferStore);
         this.store = Objects.requireNonNull(store);
         this.generator = Objects.requireNonNull(generator);
@@ -154,6 +183,7 @@ public class InsightBuildScheduler implements Closeable {
         this.memoryVector = memoryVector;
         this.idGenerator = Objects.requireNonNull(idGenerator);
         this.config = Objects.requireNonNull(config);
+        this.pointIdentityManager = Objects.requireNonNull(pointIdentityManager);
         this.observer = observer != null ? observer : new NoopMemoryObserver();
         this.executor = Executors.newVirtualThreadPerTaskExecutor();
         this.semaphore = new Semaphore(config.concurrency());
@@ -523,6 +553,7 @@ public class InsightBuildScheduler implements Closeable {
                 store.insightOperations()
                         .getLeafByGroup(memoryId, insightTypeName, groupName)
                         .orElse(null);
+        existingLeaf = normalizeExistingInsightIfNeeded(memoryId, existingLeaf);
         var existingPoints =
                 existingLeaf != null && existingLeaf.points() != null
                         ? existingLeaf.points()
@@ -553,7 +584,10 @@ public class InsightBuildScheduler implements Closeable {
                     language);
         }
 
-        var resolved = PointOperationResolver.resolve(existingPoints, opsResponse.operations());
+        var normalizedOps =
+                pointIdentityManager.normalizeGeneratedOperations(
+                        existingPoints, opsResponse.operations());
+        var resolved = PointOperationResolver.resolve(existingPoints, normalizedOps);
         if (resolved.fallbackRequired()) {
             return buildLeafWithFullRewrite(
                     memoryId,
@@ -618,7 +652,8 @@ public class InsightBuildScheduler implements Closeable {
             return null;
         }
 
-        var points = response.points();
+        var points =
+                pointIdentityManager.reusePointIdsForFullRewrite(existingPoints, response.points());
         if (existingLeaf != null && points.equals(existingLeaf.points())) {
             bufferStore.markBuilt(memoryId, insightTypeName, unbuiltItemIds);
             return null;
@@ -633,6 +668,20 @@ public class InsightBuildScheduler implements Closeable {
                 unbuiltItemIds,
                 existingLeaf,
                 points);
+    }
+
+    private MemoryInsight normalizeExistingInsightIfNeeded(
+            MemoryId memoryId, MemoryInsight insight) {
+        if (insight == null || insight.points() == null || insight.points().isEmpty()) {
+            return insight;
+        }
+        var normalized = pointIdentityManager.normalizePersistedPoints(insight.points());
+        if (normalized.equals(insight.points())) {
+            return insight;
+        }
+        var updated = insight.withPoints(normalized).withUpdatedAt(Instant.now());
+        store.insightOperations().upsertInsights(memoryId, List.of(updated));
+        return updated;
     }
 
     private MemoryInsight saveLeafInsight(

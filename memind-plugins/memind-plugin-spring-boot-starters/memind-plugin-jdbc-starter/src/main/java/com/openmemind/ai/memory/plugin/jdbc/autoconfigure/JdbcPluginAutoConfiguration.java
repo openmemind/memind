@@ -14,22 +14,26 @@
 package com.openmemind.ai.memory.plugin.jdbc.autoconfigure;
 
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
+import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlBubbleTrackerStore;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBufferAccessor;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlInsightBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlMemoryStore;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlMemoryTextSearch;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlRecentConversationBuffer;
+import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlBubbleTrackerStore;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlConversationBufferAccessor;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlInsightBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlMemoryStore;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlMemoryTextSearch;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlRecentConversationBuffer;
+import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteBubbleTrackerStore;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteConversationBufferAccessor;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteInsightBuffer;
@@ -123,6 +127,18 @@ public class JdbcPluginAutoConfiguration {
             case SQLITE -> new SqliteMemoryTextSearch(dataSource, createIfNotExist);
             case MYSQL -> new MysqlMemoryTextSearch(dataSource, createIfNotExist);
             case POSTGRESQL -> new PostgresqlMemoryTextSearch(dataSource, createIfNotExist);
+        };
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(BubbleTrackerStore.class)
+    public BubbleTrackerStore bubbleTrackerStore(DataSource dataSource, Environment environment) {
+        boolean createIfNotExist =
+                environment.getProperty("memind.store.init-schema", Boolean.class, true);
+        return switch (detectDialect(dataSource)) {
+            case SQLITE -> new SqliteBubbleTrackerStore(dataSource, createIfNotExist);
+            case MYSQL -> new MysqlBubbleTrackerStore(dataSource, createIfNotExist);
+            case POSTGRESQL -> new PostgresqlBubbleTrackerStore(dataSource, createIfNotExist);
         };
     }
 

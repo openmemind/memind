@@ -246,14 +246,15 @@ public final class InsightLeafPrompts {
               "operations": [
                 {
                   "op": "UPDATE",
-                  "targetIndex": 1,
+                  "targetPointId": "pt_existing_1",
                   "point": {
+                    "pointId": "pt_existing_1",
                     "type": "SUMMARY",
                     "content": "Updated synthesized observation integrating multiple memory items...",
                     "confidence": 0.85,
                     "sourceItemIds": ["42", "43", "45"]
                   },
-                  "reason": "P1 remains valid but new items refine it with stronger evidence."
+                  "reason": "This point remains valid but new items refine it with stronger evidence."
                 },
                 {
                   "op": "ADD",
@@ -267,19 +268,20 @@ public final class InsightLeafPrompts {
                 },
                 {
                   "op": "DELETE",
-                  "targetIndex": 2,
-                  "reason": "P2 is obsolete or fully absorbed by another point."
+                  "targetPointId": "pt_existing_2",
+                  "reason": "This point is obsolete or fully absorbed by another point."
                 }
               ]
             }
 
             Field descriptions:
             - `op`: "ADD", "UPDATE", or "DELETE".
-            - `targetIndex`: Required for UPDATE/DELETE. Uses the input numbering `P1`, `P2`, ...
+            - `targetPointId`: Required for UPDATE/DELETE. Must equal an existing point's `pointId`.
             - `point`: Required for ADD/UPDATE.
             - `reason`: Short explanation of why this operation is needed.
             - `point.type`: "SUMMARY" or "REASONING" (see Type Decision Logic above).
             - `point.content`: Plain text synthesized statement (1-3 sentences).
+            - `point.pointId`: For UPDATE, keep it identical to `targetPointId`. For ADD, omit it.
             - `point.confidence`:
               For SUMMARY:
                 - 0.90+: Theme confirmed across 3+ items with strong consistency.
@@ -379,8 +381,11 @@ public final class InsightLeafPrompts {
 
             Input:
             Existing Points:
-            P1. [SUMMARY] User prefers working from home and values schedule flexibility \
-            (confidence: 0.85, sourceItemIds: ["10", "11"])
+            - pointId: pt_existing_1
+              type: SUMMARY
+              content: User prefers working from home and values schedule flexibility
+              confidence: 0.85
+              sourceItemIds: ["10", "11"]
 
             New items:
             - id: "55", content: User recently started going to the office 3 days a week
@@ -391,14 +396,15 @@ public final class InsightLeafPrompts {
               "operations": [
                 {
                   "op": "UPDATE",
-                  "targetIndex": 1,
+                  "targetPointId": "pt_existing_1",
                   "point": {
+                    "pointId": "pt_existing_1",
                     "type": "SUMMARY",
                     "content": "User transitioned from fully remote work to a hybrid schedule. They still value flexibility, but now see in-office collaboration as improving project velocity.",
                     "confidence": 0.90,
                     "sourceItemIds": ["10", "11", "55", "57"]
                   },
-                  "reason": "P1 remains directionally valid but needs to reflect the new hybrid-work evidence."
+                  "reason": "The existing point remains directionally valid but needs to reflect the new hybrid-work evidence."
                 }
               ]
             }
@@ -407,7 +413,11 @@ public final class InsightLeafPrompts {
 
             Input:
             Existing Points:
-            P1. [SUMMARY] User prefers concise technical answers (confidence: 0.90, sourceItemIds: ["70", "71"])
+            - pointId: pt_existing_1
+              type: SUMMARY
+              content: User prefers concise technical answers
+              confidence: 0.90
+              sourceItemIds: ["70", "71"]
 
             New items:
             - id: "88", content: User again asked for a concise answer format
@@ -617,15 +627,15 @@ public final class InsightLeafPrompts {
             sb.append("\n# Existing Points\n");
             for (int i = 0; i < existingPoints.size(); i++) {
                 var p = existingPoints.get(i);
-                sb.append("P")
-                        .append(i + 1)
-                        .append(". [")
+                sb.append("- pointId: ")
+                        .append(p.pointId())
+                        .append("\n  type: ")
                         .append(p.type())
-                        .append("] ")
+                        .append("\n  content: ")
                         .append(p.content())
-                        .append("\n    confidence: ")
+                        .append("\n  confidence: ")
                         .append(p.confidence())
-                        .append("\n    sourceItemIds: ")
+                        .append("\n  sourceItemIds: ")
                         .append(p.sourceItemIds())
                         .append("\n");
             }

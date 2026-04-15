@@ -61,6 +61,7 @@ class InsightLeafPromptsTest {
                                 "response rules",
                                 List.of(
                                         new InsightPoint(
+                                                "pt_existing_1",
                                                 PointType.SUMMARY,
                                                 "Existing point",
                                                 0.8f,
@@ -69,11 +70,10 @@ class InsightLeafPromptsTest {
                                 200)
                         .render("English");
 
-        assertThat(prompt.userPrompt()).contains("P1.").contains("sourceItemIds");
+        assertThat(prompt.userPrompt()).contains("pointId: pt_existing_1").doesNotContain("P1.");
         assertThat(prompt.systemPrompt())
-                .contains("\"operations\"")
-                .doesNotContain("\"points\": [")
-                .contains("Return ONLY a raw JSON object");
+                .contains("\"targetPointId\"")
+                .doesNotContain("\"targetIndex\"");
     }
 
     @Test

@@ -79,5 +79,12 @@ class BubbleTrackerTest {
             assertThat(tracker.getDirtyCount("unknown-key")).isZero();
             assertThat(tracker.shouldResummarize("unknown-key", 5)).isFalse();
         }
+
+        @Test
+        @DisplayName("incrementAndGet should return the current dirty count")
+        void incrementAndGetReturnsCurrentDirtyCount() {
+            assertThat(tracker.incrementAndGet("test-memory::type-a", 2)).isEqualTo(2);
+            assertThat(tracker.incrementAndGet("test-memory::type-a", 3)).isEqualTo(5);
+        }
     }
 }

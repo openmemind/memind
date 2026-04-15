@@ -238,14 +238,15 @@ public final class BranchAggregationPrompts {
               "operations": [
                 {
                   "op": "UPDATE",
-                  "targetIndex": 1,
+                  "targetPointId": "pt_branch_1",
                   "point": {
+                    "pointId": "pt_branch_1",
                     "type": "SUMMARY",
                     "content": "Cross-group factual synthesis...",
                     "confidence": 0.85,
                     "sourceItemIds": ["42", "43", "45", "50", "51"]
                   },
-                  "reason": "P1 remains valid but needs to incorporate new cross-group evidence."
+                  "reason": "This point remains valid but needs to incorporate new cross-group evidence."
                 },
                 {
                   "op": "ADD",
@@ -262,12 +263,13 @@ public final class BranchAggregationPrompts {
 
             Field descriptions:
             - `op`: "ADD", "UPDATE", or "DELETE".
-            - `targetIndex`: Required for UPDATE/DELETE. Uses the input numbering `P1`, \
-            `P2`, ...
+            - `targetPointId`: Required for UPDATE/DELETE. Must equal an existing point's \
+            `pointId`.
             - `point`: Required for ADD/UPDATE.
             - `reason`: Short explanation of why this operation is needed.
             - `point.type`: "SUMMARY" or "REASONING" (see Type Decision Logic above).
             - `point.content`: Plain text aggregated statement (1-3 sentences).
+            - `point.pointId`: For UPDATE, keep it identical to `targetPointId`. For ADD, omit it.
             - `point.confidence`:
               For SUMMARY:
                 - 0.90+: Theme confirmed across 3+ LEAF groups.
@@ -393,8 +395,11 @@ public final class BranchAggregationPrompts {
 
             Input:
             Existing BRANCH Points:
-            P1. [SUMMARY] User is a fully remote backend engineer who values schedule \
-            flexibility (confidence: 0.85, sourceItemIds: ["10", "11"])
+            - pointId: pt_branch_1
+              type: SUMMARY
+              content: User is a fully remote backend engineer who values schedule flexibility
+              confidence: 0.85
+              sourceItemIds: ["10", "11"]
 
             LEAF Insights:
             G1.P1 [SUMMARY] User transitioned to hybrid schedule, 3 days in office. \
@@ -410,8 +415,9 @@ public final class BranchAggregationPrompts {
               "operations": [
                 {
                   "op": "UPDATE",
-                  "targetIndex": 1,
+                  "targetPointId": "pt_branch_1",
                   "point": {
+                    "pointId": "pt_branch_1",
                     "type": "SUMMARY",
                     "content": "User transitioned from fully remote to hybrid work (3 days \
             in office) coinciding with a promotion to tech lead. The shift to in-office \
@@ -618,15 +624,15 @@ public final class BranchAggregationPrompts {
             sb.append("\n# Existing BRANCH Points\n");
             for (int i = 0; i < existingPoints.size(); i++) {
                 var point = existingPoints.get(i);
-                sb.append("P")
-                        .append(i + 1)
-                        .append(". [")
+                sb.append("- pointId: ")
+                        .append(point.pointId())
+                        .append("\n  type: ")
                         .append(point.type())
-                        .append("] ")
+                        .append("\n  content: ")
                         .append(point.content())
-                        .append("\n    confidence: ")
+                        .append("\n  confidence: ")
                         .append(point.confidence())
-                        .append("\n    sourceItemIds: ")
+                        .append("\n  sourceItemIds: ")
                         .append(point.sourceItemIds())
                         .append("\n");
             }

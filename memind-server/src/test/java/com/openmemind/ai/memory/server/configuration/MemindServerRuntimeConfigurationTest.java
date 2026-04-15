@@ -24,6 +24,10 @@ import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
+import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
+import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
+import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
+import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
@@ -69,6 +73,35 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 class MemindServerRuntimeConfigurationTest {
+
+    @Test
+    void runtimeFactoryForwardsBubbleTrackerStoreBeanIntoBuiltMemory() {
+        var customBubbleTracker = proxy(BubbleTrackerStore.class);
+        var configuration = new MemindServerRuntimeConfiguration();
+
+        MemoryRuntimeFactory factory =
+                configuration.memoryRuntimeFactory(
+                        provider(StructuredChatClient.class, proxy(StructuredChatClient.class)),
+                        provider(MemoryStore.class, memoryStore()),
+                        provider(MemoryBuffer.class, memoryBuffer()),
+                        provider(MemoryVector.class, proxy(MemoryVector.class)),
+                        emptyProvider(MemoryTextSearch.class),
+                        provider(Reranker.class, new NoopReranker()),
+                        emptyProvider(ContentParser.class),
+                        emptyProvider(RawDataPlugin.class),
+                        emptyProvider(ResourceFetcher.class),
+                        provider(BubbleTrackerStore.class, customBubbleTracker));
+
+        Memory memory = factory.create(MemoryBuildOptions.defaults());
+        var extractor =
+                readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
+        var insightLayer = readField(extractor, "insightStep", InsightLayer.class);
+        var scheduler = readField(insightLayer, "scheduler", InsightBuildScheduler.class);
+        var reorganizer = readField(scheduler, "treeReorganizer", InsightTreeReorganizer.class);
+
+        assertThat(readField(reorganizer, "bubbleTracker", BubbleTrackerStore.class))
+                .isSameAs(customBubbleTracker);
+    }
 
     @Test
     void runtimeFactoryUsesProvidedContentParsersWithoutInjectingImplicitDocumentParser() {
@@ -138,7 +171,8 @@ class MemindServerRuntimeConfigurationTest {
                         provider(Reranker.class, new NoopReranker()),
                         provider(ContentParser.class, parser),
                         emptyProvider(RawDataPlugin.class),
-                        provider(ResourceFetcher.class, fetcher));
+                        provider(ResourceFetcher.class, fetcher),
+                        emptyProvider(BubbleTrackerStore.class));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults());
         var extractor =
@@ -201,7 +235,8 @@ class MemindServerRuntimeConfigurationTest {
                         provider(Reranker.class, new NoopReranker()),
                         provider(ContentParser.class, parser),
                         provider(RawDataPlugin.class, plugin),
-                        emptyProvider(ResourceFetcher.class));
+                        emptyProvider(ResourceFetcher.class),
+                        emptyProvider(BubbleTrackerStore.class));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults());
         var extractor =
@@ -241,7 +276,8 @@ class MemindServerRuntimeConfigurationTest {
                                 ContentParser.class,
                                 Map.of("imageParser", imageParser, "audioParser", audioParser)),
                         emptyProvider(RawDataPlugin.class),
-                        emptyProvider(ResourceFetcher.class));
+                        emptyProvider(ResourceFetcher.class),
+                        emptyProvider(BubbleTrackerStore.class));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults());
         var extractor =

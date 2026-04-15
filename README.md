@@ -207,6 +207,7 @@ Memory memory = Memory.builder()
         .store(jdbc.store())
         .buffer(jdbc.buffer())
         .textSearch(jdbc.textSearch())
+        .bubbleTrackerStore(jdbc.bubbleTrackerStore())
         .vector(SpringAiFileVector.file("./data/vector-store.json", embeddingModel))
         .options(MemoryBuildOptions.builder()
                 .extraction(new ExtractionOptions(

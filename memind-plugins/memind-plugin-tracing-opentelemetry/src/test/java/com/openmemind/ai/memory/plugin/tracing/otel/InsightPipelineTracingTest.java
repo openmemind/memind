@@ -27,6 +27,7 @@ import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightPointGenerateResponse;
+import com.openmemind.ai.memory.core.extraction.insight.generator.InsightPointOpsResponse;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassifier;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupRouter;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
@@ -256,6 +257,18 @@ class InsightPipelineTracingTest {
                         List.of(String.valueOf(itemId)));
         var response = new InsightPointGenerateResponse(List.of(point));
         return new InsightGenerator() {
+            @Override
+            public Mono<InsightPointOpsResponse> generateLeafPointOps(
+                    MemoryInsightType insightType,
+                    String groupName,
+                    List<InsightPoint> existingPoints,
+                    List<MemoryItem> newItems,
+                    int targetTokens,
+                    String additionalContext,
+                    String language) {
+                return Mono.empty();
+            }
+
             @Override
             public Mono<InsightPointGenerateResponse> generatePoints(
                     MemoryInsightType insightType,

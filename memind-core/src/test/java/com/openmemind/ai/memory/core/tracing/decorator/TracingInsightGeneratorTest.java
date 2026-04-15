@@ -149,12 +149,14 @@ class TracingInsightGeneratorTest {
                                         PointOperation.OpType.ADD,
                                         null,
                                         new InsightPoint(
+                                                "pt_add",
                                                 InsightPoint.PointType.SUMMARY,
                                                 "new",
                                                 0.9f,
                                                 List.of("1", "2")),
                                         null),
-                                new PointOperation(PointOperation.OpType.DELETE, 1, null, "drop")));
+                                new PointOperation(
+                                        PointOperation.OpType.DELETE, "pt_delete", null, "drop")));
         when(delegate.generateLeafPointOps(any(), any(), any(), any(), anyInt(), any(), any()))
                 .thenReturn(Mono.just(response));
         var insightType = insightType();
@@ -182,8 +184,9 @@ class TracingInsightGeneratorTest {
                         List.of(
                                 new PointOperation(
                                         PointOperation.OpType.UPDATE,
-                                        1,
+                                        "pt_update",
                                         new InsightPoint(
+                                                "pt_update",
                                                 InsightPoint.PointType.SUMMARY,
                                                 "updated",
                                                 0.9f,

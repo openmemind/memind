@@ -90,7 +90,7 @@ public final class PointOperationResolver {
                     addCount++;
                 }
                 case UPDATE -> {
-                    if (!isValidTarget(existingPoints, operation.targetIndex())
+                    if (!isValidTarget(existingPoints, operation.targetPointId())
                             || operation.point() == null) {
                         invalidCount++;
                         continue;
@@ -99,7 +99,7 @@ public final class PointOperationResolver {
                     updateCount++;
                 }
                 case DELETE -> {
-                    if (!isValidTarget(existingPoints, operation.targetIndex())) {
+                    if (!isValidTarget(existingPoints, operation.targetPointId())) {
                         invalidCount++;
                         continue;
                     }
@@ -113,8 +113,10 @@ public final class PointOperationResolver {
                 List.copyOf(valid), addCount, updateCount, deleteCount, invalidCount);
     }
 
-    private static boolean isValidTarget(List<InsightPoint> existingPoints, Integer targetIndex) {
-        return targetIndex != null && targetIndex >= 1 && targetIndex <= existingPoints.size();
+    private static boolean isValidTarget(List<InsightPoint> existingPoints, String targetIndex) {
+        return targetIndex != null
+                && !targetIndex.isBlank()
+                && existingPoints.stream().anyMatch(point -> targetIndex.equals(point.pointId()));
     }
 
     private record FilteredOperations(

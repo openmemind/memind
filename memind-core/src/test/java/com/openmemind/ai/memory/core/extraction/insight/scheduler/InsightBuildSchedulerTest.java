@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.core.extraction.insight.scheduler;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -108,6 +109,28 @@ class InsightBuildSchedulerTest {
     }
 
     @Test
+    @DisplayName("flushSync should backfill missing point ids before generating point ops")
+    void buildLeafForGroupBackfillsMissingPointIdsBeforePointOps() {
+        seedGroupedBuffer(1L);
+        when(itemOperations.getItemsByIds(eq(MEMORY_ID), anyList())).thenReturn(List.of(item(1L)));
+        when(insightOperations.getLeafByGroup(MEMORY_ID, TYPE_NAME, GROUP_NAME))
+                .thenReturn(Optional.of(existingLegacyLeaf("legacy point")));
+        when(generator.generateLeafPointOps(
+                        any(), anyString(), anyList(), anyList(), anyInt(), any(), any()))
+                .thenAnswer(
+                        invocation -> {
+                            @SuppressWarnings("unchecked")
+                            var existingPoints = (List<InsightPoint>) invocation.getArgument(2);
+                            assertThat(existingPoints).allMatch(point -> point.pointId() != null);
+                            return Mono.just(new InsightPointOpsResponse(List.of()));
+                        });
+
+        scheduler.flushSync(MEMORY_ID, TYPE_NAME, "English");
+
+        verify(insightOperations).upsertInsights(eq(MEMORY_ID), anyList());
+    }
+
+    @Test
     @DisplayName("flushSync should not persist or reorganize when leaf ops resolve to noop")
     void buildLeafForGroupDoesNotPersistAndDoesNotEnterTreeReorganizeWhenOpsResolveToNoop() {
         seedGroupedBuffer(1L);
@@ -171,7 +194,7 @@ class InsightBuildSchedulerTest {
                                         List.of(
                                                 new PointOperation(
                                                         PointOperation.OpType.DELETE,
-                                                        1,
+                                                        "pt_existing",
                                                         null,
                                                         "drop")))));
         when(generator.generatePoints(
@@ -208,7 +231,7 @@ class InsightBuildSchedulerTest {
                                         List.of(
                                                 new PointOperation(
                                                         PointOperation.OpType.UPDATE,
-                                                        9,
+                                                        "pt_missing",
                                                         new InsightPoint(
                                                                 InsightPoint.PointType.SUMMARY,
                                                                 "invalid",
@@ -258,6 +281,33 @@ class InsightBuildSchedulerTest {
     }
 
     private static MemoryInsight existingLeaf(String content) {
+        return new MemoryInsight(
+                10L,
+                MEMORY_ID.toIdentifier(),
+                TYPE_NAME,
+                MemoryScope.USER,
+                "Leaf summary",
+                List.of("profile"),
+                List.of(
+                        new InsightPoint(
+                                "pt_existing",
+                                InsightPoint.PointType.SUMMARY,
+                                content,
+                                0.8f,
+                                List.of("1", "2"))),
+                GROUP_NAME,
+                0.8f,
+                Instant.now(),
+                null,
+                Instant.now(),
+                Instant.now(),
+                com.openmemind.ai.memory.core.data.enums.InsightTier.LEAF,
+                null,
+                List.of(),
+                1);
+    }
+
+    private static MemoryInsight existingLegacyLeaf(String content) {
         return new MemoryInsight(
                 10L,
                 MEMORY_ID.toIdentifier(),

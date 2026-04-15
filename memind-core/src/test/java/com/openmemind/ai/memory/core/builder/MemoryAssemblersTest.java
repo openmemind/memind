@@ -24,6 +24,8 @@ import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
+import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
+import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
@@ -182,6 +184,33 @@ class MemoryAssemblersTest {
     }
 
     @Test
+    void extractionAssemblerUsesInjectedBubbleTrackerStore() {
+        var customBubbleTracker = proxy(BubbleTrackerStore.class);
+        var context =
+                new MemoryAssemblyContext(
+                        new ChatClientRegistry(CHAT_CLIENT, Map.of()),
+                        MEMORY_STORE,
+                        MEMORY_BUFFER,
+                        TEXT_SEARCH,
+                        MEMORY_VECTOR,
+                        new NoopReranker(),
+                        PromptRegistry.EMPTY,
+                        MemoryBuildOptions.defaults(),
+                        null,
+                        null,
+                        List.of(),
+                        customBubbleTracker);
+
+        var assembly = new MemoryExtractionAssembler().assemble(context);
+        var scheduler =
+                readField(assembly.insightLayer(), "scheduler", InsightBuildScheduler.class);
+        var reorganizer = readField(scheduler, "treeReorganizer", InsightTreeReorganizer.class);
+
+        assertThat(readField(reorganizer, "bubbleTracker", BubbleTrackerStore.class))
+                .isSameAs(customBubbleTracker);
+    }
+
+    @Test
     void extractionAssemblerSharesProcessorRegistryBetweenRawDataLayerAndExtractor() {
         var assembly =
                 new MemoryExtractionAssembler()
@@ -238,7 +267,8 @@ class MemoryAssemblersTest {
                 options,
                 contentParserRegistry,
                 resourceFetcher,
-                rawDataPlugins);
+                rawDataPlugins,
+                null);
     }
 
     @SuppressWarnings("unchecked")

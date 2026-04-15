@@ -77,13 +77,14 @@ class BranchAggregationPromptsTest {
     }
 
     @Test
-    @DisplayName("Rendered prompt should use point ops and structured leaf point inputs")
-    void shouldRenderPointOpsPromptWithStructuredLeafInputs() {
+    @DisplayName("Rendered point-op prompt should use point ids for branch points")
+    void shouldRenderPointOpsPromptWithPointIds() {
         var template =
                 BranchAggregationPrompts.buildPointOps(
                         createInsightType(),
                         List.of(
                                 new InsightPoint(
+                                        "pt_branch_1",
                                         PointType.SUMMARY,
                                         "User values schedule flexibility",
                                         0.85f,
@@ -96,10 +97,13 @@ class BranchAggregationPromptsTest {
                 .contains("Point Operations Only")
                 .doesNotContain("Full Replacement");
         assertThat(prompt.userPrompt())
-                .contains("P1. [SUMMARY] User values schedule flexibility")
+                .contains("pointId: pt_branch_1")
                 .contains("G1.P1 [SUMMARY] User has 8 years of backend engineering experience")
                 .contains("sourceItemIds: [10, 14]")
-                .doesNotContain("1. [group=career_background]");
+                .doesNotContain("P1.");
+        assertThat(prompt.systemPrompt())
+                .contains("\"targetPointId\"")
+                .doesNotContain("\"targetIndex\"");
     }
 
     @Test

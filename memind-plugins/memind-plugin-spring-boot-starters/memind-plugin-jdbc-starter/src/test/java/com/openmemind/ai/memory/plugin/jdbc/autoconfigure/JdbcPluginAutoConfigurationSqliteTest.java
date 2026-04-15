@@ -24,6 +24,7 @@ import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
@@ -34,6 +35,7 @@ import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.textsearch.TextSearchResult;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JsonCodec;
+import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteBubbleTrackerStore;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryStore;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryTextSearch;
 import java.io.IOException;
@@ -195,6 +197,20 @@ class JdbcPluginAutoConfigurationSqliteTest {
                             assertThat(context).hasNotFailed();
                             assertThat(context.getBean(MemoryStore.class).resourceStore())
                                     .isSameAs(context.getBean(ResourceStore.class));
+                        });
+    }
+
+    @Test
+    @DisplayName("Expose BubbleTrackerStore bean for SQLite JDBC starter")
+    void exposesBubbleTrackerStoreBean() {
+        contextRunner
+                .withUserConfiguration(SqliteDataSourceConfig.class)
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+                            assertThat(context).hasSingleBean(BubbleTrackerStore.class);
+                            assertThat(context.getBean(BubbleTrackerStore.class))
+                                    .isInstanceOf(SqliteBubbleTrackerStore.class);
                         });
     }
 

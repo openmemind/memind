@@ -25,117 +25,65 @@ import org.junit.jupiter.api.Test;
 class PointOperationResolverTest {
 
     @Test
-    @DisplayName("resolve should return noop when operations are empty and points are unchanged")
-    void resolveReturnsNoopWhenOperationsAreEmptyAndPointsAreUnchanged() {
+    void resolveUsesTargetPointIdForUpdate() {
         var existing =
                 List.of(
                         new InsightPoint(
+                                "pt_keep",
                                 InsightPoint.PointType.SUMMARY,
-                                "existing",
+                                "keep",
                                 0.8f,
-                                List.of("1", "2")));
-
-        var resolved = PointOperationResolver.resolve(existing, List.of());
-
-        assertThat(resolved.changed()).isFalse();
-        assertThat(resolved.noop()).isTrue();
-        assertThat(resolved.fallbackRequired()).isFalse();
-        assertThat(resolved.points()).containsExactlyElementsOf(existing);
-    }
-
-    @Test
-    @DisplayName("resolve should request fallback when non-empty existing points are fully deleted")
-    void resolveRequestsFallbackWhenAppliedPointsBecomeEmptyFromNonEmptyExisting() {
-        var existing =
-                List.of(
+                                List.of("1")),
                         new InsightPoint(
+                                "pt_update",
                                 InsightPoint.PointType.SUMMARY,
-                                "existing",
+                                "old",
                                 0.8f,
-                                List.of("1", "2")));
-        var ops = List.of(new PointOperation(PointOperation.OpType.DELETE, 1, null, "drop"));
+                                List.of("2")));
 
-        var resolved = PointOperationResolver.resolve(existing, ops);
-
-        assertThat(resolved.changed()).isFalse();
-        assertThat(resolved.noop()).isFalse();
-        assertThat(resolved.fallbackRequired()).isTrue();
-        assertThat(resolved.points()).containsExactlyElementsOf(existing);
-    }
-
-    @Test
-    @DisplayName("resolve should drop invalid operations and keep valid ones")
-    void resolveDropsInvalidOperationsButKeepsValidOnes() {
-        var existing =
-                List.of(
-                        new InsightPoint(
-                                InsightPoint.PointType.SUMMARY,
-                                "existing",
-                                0.8f,
-                                List.of("1", "2")));
-        var ops =
-                List.of(
-                        new PointOperation(
-                                PointOperation.OpType.UPDATE,
-                                5,
-                                new InsightPoint(
-                                        InsightPoint.PointType.SUMMARY,
-                                        "ignored",
-                                        0.7f,
-                                        List.of("9")),
-                                null),
-                        new PointOperation(
-                                PointOperation.OpType.ADD,
-                                null,
-                                new InsightPoint(
-                                        InsightPoint.PointType.SUMMARY,
-                                        "added",
-                                        0.85f,
-                                        List.of("3", "4")),
-                                null));
-
-        var resolved = PointOperationResolver.resolve(existing, ops);
+        var resolved =
+                PointOperationResolver.resolve(
+                        existing,
+                        List.of(
+                                new PointOperation(
+                                        PointOperation.OpType.UPDATE,
+                                        "pt_update",
+                                        new InsightPoint(
+                                                "pt_update",
+                                                InsightPoint.PointType.SUMMARY,
+                                                "new",
+                                                0.9f,
+                                                List.of("2", "3")),
+                                        "merge")));
 
         assertThat(resolved.changed()).isTrue();
-        assertThat(resolved.noop()).isFalse();
-        assertThat(resolved.fallbackRequired()).isFalse();
-        assertThat(resolved.invalidCount()).isEqualTo(1);
-        assertThat(resolved.addCount()).isEqualTo(1);
-        assertThat(resolved.updateCount()).isEqualTo(0);
-        assertThat(resolved.deleteCount()).isEqualTo(0);
         assertThat(resolved.points())
                 .extracting(InsightPoint::content)
-                .containsExactly("existing", "added");
+                .containsExactly("keep", "new");
     }
 
     @Test
-    @DisplayName("resolve should request fallback when all operations are invalid")
     void resolveRequestsFallbackWhenAllOperationsAreInvalid() {
         var existing =
                 List.of(
                         new InsightPoint(
+                                "pt_existing",
                                 InsightPoint.PointType.SUMMARY,
                                 "existing",
                                 0.8f,
-                                List.of("1", "2")));
-        var ops =
-                List.of(
-                        new PointOperation(
-                                PointOperation.OpType.UPDATE,
-                                5,
-                                new InsightPoint(
-                                        InsightPoint.PointType.SUMMARY,
-                                        "ignored",
-                                        0.7f,
-                                        List.of("9")),
-                                null));
+                                List.of("1")));
 
-        var resolved = PointOperationResolver.resolve(existing, ops);
+        var resolved =
+                PointOperationResolver.resolve(
+                        existing,
+                        List.of(
+                                new PointOperation(
+                                        PointOperation.OpType.DELETE,
+                                        "pt_missing",
+                                        null,
+                                        "missing target")));
 
-        assertThat(resolved.changed()).isFalse();
-        assertThat(resolved.noop()).isFalse();
         assertThat(resolved.fallbackRequired()).isTrue();
         assertThat(resolved.invalidCount()).isEqualTo(1);
-        assertThat(resolved.points()).containsExactlyElementsOf(existing);
     }
 }

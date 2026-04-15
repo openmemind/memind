@@ -329,6 +329,7 @@ class InsightTreeReorganizerTest {
         void branchPointOpNoopShouldNotBubbleRootSynthesis() {
             var existingPoint =
                     new InsightPoint(
+                            "pt_branch_existing",
                             InsightPoint.PointType.SUMMARY,
                             "Existing branch summary",
                             0.9f,
@@ -455,7 +456,7 @@ class InsightTreeReorganizerTest {
                                             List.of(
                                                     new PointOperation(
                                                             PointOperation.OpType.DELETE,
-                                                            1,
+                                                            "pt_branch_existing",
                                                             null,
                                                             "drop")))));
             when(generator.generateBranchSummary(
@@ -489,6 +490,7 @@ class InsightTreeReorganizerTest {
         void invalidBranchPointOpsShouldFallBackToFullRewrite() {
             var existingPoint =
                     new InsightPoint(
+                            "pt_branch_existing",
                             InsightPoint.PointType.SUMMARY,
                             "Existing branch summary",
                             0.9f,
@@ -514,7 +516,7 @@ class InsightTreeReorganizerTest {
                                             List.of(
                                                     new PointOperation(
                                                             PointOperation.OpType.UPDATE,
-                                                            9,
+                                                            "pt_branch_missing",
                                                             new InsightPoint(
                                                                     InsightPoint.PointType.SUMMARY,
                                                                     "invalid",

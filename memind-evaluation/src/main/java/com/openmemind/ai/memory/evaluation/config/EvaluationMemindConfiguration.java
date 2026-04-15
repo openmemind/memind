@@ -31,6 +31,7 @@ import com.openmemind.ai.memory.core.builder.RetrievalOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
 import com.openmemind.ai.memory.core.builder.SufficiencyOptions;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
+import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.LlmReranker;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
@@ -156,7 +157,8 @@ public class EvaluationMemindConfiguration {
             MemoryVector memoryVector,
             MemoryTextSearch memoryTextSearch,
             Reranker reranker,
-            MemoryBuildOptions memoryBuildOptions) {
+            MemoryBuildOptions memoryBuildOptions,
+            BubbleTrackerStore bubbleTrackerStore) {
         return Memory.builder()
                 .chatClient(structuredChatClient)
                 .store(memoryStore)
@@ -164,6 +166,7 @@ public class EvaluationMemindConfiguration {
                 .vector(memoryVector)
                 .textSearch(memoryTextSearch)
                 .reranker(reranker)
+                .bubbleTrackerStore(bubbleTrackerStore)
                 .options(memoryBuildOptions)
                 .build();
     }

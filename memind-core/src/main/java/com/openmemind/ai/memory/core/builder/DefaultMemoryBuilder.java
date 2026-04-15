@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core.builder;
 import com.openmemind.ai.memory.core.DefaultMemory;
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
@@ -48,6 +49,7 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     private PromptRegistry promptRegistry = PromptRegistry.EMPTY;
     private ContentParserRegistry contentParserRegistry;
     private ResourceFetcher resourceFetcher;
+    private BubbleTrackerStore bubbleTrackerStore;
     private final List<RawDataPlugin> rawDataPlugins = new ArrayList<>();
     private MemoryBuildOptions options = MemoryBuildOptions.defaults();
     private boolean externallyManaged;
@@ -127,6 +129,12 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     }
 
     @Override
+    public MemoryBuilder bubbleTrackerStore(BubbleTrackerStore bubbleTrackerStore) {
+        this.bubbleTrackerStore = Objects.requireNonNull(bubbleTrackerStore, "bubbleTrackerStore");
+        return this;
+    }
+
+    @Override
     public MemoryBuilder options(MemoryBuildOptions options) {
         this.options = Objects.requireNonNull(options, "options");
         return this;
@@ -155,7 +163,8 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
                         options,
                         contentParserRegistry,
                         resourceFetcher,
-                        List.copyOf(rawDataPlugins));
+                        List.copyOf(rawDataPlugins),
+                        bubbleTrackerStore);
         MemoryExtractionAssembly extractionAssembly =
                 new MemoryExtractionAssembler().assemble(context);
         var memoryRetriever = new MemoryRetrievalAssembler().assemble(context);

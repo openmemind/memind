@@ -24,6 +24,7 @@ import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassi
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupRouter;
 import com.openmemind.ai.memory.core.extraction.insight.group.LlmInsightGroupClassifier;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
+import com.openmemind.ai.memory.core.extraction.insight.support.InsightPointIdentityManager;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTracker;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
@@ -120,14 +121,19 @@ final class MemoryExtractionAssembler {
                 new LlmInsightGroupClassifier(
                         registry.resolve(ChatClientSlot.INSIGHT_GROUP_CLASSIFIER),
                         context.promptRegistry());
-        BubbleTrackerStore bubbleTrackerStore = new BubbleTracker();
+        var identityManager = new InsightPointIdentityManager();
+        BubbleTrackerStore bubbleTrackerStore =
+                context.bubbleTrackerStore() != null
+                        ? context.bubbleTrackerStore()
+                        : new BubbleTracker();
         InsightTreeReorganizer insightTreeReorganizer =
                 new InsightTreeReorganizer(
                         insightGenerator,
                         context.memoryVector(),
                         context.memoryStore(),
                         bubbleTrackerStore,
-                        IdUtils.snowflake());
+                        IdUtils.snowflake(),
+                        identityManager);
         InsightGroupRouter insightGroupRouter = new InsightGroupRouter(insightGroupClassifier);
         InsightBuildScheduler insightBuildScheduler =
                 new InsightBuildScheduler(
@@ -140,6 +146,7 @@ final class MemoryExtractionAssembler {
                         context.memoryVector(),
                         IdUtils.snowflake(),
                         context.options().extraction().insight().build(),
+                        identityManager,
                         null);
         InsightLayer insightLayer =
                 new InsightLayer(

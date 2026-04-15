@@ -14,20 +14,24 @@
 package com.openmemind.ai.memory.plugin.jdbc;
 
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlBubbleTrackerStore;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBufferAccessor;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlInsightBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlMemoryStore;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlMemoryTextSearch;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlRecentConversationBuffer;
+import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlBubbleTrackerStore;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlConversationBufferAccessor;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlInsightBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlMemoryStore;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlMemoryTextSearch;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlRecentConversationBuffer;
+import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteBubbleTrackerStore;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteConversationBufferAccessor;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteInsightBuffer;
@@ -137,6 +141,7 @@ public final class JdbcStore {
                 var insightBufferStore = new SqliteInsightBuffer(dataSource, createIfNotExist);
                 var conversationBufferAccessor =
                         new SqliteConversationBufferAccessor(dataSource, createIfNotExist);
+                var bubbleTrackerStore = new SqliteBubbleTrackerStore(dataSource, createIfNotExist);
                 var memoryBuffer =
                         MemoryBuffer.of(
                                 insightBufferStore,
@@ -146,6 +151,7 @@ public final class JdbcStore {
                         store,
                         memoryBuffer,
                         new SqliteMemoryTextSearch(dataSource, createIfNotExist),
+                        bubbleTrackerStore,
                         dataSource);
             }
             case MYSQL -> {
@@ -153,6 +159,7 @@ public final class JdbcStore {
                 var insightBufferStore = new MysqlInsightBuffer(dataSource, createIfNotExist);
                 var conversationBufferAccessor =
                         new MysqlConversationBufferAccessor(dataSource, createIfNotExist);
+                var bubbleTrackerStore = new MysqlBubbleTrackerStore(dataSource, createIfNotExist);
                 var memoryBuffer =
                         MemoryBuffer.of(
                                 insightBufferStore,
@@ -162,6 +169,7 @@ public final class JdbcStore {
                         store,
                         memoryBuffer,
                         new MysqlMemoryTextSearch(dataSource, createIfNotExist),
+                        bubbleTrackerStore,
                         dataSource);
             }
             case POSTGRESQL -> {
@@ -169,6 +177,8 @@ public final class JdbcStore {
                 var insightBufferStore = new PostgresqlInsightBuffer(dataSource, createIfNotExist);
                 var conversationBufferAccessor =
                         new PostgresqlConversationBufferAccessor(dataSource, createIfNotExist);
+                var bubbleTrackerStore =
+                        new PostgresqlBubbleTrackerStore(dataSource, createIfNotExist);
                 var memoryBuffer =
                         MemoryBuffer.of(
                                 insightBufferStore,
@@ -178,6 +188,7 @@ public final class JdbcStore {
                         store,
                         memoryBuffer,
                         new PostgresqlMemoryTextSearch(dataSource, createIfNotExist),
+                        bubbleTrackerStore,
                         dataSource);
             }
         };
@@ -200,6 +211,7 @@ public final class JdbcStore {
             MemoryStore store,
             MemoryBuffer buffer,
             MemoryTextSearch textSearch,
+            BubbleTrackerStore bubbleTrackerStore,
             DataSource dataSource)
             implements JdbcMemoryAccess {
 
@@ -207,6 +219,7 @@ public final class JdbcStore {
             Objects.requireNonNull(store, "store");
             Objects.requireNonNull(buffer, "buffer");
             Objects.requireNonNull(textSearch, "textSearch");
+            Objects.requireNonNull(bubbleTrackerStore, "bubbleTrackerStore");
             Objects.requireNonNull(dataSource, "dataSource");
         }
 
