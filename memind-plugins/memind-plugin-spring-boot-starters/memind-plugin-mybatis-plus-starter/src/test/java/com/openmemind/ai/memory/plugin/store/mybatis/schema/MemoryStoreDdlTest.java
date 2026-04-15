@@ -16,17 +16,23 @@ package com.openmemind.ai.memory.plugin.store.mybatis.schema;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Proxy;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Locale;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.AbstractDataSource;
@@ -37,6 +43,18 @@ import org.sqlite.SQLiteDataSource;
 class MemoryStoreDdlTest {
 
     private final DatabaseDialectDetector detector = new DatabaseDialectDetector();
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "db/migration/sqlite/V1__init_store.sql",
+                "db/migration/mysql/V1__init_store.sql",
+                "db/migration/postgresql/V1__init_store.sql"
+            })
+    @DisplayName("Fresh V1 store scripts should not define confidence column")
+    void freshStoreScriptsShouldNotDefineInsightConfidenceColumn(String classpathResource) {
+        assertThat(normalizedSqlResource(classpathResource)).doesNotContain(" confidence ");
+    }
 
     @Test
     @DisplayName("Load SQLite store and text search scripts")
@@ -148,6 +166,20 @@ class MemoryStoreDdlTest {
                 return false;
             }
         } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private String normalizedSqlResource(String classpathResource) {
+        try (InputStream inputStream =
+                MemoryStoreDdlTest.class.getClassLoader().getResourceAsStream(classpathResource)) {
+            if (inputStream == null) {
+                throw new IllegalArgumentException("Resource not found: " + classpathResource);
+            }
+            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8)
+                    .replaceAll("\\s+", " ")
+                    .toLowerCase(Locale.ROOT);
+        } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }

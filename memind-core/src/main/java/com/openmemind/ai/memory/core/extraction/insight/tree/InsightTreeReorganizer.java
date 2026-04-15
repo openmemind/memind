@@ -684,6 +684,10 @@ public class InsightTreeReorganizer {
                                 response.points()),
                         allBranches);
 
+        if (!pointsChanged(root, points)) {
+            return root;
+        }
+
         return embedAndSave(memoryId, root, points, InsightTier.ROOT);
     }
 

@@ -95,7 +95,6 @@ CREATE TABLE IF NOT EXISTS memory_insight (
     content           TEXT,
     points            TEXT,
     group_name        TEXT,
-    confidence        REAL         DEFAULT 0,
     last_reasoned_at  TEXT,
     summary_embedding TEXT,
     tier              TEXT,

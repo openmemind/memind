@@ -97,7 +97,6 @@ CREATE TABLE IF NOT EXISTS memory_insight (
     content           MEDIUMTEXT,
     points            JSON,
     group_name        VARCHAR(64),
-    confidence        FLOAT        DEFAULT 0,
     last_reasoned_at  DATETIME(3),
     summary_embedding JSON,
     tier              VARCHAR(16),

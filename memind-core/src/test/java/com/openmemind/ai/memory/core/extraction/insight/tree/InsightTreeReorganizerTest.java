@@ -29,6 +29,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.data.InsightPoint;
+import com.openmemind.ai.memory.core.data.InsightPointRef;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
@@ -46,9 +47,11 @@ import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -678,6 +681,116 @@ class InsightTreeReorganizerTest {
                             anyList(),
                             anyInt(),
                             nullable(String.class));
+        }
+
+        @Test
+        @DisplayName(
+                "ROOT re-summarize should skip embed and save when normalized points are unchanged")
+        void rootResummarizeShouldSkipSaveWhenPointsAreUnchanged() {
+            var branch =
+                    createBranchWithType(10L, TYPE_NAME)
+                            .withPoints(
+                                    List.of(
+                                            new InsightPoint(
+                                                    "pt_branch_1",
+                                                    InsightPoint.PointType.SUMMARY,
+                                                    "Branch summary one",
+                                                    List.of())));
+            var branch2 =
+                    createBranchWithType(20L, "other-type")
+                            .withPoints(
+                                    List.of(
+                                            new InsightPoint(
+                                                    "pt_branch_2",
+                                                    InsightPoint.PointType.SUMMARY,
+                                                    "Branch summary two",
+                                                    List.of())));
+            var existingRootPoint =
+                    new InsightPoint(
+                            "pt_root_existing",
+                            InsightPoint.PointType.REASONING,
+                            "ROOT comprehensive",
+                            List.of(),
+                            List.of(
+                                    new InsightPointRef(10L, "pt_branch_1"),
+                                    new InsightPointRef(20L, "pt_branch_2")),
+                            Map.of("dimension", "convergence"));
+            var root =
+                    createRoot(100L, ROOT_TYPE_NAME, List.of(10L, 20L))
+                            .withPoints(List.of(existingRootPoint))
+                            .withVersion(1);
+            var leaf = createLeaf(3L, "Third piece of information");
+            var rootInsightType = createRootInsightType(ROOT_TYPE_NAME);
+
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch));
+            when(insightOps.getInsight(memoryId, 100L)).thenReturn(Optional.of(root));
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME))
+                    .thenReturn(
+                            List.of(
+                                    createLeaf(1L, "First piece"),
+                                    createLeaf(2L, "Second piece"),
+                                    leaf));
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
+                    .thenReturn(List.of(branch, branch2));
+            when(insightOps.listInsightTypes()).thenReturn(List.of(rootInsightType));
+            when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.of(root));
+
+            when(generator.generateBranchSummary(
+                            any(), any(), anyList(), anyInt(), nullable(String.class)))
+                    .thenReturn(
+                            Mono.just(
+                                    new InsightPointGenerateResponse(
+                                            List.of(
+                                                    new InsightPoint(
+                                                            InsightPoint.PointType.SUMMARY,
+                                                            "BRANCH summary",
+                                                            List.of())))));
+
+            when(generator.generateRootSynthesis(
+                            any(MemoryInsightType.class),
+                            any(),
+                            anyList(),
+                            anyInt(),
+                            nullable(String.class)))
+                    .thenReturn(
+                            Mono.just(
+                                    new InsightPointGenerateResponse(
+                                            List.of(
+                                                    new InsightPoint(
+                                                            null,
+                                                            InsightPoint.PointType.REASONING,
+                                                            "ROOT comprehensive",
+                                                            List.of(),
+                                                            List.of(
+                                                                    new InsightPointRef(
+                                                                            10L, "pt_branch_1"),
+                                                                    new InsightPointRef(
+                                                                            20L, "pt_branch_2")),
+                                                            Map.of("dimension", "convergence"))))));
+
+            when(vector.embed(anyString())).thenReturn(Mono.just(List.of(0.1f, 0.2f)));
+
+            bubbleTracker.markDirty(DIRTY_KEY);
+            bubbleTracker.markDirty(DIRTY_KEY);
+            bubbleTracker.markDirty("test-memory::root::" + ROOT_TYPE_NAME);
+
+            reorganizer.onLeafUpdated(memoryId, TYPE_NAME, createInsightType(), leaf, config);
+            reorganizer.drainRootTasks(memoryId, 2, TimeUnit.SECONDS);
+
+            verify(vector, never()).embed("ROOT comprehensive");
+            verify(insightOps, never())
+                    .upsertInsights(
+                            eq(memoryId),
+                            argThat(
+                                    list ->
+                                            list.stream()
+                                                    .anyMatch(
+                                                            insight ->
+                                                                    insight.tier()
+                                                                                    == InsightTier
+                                                                                            .ROOT
+                                                                            && insight.version()
+                                                                                    > 1)));
         }
 
         @Test

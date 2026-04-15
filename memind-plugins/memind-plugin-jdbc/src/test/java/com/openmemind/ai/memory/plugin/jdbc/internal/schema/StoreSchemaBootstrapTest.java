@@ -15,17 +15,34 @@ package com.openmemind.ai.memory.plugin.jdbc.internal.schema;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.openmemind.ai.memory.plugin.jdbc.internal.support.SqlScriptRunner;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Statement;
+import java.util.Locale;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.sqlite.SQLiteDataSource;
 
 class StoreSchemaBootstrapTest {
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "db/jdbc/sqlite/store/V1__init.sql",
+                "db/jdbc/mysql/store/V1__init.sql",
+                "db/jdbc/postgresql/store/V1__init.sql"
+            })
+    void freshStoreScriptsShouldNotDefineInsightConfidenceColumn(String classpathResource) {
+        assertThat(normalizedSqlResource(classpathResource)).doesNotContain(" confidence ");
+    }
 
     @Test
     void ensureSqliteReportsWhenInsightTypeTableWasCreated(@TempDir Path tempDir) {
@@ -40,7 +57,7 @@ class StoreSchemaBootstrapTest {
     void ensureSqliteUpgradesLegacyStoreSchemaWithMultimodalTablesAndColumns(
             @TempDir Path tempDir) {
         DataSource dataSource = dataSource(tempDir.resolve("legacy-store.db"));
-        SqlScriptRunner.execute(dataSource, "db/jdbc/sqlite/store/V1__init.sql");
+        createLegacySqliteStoreSchema(dataSource);
 
         assertThat(tableExists(dataSource, "memory_resource")).isFalse();
         assertThat(columnExists(dataSource, "memory_insight", "confidence")).isTrue();
@@ -60,6 +77,57 @@ class StoreSchemaBootstrapTest {
         SQLiteDataSource dataSource = new SQLiteDataSource();
         dataSource.setUrl("jdbc:sqlite:" + dbPath);
         return dataSource;
+    }
+
+    private void createLegacySqliteStoreSchema(DataSource dataSource) {
+        try (Connection connection = dataSource.getConnection();
+                Statement statement = connection.createStatement()) {
+            statement.execute(
+                    """
+                    CREATE TABLE memory_raw_data (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        biz_id TEXT NOT NULL,
+                        user_id TEXT NOT NULL,
+                        agent_id TEXT NOT NULL,
+                        memory_id TEXT NOT NULL,
+                        type TEXT NOT NULL
+                    )
+                    """);
+            statement.execute(
+                    """
+                    CREATE TABLE memory_item (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+                    )
+                    """);
+            statement.execute(
+                    """
+                    CREATE TABLE memory_insight_type (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL
+                    )
+                    """);
+            statement.execute(
+                    """
+                    CREATE TABLE memory_insight (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        biz_id INTEGER NOT NULL,
+                        user_id TEXT NOT NULL,
+                        agent_id TEXT NOT NULL,
+                        memory_id TEXT NOT NULL,
+                        type TEXT NOT NULL,
+                        scope TEXT NOT NULL,
+                        confidence REAL DEFAULT 0
+                    )
+                    """);
+            statement.execute(
+                    """
+                    CREATE TABLE memory_insight_buffer (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+                    )
+                    """);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private boolean tableExists(DataSource dataSource, String tableName) {
@@ -89,6 +157,22 @@ class StoreSchemaBootstrapTest {
                 return false;
             }
         } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private String normalizedSqlResource(String classpathResource) {
+        try (InputStream inputStream =
+                StoreSchemaBootstrapTest.class
+                        .getClassLoader()
+                        .getResourceAsStream(classpathResource)) {
+            if (inputStream == null) {
+                throw new IllegalArgumentException("Resource not found: " + classpathResource);
+            }
+            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8)
+                    .replaceAll("\\s+", " ")
+                    .toLowerCase(Locale.ROOT);
+        } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
