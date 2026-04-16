@@ -21,7 +21,10 @@ import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.item.dedup.DeduplicationResult;
 import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicator;
 import com.openmemind.ai.memory.core.extraction.item.extractor.MemoryItemExtractor;
+import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
+import com.openmemind.ai.memory.core.extraction.item.graph.NoOpItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
+import com.openmemind.ai.memory.core.extraction.item.support.ItemEmbeddingTextResolver;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
@@ -55,13 +58,21 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
     private final MemoryVector vector;
     private final IdUtils.SnowflakeIdGenerator idGenerator;
     private final LlmSelfVerificationStep selfVerificationStep; // nullable
+    private final ItemGraphMaterializer graphMaterializer;
 
     public MemoryItemLayer(
             MemoryItemExtractor extractor,
             MemoryItemDeduplicator deduplicator,
             MemoryStore memoryStore,
             MemoryVector vector) {
-        this(extractor, deduplicator, memoryStore, vector, IdUtils.snowflake(), null);
+        this(
+                extractor,
+                deduplicator,
+                memoryStore,
+                vector,
+                IdUtils.snowflake(),
+                null,
+                NoOpItemGraphMaterializer.INSTANCE);
     }
 
     public MemoryItemLayer(
@@ -76,7 +87,24 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 memoryStore,
                 vector,
                 IdUtils.snowflake(),
-                selfVerificationStep);
+                selfVerificationStep,
+                NoOpItemGraphMaterializer.INSTANCE);
+    }
+
+    public MemoryItemLayer(
+            MemoryItemExtractor extractor,
+            MemoryItemDeduplicator deduplicator,
+            MemoryStore memoryStore,
+            MemoryVector vector,
+            ItemGraphMaterializer graphMaterializer) {
+        this(
+                extractor,
+                deduplicator,
+                memoryStore,
+                vector,
+                IdUtils.snowflake(),
+                null,
+                graphMaterializer);
     }
 
     public MemoryItemLayer(
@@ -86,12 +114,32 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
             MemoryVector vector,
             IdUtils.SnowflakeIdGenerator idGenerator,
             LlmSelfVerificationStep selfVerificationStep) {
+        this(
+                extractor,
+                deduplicator,
+                memoryStore,
+                vector,
+                idGenerator,
+                selfVerificationStep,
+                NoOpItemGraphMaterializer.INSTANCE);
+    }
+
+    public MemoryItemLayer(
+            MemoryItemExtractor extractor,
+            MemoryItemDeduplicator deduplicator,
+            MemoryStore memoryStore,
+            MemoryVector vector,
+            IdUtils.SnowflakeIdGenerator idGenerator,
+            LlmSelfVerificationStep selfVerificationStep,
+            ItemGraphMaterializer graphMaterializer) {
         this.extractor = extractor;
         this.deduplicator = deduplicator;
         this.memoryStore = memoryStore;
         this.vector = vector;
         this.idGenerator = idGenerator;
         this.selfVerificationStep = selfVerificationStep;
+        this.graphMaterializer =
+                graphMaterializer != null ? graphMaterializer : NoOpItemGraphMaterializer.INSTANCE;
     }
 
     @Override
@@ -274,7 +322,8 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
             return Mono.just(new MemoryItemResult(List.of(), resolvedInsightTypes));
         }
 
-        List<String> contents = newEntries.stream().map(this::embeddingText).toList();
+        List<String> contents =
+                newEntries.stream().map(ItemEmbeddingTextResolver::resolve).toList();
         List<Map<String, Object>> metadataList =
                 newEntries.stream()
                         .map(
@@ -309,21 +358,19 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
 
                             memoryStore.itemOperations().insertItems(memoryId, newItems);
 
-                            return new MemoryItemResult(newItems, resolvedInsightTypes);
-                        });
+                            return newItems;
+                        })
+                .flatMap(
+                        newItems ->
+                                graphMaterializer
+                                        .materialize(memoryId, newItems, newEntries)
+                                        .onErrorResume(ignored -> Mono.empty())
+                                        .thenReturn(
+                                                new MemoryItemResult(
+                                                        newItems, resolvedInsightTypes)));
     }
 
     // ===== Utility methods =====
-
-    private String embeddingText(ExtractedMemoryEntry entry) {
-        if (entry.metadata() != null) {
-            Object whenToUse = entry.metadata().get("whenToUse");
-            if (whenToUse instanceof String s && !s.isBlank()) {
-                return s;
-            }
-        }
-        return entry.content();
-    }
 
     private MemoryItem toMemoryItem(
             MemoryId memoryId,

@@ -199,7 +199,8 @@ class MemoryAssemblersTest {
                         null,
                         null,
                         List.of(),
-                        customBubbleTracker);
+                        customBubbleTracker,
+                        null);
 
         var assembly = new MemoryExtractionAssembler().assemble(context);
         var scheduler =
@@ -268,6 +269,7 @@ class MemoryAssemblersTest {
                 contentParserRegistry,
                 resourceFetcher,
                 rawDataPlugins,
+                null,
                 null);
     }
 

@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.core.prompt.extraction.item;
 
+import com.openmemind.ai.memory.core.builder.ItemGraphOptions;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
@@ -122,6 +123,30 @@ public final class MemoryItemPrompts {
             String userName,
             Set<MemoryCategory> categories) {
         return MemoryItemUnifiedPrompts.build(
-                registry, insightTypes, segmentText, referenceTime, userName, categories);
+                registry,
+                insightTypes,
+                segmentText,
+                referenceTime,
+                userName,
+                categories,
+                ItemGraphOptions.defaults());
+    }
+
+    public static PromptTemplate buildUnified(
+            PromptRegistry registry,
+            List<MemoryInsightType> insightTypes,
+            String segmentText,
+            Instant referenceTime,
+            String userName,
+            Set<MemoryCategory> categories,
+            ItemGraphOptions graphOptions) {
+        return MemoryItemUnifiedPrompts.build(
+                registry,
+                insightTypes,
+                segmentText,
+                referenceTime,
+                userName,
+                categories,
+                graphOptions);
     }
 }

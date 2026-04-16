@@ -36,6 +36,11 @@ import com.openmemind.ai.memory.core.extraction.item.dedup.HashBasedDeduplicator
 import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicator;
 import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItemExtractor;
 import com.openmemind.ai.memory.core.extraction.item.extractor.MemoryItemExtractor;
+import com.openmemind.ai.memory.core.extraction.item.graph.DefaultItemGraphMaterializer;
+import com.openmemind.ai.memory.core.extraction.item.graph.GraphHintNormalizer;
+import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
+import com.openmemind.ai.memory.core.extraction.item.graph.NoOpItemGraphMaterializer;
+import com.openmemind.ai.memory.core.extraction.item.graph.SemanticItemLinker;
 import com.openmemind.ai.memory.core.extraction.item.strategy.LlmItemExtractionStrategy;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
@@ -57,6 +62,7 @@ import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.DefaultContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.HttpResourceFetcher;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingItemGraphMaterializer;
 import com.openmemind.ai.memory.core.utils.IdUtils;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -105,6 +111,7 @@ final class MemoryExtractionAssembler {
         MemoryItemDeduplicator deduplicator =
                 new CompositeDeduplicator(
                         List.of(new HashBasedDeduplicator(context.memoryStore())));
+        ItemGraphMaterializer graphMaterializer = graphMaterializer(context);
         MemoryItemLayer memoryItemLayer =
                 new MemoryItemLayer(
                         itemExtractor,
@@ -112,7 +119,8 @@ final class MemoryExtractionAssembler {
                         context.memoryStore(),
                         context.memoryVector(),
                         IdUtils.snowflake(),
-                        null);
+                        null,
+                        graphMaterializer);
 
         InsightGenerator insightGenerator =
                 new LlmInsightGenerator(
@@ -184,6 +192,24 @@ final class MemoryExtractionAssembler {
 
     private ResourceFetcher resolveResourceFetcher(ResourceFetcher runtimeFetcher) {
         return runtimeFetcher != null ? runtimeFetcher : DEFAULT_RESOURCE_FETCHER;
+    }
+
+    private ItemGraphMaterializer graphMaterializer(MemoryAssemblyContext context) {
+        if (!context.options().extraction().item().graph().enabled()) {
+            return NoOpItemGraphMaterializer.INSTANCE;
+        }
+
+        ItemGraphMaterializer graphMaterializer =
+                new DefaultItemGraphMaterializer(
+                        context.memoryStore().graphOperations(),
+                        new GraphHintNormalizer(),
+                        new SemanticItemLinker(
+                                context.memoryStore().itemOperations(),
+                                context.memoryStore().graphOperations(),
+                                context.memoryVector(),
+                                context.options().extraction().item().graph()),
+                        context.options().extraction().item().graph());
+        return new TracingItemGraphMaterializer(graphMaterializer, context.memoryObserver());
     }
 
     private ConversationContentProcessor conversationProcessor(

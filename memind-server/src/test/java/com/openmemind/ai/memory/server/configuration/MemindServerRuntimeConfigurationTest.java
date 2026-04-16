@@ -22,12 +22,21 @@ import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
+import com.openmemind.ai.memory.core.builder.ExtractionCommonOptions;
+import com.openmemind.ai.memory.core.builder.ExtractionOptions;
+import com.openmemind.ai.memory.core.builder.InsightExtractionOptions;
+import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
+import com.openmemind.ai.memory.core.builder.ItemGraphOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.builder.PromptBudgetOptions;
+import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
 import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
+import com.openmemind.ai.memory.core.extraction.item.MemoryItemLayer;
+import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
@@ -46,6 +55,9 @@ import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import com.openmemind.ai.memory.core.tracing.MemoryObserver;
+import com.openmemind.ai.memory.core.tracing.ObservationContext;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingItemGraphMaterializer;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import com.openmemind.ai.memory.plugin.rawdata.audio.content.AudioContent;
 import com.openmemind.ai.memory.plugin.rawdata.audio.parser.TranscriptionAudioContentParser;
@@ -90,7 +102,8 @@ class MemindServerRuntimeConfigurationTest {
                         emptyProvider(ContentParser.class),
                         emptyProvider(RawDataPlugin.class),
                         emptyProvider(ResourceFetcher.class),
-                        provider(BubbleTrackerStore.class, customBubbleTracker));
+                        provider(BubbleTrackerStore.class, customBubbleTracker),
+                        emptyProvider(MemoryObserver.class));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults());
         var extractor =
@@ -101,6 +114,33 @@ class MemindServerRuntimeConfigurationTest {
 
         assertThat(readField(reorganizer, "bubbleTracker", BubbleTrackerStore.class))
                 .isSameAs(customBubbleTracker);
+    }
+
+    @Test
+    void serverRuntimeFactoryShouldForwardObserverBeanIntoBuilderManagedRuntime() {
+        var observer = new TestMemoryObserver();
+        var configuration = new MemindServerRuntimeConfiguration();
+
+        MemoryRuntimeFactory factory =
+                configuration.memoryRuntimeFactory(
+                        provider(StructuredChatClient.class, proxy(StructuredChatClient.class)),
+                        provider(MemoryStore.class, memoryStore()),
+                        provider(MemoryBuffer.class, memoryBuffer()),
+                        provider(MemoryVector.class, proxy(MemoryVector.class)),
+                        emptyProvider(MemoryTextSearch.class),
+                        provider(Reranker.class, new NoopReranker()),
+                        emptyProvider(ContentParser.class),
+                        emptyProvider(RawDataPlugin.class),
+                        emptyProvider(ResourceFetcher.class),
+                        emptyProvider(BubbleTrackerStore.class),
+                        provider(MemoryObserver.class, observer));
+
+        var memory = (DefaultMemory) factory.create(graphEnabledBuildOptions());
+        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
+        var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+
+        assertThat(readField(itemLayer, "graphMaterializer", ItemGraphMaterializer.class))
+                .isInstanceOf(TracingItemGraphMaterializer.class);
     }
 
     @Test
@@ -172,7 +212,8 @@ class MemindServerRuntimeConfigurationTest {
                         provider(ContentParser.class, parser),
                         emptyProvider(RawDataPlugin.class),
                         provider(ResourceFetcher.class, fetcher),
-                        emptyProvider(BubbleTrackerStore.class));
+                        emptyProvider(BubbleTrackerStore.class),
+                        emptyProvider(MemoryObserver.class));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults());
         var extractor =
@@ -236,7 +277,8 @@ class MemindServerRuntimeConfigurationTest {
                         provider(ContentParser.class, parser),
                         provider(RawDataPlugin.class, plugin),
                         emptyProvider(ResourceFetcher.class),
-                        emptyProvider(BubbleTrackerStore.class));
+                        emptyProvider(BubbleTrackerStore.class),
+                        emptyProvider(MemoryObserver.class));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults());
         var extractor =
@@ -277,7 +319,8 @@ class MemindServerRuntimeConfigurationTest {
                                 Map.of("imageParser", imageParser, "audioParser", audioParser)),
                         emptyProvider(RawDataPlugin.class),
                         emptyProvider(ResourceFetcher.class),
-                        emptyProvider(BubbleTrackerStore.class));
+                        emptyProvider(BubbleTrackerStore.class),
+                        emptyProvider(MemoryObserver.class));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults());
         var extractor =
@@ -419,6 +462,20 @@ class MemindServerRuntimeConfigurationTest {
                 proxy(RecentConversationBuffer.class));
     }
 
+    private static MemoryBuildOptions graphEnabledBuildOptions() {
+        return MemoryBuildOptions.builder()
+                .extraction(
+                        new ExtractionOptions(
+                                ExtractionCommonOptions.defaults(),
+                                RawDataExtractionOptions.defaults(),
+                                new ItemExtractionOptions(
+                                        false,
+                                        PromptBudgetOptions.defaults(),
+                                        ItemGraphOptions.defaults().withEnabled(true)),
+                                InsightExtractionOptions.defaults()))
+                .build();
+    }
+
     private static final class TestRawDataPlugin implements RawDataPlugin {
 
         @Override
@@ -474,6 +531,21 @@ class MemindServerRuntimeConfigurationTest {
         @Override
         public String getContentId() {
             return "test";
+        }
+    }
+
+    private static final class TestMemoryObserver implements MemoryObserver {
+
+        @Override
+        public <T> Mono<T> observeMono(
+                ObservationContext<T> ctx, java.util.function.Supplier<Mono<T>> operation) {
+            return operation.get();
+        }
+
+        @Override
+        public <T> Flux<T> observeFlux(
+                ObservationContext<T> ctx, java.util.function.Supplier<Flux<T>> operation) {
+            return operation.get();
         }
     }
 

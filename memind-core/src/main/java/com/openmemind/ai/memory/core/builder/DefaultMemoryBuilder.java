@@ -28,6 +28,8 @@ import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import com.openmemind.ai.memory.core.tracing.MemoryObserver;
+import com.openmemind.ai.memory.core.tracing.NoopMemoryObserver;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -52,6 +54,7 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     private BubbleTrackerStore bubbleTrackerStore;
     private final List<RawDataPlugin> rawDataPlugins = new ArrayList<>();
     private MemoryBuildOptions options = MemoryBuildOptions.defaults();
+    private MemoryObserver memoryObserver = new NoopMemoryObserver();
     private boolean externallyManaged;
 
     @Override
@@ -141,6 +144,12 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     }
 
     @Override
+    public MemoryBuilder memoryObserver(MemoryObserver observer) {
+        this.memoryObserver = Objects.requireNonNull(observer, "observer");
+        return this;
+    }
+
+    @Override
     public MemoryBuilder externallyManaged(boolean externallyManaged) {
         this.externallyManaged = externallyManaged;
         return this;
@@ -164,7 +173,8 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
                         contentParserRegistry,
                         resourceFetcher,
                         List.copyOf(rawDataPlugins),
-                        bubbleTrackerStore);
+                        bubbleTrackerStore,
+                        memoryObserver);
         MemoryExtractionAssembly extractionAssembly =
                 new MemoryExtractionAssembler().assemble(context);
         var memoryRetriever = new MemoryRetrievalAssembler().assemble(context);

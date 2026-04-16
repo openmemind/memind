@@ -69,4 +69,6 @@ public final class MemorySpanNames {
     public static final String GRAPH_EXTRACT_EDGES = "memind.graph.extract_edges";
     public static final String GRAPH_RESOLVE_ENTITIES = "memind.graph.resolve_entities";
     public static final String GRAPH_RESOLVE_EDGES = "memind.graph.resolve_edges";
+    public static final String GRAPH_MATERIALIZE = "memind.graph.materialize";
+    public static final String GRAPH_SEMANTIC_LINK = "memind.graph.semantic_link";
 }

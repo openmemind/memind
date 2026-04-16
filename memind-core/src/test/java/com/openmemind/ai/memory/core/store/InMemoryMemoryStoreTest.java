@@ -153,6 +153,15 @@ class InMemoryMemoryStoreTest {
         assertThat(store.resourceOperations().getResource(MEMORY_ID, "res-1")).contains(resource);
     }
 
+    @Test
+    @DisplayName("graphOperations stays empty by default and is exposed by in-memory store")
+    void graphOperationsStaysEmptyByDefaultAndIsExposedByInMemoryStore() {
+        var store = new InMemoryMemoryStore();
+
+        assertThat(store.graphOperations().listEntities(MEMORY_ID)).isEmpty();
+        assertThat(store.graphOperations().listItemLinks(MEMORY_ID)).isEmpty();
+    }
+
     private static MemoryRawData rawData(
             String id, String caption, String contentId, Map<String, Object> metadata) {
         return new MemoryRawData(

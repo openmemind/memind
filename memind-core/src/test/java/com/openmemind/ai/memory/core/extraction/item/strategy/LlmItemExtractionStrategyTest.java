@@ -45,6 +45,41 @@ import reactor.test.StepVerifier;
 class LlmItemExtractionStrategyTest {
 
     @Test
+    @DisplayName("toFactEntries should parse graph hints into extracted memory entries")
+    void toFactEntriesShouldParseGraphHintsIntoExtractedMemoryEntries() {
+        var response =
+                new MemoryItemExtractionResponse(
+                        List.of(
+                                new MemoryItemExtractionResponse.ExtractedItem(
+                                        "User discussed OpenAI launch plans",
+                                        0.95f,
+                                        null,
+                                        null,
+                                        List.of("event"),
+                                        Map.of(),
+                                        "event",
+                                        List.of(
+                                                new MemoryItemExtractionResponse.ExtractedEntity(
+                                                        "OpenAI", "organization", 0.91f)),
+                                        List.of(
+                                                new MemoryItemExtractionResponse
+                                                        .ExtractedCausalRelation(
+                                                        0, "enabled_by", 0.88f)))));
+
+        var entries =
+                LlmItemExtractionStrategy.toFactEntries(
+                        response, sampleSegment(), Instant.parse("2026-04-16T00:00:00Z"));
+
+        assertThat(entries)
+                .singleElement()
+                .satisfies(
+                        entry -> {
+                            assertThat(entry.graphHints().entities()).hasSize(1);
+                            assertThat(entry.graphHints().causalRelations()).hasSize(1);
+                        });
+    }
+
+    @Test
     @DisplayName("extract should use unified prompt override instruction")
     void extractShouldUseUnifiedPromptOverrideInstruction() {
         var client =

@@ -80,4 +80,23 @@ class MemoryBuildOptionsTest {
         assertThat(defaults.promptBudget().maxInputTokens()).isEqualTo(8192);
         assertThat(defaults.promptBudget().reservedOutputTokens()).isEqualTo(1200);
     }
+
+    @Test
+    void itemGraphOptionsDefaultsToDisabledAndKeepsPhaseOneCaps() {
+        var options = ItemGraphOptions.defaults();
+
+        assertThat(options.enabled()).isFalse();
+        assertThat(options.maxEntitiesPerItem()).isEqualTo(8);
+        assertThat(options.maxCausalReferencesPerItem()).isEqualTo(2);
+        assertThat(options.maxTemporalLinksPerItem()).isEqualTo(10);
+        assertThat(options.maxSemanticLinksPerItem()).isEqualTo(5);
+        assertThat(options.semanticMinScore()).isEqualTo(0.82d);
+    }
+
+    @Test
+    void legacyItemExtractionOptionsConstructorStillBuildsDisabledGraphConfig() {
+        var options = new ItemExtractionOptions(false);
+
+        assertThat(options.graph()).isEqualTo(ItemGraphOptions.defaults());
+    }
 }

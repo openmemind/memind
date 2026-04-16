@@ -26,6 +26,7 @@ import com.openmemind.ai.memory.core.resource.DefaultContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeFactory;
@@ -73,7 +74,8 @@ public class MemindServerRuntimeConfiguration {
             ObjectProvider<ContentParser> contentParserProvider,
             ObjectProvider<RawDataPlugin> rawDataPluginProvider,
             ObjectProvider<ResourceFetcher> resourceFetcherProvider,
-            ObjectProvider<BubbleTrackerStore> bubbleTrackerStoreProvider) {
+            ObjectProvider<BubbleTrackerStore> bubbleTrackerStoreProvider,
+            ObjectProvider<MemoryObserver> memoryObserverProvider) {
         return options -> {
             StructuredChatClient structuredChatClient =
                     requireRuntimeDependency(structuredChatClientProvider);
@@ -85,6 +87,7 @@ public class MemindServerRuntimeConfiguration {
                     parsers.isEmpty() ? null : new DefaultContentParserRegistry(parsers);
             ResourceFetcher resourceFetcher = resourceFetcherProvider.getIfAvailable();
             BubbleTrackerStore bubbleTrackerStore = bubbleTrackerStoreProvider.getIfAvailable();
+            MemoryObserver memoryObserver = memoryObserverProvider.getIfAvailable();
             var builder =
                     Memory.builder()
                             .chatClient(structuredChatClient)
@@ -95,6 +98,9 @@ public class MemindServerRuntimeConfiguration {
                             .externallyManaged(true);
             if (bubbleTrackerStore != null) {
                 builder.bubbleTrackerStore(bubbleTrackerStore);
+            }
+            if (memoryObserver != null) {
+                builder.memoryObserver(memoryObserver);
             }
             if (contentParserRegistry != null) {
                 builder.contentParserRegistry(contentParserRegistry);

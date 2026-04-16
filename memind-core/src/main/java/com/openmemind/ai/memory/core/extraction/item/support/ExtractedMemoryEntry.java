@@ -48,7 +48,43 @@ public record ExtractedMemoryEntry(
         List<String> insightTypes,
         Map<String, Object> metadata,
         MemoryItemType type,
-        String category) {
+        String category,
+        ExtractedGraphHints graphHints) {
+
+    public ExtractedMemoryEntry {
+        graphHints = graphHints == null ? ExtractedGraphHints.empty() : graphHints;
+    }
+
+    public ExtractedMemoryEntry(
+            String content,
+            float confidence,
+            Instant occurredAt,
+            Instant occurredStart,
+            Instant occurredEnd,
+            String timeGranularity,
+            Instant observedAt,
+            String rawDataId,
+            String contentHash,
+            List<String> insightTypes,
+            Map<String, Object> metadata,
+            MemoryItemType type,
+            String category) {
+        this(
+                content,
+                confidence,
+                occurredAt,
+                occurredStart,
+                occurredEnd,
+                timeGranularity,
+                observedAt,
+                rawDataId,
+                contentHash,
+                insightTypes,
+                metadata,
+                type,
+                category,
+                ExtractedGraphHints.empty());
+    }
 
     public ExtractedMemoryEntry(
             String content,
@@ -74,7 +110,8 @@ public record ExtractedMemoryEntry(
                 insightTypes,
                 metadata,
                 type,
-                category);
+                category,
+                ExtractedGraphHints.empty());
     }
 
     /**
@@ -94,6 +131,7 @@ public record ExtractedMemoryEntry(
                 insightTypes,
                 metadata,
                 type,
-                category);
+                category,
+                graphHints);
     }
 }

@@ -23,8 +23,14 @@ import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.builder.DeepRetrievalOptions;
+import com.openmemind.ai.memory.core.builder.ExtractionCommonOptions;
+import com.openmemind.ai.memory.core.builder.ExtractionOptions;
+import com.openmemind.ai.memory.core.builder.InsightExtractionOptions;
+import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
+import com.openmemind.ai.memory.core.builder.ItemGraphOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuilder;
+import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalAdvancedOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalCommonOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalOptions;
@@ -37,6 +43,8 @@ import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
 import com.openmemind.ai.memory.core.extraction.item.MemoryItemLayer;
 import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItemExtractor;
+import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
+import com.openmemind.ai.memory.core.extraction.item.graph.NoOpItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.item.strategy.LlmItemExtractionStrategy;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
@@ -53,7 +61,9 @@ import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
+import com.openmemind.ai.memory.core.support.RecordingMemoryObserver;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingItemGraphMaterializer;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.lang.reflect.Proxy;
 import java.util.Map;
@@ -272,6 +282,50 @@ class DefaultMemoryBuilderTest {
     }
 
     @Test
+    void builderManagedRuntimeShouldWrapGraphMaterializerWithTracingObserver() {
+        var observer = new RecordingMemoryObserver();
+
+        var memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(CHAT_CLIENT)
+                                .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .memoryObserver(observer)
+                                .options(graphEnabledBuildOptions())
+                                .build();
+
+        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
+        var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+
+        assertThat(readField(itemLayer, "graphMaterializer", ItemGraphMaterializer.class))
+                .isInstanceOf(TracingItemGraphMaterializer.class);
+    }
+
+    @Test
+    void builderManagedRuntimeShouldKeepGraphMaterializerNoOpAndUntracedWhenGraphDisabled() {
+        var observer = new RecordingMemoryObserver();
+
+        var memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(CHAT_CLIENT)
+                                .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .memoryObserver(observer)
+                                .options(MemoryBuildOptions.defaults())
+                                .build();
+
+        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
+        var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+
+        assertThat(readField(itemLayer, "graphMaterializer", ItemGraphMaterializer.class))
+                .isSameAs(NoOpItemGraphMaterializer.INSTANCE);
+    }
+
+    @Test
     void closeClosesCloseableComponentsOnlyOnce() {
         var storeCloseCount = new AtomicInteger();
         var bufferCloseCount = new AtomicInteger();
@@ -390,6 +444,21 @@ class DefaultMemoryBuilderTest {
                 closeCount.incrementAndGet();
             }
         }
+    }
+
+    private static MemoryBuildOptions graphEnabledBuildOptions() {
+        return MemoryBuildOptions.builder()
+                .extraction(
+                        new ExtractionOptions(
+                                ExtractionCommonOptions.defaults(),
+                                RawDataExtractionOptions.defaults(),
+                                new ItemExtractionOptions(
+                                        false,
+                                        com.openmemind.ai.memory.core.builder.PromptBudgetOptions
+                                                .defaults(),
+                                        ItemGraphOptions.defaults().withEnabled(true)),
+                                InsightExtractionOptions.defaults()))
+                .build();
     }
 
     private static final class FixedMemoryBuffer implements MemoryBuffer {

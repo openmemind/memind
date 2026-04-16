@@ -17,6 +17,7 @@ import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.support.ExtractedGraphHints;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedTemporal;
 import com.openmemind.ai.memory.core.extraction.item.support.ForesightExtractionResponse;
@@ -114,7 +115,8 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
                                             segment.text(),
                                             referenceTime,
                                             userName,
-                                            config.allowedCategories())
+                                            config.allowedCategories(),
+                                            config.graph())
                                     .render(language);
                         })
                 .subscribeOn(Schedulers.boundedElastic())
@@ -134,7 +136,7 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
                 .onErrorResume(e -> Mono.just(List.of()));
     }
 
-    private List<ExtractedMemoryEntry> toFactEntries(
+    static List<ExtractedMemoryEntry> toFactEntries(
             MemoryItemExtractionResponse response, ParsedSegment segment, Instant referenceTime) {
         if (response == null || response.items() == null) {
             return List.of();
@@ -167,7 +169,9 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
                 item.insightTypes() != null ? item.insightTypes() : List.of(),
                 mergeMetadata(segment, item, temporal),
                 MemoryItemType.FACT,
-                item.category());
+                item.category(),
+                new ExtractedGraphHints(
+                        toEntityHints(item.entities()), toCausalHints(item.causalRelations())));
     }
 
     private Mono<List<ExtractedMemoryEntry>> extractForesight(
@@ -281,6 +285,44 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
 
     static float clamp(float value) {
         return Math.max(0.0f, Math.min(1.0f, value));
+    }
+
+    private static Float clampNullable(Float value) {
+        return value == null ? null : clamp(value);
+    }
+
+    private static List<ExtractedGraphHints.ExtractedEntityHint> toEntityHints(
+            List<MemoryItemExtractionResponse.ExtractedEntity> entities) {
+        if (entities == null || entities.isEmpty()) {
+            return List.of();
+        }
+        return entities.stream()
+                .filter(
+                        entity ->
+                                entity != null && entity.name() != null && !entity.name().isBlank())
+                .map(
+                        entity ->
+                                new ExtractedGraphHints.ExtractedEntityHint(
+                                        entity.name(),
+                                        entity.entityType(),
+                                        clampNullable(entity.salience())))
+                .toList();
+    }
+
+    private static List<ExtractedGraphHints.ExtractedCausalRelationHint> toCausalHints(
+            List<MemoryItemExtractionResponse.ExtractedCausalRelation> causalRelations) {
+        if (causalRelations == null || causalRelations.isEmpty()) {
+            return List.of();
+        }
+        return causalRelations.stream()
+                .filter(relation -> relation != null && relation.targetIndex() != null)
+                .map(
+                        relation ->
+                                new ExtractedGraphHints.ExtractedCausalRelationHint(
+                                        relation.targetIndex(),
+                                        relation.relationType(),
+                                        clampNullable(relation.strength())))
+                .toList();
     }
 
     static Instant resolveReferenceTime(ParsedSegment segment) {

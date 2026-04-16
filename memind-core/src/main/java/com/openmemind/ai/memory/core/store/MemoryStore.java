@@ -17,6 +17,8 @@ import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
 import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
+import com.openmemind.ai.memory.core.store.graph.GraphOperations;
+import com.openmemind.ai.memory.core.store.graph.NoOpGraphOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
@@ -36,6 +38,10 @@ public interface MemoryStore extends AutoCloseable {
     ItemOperations itemOperations();
 
     InsightOperations insightOperations();
+
+    default GraphOperations graphOperations() {
+        return NoOpGraphOperations.INSTANCE;
+    }
 
     default ResourceOperations resourceOperations() {
         throw new IllegalStateException(

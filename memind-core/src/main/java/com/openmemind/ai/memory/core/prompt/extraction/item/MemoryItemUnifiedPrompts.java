@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.core.prompt.extraction.item;
 
+import com.openmemind.ai.memory.core.builder.ItemGraphOptions;
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
@@ -150,6 +151,7 @@ public final class MemoryItemUnifiedPrompts {
             canonical half-open bucket in the System Time Zone before converting to UTC.
             - During rollout the parser still tolerates legacy `occurredAt`, but your response \
             should use `time`.
+            {{GRAPH_HINT_RULES}}
             """;
 
     private static final String OUTPUT =
@@ -169,6 +171,7 @@ public final class MemoryItemUnifiedPrompts {
                     "granularity": "point"
                   },
                   "insightTypes": ["Choose ONLY from the Available insightTypes listed under the assigned category"],
+            {{GRAPH_OUTPUT_FIELDS}}
                   "category_reason": "CRITICAL: Briefly explain WHY this category was chosen based on the rules. This field is for reasoning only and will NOT be stored.",
                   "category": "<matched_category_from_list>"
                 }
@@ -449,12 +452,29 @@ public final class MemoryItemUnifiedPrompts {
             String userName,
             Set<MemoryCategory> categories) {
         return build(
+                insightTypes,
+                segmentText,
+                referenceTime,
+                userName,
+                categories,
+                ItemGraphOptions.defaults());
+    }
+
+    public static PromptTemplate build(
+            List<MemoryInsightType> insightTypes,
+            String segmentText,
+            Instant referenceTime,
+            String userName,
+            Set<MemoryCategory> categories,
+            ItemGraphOptions graphOptions) {
+        return build(
                 PromptRegistry.EMPTY,
                 insightTypes,
                 segmentText,
                 referenceTime,
                 userName,
-                categories);
+                categories,
+                graphOptions);
     }
 
     public static PromptTemplate buildDefault() {
@@ -479,6 +499,24 @@ public final class MemoryItemUnifiedPrompts {
             Instant referenceTime,
             String userName,
             Set<MemoryCategory> categories) {
+        return build(
+                registry,
+                insightTypes,
+                segmentText,
+                referenceTime,
+                userName,
+                categories,
+                ItemGraphOptions.defaults());
+    }
+
+    public static PromptTemplate build(
+            PromptRegistry registry,
+            List<MemoryInsightType> insightTypes,
+            String segmentText,
+            Instant referenceTime,
+            String userName,
+            Set<MemoryCategory> categories,
+            ItemGraphOptions graphOptions) {
 
         PromptTemplate.Builder builder =
                 registry.hasOverride(PromptType.MEMORY_ITEM_UNIFIED)
@@ -493,8 +531,49 @@ public final class MemoryItemUnifiedPrompts {
                 .variable("IDENTITY_CONTEXT", buildIdentityContext(userName))
                 .variable("SUBJECT_CONTEXT", buildSubjectClarityContext(userName))
                 .variable("TEMPORAL_CONTEXT", buildTimeContext(segmentText, referenceTime))
+                .variable("GRAPH_HINT_RULES", buildGraphHintRules(graphOptions))
+                .variable("GRAPH_OUTPUT_FIELDS", buildGraphOutputFields(graphOptions))
                 .variable("CONVERSATION", segmentText != null ? segmentText : "")
                 .build();
+    }
+
+    private static String buildGraphHintRules(ItemGraphOptions graphOptions) {
+        if (graphOptions == null || !graphOptions.enabled()) {
+            return "";
+        }
+        return """
+
+        ## Graph Hints
+        - Include `"entities"` only for concrete, high-value named entities; keep at most %d per item.
+        - Include `"causalRelations"` only for strong backward-looking links; keep at most %d per item.
+        - `"entities"` uses objects with `"name"`, `"entityType"`, and optional `"salience"`.
+        - `"causalRelations"` uses objects with `"targetIndex"`, `"relationType"`, and optional `"strength"`.
+        - targetIndex must reference an earlier item in the same response.
+        - Prefer omission to hallucinated graph structure.
+        """
+                .formatted(
+                        graphOptions.maxEntitiesPerItem(),
+                        graphOptions.maxCausalReferencesPerItem());
+    }
+
+    private static String buildGraphOutputFields(ItemGraphOptions graphOptions) {
+        if (graphOptions == null || !graphOptions.enabled()) {
+            return "";
+        }
+        return "      \"entities\": [\n"
+                + "        {\n"
+                + "          \"name\": \"OpenAI\",\n"
+                + "          \"entityType\": \"organization\",\n"
+                + "          \"salience\": 0.91\n"
+                + "        }\n"
+                + "      ],\n"
+                + "      \"causalRelations\": [\n"
+                + "        {\n"
+                + "          \"targetIndex\": 0,\n"
+                + "          \"relationType\": \"caused_by\",\n"
+                + "          \"strength\": 0.88\n"
+                + "        }\n"
+                + "      ],\n";
     }
 
     private static PromptTemplate.Builder defaultBuilder() {

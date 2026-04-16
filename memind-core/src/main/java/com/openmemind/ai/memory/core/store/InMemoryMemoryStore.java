@@ -14,6 +14,8 @@
 package com.openmemind.ai.memory.core.store;
 
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
+import com.openmemind.ai.memory.core.store.graph.GraphOperations;
+import com.openmemind.ai.memory.core.store.graph.InMemoryGraphOperations;
 import com.openmemind.ai.memory.core.store.insight.InMemoryInsightOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.InMemoryItemOperations;
@@ -31,6 +33,7 @@ public class InMemoryMemoryStore implements MemoryStore {
     private final RawDataOperations rawDataOperations = new InMemoryRawDataOperations();
     private final ItemOperations itemOperations = new InMemoryItemOperations();
     private final InsightOperations insightOperations = new InMemoryInsightOperations();
+    private final GraphOperations graphOperations = new InMemoryGraphOperations();
     private final ResourceOperations resourceOperations = new InMemoryResourceOperations();
 
     public InMemoryMemoryStore() {
@@ -50,6 +53,11 @@ public class InMemoryMemoryStore implements MemoryStore {
     @Override
     public InsightOperations insightOperations() {
         return insightOperations;
+    }
+
+    @Override
+    public GraphOperations graphOperations() {
+        return graphOperations;
     }
 
     @Override

@@ -37,6 +37,19 @@ public record MemoryItemExtractionResponse(List<ExtractedItem> items) {
     public record ExtractedTime(String expression, String start, String end, String granularity) {}
 
     /**
+     * Structured entity hint extracted from the same response as the item.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ExtractedEntity(String name, String entityType, Float salience) {}
+
+    /**
+     * Structured causal hint referencing an earlier item in the same response.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ExtractedCausalRelation(
+            Integer targetIndex, String relationType, Float strength) {}
+
+    /**
      * Single extraction result
      *
      * @param content Memory content
@@ -54,7 +67,35 @@ public record MemoryItemExtractionResponse(List<ExtractedItem> items) {
             ExtractedTime time,
             List<String> insightTypes,
             Map<String, Object> metadata,
-            String category) {
+            String category,
+            List<ExtractedEntity> entities,
+            List<ExtractedCausalRelation> causalRelations) {
+
+        public ExtractedItem {
+            insightTypes = insightTypes == null ? List.of() : List.copyOf(insightTypes);
+            entities = entities == null ? List.of() : List.copyOf(entities);
+            causalRelations = causalRelations == null ? List.of() : List.copyOf(causalRelations);
+        }
+
+        public ExtractedItem(
+                String content,
+                float confidence,
+                String occurredAt,
+                ExtractedTime time,
+                List<String> insightTypes,
+                Map<String, Object> metadata,
+                String category) {
+            this(
+                    content,
+                    confidence,
+                    occurredAt,
+                    time,
+                    insightTypes,
+                    metadata,
+                    category,
+                    List.of(),
+                    List.of());
+        }
 
         public ExtractedItem(
                 String content,
@@ -63,7 +104,16 @@ public record MemoryItemExtractionResponse(List<ExtractedItem> items) {
                 List<String> insightTypes,
                 Map<String, Object> metadata,
                 String category) {
-            this(content, confidence, occurredAt, null, insightTypes, metadata, category);
+            this(
+                    content,
+                    confidence,
+                    occurredAt,
+                    null,
+                    insightTypes,
+                    metadata,
+                    category,
+                    List.of(),
+                    List.of());
         }
     }
 }

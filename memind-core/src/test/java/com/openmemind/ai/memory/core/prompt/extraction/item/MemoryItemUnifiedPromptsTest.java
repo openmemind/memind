@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.prompt.extraction.item;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.builder.ItemGraphOptions;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
@@ -29,6 +30,37 @@ import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.api.parallel.Resources;
 
 class MemoryItemUnifiedPromptsTest {
+
+    @Test
+    @DisplayName("Rendered prompt should include graph schema only when graph is enabled")
+    void shouldIncludeGraphSchemaOnlyWhenGraphIsEnabled() {
+        var enabled =
+                MemoryItemUnifiedPrompts.build(
+                                List.of(),
+                                "user: 我昨天和 OpenAI 团队讨论了部署方案",
+                                Instant.parse("2026-04-16T00:00:00Z"),
+                                null,
+                                Set.of(MemoryCategory.EVENT),
+                                ItemGraphOptions.defaults().withEnabled(true))
+                        .render("English");
+        var disabled =
+                MemoryItemUnifiedPrompts.build(
+                                List.of(),
+                                "user: 我昨天和 OpenAI 团队讨论了部署方案",
+                                Instant.parse("2026-04-16T00:00:00Z"),
+                                null,
+                                Set.of(MemoryCategory.EVENT),
+                                ItemGraphOptions.defaults())
+                        .render("English");
+
+        assertThat(enabled.systemPrompt())
+                .contains("\"entities\"")
+                .contains("\"causalRelations\"")
+                .contains("targetIndex must reference an earlier item");
+        assertThat(disabled.systemPrompt())
+                .doesNotContain("\"entities\"")
+                .doesNotContain("\"causalRelations\"");
+    }
 
     @Test
     @DisplayName("build default should keep runtime category placeholders raw")
