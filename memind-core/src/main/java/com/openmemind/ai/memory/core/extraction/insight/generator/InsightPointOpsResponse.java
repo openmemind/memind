@@ -13,15 +13,67 @@
  */
 package com.openmemind.ai.memory.core.extraction.insight.generator;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSetter;
 import com.openmemind.ai.memory.core.data.PointOperation;
 import java.util.List;
+import java.util.Objects;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record InsightPointOpsResponse(List<PointOperation> operations) {
-    public InsightPointOpsResponse {
-        if (operations == null) {
-            operations = List.of();
+public final class InsightPointOpsResponse {
+
+    private List<PointOperation> operations = List.of();
+
+    @JsonIgnore private boolean explicitOperationsArray;
+
+    public InsightPointOpsResponse() {}
+
+    public InsightPointOpsResponse(List<PointOperation> operations) {
+        setOperations(operations);
+    }
+
+    @JsonSetter("operations")
+    public void setOperations(List<PointOperation> operations) {
+        explicitOperationsArray = operations != null;
+        this.operations = operations == null ? List.of() : List.copyOf(operations);
+    }
+
+    @JsonProperty("operations")
+    public List<PointOperation> operations() {
+        return operations;
+    }
+
+    @JsonIgnore
+    public boolean hasExplicitOperationsArray() {
+        return explicitOperationsArray;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
         }
+        if (!(o instanceof InsightPointOpsResponse that)) {
+            return false;
+        }
+        return explicitOperationsArray == that.explicitOperationsArray
+                && Objects.equals(operations, that.operations);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(operations, explicitOperationsArray);
+    }
+
+    @Override
+    public String toString() {
+        return "InsightPointOpsResponse{"
+                + "operations="
+                + operations
+                + ", explicitOperationsArray="
+                + explicitOperationsArray
+                + '}';
     }
 }

@@ -15,6 +15,8 @@ package com.openmemind.ai.memory.core.prompt.extraction.insight;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.data.InsightPoint;
+import com.openmemind.ai.memory.core.data.InsightPoint.PointType;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
@@ -26,6 +28,53 @@ import org.junit.jupiter.api.Test;
 
 @DisplayName("InsightLeafPrompts Unit Test")
 class InsightLeafPromptsTest {
+
+    @Test
+    @DisplayName("full rewrite prompt should keep points contract")
+    void leafPromptKeepsFullRewriteContract() {
+        var prompt =
+                InsightLeafPrompts.build(
+                                createBranchType("directives"),
+                                "response rules",
+                                List.of(
+                                        new InsightPoint(
+                                                PointType.SUMMARY,
+                                                "Existing point",
+                                                List.of("1", "2"))),
+                                List.of(),
+                                200)
+                        .render("English");
+
+        assertThat(prompt.systemPrompt())
+                .contains("\"points\"")
+                .doesNotContain("\"operations\"")
+                .contains("Full Replacement");
+        assertThat(prompt.userPrompt()).doesNotContain("confidence").contains("sourceItemIds");
+    }
+
+    @Test
+    @DisplayName("point-op prompt should enumerate existing points with stable point ids")
+    void leafPointOpsPromptEnumeratesExistingPointsWithStablePointIds() {
+        var prompt =
+                InsightLeafPrompts.buildPointOps(
+                                createBranchType("directives"),
+                                "response rules",
+                                List.of(
+                                        new InsightPoint(
+                                                "pt_existing_1",
+                                                PointType.SUMMARY,
+                                                "Existing point",
+                                                List.of("1", "2"))),
+                                List.of(),
+                                200)
+                        .render("English");
+
+        assertThat(prompt.userPrompt()).contains("pointId: pt_existing_1").doesNotContain("P1.");
+        assertThat(prompt.userPrompt()).contains("sourcePointRefs").doesNotContain("confidence");
+        assertThat(prompt.systemPrompt())
+                .contains("\"targetPointId\"")
+                .doesNotContain("\"targetIndex\"");
+    }
 
     @Test
     @DisplayName("system prompt should describe new agent dimension examples")

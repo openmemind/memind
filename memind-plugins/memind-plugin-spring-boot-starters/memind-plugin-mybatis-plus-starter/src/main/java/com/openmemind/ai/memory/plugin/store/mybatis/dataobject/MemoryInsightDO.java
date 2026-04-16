@@ -46,8 +46,6 @@ public class MemoryInsightDO extends BaseDO {
 
     private String groupName;
 
-    private Float confidence;
-
     @TableField(typeHandler = InstantTypeHandler.class)
     private Instant lastReasonedAt;
 
@@ -157,14 +155,6 @@ public class MemoryInsightDO extends BaseDO {
 
     public void setGroupName(String groupName) {
         this.groupName = groupName;
-    }
-
-    public Float getConfidence() {
-        return confidence;
-    }
-
-    public void setConfidence(Float confidence) {
-        this.confidence = confidence;
     }
 
     public Instant getLastReasonedAt() {

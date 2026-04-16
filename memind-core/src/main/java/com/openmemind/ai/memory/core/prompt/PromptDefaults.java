@@ -95,10 +95,20 @@ final class PromptDefaults {
                 PromptType.INSIGHT_LEAF,
                 entry(InsightLeafPrompts::buildDefault, InsightLeafPrompts::buildPreview));
         builders.put(
+                PromptType.INSIGHT_LEAF_POINT_OPS,
+                entry(
+                        InsightLeafPrompts::buildPointOpsDefault,
+                        InsightLeafPrompts::buildPointOpsPreview));
+        builders.put(
                 PromptType.BRANCH_AGGREGATION,
                 entry(
                         BranchAggregationPrompts::buildDefault,
                         BranchAggregationPrompts::buildPreview));
+        builders.put(
+                PromptType.BRANCH_AGGREGATION_POINT_OPS,
+                entry(
+                        BranchAggregationPrompts::buildPointOpsDefault,
+                        BranchAggregationPrompts::buildPointOpsPreview));
         builders.put(
                 PromptType.ROOT_SYNTHESIS,
                 entry(RootSynthesisPrompts::buildDefault, RootSynthesisPrompts::buildPreview));

@@ -21,6 +21,7 @@ import com.baomidou.mybatisplus.extension.parser.cache.JdkSerialCaffeineJsqlPars
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
@@ -33,6 +34,7 @@ import com.openmemind.ai.memory.plugin.store.mybatis.handler.DefaultDBFieldHandl
 import com.openmemind.ai.memory.plugin.store.mybatis.initializer.MemoryStoreProperties;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.ConversationBufferMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.InsightBufferMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightBubbleStateMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightTypeMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
@@ -164,5 +166,13 @@ public class MemoryMybatisPlusAutoConfiguration {
             case MYSQL -> new MysqlFulltextTextSearch(jdbcTemplate);
             case POSTGRESQL -> new PostgresqlTrigramTextSearch(jdbcTemplate);
         };
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(BubbleTrackerStore.class)
+    public MybatisPlusBubbleTrackerStore bubbleTrackerStore(
+            MemoryInsightBubbleStateMapper bubbleStateMapper, DataSource dataSource) {
+        return new MybatisPlusBubbleTrackerStore(
+                bubbleStateMapper, new DatabaseDialectDetector().detect(dataSource));
     }
 }

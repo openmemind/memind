@@ -17,11 +17,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.InsightPoint.PointType;
+import com.openmemind.ai.memory.core.data.InsightPointRef;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
+import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptType;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,12 +37,7 @@ class BranchAggregationPromptsTest {
         var template =
                 BranchAggregationPrompts.build(
                         createInsightType(),
-                        List.of(
-                                new InsightPoint(
-                                        PointType.SUMMARY,
-                                        "User values schedule flexibility",
-                                        0.85f,
-                                        List.of("10", "11"))),
+                        List.of(existingBranchPoint()),
                         List.of(createLeafInsight("career_background")),
                         320);
         var prompt = template.render("English");
@@ -51,7 +49,54 @@ class BranchAggregationPromptsTest {
                 .contains("User values schedule flexibility")
                 .contains("# LEAF Insights")
                 .contains("career_background")
+                .contains("sourcePointRefs")
                 .doesNotContain("# Core Principles");
+    }
+
+    @Test
+    @DisplayName("Rendered full rewrite prompt should keep points contract")
+    void shouldRenderFullRewritePrompt() {
+        var template =
+                BranchAggregationPrompts.build(
+                        createInsightType(),
+                        List.of(existingBranchPoint()),
+                        List.of(createLeafInsight("career_background")),
+                        320);
+        var prompt = template.render("English");
+
+        assertThat(prompt.systemPrompt())
+                .contains("\"points\"")
+                .doesNotContain("\"operations\"")
+                .contains("Full Replacement")
+                .doesNotContain("confidence");
+    }
+
+    @Test
+    @DisplayName("Rendered point-op prompt should use point ids for branch points")
+    void shouldRenderPointOpsPromptWithPointIds() {
+        var template =
+                BranchAggregationPrompts.buildPointOps(
+                        createInsightType(),
+                        List.of(existingBranchPoint()),
+                        List.of(createLeafInsight("career_background")),
+                        320);
+        var prompt = template.render("English");
+
+        assertThat(prompt.systemPrompt())
+                .contains("Point Operations Only")
+                .doesNotContain("Full Replacement");
+        assertThat(prompt.userPrompt())
+                .contains("pointId: pt_branch_1")
+                .contains(
+                        "G1.P1 insightId=10 pointId=pt_leaf_1 [SUMMARY] User has 8 years of"
+                                + " backend engineering experience")
+                .contains("sourceItemIds: [10, 14]")
+                .contains("sourcePointRefs")
+                .doesNotContain("confidence")
+                .doesNotContain("P1.");
+        assertThat(prompt.systemPrompt())
+                .contains("\"targetPointId\"")
+                .doesNotContain("\"targetIndex\"");
     }
 
     @Test
@@ -89,7 +134,18 @@ class BranchAggregationPromptsTest {
                 null);
     }
 
+    private static InsightPoint existingBranchPoint() {
+        return new InsightPoint(
+                "pt_branch_1",
+                PointType.SUMMARY,
+                "User values schedule flexibility",
+                List.of(),
+                List.of(new InsightPointRef(10L, "pt_leaf_1")),
+                null);
+    }
+
     private static MemoryInsight createLeafInsight(String group) {
+        Instant now = Instant.parse("2026-04-15T00:00:00Z");
         return new MemoryInsight(
                 10L,
                 "memory-1",
@@ -99,17 +155,16 @@ class BranchAggregationPromptsTest {
                 List.of("profile"),
                 List.of(
                         new InsightPoint(
+                                "pt_leaf_1",
                                 PointType.SUMMARY,
                                 "User has 8 years of backend engineering experience",
-                                0.9f,
                                 List.of("10", "14"))),
                 group,
-                0.9f,
+                now,
                 null,
-                null,
-                null,
-                null,
-                null,
+                now,
+                now,
+                InsightTier.LEAF,
                 null,
                 List.of(),
                 1);

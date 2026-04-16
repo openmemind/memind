@@ -11,54 +11,53 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.extraction.insight.scheduler;
+package com.openmemind.ai.memory.core.extraction.insight.operation;
 
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.PointOperation;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 
 /**
  * Apply the operations output by LLM to the existing point list.
  *
- * <p>targetIndex is 1-based, corresponding to the numbers P1, P2, ... in the prompt. All targetIndex references the original list position before the operation.
- * DELETE takes precedence over UPDATE: when the same index is both UPDATE and DELETE, DELETE takes effect.
+ * <p>DELETE takes precedence over UPDATE: when the same pointId is both UPDATE and DELETE,
+ * DELETE takes effect.
  */
-final class PointOperationApplier {
+public final class PointOperationApplier {
     private PointOperationApplier() {}
 
-    static List<InsightPoint> apply(
+    public static List<InsightPoint> apply(
             List<InsightPoint> existingPoints, List<PointOperation> operations) {
+        var toDelete = new HashSet<String>();
+        var updates = new LinkedHashMap<String, InsightPoint>();
 
-        // 1. Collect all DELETE indices
-        var toDelete = new HashSet<Integer>();
         for (var op : operations) {
-            if (op.op() == PointOperation.OpType.DELETE && op.targetIndex() != null) {
-                int idx = op.targetIndex() - 1;
-                if (idx >= 0 && idx < existingPoints.size()) {
-                    toDelete.add(idx);
-                }
+            if (op.op() == PointOperation.OpType.DELETE && op.targetPointId() != null) {
+                toDelete.add(op.targetPointId());
+            }
+        }
+        for (var op : operations) {
+            if (op.op() == PointOperation.OpType.UPDATE
+                    && op.targetPointId() != null
+                    && op.point() != null
+                    && !toDelete.contains(op.targetPointId())) {
+                updates.put(op.targetPointId(), op.point());
             }
         }
 
-        // 2. Apply UPDATE (skip indices that are DELETE)
-        var updated = new ArrayList<>(existingPoints);
-        for (var op : operations) {
-            if (op.op() == PointOperation.OpType.UPDATE && op.targetIndex() != null) {
-                int idx = op.targetIndex() - 1;
-                if (idx >= 0 && idx < updated.size() && !toDelete.contains(idx)) {
-                    updated.set(idx, op.point());
-                }
-            }
-        }
-
-        // 3. Build the result: keep non-DELETE points, then append ADD
         var result = new ArrayList<InsightPoint>();
-        for (int i = 0; i < updated.size(); i++) {
-            if (!toDelete.contains(i)) {
-                result.add(updated.get(i));
+        for (var point : existingPoints) {
+            if (point.pointId() != null && toDelete.contains(point.pointId())) {
+                continue;
             }
+            if (point.pointId() != null && updates.containsKey(point.pointId())) {
+                result.add(updates.get(point.pointId()));
+                continue;
+            }
+            result.add(point);
         }
         for (var op : operations) {
             if (op.op() == PointOperation.OpType.ADD && op.point() != null) {

@@ -107,6 +107,53 @@ public class LlmInsightGenerator implements InsightGenerator {
     }
 
     @Override
+    public Mono<InsightPointOpsResponse> generateLeafPointOps(
+            MemoryInsightType insightType,
+            String groupName,
+            List<InsightPoint> existingPoints,
+            List<MemoryItem> newItems,
+            int targetTokens,
+            String additionalContext,
+            String language) {
+
+        var template =
+                InsightLeafPrompts.buildPointOps(
+                        promptRegistry,
+                        insightType,
+                        groupName,
+                        existingPoints,
+                        newItems,
+                        targetTokens);
+        var promptResult = template.render(language);
+        var userPrompt =
+                additionalContext != null && !additionalContext.isBlank()
+                        ? promptResult.userPrompt()
+                                + "\n\n<AdditionalContext>\n"
+                                + additionalContext
+                                + "\n</AdditionalContext>"
+                        : promptResult.userPrompt();
+        var messages = ChatMessages.systemUser(promptResult.systemPrompt(), userPrompt);
+
+        return structuredChatClient
+                .call(messages, InsightPointOpsResponse.class)
+                .filter(InsightPointOpsResponse::hasExplicitOperationsArray)
+                .subscribeOn(Schedulers.boundedElastic())
+                .retryWhen(
+                        Retry.backoff(3, Duration.ofSeconds(2))
+                                .maxBackoff(Duration.ofSeconds(15))
+                                .doBeforeRetry(
+                                        signal ->
+                                                log.warn(
+                                                        "InsightPoint ops generation failed,"
+                                                                + " retrying {} time [type={},"
+                                                                + " group={}]: {}",
+                                                        signal.totalRetries() + 1,
+                                                        insightType.name(),
+                                                        groupName,
+                                                        signal.failure().getMessage())));
+    }
+
+    @Override
     public Mono<InsightPointGenerateResponse> generateBranchSummary(
             MemoryInsightType insightType,
             List<InsightPoint> existingPoints,
@@ -144,9 +191,46 @@ public class LlmInsightGenerator implements InsightGenerator {
     }
 
     @Override
+    public Mono<InsightPointOpsResponse> generateBranchPointOps(
+            MemoryInsightType insightType,
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> leafInsights,
+            int targetTokens,
+            String language) {
+
+        var promptResult =
+                BranchAggregationPrompts.buildPointOps(
+                                promptRegistry,
+                                insightType,
+                                existingPoints,
+                                leafInsights,
+                                targetTokens)
+                        .render(language);
+        var messages =
+                ChatMessages.systemUser(promptResult.systemPrompt(), promptResult.userPrompt());
+
+        return structuredChatClient
+                .call(messages, InsightPointOpsResponse.class)
+                .filter(InsightPointOpsResponse::hasExplicitOperationsArray)
+                .subscribeOn(Schedulers.boundedElastic())
+                .retryWhen(
+                        Retry.backoff(3, Duration.ofSeconds(2))
+                                .maxBackoff(Duration.ofSeconds(15))
+                                .doBeforeRetry(
+                                        signal ->
+                                                log.warn(
+                                                        "BRANCH point-op aggregation failed,"
+                                                                + " retrying {} time [type={}]:"
+                                                                + " {}",
+                                                        signal.totalRetries() + 1,
+                                                        insightType.name(),
+                                                        signal.failure().getMessage())));
+    }
+
+    @Override
     public Mono<InsightPointGenerateResponse> generateRootSynthesis(
             MemoryInsightType rootInsightType,
-            String existingSummary,
+            List<InsightPoint> existingPoints,
             List<MemoryInsight> branchInsights,
             int targetTokens,
             String language) {
@@ -157,14 +241,14 @@ public class LlmInsightGenerator implements InsightGenerator {
                             InteractionGuideSynthesisPrompts.build(
                                     promptRegistry,
                                     rootInsightType,
-                                    existingSummary,
+                                    existingPoints,
                                     branchInsights,
                                     targetTokens);
                     default ->
                             RootSynthesisPrompts.build(
                                     promptRegistry,
                                     rootInsightType,
-                                    existingSummary,
+                                    existingPoints,
                                     branchInsights,
                                     targetTokens);
                 };

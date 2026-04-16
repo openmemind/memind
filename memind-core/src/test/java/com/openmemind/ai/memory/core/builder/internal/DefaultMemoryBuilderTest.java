@@ -31,6 +31,10 @@ import com.openmemind.ai.memory.core.builder.RetrievalOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
 import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
+import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
+import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
+import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
+import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
 import com.openmemind.ai.memory.core.extraction.item.MemoryItemLayer;
 import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItemExtractor;
 import com.openmemind.ai.memory.core.extraction.item.strategy.LlmItemExtractionStrategy;
@@ -206,6 +210,29 @@ class DefaultMemoryBuilderTest {
                 .isSameAs(registry);
         assertThat(readField(extractor, "resourceFetcher", ResourceFetcher.class))
                 .isSameAs(fetcher);
+    }
+
+    @Test
+    void builderInjectsCustomBubbleTrackerStoreIntoInsightRuntime() {
+        var customBubbleTracker = proxy(BubbleTrackerStore.class);
+
+        var memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(CHAT_CLIENT)
+                                .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .bubbleTrackerStore(customBubbleTracker)
+                                .build();
+
+        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
+        var insightLayer = readField(extractor, "insightStep", InsightLayer.class);
+        var scheduler = readField(insightLayer, "scheduler", InsightBuildScheduler.class);
+        var reorganizer = readField(scheduler, "treeReorganizer", InsightTreeReorganizer.class);
+
+        assertThat(readField(reorganizer, "bubbleTracker", BubbleTrackerStore.class))
+                .isSameAs(customBubbleTracker);
     }
 
     @Test

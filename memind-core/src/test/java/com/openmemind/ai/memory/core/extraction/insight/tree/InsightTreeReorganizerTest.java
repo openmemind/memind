@@ -22,20 +22,24 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.data.InsightPoint;
+import com.openmemind.ai.memory.core.data.InsightPointRef;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
+import com.openmemind.ai.memory.core.data.PointOperation;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightPointGenerateResponse;
+import com.openmemind.ai.memory.core.extraction.insight.generator.InsightPointOpsResponse;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.utils.IdUtils;
@@ -43,9 +47,11 @@ import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -153,10 +159,7 @@ class InsightTreeReorganizerTest {
 
             var point =
                     new InsightPoint(
-                            InsightPoint.PointType.SUMMARY,
-                            "Comprehensive summary",
-                            0.9f,
-                            List.of());
+                            InsightPoint.PointType.SUMMARY, "Comprehensive summary", List.of());
             when(generator.generateBranchSummary(
                             any(), any(), anyList(), anyInt(), nullable(String.class)))
                     .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(point))));
@@ -210,10 +213,7 @@ class InsightTreeReorganizerTest {
 
             var point =
                     new InsightPoint(
-                            InsightPoint.PointType.SUMMARY,
-                            "Comprehensive summary",
-                            0.9f,
-                            List.of());
+                            InsightPoint.PointType.SUMMARY, "Comprehensive summary", List.of());
             when(generator.generateBranchSummary(
                             any(), any(), anyList(), anyInt(), nullable(String.class)))
                     .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(point))));
@@ -283,10 +283,7 @@ class InsightTreeReorganizerTest {
 
             var point =
                     new InsightPoint(
-                            InsightPoint.PointType.SUMMARY,
-                            "Comprehensive summary",
-                            0.9f,
-                            List.of());
+                            InsightPoint.PointType.SUMMARY, "Comprehensive summary", List.of());
             when(generator.generateBranchSummary(
                             any(), any(), anyList(), anyInt(), nullable(String.class)))
                     .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(point))));
@@ -319,6 +316,224 @@ class InsightTreeReorganizerTest {
             verify(generator, never())
                     .generateBranchSummary(
                             any(), any(), anyList(), anyInt(), nullable(String.class));
+        }
+
+        @Test
+        @DisplayName("branch point-op noop should not bubble ROOT synthesis")
+        void branchPointOpNoopShouldNotBubbleRootSynthesis() {
+            var existingPoint =
+                    new InsightPoint(
+                            "pt_branch_existing",
+                            InsightPoint.PointType.SUMMARY,
+                            "Existing branch summary",
+                            List.of("1", "2"));
+            var branch = createBranch(10L, List.of(existingPoint), List.of(1L, 2L, 3L));
+            var branch2 = createBranchWithType(20L, "other-type");
+            var root = createRoot(100L, ROOT_TYPE_NAME, List.of(10L, 20L));
+            var leaf = createLeaf(3L, "Third piece of information");
+            var rootInsightType = createRootInsightType(ROOT_TYPE_NAME);
+
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch));
+            when(insightOps.getInsight(memoryId, 100L)).thenReturn(Optional.of(root));
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME))
+                    .thenReturn(
+                            List.of(
+                                    createLeaf(1L, "First piece"),
+                                    createLeaf(2L, "Second piece"),
+                                    leaf));
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
+                    .thenReturn(List.of(branch, branch2));
+            when(insightOps.listInsightTypes()).thenReturn(List.of(rootInsightType));
+            when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.of(root));
+            lenient()
+                    .when(
+                            generator.generateBranchPointOps(
+                                    any(), anyList(), anyList(), anyInt(), nullable(String.class)))
+                    .thenReturn(Mono.just(new InsightPointOpsResponse(List.of())));
+
+            bubbleTracker.markDirty(DIRTY_KEY);
+            bubbleTracker.markDirty(DIRTY_KEY);
+            var rootKey = "test-memory::root::" + ROOT_TYPE_NAME;
+            bubbleTracker.markDirty(rootKey);
+
+            reorganizer.onLeafUpdated(memoryId, TYPE_NAME, createInsightType(), leaf, config);
+
+            verify(generator)
+                    .generateBranchPointOps(
+                            any(), anyList(), anyList(), anyInt(), nullable(String.class));
+            verify(generator, never())
+                    .generateBranchSummary(
+                            any(), anyList(), anyList(), anyInt(), nullable(String.class));
+            verify(generator, never())
+                    .generateRootSynthesis(
+                            any(MemoryInsightType.class),
+                            any(),
+                            anyList(),
+                            anyInt(),
+                            nullable(String.class));
+            assertThat(bubbleTracker.getDirtyCount(rootKey)).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("missing branch point-op response should fall back to full rewrite")
+        void missingBranchPointOpsShouldFallBackToFullRewrite() {
+            var branch = createBranch(10L);
+            var leaf = createLeaf(3L, "Third piece of information");
+
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch));
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME))
+                    .thenReturn(
+                            List.of(
+                                    createLeaf(1L, "First piece"),
+                                    createLeaf(2L, "Second piece"),
+                                    leaf));
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
+                    .thenReturn(List.of(branch));
+            when(insightOps.listInsightTypes()).thenReturn(List.of());
+            when(generator.generateBranchPointOps(
+                            any(), anyList(), anyList(), anyInt(), nullable(String.class)))
+                    .thenReturn(Mono.empty());
+            when(generator.generateBranchSummary(
+                            any(), anyList(), anyList(), anyInt(), nullable(String.class)))
+                    .thenReturn(
+                            Mono.just(
+                                    new InsightPointGenerateResponse(
+                                            List.of(
+                                                    new InsightPoint(
+                                                            InsightPoint.PointType.SUMMARY,
+                                                            "fallback",
+                                                            List.of("1", "2"))))));
+            when(vector.embed(anyString())).thenReturn(Mono.just(List.of(0.1f, 0.2f)));
+
+            bubbleTracker.markDirty(DIRTY_KEY);
+            bubbleTracker.markDirty(DIRTY_KEY);
+
+            reorganizer.onLeafUpdated(memoryId, TYPE_NAME, createInsightType(), leaf, config);
+
+            verify(generator)
+                    .generateBranchPointOps(
+                            any(), anyList(), anyList(), anyInt(), nullable(String.class));
+            verify(generator)
+                    .generateBranchSummary(
+                            any(), anyList(), anyList(), anyInt(), nullable(String.class));
+        }
+
+        @Test
+        @DisplayName("fallback-required branch point ops should use full rewrite")
+        void fallbackRequiredBranchPointOpsShouldUseFullRewrite() {
+            var existingPoint =
+                    new InsightPoint(
+                            InsightPoint.PointType.SUMMARY,
+                            "Existing branch summary",
+                            List.of("1", "2"));
+            var branch = createBranch(10L, List.of(existingPoint), List.of(1L, 2L, 3L));
+            var leaf = createLeaf(3L, "Third piece of information");
+
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch));
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME))
+                    .thenReturn(
+                            List.of(
+                                    createLeaf(1L, "First piece"),
+                                    createLeaf(2L, "Second piece"),
+                                    leaf));
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
+                    .thenReturn(List.of(branch));
+            when(insightOps.listInsightTypes()).thenReturn(List.of());
+            when(generator.generateBranchPointOps(
+                            any(), anyList(), anyList(), anyInt(), nullable(String.class)))
+                    .thenReturn(
+                            Mono.just(
+                                    new InsightPointOpsResponse(
+                                            List.of(
+                                                    new PointOperation(
+                                                            PointOperation.OpType.DELETE,
+                                                            "pt_branch_existing",
+                                                            null,
+                                                            "drop")))));
+            when(generator.generateBranchSummary(
+                            any(), anyList(), anyList(), anyInt(), nullable(String.class)))
+                    .thenReturn(
+                            Mono.just(
+                                    new InsightPointGenerateResponse(
+                                            List.of(
+                                                    new InsightPoint(
+                                                            InsightPoint.PointType.SUMMARY,
+                                                            "fallback",
+                                                            List.of("1", "2"))))));
+            when(vector.embed(anyString())).thenReturn(Mono.just(List.of(0.1f, 0.2f)));
+
+            bubbleTracker.markDirty(DIRTY_KEY);
+            bubbleTracker.markDirty(DIRTY_KEY);
+
+            reorganizer.onLeafUpdated(memoryId, TYPE_NAME, createInsightType(), leaf, config);
+
+            verify(generator)
+                    .generateBranchPointOps(
+                            any(), anyList(), anyList(), anyInt(), nullable(String.class));
+            verify(generator)
+                    .generateBranchSummary(
+                            any(), anyList(), anyList(), anyInt(), nullable(String.class));
+        }
+
+        @Test
+        @DisplayName("invalid branch point ops should fall back to full rewrite")
+        void invalidBranchPointOpsShouldFallBackToFullRewrite() {
+            var existingPoint =
+                    new InsightPoint(
+                            "pt_branch_existing",
+                            InsightPoint.PointType.SUMMARY,
+                            "Existing branch summary",
+                            List.of("1", "2"));
+            var branch = createBranch(10L, List.of(existingPoint), List.of(1L, 2L, 3L));
+            var leaf = createLeaf(3L, "Third piece of information");
+
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch));
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME))
+                    .thenReturn(
+                            List.of(
+                                    createLeaf(1L, "First piece"),
+                                    createLeaf(2L, "Second piece"),
+                                    leaf));
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
+                    .thenReturn(List.of(branch));
+            when(insightOps.listInsightTypes()).thenReturn(List.of());
+            when(generator.generateBranchPointOps(
+                            any(), anyList(), anyList(), anyInt(), nullable(String.class)))
+                    .thenReturn(
+                            Mono.just(
+                                    new InsightPointOpsResponse(
+                                            List.of(
+                                                    new PointOperation(
+                                                            PointOperation.OpType.UPDATE,
+                                                            "pt_branch_missing",
+                                                            new InsightPoint(
+                                                                    InsightPoint.PointType.SUMMARY,
+                                                                    "invalid",
+                                                                    List.of("1", "2")),
+                                                            "bad target")))));
+            when(generator.generateBranchSummary(
+                            any(), anyList(), anyList(), anyInt(), nullable(String.class)))
+                    .thenReturn(
+                            Mono.just(
+                                    new InsightPointGenerateResponse(
+                                            List.of(
+                                                    new InsightPoint(
+                                                            InsightPoint.PointType.SUMMARY,
+                                                            "fallback",
+                                                            List.of("1", "2"))))));
+            when(vector.embed(anyString())).thenReturn(Mono.just(List.of(0.1f, 0.2f)));
+
+            bubbleTracker.markDirty(DIRTY_KEY);
+            bubbleTracker.markDirty(DIRTY_KEY);
+
+            reorganizer.onLeafUpdated(memoryId, TYPE_NAME, createInsightType(), leaf, config);
+
+            verify(generator)
+                    .generateBranchPointOps(
+                            any(), anyList(), anyList(), anyInt(), nullable(String.class));
+            verify(generator)
+                    .generateBranchSummary(
+                            any(), anyList(), anyList(), anyInt(), nullable(String.class));
         }
     }
 
@@ -391,8 +606,7 @@ class InsightTreeReorganizerTest {
             when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.empty());
 
             var point =
-                    new InsightPoint(
-                            InsightPoint.PointType.SUMMARY, "BRANCH summary", 0.9f, List.of());
+                    new InsightPoint(InsightPoint.PointType.SUMMARY, "BRANCH summary", List.of());
             when(generator.generateBranchSummary(
                             any(), any(), anyList(), anyInt(), nullable(String.class)))
                     .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(point))));
@@ -433,15 +647,14 @@ class InsightTreeReorganizerTest {
             when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.of(root));
 
             var branchPoint =
-                    new InsightPoint(
-                            InsightPoint.PointType.SUMMARY, "BRANCH summary", 0.9f, List.of());
+                    new InsightPoint(InsightPoint.PointType.SUMMARY, "BRANCH summary", List.of());
             when(generator.generateBranchSummary(
                             any(), any(), anyList(), anyInt(), nullable(String.class)))
                     .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(branchPoint))));
 
             var rootPoint =
                     new InsightPoint(
-                            InsightPoint.PointType.SUMMARY, "ROOT comprehensive", 0.9f, List.of());
+                            InsightPoint.PointType.SUMMARY, "ROOT comprehensive", List.of());
             when(generator.generateRootSynthesis(
                             any(MemoryInsightType.class),
                             any(),
@@ -471,6 +684,116 @@ class InsightTreeReorganizerTest {
         }
 
         @Test
+        @DisplayName(
+                "ROOT re-summarize should skip embed and save when normalized points are unchanged")
+        void rootResummarizeShouldSkipSaveWhenPointsAreUnchanged() {
+            var branch =
+                    createBranchWithType(10L, TYPE_NAME)
+                            .withPoints(
+                                    List.of(
+                                            new InsightPoint(
+                                                    "pt_branch_1",
+                                                    InsightPoint.PointType.SUMMARY,
+                                                    "Branch summary one",
+                                                    List.of())));
+            var branch2 =
+                    createBranchWithType(20L, "other-type")
+                            .withPoints(
+                                    List.of(
+                                            new InsightPoint(
+                                                    "pt_branch_2",
+                                                    InsightPoint.PointType.SUMMARY,
+                                                    "Branch summary two",
+                                                    List.of())));
+            var existingRootPoint =
+                    new InsightPoint(
+                            "pt_root_existing",
+                            InsightPoint.PointType.REASONING,
+                            "ROOT comprehensive",
+                            List.of(),
+                            List.of(
+                                    new InsightPointRef(10L, "pt_branch_1"),
+                                    new InsightPointRef(20L, "pt_branch_2")),
+                            Map.of("dimension", "convergence"));
+            var root =
+                    createRoot(100L, ROOT_TYPE_NAME, List.of(10L, 20L))
+                            .withPoints(List.of(existingRootPoint))
+                            .withVersion(1);
+            var leaf = createLeaf(3L, "Third piece of information");
+            var rootInsightType = createRootInsightType(ROOT_TYPE_NAME);
+
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch));
+            when(insightOps.getInsight(memoryId, 100L)).thenReturn(Optional.of(root));
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME))
+                    .thenReturn(
+                            List.of(
+                                    createLeaf(1L, "First piece"),
+                                    createLeaf(2L, "Second piece"),
+                                    leaf));
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
+                    .thenReturn(List.of(branch, branch2));
+            when(insightOps.listInsightTypes()).thenReturn(List.of(rootInsightType));
+            when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.of(root));
+
+            when(generator.generateBranchSummary(
+                            any(), any(), anyList(), anyInt(), nullable(String.class)))
+                    .thenReturn(
+                            Mono.just(
+                                    new InsightPointGenerateResponse(
+                                            List.of(
+                                                    new InsightPoint(
+                                                            InsightPoint.PointType.SUMMARY,
+                                                            "BRANCH summary",
+                                                            List.of())))));
+
+            when(generator.generateRootSynthesis(
+                            any(MemoryInsightType.class),
+                            any(),
+                            anyList(),
+                            anyInt(),
+                            nullable(String.class)))
+                    .thenReturn(
+                            Mono.just(
+                                    new InsightPointGenerateResponse(
+                                            List.of(
+                                                    new InsightPoint(
+                                                            null,
+                                                            InsightPoint.PointType.REASONING,
+                                                            "ROOT comprehensive",
+                                                            List.of(),
+                                                            List.of(
+                                                                    new InsightPointRef(
+                                                                            10L, "pt_branch_1"),
+                                                                    new InsightPointRef(
+                                                                            20L, "pt_branch_2")),
+                                                            Map.of("dimension", "convergence"))))));
+
+            when(vector.embed(anyString())).thenReturn(Mono.just(List.of(0.1f, 0.2f)));
+
+            bubbleTracker.markDirty(DIRTY_KEY);
+            bubbleTracker.markDirty(DIRTY_KEY);
+            bubbleTracker.markDirty("test-memory::root::" + ROOT_TYPE_NAME);
+
+            reorganizer.onLeafUpdated(memoryId, TYPE_NAME, createInsightType(), leaf, config);
+            reorganizer.drainRootTasks(memoryId, 2, TimeUnit.SECONDS);
+
+            verify(vector, never()).embed("ROOT comprehensive");
+            verify(insightOps, never())
+                    .upsertInsights(
+                            eq(memoryId),
+                            argThat(
+                                    list ->
+                                            list.stream()
+                                                    .anyMatch(
+                                                            insight ->
+                                                                    insight.tier()
+                                                                                    == InsightTier
+                                                                                            .ROOT
+                                                                            && insight.version()
+                                                                                    > 1)));
+        }
+
+        @Test
         @DisplayName("should keep ROOT dirty count when re-summarize fails")
         void shouldKeepRootDirtyCountWhenResummarizeFails() {
             var branch1 = createBranchWithType(10L, TYPE_NAME);
@@ -490,8 +813,7 @@ class InsightTreeReorganizerTest {
             when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.of(root));
 
             var branchPoint =
-                    new InsightPoint(
-                            InsightPoint.PointType.SUMMARY, "BRANCH summary", 0.9f, List.of());
+                    new InsightPoint(InsightPoint.PointType.SUMMARY, "BRANCH summary", List.of());
             when(generator.generateBranchSummary(
                             any(), any(), anyList(), anyInt(), nullable(String.class)))
                     .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(branchPoint))));
@@ -545,15 +867,14 @@ class InsightTreeReorganizerTest {
             when(insightOps.getInsight(memoryId, 200L)).thenReturn(Optional.of(root2));
 
             var branchPoint =
-                    new InsightPoint(
-                            InsightPoint.PointType.SUMMARY, "BRANCH summary", 0.9f, List.of());
+                    new InsightPoint(InsightPoint.PointType.SUMMARY, "BRANCH summary", List.of());
             when(generator.generateBranchSummary(
                             any(), any(), anyList(), anyInt(), nullable(String.class)))
                     .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(branchPoint))));
 
             var rootPoint =
                     new InsightPoint(
-                            InsightPoint.PointType.SUMMARY, "ROOT comprehensive", 0.9f, List.of());
+                            InsightPoint.PointType.SUMMARY, "ROOT comprehensive", List.of());
             when(generator.generateRootSynthesis(
                             any(MemoryInsightType.class),
                             any(),
@@ -613,15 +934,14 @@ class InsightTreeReorganizerTest {
             when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.of(root));
 
             var branchPoint =
-                    new InsightPoint(
-                            InsightPoint.PointType.SUMMARY, "BRANCH summary", 0.9f, List.of());
+                    new InsightPoint(InsightPoint.PointType.SUMMARY, "BRANCH summary", List.of());
             when(generator.generateBranchSummary(
                             any(), any(), anyList(), anyInt(), nullable(String.class)))
                     .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(branchPoint))));
 
             var rootPoint =
                     new InsightPoint(
-                            InsightPoint.PointType.SUMMARY, "ROOT comprehensive", 0.9f, List.of());
+                            InsightPoint.PointType.SUMMARY, "ROOT comprehensive", List.of());
             when(generator.generateRootSynthesis(
                             any(MemoryInsightType.class),
                             any(),
@@ -700,9 +1020,8 @@ class InsightTreeReorganizerTest {
                 MemoryScope.USER,
                 "leaf-" + id,
                 List.of("tool"),
-                List.of(new InsightPoint(InsightPoint.PointType.SUMMARY, content, 1.0f, List.of())),
+                List.of(new InsightPoint(InsightPoint.PointType.SUMMARY, content, List.of())),
                 "group-a",
-                0.9f,
                 now,
                 List.of(0.1f, 0.2f),
                 now,
@@ -718,6 +1037,10 @@ class InsightTreeReorganizerTest {
     }
 
     private MemoryInsight createBranch(Long id, List<Long> childIds) {
+        return createBranch(id, List.of(), childIds);
+    }
+
+    private MemoryInsight createBranch(Long id, List<InsightPoint> points, List<Long> childIds) {
         var now = Instant.now();
         return new MemoryInsight(
                 id,
@@ -726,9 +1049,8 @@ class InsightTreeReorganizerTest {
                 MemoryScope.USER,
                 "branch-" + TYPE_NAME,
                 List.of("tool"),
-                List.of(),
+                points,
                 null,
-                0.0f,
                 now,
                 null,
                 now,
@@ -750,7 +1072,6 @@ class InsightTreeReorganizerTest {
                 List.of("tool"),
                 List.of(),
                 null,
-                0.0f,
                 now,
                 null,
                 now,
@@ -772,7 +1093,6 @@ class InsightTreeReorganizerTest {
                 List.of(),
                 List.of(),
                 null,
-                0.0f,
                 now,
                 null,
                 now,

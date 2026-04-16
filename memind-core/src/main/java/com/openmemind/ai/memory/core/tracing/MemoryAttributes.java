@@ -52,6 +52,11 @@ public final class MemoryAttributes {
             "memind.extraction.insight_point_count";
     public static final String EXTRACTION_INSIGHT_LEAF_COUNT =
             "memind.extraction.insight_leaf_count";
+    public static final String EXTRACTION_INSIGHT_ADD_COUNT = "memind.extraction.insight_add_count";
+    public static final String EXTRACTION_INSIGHT_UPDATE_COUNT =
+            "memind.extraction.insight_update_count";
+    public static final String EXTRACTION_INSIGHT_DELETE_COUNT =
+            "memind.extraction.insight_delete_count";
 
     // ===== Retrieval =====
     public static final String RETRIEVAL_STRATEGY = "memind.retrieval.strategy";

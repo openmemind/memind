@@ -16,15 +16,23 @@ package com.openmemind.ai.memory.plugin.store.mybatis.schema;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Proxy;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Locale;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.AbstractDataSource;
@@ -36,6 +44,18 @@ class MemoryStoreDdlTest {
 
     private final DatabaseDialectDetector detector = new DatabaseDialectDetector();
 
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "db/migration/sqlite/V1__init_store.sql",
+                "db/migration/mysql/V1__init_store.sql",
+                "db/migration/postgresql/V1__init_store.sql"
+            })
+    @DisplayName("Fresh V1 store scripts should not define confidence column")
+    void freshStoreScriptsShouldNotDefineInsightConfidenceColumn(String classpathResource) {
+        assertThat(normalizedSqlResource(classpathResource)).doesNotContain(" confidence ");
+    }
+
     @Test
     @DisplayName("Load SQLite store and text search scripts")
     void loadsSqliteScripts() {
@@ -45,7 +65,8 @@ class MemoryStoreDdlTest {
                 .containsExactly(
                         "db/migration/sqlite/V1__init_store.sql",
                         "db/migration/sqlite/V2__init_text_search.sql",
-                        "db/migration/sqlite/V3__multimodal.sql");
+                        "db/migration/sqlite/V3__multimodal.sql",
+                        "db/migration/sqlite/V4__bubble_state.sql");
     }
 
     @Test
@@ -59,7 +80,8 @@ class MemoryStoreDdlTest {
                 .containsExactly(
                         "db/migration/mysql/V1__init_store.sql",
                         "db/migration/mysql/V2__init_text_search.sql",
-                        "db/migration/mysql/V3__multimodal.sql");
+                        "db/migration/mysql/V3__multimodal.sql",
+                        "db/migration/mysql/V4__bubble_state.sql");
     }
 
     @Test
@@ -75,7 +97,8 @@ class MemoryStoreDdlTest {
                 .containsExactly(
                         "db/migration/postgresql/V1__init_store.sql",
                         "db/migration/postgresql/V2__init_text_search.sql",
-                        "db/migration/postgresql/V3__multimodal.sql");
+                        "db/migration/postgresql/V3__multimodal.sql",
+                        "db/migration/postgresql/V4__bubble_state.sql");
     }
 
     @Test
@@ -99,6 +122,7 @@ class MemoryStoreDdlTest {
                         .queryForObject("SELECT COUNT(*) FROM memory_insight_type", Integer.class);
 
         assertThat(count).isEqualTo(DefaultInsightTypes.all().size());
+        assertThat(columnExists(dataSource, "memory_insight", "confidence")).isFalse();
     }
 
     @Test
@@ -122,10 +146,42 @@ class MemoryStoreDdlTest {
                         "SELECT COUNT(*) FROM memory_insight_type", Integer.class);
 
         assertThat(count).isZero();
+        assertThat(columnExists(dataSource, "memory_insight", "confidence")).isFalse();
     }
 
     private DataSource dataSource(String productName, String url) {
         return new MetadataDataSource(productName, url);
+    }
+
+    private boolean columnExists(DataSource dataSource, String tableName, String columnName) {
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement("PRAGMA table_info(" + tableName + ")")) {
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    if (columnName.equalsIgnoreCase(resultSet.getString("name"))) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private String normalizedSqlResource(String classpathResource) {
+        try (InputStream inputStream =
+                MemoryStoreDdlTest.class.getClassLoader().getResourceAsStream(classpathResource)) {
+            if (inputStream == null) {
+                throw new IllegalArgumentException("Resource not found: " + classpathResource);
+            }
+            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8)
+                    .replaceAll("\\s+", " ")
+                    .toLowerCase(Locale.ROOT);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static final class MetadataDataSource extends AbstractDataSource {

@@ -23,12 +23,18 @@ public final class StoreSchemaBootstrap {
     private static final String SQLITE_STORE_RESOURCE = "db/jdbc/sqlite/store/V1__init.sql";
     private static final String SQLITE_MULTIMODAL_RESOURCE =
             "db/jdbc/sqlite/store/V2__multimodal.sql";
+    private static final String SQLITE_BUBBLE_STATE_RESOURCE =
+            "db/jdbc/sqlite/store/V3__bubble_state.sql";
     private static final String MYSQL_STORE_RESOURCE = "db/jdbc/mysql/store/V1__init.sql";
     private static final String MYSQL_MULTIMODAL_RESOURCE =
             "db/jdbc/mysql/store/V2__multimodal.sql";
+    private static final String MYSQL_BUBBLE_STATE_RESOURCE =
+            "db/jdbc/mysql/store/V3__bubble_state.sql";
     private static final String POSTGRESQL_STORE_RESOURCE = "db/jdbc/postgresql/store/V1__init.sql";
     private static final String POSTGRESQL_MULTIMODAL_RESOURCE =
             "db/jdbc/postgresql/store/V2__multimodal.sql";
+    private static final String POSTGRESQL_BUBBLE_STATE_RESOURCE =
+            "db/jdbc/postgresql/store/V3__bubble_state.sql";
 
     private StoreSchemaBootstrap() {}
 
@@ -53,6 +59,8 @@ public final class StoreSchemaBootstrap {
             }
             SqlScriptRunner.execute(dataSource, SQLITE_MULTIMODAL_RESOURCE);
         }
+        ensureSqliteBubbleStateSchema(dataSource, createIfNotExist);
+        ensureSqliteInsightConfidenceRemoved(dataSource, createIfNotExist);
         boolean hasInsightTypeTable =
                 SchemaVerifier.hasSqliteTable(dataSource, "memory_insight_type");
         return new StoreSchemaInitResult(
@@ -79,6 +87,8 @@ public final class StoreSchemaBootstrap {
             }
             SqlScriptRunner.execute(dataSource, MYSQL_MULTIMODAL_RESOURCE);
         }
+        ensureMysqlBubbleStateSchema(dataSource, createIfNotExist);
+        ensureMysqlInsightConfidenceRemoved(dataSource, createIfNotExist);
         boolean hasInsightTypeTable =
                 SchemaVerifier.hasMysqlTable(dataSource, "memory_insight_type");
         return new StoreSchemaInitResult(
@@ -105,6 +115,8 @@ public final class StoreSchemaBootstrap {
             }
             SqlScriptRunner.execute(dataSource, POSTGRESQL_MULTIMODAL_RESOURCE);
         }
+        ensurePostgresqlBubbleStateSchema(dataSource, createIfNotExist);
+        ensurePostgresqlInsightConfidenceRemoved(dataSource, createIfNotExist);
         boolean hasInsightTypeTable =
                 SchemaVerifier.hasPostgresqlTable(dataSource, "memory_insight_type");
         return new StoreSchemaInitResult(
@@ -151,5 +163,77 @@ public final class StoreSchemaBootstrap {
         return SchemaVerifier.hasPostgresqlTable(dataSource, "memory_resource")
                 && SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_raw_data", "resource_id")
                 && SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_raw_data", "mime_type");
+    }
+
+    private static void ensureSqliteBubbleStateSchema(
+            DataSource dataSource, boolean createIfNotExist) {
+        if (SchemaVerifier.hasSqliteTable(dataSource, "memory_insight_bubble_state")) {
+            return;
+        }
+        if (!createIfNotExist) {
+            throw new JdbcPluginException(
+                    "Missing required SQLite bubble schema: memory_insight_bubble_state");
+        }
+        SqlScriptRunner.execute(dataSource, SQLITE_BUBBLE_STATE_RESOURCE);
+    }
+
+    private static void ensureMysqlBubbleStateSchema(
+            DataSource dataSource, boolean createIfNotExist) {
+        if (SchemaVerifier.hasMysqlTable(dataSource, "memory_insight_bubble_state")) {
+            return;
+        }
+        if (!createIfNotExist) {
+            throw new JdbcPluginException(
+                    "Missing required MySQL bubble schema: memory_insight_bubble_state");
+        }
+        SqlScriptRunner.execute(dataSource, MYSQL_BUBBLE_STATE_RESOURCE);
+    }
+
+    private static void ensurePostgresqlBubbleStateSchema(
+            DataSource dataSource, boolean createIfNotExist) {
+        if (SchemaVerifier.hasPostgresqlTable(dataSource, "memory_insight_bubble_state")) {
+            return;
+        }
+        if (!createIfNotExist) {
+            throw new JdbcPluginException(
+                    "Missing required PostgreSQL bubble schema: memory_insight_bubble_state");
+        }
+        SqlScriptRunner.execute(dataSource, POSTGRESQL_BUBBLE_STATE_RESOURCE);
+    }
+
+    private static void ensureSqliteInsightConfidenceRemoved(
+            DataSource dataSource, boolean createIfNotExist) {
+        if (!SchemaVerifier.hasSqliteColumn(dataSource, "memory_insight", "confidence")) {
+            return;
+        }
+        if (!createIfNotExist) {
+            throw new JdbcPluginException(
+                    "Legacy SQLite insight schema requires confidence column removal");
+        }
+        JdbcExecutor.execute(dataSource, "ALTER TABLE memory_insight DROP COLUMN confidence");
+    }
+
+    private static void ensureMysqlInsightConfidenceRemoved(
+            DataSource dataSource, boolean createIfNotExist) {
+        if (!SchemaVerifier.hasMysqlColumn(dataSource, "memory_insight", "confidence")) {
+            return;
+        }
+        if (!createIfNotExist) {
+            throw new JdbcPluginException(
+                    "Legacy MySQL insight schema requires confidence column removal");
+        }
+        JdbcExecutor.execute(dataSource, "ALTER TABLE memory_insight DROP COLUMN confidence");
+    }
+
+    private static void ensurePostgresqlInsightConfidenceRemoved(
+            DataSource dataSource, boolean createIfNotExist) {
+        if (!SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_insight", "confidence")) {
+            return;
+        }
+        if (!createIfNotExist) {
+            throw new JdbcPluginException(
+                    "Legacy PostgreSQL insight schema requires confidence column removal");
+        }
+        JdbcExecutor.execute(dataSource, "ALTER TABLE memory_insight DROP COLUMN confidence");
     }
 }

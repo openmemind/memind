@@ -25,14 +25,15 @@ import java.util.Set;
 /**
  * Bidirectional Insight Tree Expander
  *
- * <p>A purely logical component that receives search hits and preloaded insight data,
- * expanding bidirectionally along the tree structure:
+ * <p>The persisted insight structure is a shared layered model:
+ *
  * <ul>
- *   <li>Pulling up (Bottom-up): hit LEAF pulls parent BRANCH + grandparent ROOT; hit BRANCH pulls parent ROOT</li>
- *   <li>Expanding down (Top-down): hit BRANCH expands child LEAFs (top-N cut based on cosine score);
- *   hit ROOT expands child BRANCHes</li>
+ *   <li>LEAF -> BRANCH is stored with {@code parentInsightId}</li>
+ *   <li>ROOT -> BRANCH is stored with {@code ROOT.childInsightIds}</li>
  * </ul>
  *
+ * <p>Because BRANCH nodes are shared across multiple ROOT nodes, upward ROOT lookup is derived
+ * from ROOT child links rather than a single BRANCH parent pointer.
  */
 public class InsightTreeExpander {
 
@@ -60,6 +61,7 @@ public class InsightTreeExpander {
         // LinkedHashMap is used for natural deduplication, maintaining insertion order
         LinkedHashMap<String, ExpandedInsight> contextMap = new LinkedHashMap<>();
         LinkedHashMap<String, ExpandedInsight> expandedLeafMap = new LinkedHashMap<>();
+        Map<Long, List<MemoryInsight>> rootParentIndex = buildRootParentIndex(insightIndex);
 
         for (String hitId : hitIds) {
             MemoryInsight hit = insightIndex.get(parseLong(hitId));
@@ -68,9 +70,9 @@ public class InsightTreeExpander {
             }
 
             switch (hit.tier()) {
-                case LEAF -> expandFromLeaf(hit, hitIds, insightIndex, contextMap);
+                case LEAF -> expandFromLeaf(hit, hitIds, insightIndex, rootParentIndex, contextMap);
                 case BRANCH -> {
-                    expandFromBranchUp(hit, hitIds, insightIndex, contextMap);
+                    expandFromBranchUp(hit, hitIds, rootParentIndex, contextMap);
                     expandFromBranchDown(
                             hit, hitIds, insightIndex, queryEmbedding, expandedLeafMap);
                 }
@@ -89,26 +91,25 @@ public class InsightTreeExpander {
             MemoryInsight leaf,
             Set<String> hitIds,
             Map<Long, MemoryInsight> insightIndex,
+            Map<Long, List<MemoryInsight>> rootParentIndex,
             LinkedHashMap<String, ExpandedInsight> contextMap) {
 
-        MemoryInsight current = leaf;
-        // Move up at most two levels (LEAF → BRANCH → ROOT)
-        for (int level = 0; level < 2; level++) {
-            if (current.parentInsightId() == null) {
-                break;
-            }
-            MemoryInsight parent = insightIndex.get(current.parentInsightId());
-            if (parent == null || parent.tier() == null) {
-                break;
-            }
-            String parentId = String.valueOf(parent.id());
-            if (!hitIds.contains(parentId) && !contextMap.containsKey(parentId)) {
-                contextMap.put(
-                        parentId,
-                        new ExpandedInsight(parentId, parent.pointsContent(), parent.tier()));
-            }
-            current = parent;
+        if (leaf.parentInsightId() == null) {
+            return;
         }
+
+        MemoryInsight branch = insightIndex.get(leaf.parentInsightId());
+        if (branch == null || branch.tier() != InsightTier.BRANCH) {
+            return;
+        }
+
+        String branchId = String.valueOf(branch.id());
+        if (!hitIds.contains(branchId) && !contextMap.containsKey(branchId)) {
+            contextMap.put(
+                    branchId, new ExpandedInsight(branchId, branch.pointsContent(), branch.tier()));
+        }
+
+        addRootParents(branch, hitIds, rootParentIndex, contextMap);
     }
 
     /**
@@ -117,20 +118,23 @@ public class InsightTreeExpander {
     private void expandFromBranchUp(
             MemoryInsight branch,
             Set<String> hitIds,
-            Map<Long, MemoryInsight> insightIndex,
+            Map<Long, List<MemoryInsight>> rootParentIndex,
             LinkedHashMap<String, ExpandedInsight> contextMap) {
+        addRootParents(branch, hitIds, rootParentIndex, contextMap);
+    }
 
-        if (branch.parentInsightId() == null) {
-            return;
-        }
-        MemoryInsight parent = insightIndex.get(branch.parentInsightId());
-        if (parent == null || parent.tier() == null) {
-            return;
-        }
-        String parentId = String.valueOf(parent.id());
-        if (!hitIds.contains(parentId) && !contextMap.containsKey(parentId)) {
+    private void addRootParents(
+            MemoryInsight branch,
+            Set<String> hitIds,
+            Map<Long, List<MemoryInsight>> rootParentIndex,
+            LinkedHashMap<String, ExpandedInsight> contextMap) {
+        for (MemoryInsight root : rootParentIndex.getOrDefault(branch.id(), List.of())) {
+            String parentId = String.valueOf(root.id());
+            if (hitIds.contains(parentId) || contextMap.containsKey(parentId)) {
+                continue;
+            }
             contextMap.put(
-                    parentId, new ExpandedInsight(parentId, parent.pointsContent(), parent.tier()));
+                    parentId, new ExpandedInsight(parentId, root.pointsContent(), root.tier()));
         }
     }
 
@@ -214,6 +218,24 @@ public class InsightTreeExpander {
                     childIdStr,
                     new ExpandedInsight(childIdStr, child.pointsContent(), child.tier()));
         }
+    }
+
+    private Map<Long, List<MemoryInsight>> buildRootParentIndex(
+            Map<Long, MemoryInsight> insightIndex) {
+        Map<Long, List<MemoryInsight>> rootParentIndex = new LinkedHashMap<>();
+        for (MemoryInsight insight : insightIndex.values()) {
+            if (insight == null || insight.tier() != InsightTier.ROOT) {
+                continue;
+            }
+            List<Long> childIds = insight.childInsightIds();
+            if (childIds == null || childIds.isEmpty()) {
+                continue;
+            }
+            for (Long childId : childIds) {
+                rootParentIndex.computeIfAbsent(childId, ignored -> new ArrayList<>()).add(insight);
+            }
+        }
+        return rootParentIndex;
     }
 
     private double cosineSimilarity(List<Float> a, List<Float> b) {

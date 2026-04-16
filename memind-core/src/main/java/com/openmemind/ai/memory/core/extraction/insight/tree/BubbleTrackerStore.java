@@ -23,11 +23,21 @@ package com.openmemind.ai.memory.core.extraction.insight.tree;
  */
 public interface BubbleTrackerStore {
 
+    int incrementAndGet(String key, int delta);
+
+    default int incrementAndGet(String key) {
+        return incrementAndGet(key, 1);
+    }
+
     /** Mark node as dirty (child nodes have been updated) */
-    void markDirty(String key);
+    default void markDirty(String key) {
+        incrementAndGet(key, 1);
+    }
 
     /** Check if re-summarize should be triggered */
-    boolean shouldResummarize(String key, int threshold);
+    default boolean shouldResummarize(String key, int threshold) {
+        return getDirtyCount(key) >= threshold;
+    }
 
     /** Get current dirty count */
     int getDirtyCount(String key);

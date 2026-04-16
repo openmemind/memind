@@ -47,6 +47,7 @@ public class MemoryStoreDdl implements IDdl, Ordered {
     public void runScript(Consumer<DataSource> consumer) {
         boolean hadInsightTypeTable = tableExists("memory_insight_type");
         consumer.accept(dataSource);
+        dropInsightConfidenceIfPresent();
         if (!hadInsightTypeTable && tableExists("memory_insight_type")) {
             seedDefaultInsightTypes();
         }
@@ -74,6 +75,38 @@ public class MemoryStoreDdl implements IDdl, Ordered {
                 metadata.getTables(null, null, tableName, new String[] {"TABLE"})) {
             return resultSet.next();
         }
+    }
+
+    private boolean columnExists(String tableName, String columnName) {
+        try (Connection connection = dataSource.getConnection()) {
+            DatabaseMetaData metadata = connection.getMetaData();
+            return columnExists(metadata, tableName, columnName)
+                    || columnExists(metadata, tableName.toUpperCase(), columnName)
+                    || columnExists(metadata, tableName.toLowerCase(), columnName);
+        } catch (SQLException e) {
+            throw new IllegalStateException(
+                    "Failed to inspect column existence for " + tableName + "." + columnName, e);
+        }
+    }
+
+    private boolean columnExists(DatabaseMetaData metadata, String tableName, String columnName)
+            throws SQLException {
+        try (ResultSet resultSet = metadata.getColumns(null, null, tableName, columnName)) {
+            return resultSet.next();
+        }
+    }
+
+    private void dropInsightConfidenceIfPresent() {
+        if (!tableExists("memory_insight") || !columnExists("memory_insight", "confidence")) {
+            return;
+        }
+        String sql =
+                switch (databaseDialectDetector.detect(dataSource)) {
+                    case SQLITE -> "ALTER TABLE memory_insight DROP COLUMN confidence";
+                    case MYSQL -> "ALTER TABLE memory_insight DROP COLUMN confidence";
+                    case POSTGRESQL -> "ALTER TABLE memory_insight DROP COLUMN confidence";
+                };
+        new JdbcTemplate(dataSource).execute(sql);
     }
 
     private void seedDefaultInsightTypes() {

@@ -14,6 +14,7 @@
 package com.openmemind.ai.memory.core.prompt.extraction.insight;
 
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
+import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.prompt.PromptBuilderSupport;
@@ -168,12 +169,14 @@ public final class InteractionGuideSynthesisPrompts {
                 {
                   "type": "REASONING",
                   "content": "Keep responses under 3 paragraphs. Lead with the answer, then explain only if needed.",
-                  "confidence": 0.85,
-                  "sourceItemIds": [],
+                  "sourcePointRefs": [
+                    { "insightId": 11, "pointId": "pt_branch_behavior" },
+                    { "insightId": 12, "pointId": "pt_branch_preferences" }
+                  ],
                   "metadata": {
                     "dimension": "communication_style"
                   },
-                  "point_reason": "behavior BRANCH shows user gets impatient with long responses. preferences BRANCH shows user values conciseness. Convergent evidence from 2 dimensions → high confidence. Dimension=communication_style because this is about response length/structure."
+                  "point_reason": "behavior BRANCH shows user gets impatient with long responses. preferences BRANCH shows user values conciseness. Two dimensions converge on the same interaction rule. Dimension=communication_style because this is about response length/structure."
                 }
               ]
             }
@@ -183,15 +186,11 @@ public final class InteractionGuideSynthesisPrompts {
             cross-BRANCH analysis).
             - `content`: Imperative instruction text (1-2 sentences). Same language as \
             BRANCHes.
-            - `confidence`:
-              - 0.85+: Directive supported by convergent evidence from 2+ BRANCHes, or \
-              directly stated by user in a directives BRANCH.
-              - 0.70-0.84: Reasonable inference from clear signals in 1-2 BRANCHes.
-              - 0.60-0.69: Speculative but potentially valuable. Include sparingly.
-              - boundary DO NOT rules require 0.80+ (higher bar for restrictions).
-            - `sourceItemIds`: Always empty `[]` at ROOT level.
+            - `sourcePointRefs`: Array of `{ "insightId": number, "pointId": string }`. \
+            MUST reference every contributing BRANCH point directly.
             - `metadata.dimension` (REQUIRED): One of "communication_style", \
             "domain_strategy", or "boundary".
+            - Give highest priority to rules directly stated by user in a directives BRANCH.
             - `point_reason`: CRITICAL. Explain: (1) which BRANCH dimensions provide what \
             evidence, (2) what interaction strategy you derived, (3) why this dimension \
             was chosen. This field is for reasoning only and will NOT be stored.\
@@ -221,8 +220,11 @@ public final class InteractionGuideSynthesisPrompts {
                   "type": "REASONING",
                   "content": "Lead every technical response with a code block or concrete \
             example. Place explanation after the code, not before.",
-                  "confidence": 0.90,
-                  "sourceItemIds": [],
+                  "sourcePointRefs": [
+                    { "insightId": 1, "pointId": "pt_branch_identity" },
+                    { "insightId": 2, "pointId": "pt_branch_preferences" },
+                    { "insightId": 4, "pointId": "pt_branch_directives" }
+                  ],
                   "metadata": { "dimension": "communication_style" },
                   "point_reason": "preferences BRANCH: prefers code over verbal explanations. \
             directives BRANCH: praised code-first response. behavior BRANCH: sends short \
@@ -233,8 +235,11 @@ public final class InteractionGuideSynthesisPrompts {
                   "type": "REASONING",
                   "content": "Keep responses under 3 paragraphs. Use bullet points for \
             multi-part answers instead of prose.",
-                  "confidence": 0.88,
-                  "sourceItemIds": [],
+                  "sourcePointRefs": [
+                    { "insightId": 2, "pointId": "pt_branch_preferences" },
+                    { "insightId": 3, "pointId": "pt_branch_behavior" },
+                    { "insightId": 4, "pointId": "pt_branch_directives" }
+                  ],
                   "metadata": { "dimension": "communication_style" },
                   "point_reason": "behavior BRANCH: gets impatient beyond 3 paragraphs. \
             directives BRANCH: told agent 'stop being verbose'. preferences BRANCH: values \
@@ -246,8 +251,10 @@ public final class InteractionGuideSynthesisPrompts {
                   "content": "When the user asks a Go or PostgreSQL question, provide working \
             code first with inline comments. Skip high-level architecture explanations unless \
             explicitly requested.",
-                  "confidence": 0.82,
-                  "sourceItemIds": [],
+                  "sourcePointRefs": [
+                    { "insightId": 1, "pointId": "pt_branch_identity" },
+                    { "insightId": 2, "pointId": "pt_branch_preferences" }
+                  ],
                   "metadata": { "dimension": "domain_strategy" },
                   "point_reason": "identity BRANCH: senior Go/PostgreSQL engineer (expert \
             level, no need for basics). preferences BRANCH: code over verbal. Combined: for \
@@ -258,8 +265,10 @@ public final class InteractionGuideSynthesisPrompts {
                   "type": "REASONING",
                   "content": "Never ask clarifying questions when the user's intent is \
             reasonably clear. Make a best-effort attempt and note assumptions at the end.",
-                  "confidence": 0.85,
-                  "sourceItemIds": [],
+                  "sourcePointRefs": [
+                    { "insightId": 2, "pointId": "pt_branch_preferences" },
+                    { "insightId": 3, "pointId": "pt_branch_behavior" }
+                  ],
                   "metadata": { "dimension": "boundary" },
                   "point_reason": "preferences BRANCH: dislikes clarifying questions when \
             intent is obvious. behavior BRANCH: sends follow-ups immediately (self-corrects). \
@@ -297,13 +306,11 @@ public final class InteractionGuideSynthesisPrompts {
                 {
                   "type": "REASONING",
                   "content": "Be helpful and responsive.",
-                  "confidence": 0.90,
                   "metadata": { "dimension": "communication_style" }
                 },
                 {
                   "type": "REASONING",
                   "content": "Adapt to the user's needs.",
-                  "confidence": 0.85,
                   "metadata": { "dimension": "boundary" }
                 }
               ]
@@ -329,8 +336,10 @@ public final class InteractionGuideSynthesisPrompts {
                   "type": "REASONING",
                   "content": "用编号列表回答所有多部分问题。对用户消息中的每个子问题编号并逐一回复，\
             确保不遗漏。",
-                  "confidence": 0.88,
-                  "sourceItemIds": [],
+                  "sourcePointRefs": [
+                    { "insightId": 2, "pointId": "pt_branch_behavior" },
+                    { "insightId": 3, "pointId": "pt_branch_preferences" }
+                  ],
                   "metadata": { "dimension": "communication_style" },
                   "point_reason": "behavior BRANCH: 一次发多个问题并逐个确认。preferences BRANCH: \
             偏好编号列表。两个维度收敛于结构化编号回复。Dimension=communication_style 因为这是关于\
@@ -340,8 +349,10 @@ public final class InteractionGuideSynthesisPrompts {
                   "type": "REASONING",
                   "content": "回答数据分析相关问题时，提供具体的指标定义、计算公式或SQL示例，而非\
             概念性描述。",
-                  "confidence": 0.82,
-                  "sourceItemIds": [],
+                  "sourcePointRefs": [
+                    { "insightId": 1, "pointId": "pt_branch_identity" },
+                    { "insightId": 4, "pointId": "pt_branch_directives" }
+                  ],
                   "metadata": { "dimension": "domain_strategy" },
                   "point_reason": "identity BRANCH: 产品经理，需要数据分析支持。directives BRANCH: \
             要求具体步骤而非笼统回答。针对数据分析这个特定领域的策略。Dimension=domain_strategy \
@@ -350,8 +361,10 @@ public final class InteractionGuideSynthesisPrompts {
                 {
                   "type": "REASONING",
                   "content": "永远不要给出模糊建议。每个回答必须包含至少一个具体的、可执行的步骤或示例。",
-                  "confidence": 0.90,
-                  "sourceItemIds": [],
+                  "sourcePointRefs": [
+                    { "insightId": 3, "pointId": "pt_branch_preferences" },
+                    { "insightId": 4, "pointId": "pt_branch_directives" }
+                  ],
                   "metadata": { "dimension": "boundary" },
                   "point_reason": "directives BRANCH: 明确反馈'回答太笼统'。preferences BRANCH: \
             对模糊回答不满。这是一条明确的 DO NOT 规则。Dimension=boundary 因为这是行为限制。"
@@ -362,13 +375,13 @@ public final class InteractionGuideSynthesisPrompts {
 
     public static PromptTemplate build(
             MemoryInsightType rootInsightType,
-            String existingSummary,
+            List<InsightPoint> existingPoints,
             List<MemoryInsight> branchInsights,
             int targetTokens) {
         return build(
                 PromptRegistry.EMPTY,
                 rootInsightType,
-                existingSummary,
+                existingPoints,
                 branchInsights,
                 targetTokens);
     }
@@ -389,11 +402,11 @@ public final class InteractionGuideSynthesisPrompts {
     public static PromptTemplate build(
             PromptRegistry registry,
             MemoryInsightType rootInsightType,
-            String existingSummary,
+            List<InsightPoint> existingPoints,
             List<MemoryInsight> branchInsights,
             int targetTokens) {
 
-        var userPromptContent = buildUserPrompt(existingSummary, branchInsights, targetTokens);
+        var userPromptContent = buildUserPrompt(existingPoints, branchInsights, targetTokens);
         var builder =
                 registry.hasOverride(PromptType.INTERACTION_GUIDE_SYNTHESIS)
                         ? PromptTemplate.builder("interaction-guide-synthesis")
@@ -421,26 +434,51 @@ public final class InteractionGuideSynthesisPrompts {
     }
 
     private static String buildUserPrompt(
-            String existingSummary, List<MemoryInsight> branchInsights, int targetTokens) {
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> branchInsights,
+            int targetTokens) {
 
         var sb = new StringBuilder();
         sb.append("# Token Budget\n");
         sb.append(targetTokens).append("\n");
 
-        if (existingSummary != null && !existingSummary.isBlank()) {
+        if (existingPoints != null && !existingPoints.isEmpty()) {
             sb.append("\n# Existing Directives\n");
-            sb.append(existingSummary).append("\n");
+            for (var point : existingPoints) {
+                sb.append("- pointId: ")
+                        .append(point.pointId())
+                        .append("\n  type: ")
+                        .append(point.type())
+                        .append("\n  content: ")
+                        .append(point.content())
+                        .append("\n  sourcePointRefs: ")
+                        .append(point.sourcePointRefs())
+                        .append("\n");
+            }
         }
 
-        sb.append("\n# BRANCH Summaries\n");
+        sb.append("\n# BRANCH Points\n");
         for (int i = 0; i < branchInsights.size(); i++) {
             var branch = branchInsights.get(i);
-            sb.append(i + 1)
-                    .append(". [type=")
-                    .append(branch.type())
-                    .append("] ")
-                    .append(branch.pointsContent())
-                    .append("\n");
+            var points = branch.points() != null ? branch.points() : List.<InsightPoint>of();
+            for (var point : points) {
+                sb.append(i + 1)
+                        .append(". insightId=")
+                        .append(branch.id())
+                        .append(" pointId=")
+                        .append(point.pointId())
+                        .append(" [type=")
+                        .append(branch.type())
+                        .append("] [pointType=")
+                        .append(point.type())
+                        .append("] ")
+                        .append(point.content())
+                        .append("\n   sourcePointRefs: ")
+                        .append(point.sourcePointRefs())
+                        .append("\n   metadata: ")
+                        .append(point.metadata())
+                        .append("\n");
+            }
         }
 
         return sb.toString();

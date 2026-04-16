@@ -27,16 +27,40 @@ import java.util.Map;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record InsightPoint(
+        @JsonInclude(JsonInclude.Include.NON_NULL) String pointId,
         PointType type,
         String content,
-        float confidence,
         List<String> sourceItemIds,
+        List<InsightPointRef> sourcePointRefs,
         @JsonInclude(JsonInclude.Include.NON_NULL) Map<String, String> metadata) {
 
+    public InsightPoint {
+        sourceItemIds = sourceItemIds == null ? List.of() : List.copyOf(sourceItemIds);
+        sourcePointRefs = sourcePointRefs == null ? List.of() : List.copyOf(sourcePointRefs);
+        metadata = metadata == null || metadata.isEmpty() ? null : Map.copyOf(metadata);
+    }
+
     /** Backward compatible: constructor without metadata */
+    public InsightPoint(PointType type, String content, List<String> sourceItemIds) {
+        this(null, type, content, sourceItemIds, List.of(), null);
+    }
+
     public InsightPoint(
-            PointType type, String content, float confidence, List<String> sourceItemIds) {
-        this(type, content, confidence, sourceItemIds, null);
+            String pointId, PointType type, String content, List<String> sourceItemIds) {
+        this(pointId, type, content, sourceItemIds, List.of(), null);
+    }
+
+    /** Backward compatible: constructor without pointId */
+    public InsightPoint(
+            PointType type,
+            String content,
+            List<String> sourceItemIds,
+            Map<String, String> metadata) {
+        this(null, type, content, sourceItemIds, List.of(), metadata);
+    }
+
+    public InsightPoint withPointId(String pointId) {
+        return new InsightPoint(pointId, type, content, sourceItemIds, sourcePointRefs, metadata);
     }
 
     public enum PointType {

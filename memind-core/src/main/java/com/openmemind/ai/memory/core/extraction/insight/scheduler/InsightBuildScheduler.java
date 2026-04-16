@@ -26,6 +26,9 @@ import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassifier;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupRouter;
+import com.openmemind.ai.memory.core.extraction.insight.operation.PointOperationResolver;
+import com.openmemind.ai.memory.core.extraction.insight.support.InsightPointEvidenceNormalizer;
+import com.openmemind.ai.memory.core.extraction.insight.support.InsightPointIdentityManager;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.tracing.MemoryAttributes;
@@ -76,6 +79,8 @@ public class InsightBuildScheduler implements Closeable {
     private final MemoryVector memoryVector;
     private final IdUtils.SnowflakeIdGenerator idGenerator;
     private final InsightBuildConfig config;
+    private final InsightPointIdentityManager pointIdentityManager;
+    private final InsightPointEvidenceNormalizer evidenceNormalizer;
     private final MemoryObserver observer;
 
     private final ExecutorService executor;
@@ -130,6 +135,8 @@ public class InsightBuildScheduler implements Closeable {
                 memoryVector,
                 idGenerator,
                 config,
+                new InsightPointIdentityManager(),
+                new InsightPointEvidenceNormalizer(),
                 null);
     }
 
@@ -144,6 +151,34 @@ public class InsightBuildScheduler implements Closeable {
             IdUtils.SnowflakeIdGenerator idGenerator,
             InsightBuildConfig config,
             MemoryObserver observer) {
+        this(
+                bufferStore,
+                store,
+                generator,
+                groupClassifier,
+                groupRouter,
+                treeReorganizer,
+                memoryVector,
+                idGenerator,
+                config,
+                new InsightPointIdentityManager(),
+                new InsightPointEvidenceNormalizer(),
+                observer);
+    }
+
+    public InsightBuildScheduler(
+            InsightBuffer bufferStore,
+            MemoryStore store,
+            InsightGenerator generator,
+            InsightGroupClassifier groupClassifier,
+            InsightGroupRouter groupRouter,
+            InsightTreeReorganizer treeReorganizer,
+            MemoryVector memoryVector,
+            IdUtils.SnowflakeIdGenerator idGenerator,
+            InsightBuildConfig config,
+            InsightPointIdentityManager pointIdentityManager,
+            InsightPointEvidenceNormalizer evidenceNormalizer,
+            MemoryObserver observer) {
         this.bufferStore = Objects.requireNonNull(bufferStore);
         this.store = Objects.requireNonNull(store);
         this.generator = Objects.requireNonNull(generator);
@@ -153,6 +188,8 @@ public class InsightBuildScheduler implements Closeable {
         this.memoryVector = memoryVector;
         this.idGenerator = Objects.requireNonNull(idGenerator);
         this.config = Objects.requireNonNull(config);
+        this.pointIdentityManager = Objects.requireNonNull(pointIdentityManager);
+        this.evidenceNormalizer = Objects.requireNonNull(evidenceNormalizer);
         this.observer = observer != null ? observer : new NoopMemoryObserver();
         this.executor = Executors.newVirtualThreadPerTaskExecutor();
         this.semaphore = new Semaphore(config.concurrency());
@@ -522,11 +559,85 @@ public class InsightBuildScheduler implements Closeable {
                 store.insightOperations()
                         .getLeafByGroup(memoryId, insightTypeName, groupName)
                         .orElse(null);
+        existingLeaf = normalizeExistingInsightIfNeeded(memoryId, existingLeaf);
         var existingPoints =
                 existingLeaf != null && existingLeaf.points() != null
                         ? existingLeaf.points()
                         : List.<InsightPoint>of();
 
+        var opsResponse =
+                generator
+                        .generateLeafPointOps(
+                                insightType,
+                                groupName,
+                                existingPoints,
+                                items,
+                                insightType.targetTokens(),
+                                null,
+                                language)
+                        .block();
+
+        if (opsResponse == null) {
+            return buildLeafWithFullRewrite(
+                    memoryId,
+                    insightTypeName,
+                    insightType,
+                    groupName,
+                    items,
+                    unbuiltItemIds,
+                    existingLeaf,
+                    existingPoints,
+                    language);
+        }
+
+        var normalizedOps =
+                pointIdentityManager.normalizeGeneratedOperations(
+                        existingPoints, opsResponse.operations());
+        var resolved = PointOperationResolver.resolve(existingPoints, normalizedOps);
+        if (resolved.fallbackRequired()) {
+            return buildLeafWithFullRewrite(
+                    memoryId,
+                    insightTypeName,
+                    insightType,
+                    groupName,
+                    items,
+                    unbuiltItemIds,
+                    existingLeaf,
+                    existingPoints,
+                    language);
+        }
+        if (resolved.noop()) {
+            bufferStore.markBuilt(memoryId, insightTypeName, unbuiltItemIds);
+            return null;
+        }
+
+        var points = evidenceNormalizer.normalizeLeafPoints(resolved.points());
+        if (existingLeaf != null && points.equals(existingLeaf.points())) {
+            bufferStore.markBuilt(memoryId, insightTypeName, unbuiltItemIds);
+            return null;
+        }
+
+        return saveLeafInsight(
+                memoryId,
+                insightTypeName,
+                insightType,
+                groupName,
+                items,
+                unbuiltItemIds,
+                existingLeaf,
+                points);
+    }
+
+    private MemoryInsight buildLeafWithFullRewrite(
+            MemoryId memoryId,
+            String insightTypeName,
+            MemoryInsightType insightType,
+            String groupName,
+            List<MemoryItem> items,
+            List<Long> unbuiltItemIds,
+            MemoryInsight existingLeaf,
+            List<InsightPoint> existingPoints,
+            String language) {
         var response =
                 generator
                         .generatePoints(
@@ -547,22 +658,60 @@ public class InsightBuildScheduler implements Closeable {
             return null;
         }
 
-        var points = response.points();
+        var points =
+                evidenceNormalizer.normalizeLeafPoints(
+                        pointIdentityManager.reusePointIdsForFullRewrite(
+                                existingPoints, response.points()));
+        if (existingLeaf != null && points.equals(existingLeaf.points())) {
+            bufferStore.markBuilt(memoryId, insightTypeName, unbuiltItemIds);
+            return null;
+        }
 
+        return saveLeafInsight(
+                memoryId,
+                insightTypeName,
+                insightType,
+                groupName,
+                items,
+                unbuiltItemIds,
+                existingLeaf,
+                points);
+    }
+
+    private MemoryInsight normalizeExistingInsightIfNeeded(
+            MemoryId memoryId, MemoryInsight insight) {
+        if (insight == null || insight.points() == null || insight.points().isEmpty()) {
+            return insight;
+        }
+        var normalized = pointIdentityManager.normalizePersistedPoints(insight.points());
+        if (normalized.equals(insight.points())) {
+            return insight;
+        }
+        var updated = insight.withPoints(normalized).withUpdatedAt(Instant.now());
+        store.insightOperations().upsertInsights(memoryId, List.of(updated));
+        return updated;
+    }
+
+    private MemoryInsight saveLeafInsight(
+            MemoryId memoryId,
+            String insightTypeName,
+            MemoryInsightType insightType,
+            String groupName,
+            List<MemoryItem> items,
+            List<Long> unbuiltItemIds,
+            MemoryInsight existingLeaf,
+            List<InsightPoint> points) {
         var now = Instant.now();
         MemoryInsight leafInsight;
         if (existingLeaf != null) {
-            // In-place update: keep ID, version +1
             leafInsight =
                     existingLeaf
                             .withPoints(points)
-                            .withConfidence(computeConfidence(points))
                             .withLastReasonedAt(now)
                             .withSummaryEmbedding(embedPoints(points))
                             .withUpdatedAt(now)
                             .withVersion(existingLeaf.version() + 1);
         } else {
-            // First creation
             MemoryScope leafScope =
                     items.stream()
                             .map(MemoryItem::category)
@@ -580,7 +729,6 @@ public class InsightBuildScheduler implements Closeable {
                             insightType.categories(),
                             points,
                             groupName,
-                            computeConfidence(points),
                             now,
                             embedPoints(points),
                             now,
@@ -665,13 +813,6 @@ public class InsightBuildScheduler implements Closeable {
             log.warn("Embedding calculation failed: {}", e.getMessage());
             return null;
         }
-    }
-
-    private float computeConfidence(List<InsightPoint> points) {
-        if (points == null || points.isEmpty()) {
-            return 0.0f;
-        }
-        return (float) points.stream().mapToDouble(InsightPoint::confidence).average().orElse(0.0);
     }
 
     /**

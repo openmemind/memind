@@ -17,6 +17,7 @@ import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
+import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
@@ -40,7 +41,8 @@ record MemoryAssemblyContext(
         MemoryBuildOptions options,
         ContentParserRegistry contentParserRegistry,
         ResourceFetcher resourceFetcher,
-        List<RawDataPlugin> rawDataPlugins) {
+        List<RawDataPlugin> rawDataPlugins,
+        BubbleTrackerStore bubbleTrackerStore) {
 
     MemoryAssemblyContext {
         Objects.requireNonNull(chatClientRegistry, "chatClientRegistry");

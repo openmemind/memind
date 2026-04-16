@@ -524,10 +524,10 @@ public class SqliteMemoryStore
                                     """
                                     INSERT INTO memory_insight
                                         (biz_id, user_id, agent_id, memory_id, type, scope, name,
-                                         categories, content, points, group_name, confidence,
+                                         categories, content, points, group_name,
                                          last_reasoned_at, summary_embedding, tier, parent_insight_id,
                                          child_insight_ids, version, created_at, updated_at, deleted)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                                     ON CONFLICT(user_id, agent_id, biz_id) DO UPDATE SET
                                         memory_id = excluded.memory_id,
                                         type = excluded.type,
@@ -537,7 +537,6 @@ public class SqliteMemoryStore
                                         content = excluded.content,
                                         points = excluded.points,
                                         group_name = excluded.group_name,
-                                        confidence = excluded.confidence,
                                         last_reasoned_at = excluded.last_reasoned_at,
                                         summary_embedding = excluded.summary_embedding,
                                         tier = excluded.tier,
@@ -926,16 +925,15 @@ public class SqliteMemoryStore
         statement.setString(9, insight.pointsContent());
         statement.setString(10, jsonHelper.toJson(insight.points()));
         statement.setString(11, insight.group());
-        statement.setFloat(12, insight.confidence());
-        statement.setString(13, writeInstant(insight.lastReasonedAt()));
-        statement.setString(14, jsonHelper.toJson(insight.summaryEmbedding()));
-        statement.setString(15, insight.tier() != null ? insight.tier().name() : null);
-        statement.setObject(16, insight.parentInsightId());
-        statement.setString(17, jsonHelper.toJson(insight.childInsightIds()));
-        statement.setInt(18, insight.version());
+        statement.setString(12, writeInstant(insight.lastReasonedAt()));
+        statement.setString(13, jsonHelper.toJson(insight.summaryEmbedding()));
+        statement.setString(14, insight.tier() != null ? insight.tier().name() : null);
+        statement.setObject(15, insight.parentInsightId());
+        statement.setString(16, jsonHelper.toJson(insight.childInsightIds()));
+        statement.setInt(17, insight.version());
         statement.setString(
-                19, writeInstant(insight.createdAt() != null ? insight.createdAt() : now));
-        statement.setString(20, writeInstant(now));
+                18, writeInstant(insight.createdAt() != null ? insight.createdAt() : now));
+        statement.setString(19, writeInstant(now));
     }
 
     private MemoryRawData mapRawData(ResultSet resultSet) throws SQLException {
@@ -1020,7 +1018,6 @@ public class SqliteMemoryStore
                 jsonHelper.fromJson(resultSet.getString("categories"), STRING_LIST_TYPE),
                 points,
                 resultSet.getString("group_name"),
-                resultSet.getFloat("confidence"),
                 parseInstant(resultSet.getString("last_reasoned_at")),
                 jsonHelper.fromJson(resultSet.getString("summary_embedding"), FLOAT_LIST_TYPE),
                 parseInstant(resultSet.getString("created_at")),

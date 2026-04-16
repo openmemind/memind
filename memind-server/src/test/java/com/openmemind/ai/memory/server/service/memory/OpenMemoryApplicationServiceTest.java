@@ -232,7 +232,6 @@ class OpenMemoryApplicationServiceTest {
                                         List.of("preference"),
                                         List.of(),
                                         null,
-                                        0.9F,
                                         Instant.parse("2026-03-31T10:03:00Z"),
                                         List.of(),
                                         Instant.parse("2026-03-31T10:03:00Z"),

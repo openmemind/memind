@@ -53,9 +53,8 @@ class InsightTreeExpanderTest {
                 MemoryScope.USER,
                 "name",
                 List.of(),
-                List.of(new InsightPoint(InsightPoint.PointType.SUMMARY, content, 1.0f, List.of())),
+                List.of(new InsightPoint(InsightPoint.PointType.SUMMARY, content, List.of())),
                 null,
-                0.8f,
                 Instant.now(),
                 null,
                 Instant.now(),
@@ -80,9 +79,8 @@ class InsightTreeExpanderTest {
                 MemoryScope.USER,
                 "name",
                 List.of(),
-                List.of(new InsightPoint(InsightPoint.PointType.SUMMARY, content, 1.0f, List.of())),
+                List.of(new InsightPoint(InsightPoint.PointType.SUMMARY, content, List.of())),
                 null,
-                0.8f,
                 Instant.now(),
                 embedding,
                 Instant.now(),
@@ -112,7 +110,7 @@ class InsightTreeExpanderTest {
         @DisplayName("Hit LEAF -> Should pull parent BRANCH and grandparent ROOT")
         void hitLeaf_shouldPullParentBranchAndGrandparentRoot() {
             var leaf = buildInsight(1L, InsightTier.LEAF, "leaf content", 10L, List.of());
-            var branch = buildInsight(10L, InsightTier.BRANCH, "branch content", 100L, List.of(1L));
+            var branch = buildInsight(10L, InsightTier.BRANCH, "branch content", null, List.of(1L));
             var root = buildInsight(100L, InsightTier.ROOT, "root content", null, List.of(10L));
 
             Map<Long, MemoryInsight> index = indexOf(leaf, branch, root);
@@ -132,7 +130,7 @@ class InsightTreeExpanderTest {
                         + " ROOT")
         void hitLeaf_parentAlreadyInHits_shouldSkipParentAndPullRoot() {
             var leaf = buildInsight(1L, InsightTier.LEAF, "leaf content", 10L, List.of());
-            var branch = buildInsight(10L, InsightTier.BRANCH, "branch content", 100L, List.of(1L));
+            var branch = buildInsight(10L, InsightTier.BRANCH, "branch content", null, List.of(1L));
             var root = buildInsight(100L, InsightTier.ROOT, "root content", null, List.of(10L));
 
             Map<Long, MemoryInsight> index = indexOf(leaf, branch, root);
@@ -148,7 +146,7 @@ class InsightTreeExpanderTest {
         @DisplayName("Hit BRANCH -> Should pull parent ROOT")
         void hitBranch_shouldPullParentRoot() {
             var branch =
-                    buildInsight(10L, InsightTier.BRANCH, "branch content", 100L, List.of(1L, 2L));
+                    buildInsight(10L, InsightTier.BRANCH, "branch content", null, List.of(1L, 2L));
             var root = buildInsight(100L, InsightTier.ROOT, "root content", null, List.of(10L));
             var leaf1 =
                     buildInsightWithEmbedding(
@@ -174,6 +172,49 @@ class InsightTreeExpanderTest {
 
             // ROOT should appear in context
             assertThat(ids(result.contextInsights())).contains("100");
+        }
+
+        @Test
+        @DisplayName(
+                "Hit BRANCH with persisted shared-root shape should pull ROOT from root child ids")
+        void hitBranch_persistedSharedRootShape_shouldPullRootFromRootChildIds() {
+            var leaf = buildInsight(1L, InsightTier.LEAF, "leaf content", 10L, List.of());
+            var branch = buildInsight(10L, InsightTier.BRANCH, "branch content", null, List.of(1L));
+            var root = buildInsight(100L, InsightTier.ROOT, "root content", null, List.of(10L));
+
+            Map<Long, MemoryInsight> index = indexOf(leaf, branch, root);
+            ExpandResult result = expander.expand(Set.of("10"), index, List.of());
+
+            assertThat(ids(result.contextInsights())).containsExactly("100");
+        }
+
+        @Test
+        @DisplayName("Hit LEAF with persisted shared-root shape should pull BRANCH and ROOT")
+        void hitLeaf_persistedSharedRootShape_shouldPullBranchAndRoot() {
+            var leaf = buildInsight(1L, InsightTier.LEAF, "leaf content", 10L, List.of());
+            var branch = buildInsight(10L, InsightTier.BRANCH, "branch content", null, List.of(1L));
+            var root = buildInsight(100L, InsightTier.ROOT, "root content", null, List.of(10L));
+
+            Map<Long, MemoryInsight> index = indexOf(leaf, branch, root);
+            ExpandResult result = expander.expand(Set.of("1"), index, List.of());
+
+            assertThat(ids(result.contextInsights())).containsExactlyInAnyOrder("10", "100");
+        }
+
+        @Test
+        @DisplayName("Hit BRANCH shared by two ROOT nodes should pull both ROOT contexts")
+        void hitBranch_sharedByTwoRoots_shouldPullBothRoots() {
+            var leaf = buildInsight(1L, InsightTier.LEAF, "leaf content", 10L, List.of());
+            var branch = buildInsight(10L, InsightTier.BRANCH, "branch content", null, List.of(1L));
+            var profileRoot =
+                    buildInsight(100L, InsightTier.ROOT, "profile root", null, List.of(10L));
+            var interactionRoot =
+                    buildInsight(200L, InsightTier.ROOT, "interaction root", null, List.of(10L));
+
+            Map<Long, MemoryInsight> index = indexOf(leaf, branch, profileRoot, interactionRoot);
+            ExpandResult result = expander.expand(Set.of("10"), index, List.of());
+
+            assertThat(ids(result.contextInsights())).containsExactlyInAnyOrder("100", "200");
         }
 
         @Test

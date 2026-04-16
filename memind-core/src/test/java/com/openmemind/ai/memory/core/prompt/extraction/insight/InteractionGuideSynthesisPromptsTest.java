@@ -15,11 +15,14 @@ package com.openmemind.ai.memory.core.prompt.extraction.insight;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.data.InsightPoint;
+import com.openmemind.ai.memory.core.data.InsightPointRef;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -31,7 +34,17 @@ class InteractionGuideSynthesisPromptsTest {
     void shouldDescribeNewAgentBranchTaxonomy() {
         var template =
                 InteractionGuideSynthesisPrompts.build(
-                        createRootType("interaction"), "Keep replies concise", List.of(), 300);
+                        createRootType("interaction"),
+                        List.of(
+                                new InsightPoint(
+                                        "pt_root_interaction",
+                                        InsightPoint.PointType.REASONING,
+                                        "Keep replies concise",
+                                        List.of(),
+                                        List.of(new InsightPointRef(11L, "pt_branch_comm")),
+                                        Map.of("dimension", "communication_style"))),
+                        List.of(),
+                        300);
         var prompt = template.render("English");
 
         assertThat(template.describeStructure())
@@ -46,6 +59,8 @@ class InteractionGuideSynthesisPromptsTest {
         assertThat(prompt.userPrompt())
                 .contains("# Existing Directives")
                 .contains("Keep replies concise")
+                .contains("sourcePointRefs")
+                .doesNotContain("confidence")
                 .doesNotContain("# Dimension Decision Logic");
     }
 
@@ -61,11 +76,7 @@ class InteractionGuideSynthesisPromptsTest {
                         .build();
         var template =
                 InteractionGuideSynthesisPrompts.build(
-                        registry,
-                        createRootType("interaction"),
-                        "Keep replies concise",
-                        List.of(),
-                        300);
+                        registry, createRootType("interaction"), List.of(), List.of(), 300);
 
         assertThat(template.describeStructure()).contains("Sections: system");
         assertThat(template.render("English").systemPrompt())

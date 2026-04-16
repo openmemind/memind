@@ -13,17 +13,22 @@
  */
 package com.openmemind.ai.memory.core.tracing.decorator;
 
+import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.EXTRACTION_INSIGHT_ADD_COUNT;
+import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.EXTRACTION_INSIGHT_DELETE_COUNT;
 import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.EXTRACTION_INSIGHT_GROUP_NAME;
 import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.EXTRACTION_INSIGHT_LEAF_COUNT;
 import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.EXTRACTION_INSIGHT_POINT_COUNT;
 import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.EXTRACTION_INSIGHT_TYPE;
+import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.EXTRACTION_INSIGHT_UPDATE_COUNT;
 
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
+import com.openmemind.ai.memory.core.data.PointOperation;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightPointGenerateResponse;
+import com.openmemind.ai.memory.core.extraction.insight.generator.InsightPointOpsResponse;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.tracing.MemorySpanNames;
 import com.openmemind.ai.memory.core.tracing.TracingSupport;
@@ -75,6 +80,34 @@ public class TracingInsightGenerator extends TracingSupport implements InsightGe
     }
 
     @Override
+    public Mono<InsightPointOpsResponse> generateLeafPointOps(
+            MemoryInsightType insightType,
+            String groupName,
+            List<InsightPoint> existingPoints,
+            List<MemoryItem> newItems,
+            int targetTokens,
+            String additionalContext,
+            String language) {
+        return trace(
+                MemorySpanNames.EXTRACTION_INSIGHT_GENERATE_LEAF,
+                Map.of(
+                        EXTRACTION_INSIGHT_TYPE,
+                        insightType.name(),
+                        EXTRACTION_INSIGHT_GROUP_NAME,
+                        groupName != null ? groupName : ""),
+                this::operationCountAttributes,
+                () ->
+                        delegate.generateLeafPointOps(
+                                insightType,
+                                groupName,
+                                existingPoints,
+                                newItems,
+                                targetTokens,
+                                additionalContext,
+                                language));
+    }
+
+    @Override
     public Mono<InsightPointGenerateResponse> generateBranchSummary(
             MemoryInsightType insightType,
             List<InsightPoint> existingPoints,
@@ -95,9 +128,29 @@ public class TracingInsightGenerator extends TracingSupport implements InsightGe
     }
 
     @Override
+    public Mono<InsightPointOpsResponse> generateBranchPointOps(
+            MemoryInsightType insightType,
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> leafInsights,
+            int targetTokens,
+            String language) {
+        return trace(
+                MemorySpanNames.EXTRACTION_INSIGHT_GENERATE_BRANCH,
+                Map.of(
+                        EXTRACTION_INSIGHT_TYPE,
+                        insightType.name(),
+                        EXTRACTION_INSIGHT_LEAF_COUNT,
+                        leafInsights.size()),
+                this::operationCountAttributes,
+                () ->
+                        delegate.generateBranchPointOps(
+                                insightType, existingPoints, leafInsights, targetTokens, language));
+    }
+
+    @Override
     public Mono<InsightPointGenerateResponse> generateRootSynthesis(
             MemoryInsightType rootInsightType,
-            String existingSummary,
+            List<InsightPoint> existingPoints,
             List<MemoryInsight> branchInsights,
             int targetTokens,
             String language) {
@@ -112,9 +165,24 @@ public class TracingInsightGenerator extends TracingSupport implements InsightGe
                 () ->
                         delegate.generateRootSynthesis(
                                 rootInsightType,
-                                existingSummary,
+                                existingPoints,
                                 branchInsights,
                                 targetTokens,
                                 language));
+    }
+
+    private Map<String, Object> operationCountAttributes(InsightPointOpsResponse response) {
+        var operations = response != null ? response.operations() : List.<PointOperation>of();
+        return Map.of(
+                EXTRACTION_INSIGHT_ADD_COUNT,
+                        countOperations(operations, PointOperation.OpType.ADD),
+                EXTRACTION_INSIGHT_UPDATE_COUNT,
+                        countOperations(operations, PointOperation.OpType.UPDATE),
+                EXTRACTION_INSIGHT_DELETE_COUNT,
+                        countOperations(operations, PointOperation.OpType.DELETE));
+    }
+
+    private int countOperations(List<PointOperation> operations, PointOperation.OpType opType) {
+        return (int) operations.stream().filter(operation -> operation.op() == opType).count();
     }
 }

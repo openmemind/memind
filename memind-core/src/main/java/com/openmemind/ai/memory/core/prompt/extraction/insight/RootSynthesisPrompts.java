@@ -14,6 +14,7 @@
 package com.openmemind.ai.memory.core.prompt.extraction.insight;
 
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
+import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.prompt.PromptBuilderSupport;
@@ -166,8 +167,10 @@ public final class RootSynthesisPrompts {
                 {
                   "type": "REASONING",
                   "content": "Cross-dimensional thesis supported by multiple BRANCHes...",
-                  "confidence": 0.80,
-                  "sourceItemIds": [],
+                  "sourcePointRefs": [
+                    { "insightId": 11, "pointId": "pt_branch_1" },
+                    { "insightId": 12, "pointId": "pt_branch_2" }
+                  ],
                   "metadata": {
                     "dimension": "convergence"
                   },
@@ -180,9 +183,8 @@ public final class RootSynthesisPrompts {
             - `type`: "SUMMARY" for cross-dimensional factual observations, "REASONING" for \
             emergent inferences. Most ROOT points will be REASONING.
             - `content`: The synthesis text (1-3 sentences). Same language as BRANCHes.
-            - `confidence`: Float between 0.0 and 1.0. See Dimension Decision Logic for \
-            per-dimension guidance.
-            - `sourceItemIds`: Always empty `[]` at ROOT level.
+            - `sourcePointRefs`: Array of `{ "insightId": number, "pointId": string }`. \
+            MUST reference every contributing BRANCH point directly.
             - `metadata.dimension` (REQUIRED): One of "convergence", "tension", "trajectory", \
             or "causation".
             - `point_reason`: CRITICAL. Explain: (1) which BRANCH dimensions provide what \
@@ -219,8 +221,11 @@ public final class RootSynthesisPrompts {
             at work mirrors the adoption of woodworking (a solo, concentration-intensive hobby) \
             outside work. This convergence suggests a personality-level need for uninterrupted \
             cognitive engagement rather than a temporary phase.",
-                  "confidence": 0.82,
-                  "sourceItemIds": [],
+                  "sourcePointRefs": [
+                    { "insightId": 1, "pointId": "pt_branch_identity" },
+                    { "insightId": 2, "pointId": "pt_branch_experiences" },
+                    { "insightId": 4, "pointId": "pt_branch_preferences" }
+                  ],
                   "metadata": { "dimension": "convergence" },
                   "point_reason": "identity BRANCH: async preference + deep work blocking. \
             experiences BRANCH: adopted solo woodworking hobby. preferences BRANCH: enjoys \
@@ -233,8 +238,11 @@ public final class RootSynthesisPrompts {
                   "content": "A tension exists between the user's increasing withdrawal into \
             solo activities (woodworking replacing gym, async over sync communication) and the \
             partner's explicit request for more shared weekend time.",
-                  "confidence": 0.75,
-                  "sourceItemIds": [],
+                  "sourcePointRefs": [
+                    { "insightId": 1, "pointId": "pt_branch_identity" },
+                    { "insightId": 2, "pointId": "pt_branch_experiences" },
+                    { "insightId": 3, "pointId": "pt_branch_relationships" }
+                  ],
                   "metadata": { "dimension": "tension" },
                   "point_reason": "experiences BRANCH: solo hobbies increasing. relationships \
             BRANCH: partner wants more shared time. These two dimensions directly contradict \
@@ -246,8 +254,11 @@ public final class RootSynthesisPrompts {
                   "content": "Over the past 2-3 months, a trajectory toward introversion is \
             visible: declining gym visits replaced by solo woodworking, friend relocation \
             reducing social contact, and a new interest in philosophy books.",
-                  "confidence": 0.72,
-                  "sourceItemIds": [],
+                  "sourcePointRefs": [
+                    { "insightId": 2, "pointId": "pt_branch_experiences" },
+                    { "insightId": 3, "pointId": "pt_branch_relationships" },
+                    { "insightId": 4, "pointId": "pt_branch_preferences" }
+                  ],
                   "metadata": { "dimension": "trajectory" },
                   "point_reason": "experiences BRANCH: gym decline + woodworking adoption \
             (2-3 month window). relationships BRANCH: friend moved away. preferences BRANCH: \
@@ -259,8 +270,11 @@ public final class RootSynthesisPrompts {
                   "content": "The tech lead promotion (identity) likely caused the exercise \
             decline (experiences): increased meeting load consumed gym time, which may be \
             contributing to the partner's dissatisfaction (relationships).",
-                  "confidence": 0.65,
-                  "sourceItemIds": [],
+                  "sourcePointRefs": [
+                    { "insightId": 1, "pointId": "pt_branch_identity" },
+                    { "insightId": 2, "pointId": "pt_branch_experiences" },
+                    { "insightId": 3, "pointId": "pt_branch_relationships" }
+                  ],
                   "metadata": { "dimension": "causation" },
                   "point_reason": "identity BRANCH: promotion to tech lead, 55-60h/week. \
             experiences BRANCH: gym dropped from 4x to 1x. relationships BRANCH: partner \
@@ -278,7 +292,6 @@ public final class RootSynthesisPrompts {
                 {
                   "type": "REASONING",
                   "content": "The user recently started woodworking as a weekend hobby.",
-                  "confidence": 0.90,
                   "metadata": { "dimension": "convergence" }
                 }
               ]
@@ -295,7 +308,6 @@ public final class RootSynthesisPrompts {
                   "type": "REASONING",
                   "content": "The user's gym visits declined while woodworking increased, \
             suggesting a shift in leisure priorities.",
-                  "confidence": 0.75,
                   "metadata": { "dimension": "causation" }
                 }
               ]
@@ -322,8 +334,11 @@ public final class RootSynthesisPrompts {
                   "content": "identity、preferences和experiences三个维度独立指向搬去杭州的意向：\
             混合办公降低了通勤约束（identity），关注杭州生活内容说明心理准备已经开始（preferences），\
             研究杭州楼盘将买房计划具体化到了杭州（experiences）。",
-                  "confidence": 0.85,
-                  "sourceItemIds": [],
+                  "sourcePointRefs": [
+                    { "insightId": 1, "pointId": "pt_branch_identity" },
+                    { "insightId": 2, "pointId": "pt_branch_preferences" },
+                    { "insightId": 4, "pointId": "pt_branch_experiences" }
+                  ],
                   "metadata": { "dimension": "convergence" },
                   "point_reason": "identity BRANCH: 混合办公减少到岗要求。preferences BRANCH: \
             关注杭州咖啡店和远程办公。experiences BRANCH: 研究杭州楼盘。三个维度从不同角度指向\
@@ -334,8 +349,11 @@ public final class RootSynthesisPrompts {
                   "content": "异地恋（relationships）很可能是买房目标聚焦杭州的根本原因：每周4-5次\
             视频通话说明情感需求强烈，直接驱动了从模糊的买房意向到具体研究杭州楼盘（experiences）的\
             转变，而混合办公（identity）消除了职业上的搬迁障碍。",
-                  "confidence": 0.70,
-                  "sourceItemIds": [],
+                  "sourcePointRefs": [
+                    { "insightId": 1, "pointId": "pt_branch_identity" },
+                    { "insightId": 3, "pointId": "pt_branch_relationships" },
+                    { "insightId": 4, "pointId": "pt_branch_experiences" }
+                  ],
                   "metadata": { "dimension": "causation" },
                   "point_reason": "relationships BRANCH: 异地恋，高频视频通话。experiences BRANCH: \
             买房目标聚焦杭州。identity BRANCH: 混合办公降低搬迁成本。因果链：异地恋情感需求 → \
@@ -349,13 +367,13 @@ public final class RootSynthesisPrompts {
 
     public static PromptTemplate build(
             MemoryInsightType rootInsightType,
-            String existingSummary,
+            List<InsightPoint> existingPoints,
             List<MemoryInsight> branchInsights,
             int targetTokens) {
         return build(
                 PromptRegistry.EMPTY,
                 rootInsightType,
-                existingSummary,
+                existingPoints,
                 branchInsights,
                 targetTokens);
     }
@@ -376,11 +394,11 @@ public final class RootSynthesisPrompts {
     public static PromptTemplate build(
             PromptRegistry registry,
             MemoryInsightType rootInsightType,
-            String existingSummary,
+            List<InsightPoint> existingPoints,
             List<MemoryInsight> branchInsights,
             int targetTokens) {
 
-        var userPromptContent = buildUserPrompt(existingSummary, branchInsights, targetTokens);
+        var userPromptContent = buildUserPrompt(existingPoints, branchInsights, targetTokens);
         var builder =
                 registry.hasOverride(PromptType.ROOT_SYNTHESIS)
                         ? PromptTemplate.builder("root-synthesis")
@@ -400,26 +418,51 @@ public final class RootSynthesisPrompts {
     }
 
     private static String buildUserPrompt(
-            String existingSummary, List<MemoryInsight> branchInsights, int targetTokens) {
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> branchInsights,
+            int targetTokens) {
 
         var sb = new StringBuilder();
         sb.append("# Token Budget\n");
         sb.append(targetTokens).append("\n");
 
-        if (existingSummary != null && !existingSummary.isBlank()) {
+        if (existingPoints != null && !existingPoints.isEmpty()) {
             sb.append("\n# Existing ROOT Points\n");
-            sb.append(existingSummary).append("\n");
+            for (var point : existingPoints) {
+                sb.append("- pointId: ")
+                        .append(point.pointId())
+                        .append("\n  type: ")
+                        .append(point.type())
+                        .append("\n  content: ")
+                        .append(point.content())
+                        .append("\n  sourcePointRefs: ")
+                        .append(point.sourcePointRefs())
+                        .append("\n");
+            }
         }
 
-        sb.append("\n# BRANCH Summaries\n");
+        sb.append("\n# BRANCH Points\n");
         for (int i = 0; i < branchInsights.size(); i++) {
             var branch = branchInsights.get(i);
-            sb.append(i + 1)
-                    .append(". [type=")
-                    .append(branch.type())
-                    .append("] ")
-                    .append(branch.pointsContent())
-                    .append("\n");
+            var points = branch.points() != null ? branch.points() : List.<InsightPoint>of();
+            for (var point : points) {
+                sb.append(i + 1)
+                        .append(". insightId=")
+                        .append(branch.id())
+                        .append(" pointId=")
+                        .append(point.pointId())
+                        .append(" [type=")
+                        .append(branch.type())
+                        .append("] [pointType=")
+                        .append(point.type())
+                        .append("] ")
+                        .append(point.content())
+                        .append("\n   sourcePointRefs: ")
+                        .append(point.sourcePointRefs())
+                        .append("\n   metadata: ")
+                        .append(point.metadata())
+                        .append("\n");
+            }
         }
 
         return sb.toString();

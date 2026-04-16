@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteBubbleTrackerStore;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteInsightBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryStore;
@@ -52,6 +53,13 @@ class JdbcStoreTest {
         assertThat(jdbc.buffer().recentConversationBuffer())
                 .isInstanceOf(SqliteRecentConversationBuffer.class);
         assertThat(jdbc.textSearch()).isInstanceOf(SqliteMemoryTextSearch.class);
+    }
+
+    @Test
+    void sqliteHelperExposesPersistentBubbleTracker(@TempDir Path tempDir) {
+        JdbcMemoryAccess jdbc = JdbcStore.sqlite(tempDir.resolve("memind.db").toString());
+
+        assertThat(jdbc.bubbleTrackerStore()).isInstanceOf(SqliteBubbleTrackerStore.class);
     }
 
     @Test

@@ -38,7 +38,6 @@ public final class InsightConverter {
         dataObject.setContent(record.pointsContent());
         dataObject.setPoints(record.points());
         dataObject.setGroupName(record.group());
-        dataObject.setConfidence(record.confidence());
         dataObject.setLastReasonedAt(record.lastReasonedAt());
         dataObject.setSummaryEmbedding(record.summaryEmbedding());
         dataObject.setTier(record.tier() != null ? record.tier().name() : null);
@@ -64,7 +63,6 @@ public final class InsightConverter {
                 dataObject.getCategories(),
                 points,
                 dataObject.getGroupName(),
-                dataObject.getConfidence() != null ? dataObject.getConfidence() : 0.0f,
                 dataObject.getLastReasonedAt(),
                 dataObject.getSummaryEmbedding(),
                 dataObject.getCreatedAt(),

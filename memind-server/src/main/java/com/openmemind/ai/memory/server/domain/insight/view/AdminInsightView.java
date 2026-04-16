@@ -29,7 +29,6 @@ public record AdminInsightView(
         String content,
         List<InsightPoint> points,
         String groupName,
-        Float confidence,
         Instant lastReasonedAt,
         List<Float> summaryEmbedding,
         String tier,
