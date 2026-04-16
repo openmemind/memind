@@ -26,9 +26,13 @@ import com.openmemind.ai.memory.core.prompt.PromptType;
 import com.openmemind.ai.memory.core.prompt.extraction.item.SelfVerificationPrompts;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.TimeZone;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
+import org.junit.jupiter.api.parallel.Resources;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -275,6 +279,60 @@ class LlmSelfVerificationStepTest {
                                 assertThat(result.getFirst().observedAt()).isEqualTo(observedAt);
                             })
                     .verifyComplete();
+        }
+
+        @Test
+        @ResourceLock(Resources.SYSTEM_PROPERTIES)
+        @DisplayName("Should normalize structured time returned by self verification")
+        void shouldNormalizeStructuredTimeReturnedBySelfVerification() {
+            var originalTimeZone = TimeZone.getDefault();
+            TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
+            try {
+                var response =
+                        new MemoryItemExtractionResponse(
+                                List.of(
+                                        new MemoryItemExtractionResponse.ExtractedItem(
+                                                "User traveled to Hangzhou during the week of"
+                                                        + " 2026-04-06 to 2026-04-12",
+                                                0.95f,
+                                                null,
+                                                new MemoryItemExtractionResponse.ExtractedTime(
+                                                        "上周",
+                                                        "2026-04-06T00:00:00Z",
+                                                        "2026-04-13T00:00:00Z",
+                                                        "week"),
+                                                List.of("experiences"),
+                                                Map.of("reviewStage", "self_verification"),
+                                                "event")));
+                var step = new LlmSelfVerificationStep(new FakeStructuredChatClient(response));
+
+                StepVerifier.create(
+                                step.verify(
+                                        ORIGINAL_TEXT,
+                                        List.of(),
+                                        RAW_DATA_ID,
+                                        Instant.parse("2026-04-16T10:00:00Z"),
+                                        List.of(),
+                                        null,
+                                        null))
+                        .assertNext(
+                                result -> {
+                                    assertThat(result).hasSize(1);
+                                    assertThat(result.getFirst().occurredStart())
+                                            .isEqualTo(Instant.parse("2026-04-06T00:00:00Z"));
+                                    assertThat(result.getFirst().occurredEnd())
+                                            .isEqualTo(Instant.parse("2026-04-13T00:00:00Z"));
+                                    assertThat(result.getFirst().timeGranularity())
+                                            .isEqualTo("week");
+                                    assertThat(result.getFirst().occurredAt()).isNull();
+                                    assertThat(result.getFirst().metadata())
+                                            .containsEntry("reviewStage", "self_verification")
+                                            .containsEntry("timeExpression", "上周");
+                                })
+                        .verifyComplete();
+            } finally {
+                TimeZone.setDefault(originalTimeZone);
+            }
         }
     }
 

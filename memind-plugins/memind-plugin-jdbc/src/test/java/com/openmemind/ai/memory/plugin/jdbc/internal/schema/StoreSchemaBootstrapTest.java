@@ -70,6 +70,9 @@ class StoreSchemaBootstrapTest {
         assertThat(columnExists(dataSource, "memory_insight", "confidence")).isFalse();
         assertThat(columnExists(dataSource, "memory_raw_data", "resource_id")).isTrue();
         assertThat(columnExists(dataSource, "memory_raw_data", "mime_type")).isTrue();
+        assertThat(columnExists(dataSource, "memory_item", "occurred_start")).isTrue();
+        assertThat(columnExists(dataSource, "memory_item", "occurred_end")).isTrue();
+        assertThat(columnExists(dataSource, "memory_item", "time_granularity")).isTrue();
         assertThat(result.createdInsightTypeTable()).isFalse();
     }
 
@@ -96,7 +99,25 @@ class StoreSchemaBootstrapTest {
             statement.execute(
                     """
                     CREATE TABLE memory_item (
-                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        biz_id INTEGER NOT NULL,
+                        user_id TEXT NOT NULL,
+                        agent_id TEXT NOT NULL,
+                        memory_id TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        scope TEXT NOT NULL,
+                        category TEXT,
+                        vector_id TEXT,
+                        raw_data_id TEXT,
+                        content_hash TEXT,
+                        occurred_at TEXT,
+                        observed_at TEXT,
+                        type TEXT NOT NULL DEFAULT 'FACT',
+                        raw_data_type TEXT NOT NULL DEFAULT 'CONVERSATION',
+                        metadata TEXT,
+                        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                        deleted INTEGER NOT NULL DEFAULT 0
                     )
                     """);
             statement.execute(

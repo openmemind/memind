@@ -344,9 +344,9 @@ public class PostgresqlMemoryStore
                                     INSERT INTO memory_item
                                         (biz_id, user_id, agent_id, memory_id, content, scope, category,
                                          vector_id, raw_data_id, content_hash, occurred_at,
-                                         observed_at, type, raw_data_type, metadata, created_at,
-                                         updated_at, deleted)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)
+                                         occurred_start, occurred_end, time_granularity, observed_at,
+                                         type, raw_data_type, metadata, created_at, updated_at, deleted)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)
                                     """)) {
                         Instant now = Instant.now();
                         for (MemoryItem item : items) {
@@ -864,14 +864,17 @@ public class PostgresqlMemoryStore
         statement.setString(9, item.rawDataId());
         statement.setString(10, item.contentHash());
         setTimestamp(statement, 11, item.occurredAt());
-        setTimestamp(statement, 12, item.observedAt());
+        setTimestamp(statement, 12, item.occurredStart());
+        setTimestamp(statement, 13, item.occurredEnd());
+        statement.setString(14, item.timeGranularity());
+        setTimestamp(statement, 15, item.observedAt());
         statement.setString(
-                13, item.type() != null ? item.type().name() : MemoryItemType.FACT.name());
+                16, item.type() != null ? item.type().name() : MemoryItemType.FACT.name());
         statement.setString(
-                14, item.contentType() != null ? item.contentType() : ConversationContent.TYPE);
-        setJsonb(statement, 15, jsonHelper.toJson(item.metadata()));
-        setTimestamp(statement, 16, item.createdAt() != null ? item.createdAt() : now);
-        setTimestamp(statement, 17, now);
+                17, item.contentType() != null ? item.contentType() : ConversationContent.TYPE);
+        setJsonb(statement, 18, jsonHelper.toJson(item.metadata()));
+        setTimestamp(statement, 19, item.createdAt() != null ? item.createdAt() : now);
+        setTimestamp(statement, 20, now);
     }
 
     private void bindInsightTypeUpsert(
@@ -952,6 +955,15 @@ public class PostgresqlMemoryStore
     }
 
     private MemoryItem mapItem(ResultSet resultSet) throws SQLException {
+        Instant occurredAt = parseInstant(resultSet.getTimestamp("occurred_at"));
+        Instant occurredStart = parseInstant(resultSet.getTimestamp("occurred_start"));
+        if (occurredStart == null) {
+            occurredStart = occurredAt;
+        }
+        String timeGranularity = resultSet.getString("time_granularity");
+        if (occurredStart != null && (timeGranularity == null || timeGranularity.isBlank())) {
+            timeGranularity = "unknown";
+        }
         return new MemoryItem(
                 resultSet.getLong("biz_id"),
                 resultSet.getString("memory_id"),
@@ -962,7 +974,10 @@ public class PostgresqlMemoryStore
                 resultSet.getString("vector_id"),
                 resultSet.getString("raw_data_id"),
                 resultSet.getString("content_hash"),
-                parseInstant(resultSet.getTimestamp("occurred_at")),
+                occurredAt,
+                occurredStart,
+                parseInstant(resultSet.getTimestamp("occurred_end")),
+                timeGranularity,
                 parseInstant(resultSet.getTimestamp("observed_at")),
                 jsonHelper.fromJson(resultSet.getString("metadata"), OBJECT_MAP_TYPE),
                 parseInstant(resultSet.getTimestamp("created_at")),

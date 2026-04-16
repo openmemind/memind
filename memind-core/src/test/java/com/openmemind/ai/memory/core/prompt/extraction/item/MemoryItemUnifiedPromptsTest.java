@@ -22,8 +22,11 @@ import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
+import java.util.TimeZone;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
+import org.junit.jupiter.api.parallel.Resources;
 
 class MemoryItemUnifiedPromptsTest {
 
@@ -122,8 +125,8 @@ class MemoryItemUnifiedPromptsTest {
     }
 
     @Test
-    @DisplayName("Rendered prompt should enforce strict occurredAt semantics")
-    void shouldEnforceStrictOccurredAtSemantics() {
+    @DisplayName("Rendered prompt should enforce structured temporal semantics")
+    void shouldEnforceStructuredTemporalSemantics() {
         var insightTypes =
                 List.of(
                         createInsightType("profile", List.of("profile")),
@@ -149,10 +152,55 @@ class MemoryItemUnifiedPromptsTest {
                 .contains(
                         "Profile, behavior, directive, playbook, resolution, and tool items should"
                                 + " normally set")
-                .contains("Event items should populate `occurredAt` only when the text itself")
+                .contains("Event items should populate `time` only when the text itself")
                 .contains(
-                        "Do NOT use message timestamps or conversation timestamps as `occurredAt`")
+                        "Do NOT use message timestamps or conversation timestamps as default"
+                                + " temporal")
+                .contains("canonical half-open bucket")
                 .contains("reference anchor for resolving relative expressions");
+    }
+
+    @Test
+    @DisplayName("Rendered prompt should expose structured time schema")
+    void shouldRenderStructuredTimeSchemaInUnifiedPrompt() {
+        var result =
+                MemoryItemUnifiedPrompts.build(
+                                List.of(),
+                                "user: 我上周去了杭州",
+                                Instant.parse("2026-04-16T00:00:00Z"),
+                                null,
+                                Set.of(MemoryCategory.EVENT))
+                        .render("English");
+
+        assertThat(result.systemPrompt())
+                .contains("time.expression")
+                .contains("time.start")
+                .contains("time.end")
+                .contains("time.granularity");
+    }
+
+    @Test
+    @ResourceLock(Resources.SYSTEM_PROPERTIES)
+    @DisplayName("Rendered prompt should resolve temporal context in system zone")
+    void shouldRenderTemporalContextUsingSystemZone() {
+        var originalTimeZone = TimeZone.getDefault();
+        TimeZone.setDefault(TimeZone.getTimeZone("Asia/Shanghai"));
+        try {
+            var result =
+                    MemoryItemUnifiedPrompts.build(
+                                    List.of(),
+                                    "user: 我昨天修好了线上 bug",
+                                    Instant.parse("2026-04-15T17:00:00Z"),
+                                    null,
+                                    Set.of(MemoryCategory.EVENT))
+                            .render("English");
+
+            assertThat(result.systemPrompt())
+                    .contains("System Time Zone: Asia/Shanghai")
+                    .contains("Today's date: 2026-04-16");
+        } finally {
+            TimeZone.setDefault(originalTimeZone);
+        }
     }
 
     @Test

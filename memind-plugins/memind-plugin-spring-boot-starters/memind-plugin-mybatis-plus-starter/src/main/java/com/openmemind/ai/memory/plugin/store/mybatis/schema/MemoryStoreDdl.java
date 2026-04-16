@@ -48,6 +48,7 @@ public class MemoryStoreDdl implements IDdl, Ordered {
         boolean hadInsightTypeTable = tableExists("memory_insight_type");
         consumer.accept(dataSource);
         dropInsightConfidenceIfPresent();
+        ensureItemTemporalColumnsPresent();
         if (!hadInsightTypeTable && tableExists("memory_insight_type")) {
             seedDefaultInsightTypes();
         }
@@ -106,6 +107,63 @@ public class MemoryStoreDdl implements IDdl, Ordered {
                     case MYSQL -> "ALTER TABLE memory_insight DROP COLUMN confidence";
                     case POSTGRESQL -> "ALTER TABLE memory_insight DROP COLUMN confidence";
                 };
+        new JdbcTemplate(dataSource).execute(sql);
+    }
+
+    private void ensureItemTemporalColumnsPresent() {
+        if (!tableExists("memory_item")) {
+            return;
+        }
+        switch (databaseDialectDetector.detect(dataSource)) {
+            case SQLITE -> {
+                ensureColumn(
+                        "memory_item",
+                        "occurred_start",
+                        "ALTER TABLE memory_item ADD COLUMN occurred_start TEXT");
+                ensureColumn(
+                        "memory_item",
+                        "occurred_end",
+                        "ALTER TABLE memory_item ADD COLUMN occurred_end TEXT");
+                ensureColumn(
+                        "memory_item",
+                        "time_granularity",
+                        "ALTER TABLE memory_item ADD COLUMN time_granularity TEXT");
+            }
+            case MYSQL -> {
+                ensureColumn(
+                        "memory_item",
+                        "occurred_start",
+                        "ALTER TABLE memory_item ADD COLUMN occurred_start DATETIME(3) NULL");
+                ensureColumn(
+                        "memory_item",
+                        "occurred_end",
+                        "ALTER TABLE memory_item ADD COLUMN occurred_end DATETIME(3) NULL");
+                ensureColumn(
+                        "memory_item",
+                        "time_granularity",
+                        "ALTER TABLE memory_item ADD COLUMN time_granularity VARCHAR(16) NULL");
+            }
+            case POSTGRESQL -> {
+                ensureColumn(
+                        "memory_item",
+                        "occurred_start",
+                        "ALTER TABLE memory_item ADD COLUMN occurred_start TIMESTAMPTZ");
+                ensureColumn(
+                        "memory_item",
+                        "occurred_end",
+                        "ALTER TABLE memory_item ADD COLUMN occurred_end TIMESTAMPTZ");
+                ensureColumn(
+                        "memory_item",
+                        "time_granularity",
+                        "ALTER TABLE memory_item ADD COLUMN time_granularity VARCHAR(16)");
+            }
+        }
+    }
+
+    private void ensureColumn(String tableName, String columnName, String sql) {
+        if (columnExists(tableName, columnName)) {
+            return;
+        }
         new JdbcTemplate(dataSource).execute(sql);
     }
 

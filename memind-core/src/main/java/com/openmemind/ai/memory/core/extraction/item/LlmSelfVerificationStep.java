@@ -17,13 +17,17 @@ import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
+import com.openmemind.ai.memory.core.extraction.item.support.ExtractedTemporal;
 import com.openmemind.ai.memory.core.extraction.item.support.MemoryItemExtractionResponse;
+import com.openmemind.ai.memory.core.extraction.item.support.TemporalNormalizer;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.extraction.item.SelfVerificationPrompts;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -170,7 +174,7 @@ public class LlmSelfVerificationStep {
 
         return structuredChatClient
                 .call(messages, MemoryItemExtractionResponse.class)
-                .map(response -> toEntries(response, rawDataId, observedAt))
+                .map(response -> toEntries(response, rawDataId, referenceTime, observedAt))
                 .switchIfEmpty(Mono.just(List.of()))
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnNext(
@@ -192,27 +196,52 @@ public class LlmSelfVerificationStep {
     }
 
     private List<ExtractedMemoryEntry> toEntries(
-            MemoryItemExtractionResponse response, String rawDataId, Instant observedAt) {
+            MemoryItemExtractionResponse response,
+            String rawDataId,
+            Instant referenceTime,
+            Instant observedAt) {
         if (response == null || response.items() == null) {
             return List.of();
         }
 
-        return response.items().stream().map(item -> toEntry(item, rawDataId, observedAt)).toList();
+        return response.items().stream()
+                .map(item -> toEntry(item, rawDataId, referenceTime, observedAt))
+                .toList();
     }
 
     private static ExtractedMemoryEntry toEntry(
-            MemoryItemExtractionResponse.ExtractedItem item, String rawDataId, Instant observedAt) {
+            MemoryItemExtractionResponse.ExtractedItem item,
+            String rawDataId,
+            Instant referenceTime,
+            Instant observedAt) {
+        ExtractedTemporal temporal =
+                TemporalNormalizer.normalize(item.time(), item.occurredAt(), referenceTime);
         return new ExtractedMemoryEntry(
                 item.content(),
                 clamp(item.confidence()),
-                resolveOccurredAt(item.occurredAt()),
+                temporal.compatibilityOccurredAt(),
+                temporal.occurredStart(),
+                temporal.occurredEnd(),
+                temporal.granularity(),
                 observedAt,
                 rawDataId,
                 null,
                 item.insightTypes() != null ? item.insightTypes() : List.of(),
-                item.metadata(),
+                mergeMetadata(item, temporal),
                 MemoryItemType.FACT,
                 item.category());
+    }
+
+    private static Map<String, Object> mergeMetadata(
+            MemoryItemExtractionResponse.ExtractedItem item, ExtractedTemporal temporal) {
+        var merged = new LinkedHashMap<String, Object>();
+        if (item.metadata() != null) {
+            merged.putAll(item.metadata());
+        }
+        if (temporal.expression() != null && !temporal.expression().isBlank()) {
+            merged.put("timeExpression", temporal.expression());
+        }
+        return merged.isEmpty() ? null : Map.copyOf(merged);
     }
 
     private static Instant resolveOccurredAt(String llmValue) {

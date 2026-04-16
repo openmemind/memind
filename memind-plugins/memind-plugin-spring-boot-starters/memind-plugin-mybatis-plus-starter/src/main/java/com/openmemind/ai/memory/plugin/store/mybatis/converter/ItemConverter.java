@@ -41,6 +41,9 @@ public final class ItemConverter {
         dataObject.setRawDataId(record.rawDataId());
         dataObject.setContentHash(record.contentHash());
         dataObject.setOccurredAt(record.occurredAt());
+        dataObject.setOccurredStart(record.occurredStart());
+        dataObject.setOccurredEnd(record.occurredEnd());
+        dataObject.setTimeGranularity(record.timeGranularity());
         dataObject.setObservedAt(record.observedAt());
         dataObject.setMetadata(record.metadata());
         dataObject.setCreatedAt(record.createdAt() != null ? record.createdAt() : Instant.now());
@@ -51,6 +54,15 @@ public final class ItemConverter {
     }
 
     public static MemoryItem toRecord(MemoryItemDO dataObject) {
+        Instant occurredAt = dataObject.getOccurredAt();
+        Instant occurredStart = dataObject.getOccurredStart();
+        if (occurredStart == null) {
+            occurredStart = occurredAt;
+        }
+        String timeGranularity = dataObject.getTimeGranularity();
+        if (occurredStart != null && (timeGranularity == null || timeGranularity.isBlank())) {
+            timeGranularity = "unknown";
+        }
         return new MemoryItem(
                 dataObject.getBizId(),
                 dataObject.getMemoryId(),
@@ -61,7 +73,10 @@ public final class ItemConverter {
                 dataObject.getVectorId(),
                 dataObject.getRawDataId(),
                 dataObject.getContentHash(),
-                dataObject.getOccurredAt(),
+                occurredAt,
+                occurredStart,
+                dataObject.getOccurredEnd(),
+                timeGranularity,
                 dataObject.getObservedAt(),
                 dataObject.getMetadata(),
                 dataObject.getCreatedAt(),

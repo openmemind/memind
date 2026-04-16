@@ -22,6 +22,7 @@ import static org.mockito.Mockito.when;
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
+import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.item.dedup.DeduplicationResult;
 import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicator;
@@ -34,10 +35,12 @@ import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
+import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.support.TestDocumentContent;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -189,6 +192,83 @@ class MemoryItemLayerLanguageTest {
         assertThat(dedupEntriesCaptor.getValue())
                 .extracting(ExtractedMemoryEntry::category)
                 .containsExactly("profile");
+    }
+
+    @Test
+    @DisplayName("Extract should persist normalized temporal fields and legacy anchor")
+    void extractShouldPersistNormalizedTemporalFieldsAndLegacyAnchor() {
+        MemoryItemExtractor extractor = mock(MemoryItemExtractor.class);
+        MemoryItemDeduplicator deduplicator = mock(MemoryItemDeduplicator.class);
+        MemoryStore memoryStore = mock(MemoryStore.class);
+        InsightOperations insightOperations = mock(InsightOperations.class);
+        ItemOperations itemOperations = mock(ItemOperations.class);
+        MemoryVector vector = mock(MemoryVector.class);
+        var layer = new MemoryItemLayer(extractor, deduplicator, memoryStore, vector);
+        var memoryId = DefaultMemoryId.of("user1", "agent1");
+
+        var segment =
+                new ParsedSegment(
+                        "user: 我上周去了杭州",
+                        "caption",
+                        0,
+                        1,
+                        "raw-1",
+                        Map.of(),
+                        new SegmentRuntimeContext(
+                                Instant.parse("2026-04-16T10:00:00Z"),
+                                Instant.parse("2026-04-16T10:00:00Z"),
+                                "User"));
+        var temporalEntry =
+                new ExtractedMemoryEntry(
+                        "User traveled to Hangzhou during the week of 2026-04-06 to"
+                                + " 2026-04-12",
+                        0.95f,
+                        null,
+                        Instant.parse("2026-04-06T00:00:00Z"),
+                        Instant.parse("2026-04-13T00:00:00Z"),
+                        "week",
+                        Instant.parse("2026-04-16T10:00:00Z"),
+                        "raw-1",
+                        "hash-1",
+                        List.of("experiences"),
+                        Map.of("timeExpression", "上周"),
+                        MemoryItemType.FACT,
+                        "event");
+        var config =
+                new ItemExtractionConfig(
+                        MemoryScope.USER,
+                        ConversationContent.TYPE,
+                        MemoryCategory.userCategories(),
+                        false,
+                        "English");
+
+        when(memoryStore.insightOperations()).thenReturn(insightOperations);
+        when(memoryStore.itemOperations()).thenReturn(itemOperations);
+        when(insightOperations.listInsightTypes()).thenReturn(DefaultInsightTypes.all());
+        when(extractor.extract(eq(List.of(segment)), anyList(), eq(config)))
+                .thenReturn(Mono.just(List.of(temporalEntry)));
+        when(deduplicator.deduplicate(eq(memoryId), anyList()))
+                .thenReturn(Mono.just(new DeduplicationResult(List.of(temporalEntry), List.of())));
+        when(deduplicator.spanName()).thenReturn("test");
+        when(vector.storeBatch(eq(memoryId), anyList(), anyList()))
+                .thenReturn(Mono.just(List.of("vec-1")));
+
+        StepVerifier.create(
+                        layer.extract(
+                                memoryId,
+                                new RawDataResult(List.of(), List.of(segment), false),
+                                config))
+                .assertNext(
+                        result -> {
+                            var item = result.newItems().getFirst();
+                            assertThat(item.occurredAt()).isNull();
+                            assertThat(item.occurredStart())
+                                    .isEqualTo(Instant.parse("2026-04-06T00:00:00Z"));
+                            assertThat(item.occurredEnd())
+                                    .isEqualTo(Instant.parse("2026-04-13T00:00:00Z"));
+                            assertThat(item.timeGranularity()).isEqualTo("week");
+                        })
+                .verifyComplete();
     }
 
     private static final class CapturingSelfVerificationStep extends LlmSelfVerificationStep {

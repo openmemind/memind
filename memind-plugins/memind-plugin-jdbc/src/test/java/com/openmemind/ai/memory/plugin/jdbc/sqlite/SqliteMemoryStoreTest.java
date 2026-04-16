@@ -82,6 +82,9 @@ class SqliteMemoryStoreTest {
         assertThat(columnExists(emptyDataSource, "memory_insight", "confidence")).isFalse();
         assertThat(columnExists(emptyDataSource, "memory_raw_data", "resource_id")).isTrue();
         assertThat(columnExists(emptyDataSource, "memory_raw_data", "mime_type")).isTrue();
+        assertThat(columnExists(emptyDataSource, "memory_item", "occurred_start")).isTrue();
+        assertThat(columnExists(emptyDataSource, "memory_item", "occurred_end")).isTrue();
+        assertThat(columnExists(emptyDataSource, "memory_item", "time_granularity")).isTrue();
     }
 
     @Test
@@ -366,6 +369,89 @@ class SqliteMemoryStoreTest {
                 .satisfies(
                         item -> {
                             assertThat(item.occurredAt()).isNull();
+                            assertThat(item.observedAt()).isEqualTo(observedAt);
+                        });
+    }
+
+    @Test
+    void itemsRoundTripStructuredTemporalFields() {
+        Instant occurredAt = BASE_TIME.minusSeconds(120);
+        Instant occurredStart = BASE_TIME.minusSeconds(120);
+        Instant occurredEnd = BASE_TIME.plusSeconds(3600);
+        Instant observedAt = BASE_TIME.plusSeconds(30);
+        MemoryItem structuredTemporalItem =
+                new MemoryItem(
+                        104L,
+                        memoryId.toIdentifier(),
+                        "timeline event",
+                        MemoryScope.USER,
+                        MemoryCategory.EVENT,
+                        ConversationContent.TYPE,
+                        "vec-104",
+                        "rd-104",
+                        "hash-104",
+                        occurredAt,
+                        occurredStart,
+                        occurredEnd,
+                        "range",
+                        observedAt,
+                        Map.of("kind", "event"),
+                        BASE_TIME,
+                        MemoryItemType.FACT);
+
+        store.insertItems(memoryId, List.of(structuredTemporalItem));
+
+        assertThat(store.getItemsByIds(memoryId, List.of(104L)))
+                .singleElement()
+                .satisfies(
+                        item -> {
+                            assertThat(item.occurredAt()).isEqualTo(occurredAt);
+                            assertThat(item.occurredStart()).isEqualTo(occurredStart);
+                            assertThat(item.occurredEnd()).isEqualTo(occurredEnd);
+                            assertThat(item.timeGranularity()).isEqualTo("range");
+                            assertThat(item.observedAt()).isEqualTo(observedAt);
+                        });
+    }
+
+    @Test
+    void legacyItemRowsFallbackToOccurredAtWhenStructuredTemporalFieldsAreNull() {
+        Instant occurredAt = BASE_TIME.minusSeconds(1800);
+        Instant observedAt = BASE_TIME.plusSeconds(45);
+
+        executeUpdate(
+                """
+                INSERT INTO memory_item
+                    (biz_id, user_id, agent_id, memory_id, content, scope, category, vector_id,
+                     raw_data_id, content_hash, occurred_at, observed_at, type, raw_data_type,
+                     metadata, created_at, updated_at, deleted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                """,
+                105L,
+                memoryId.userId(),
+                memoryId.agentId(),
+                memoryId.toIdentifier(),
+                "legacy temporal item",
+                MemoryScope.USER.name(),
+                MemoryCategory.EVENT.name(),
+                "vec-105",
+                "rd-105",
+                "hash-105",
+                occurredAt.toString(),
+                observedAt.toString(),
+                MemoryItemType.FACT.name(),
+                ConversationContent.TYPE,
+                "{\"legacy\":true}",
+                BASE_TIME.toString(),
+                BASE_TIME.toString());
+
+        assertThat(store.getItemsByIds(memoryId, List.of(105L)))
+                .singleElement()
+                .satisfies(
+                        item -> {
+                            assertThat(item.occurredAt()).isEqualTo(occurredAt);
+                            assertThat(item.occurredStart()).isEqualTo(occurredAt);
+                            assertThat(item.occurredEnd()).isNull();
+                            assertThat(item.timeGranularity()).isEqualTo("unknown");
                             assertThat(item.observedAt()).isEqualTo(observedAt);
                         });
     }

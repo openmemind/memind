@@ -25,16 +25,22 @@ public final class StoreSchemaBootstrap {
             "db/jdbc/sqlite/store/V2__multimodal.sql";
     private static final String SQLITE_BUBBLE_STATE_RESOURCE =
             "db/jdbc/sqlite/store/V3__bubble_state.sql";
+    private static final String SQLITE_ITEM_TEMPORAL_RESOURCE =
+            "db/jdbc/sqlite/store/V4__item_temporal_fields.sql";
     private static final String MYSQL_STORE_RESOURCE = "db/jdbc/mysql/store/V1__init.sql";
     private static final String MYSQL_MULTIMODAL_RESOURCE =
             "db/jdbc/mysql/store/V2__multimodal.sql";
     private static final String MYSQL_BUBBLE_STATE_RESOURCE =
             "db/jdbc/mysql/store/V3__bubble_state.sql";
+    private static final String MYSQL_ITEM_TEMPORAL_RESOURCE =
+            "db/jdbc/mysql/store/V4__item_temporal_fields.sql";
     private static final String POSTGRESQL_STORE_RESOURCE = "db/jdbc/postgresql/store/V1__init.sql";
     private static final String POSTGRESQL_MULTIMODAL_RESOURCE =
             "db/jdbc/postgresql/store/V2__multimodal.sql";
     private static final String POSTGRESQL_BUBBLE_STATE_RESOURCE =
             "db/jdbc/postgresql/store/V3__bubble_state.sql";
+    private static final String POSTGRESQL_ITEM_TEMPORAL_RESOURCE =
+            "db/jdbc/postgresql/store/V4__item_temporal_fields.sql";
 
     private StoreSchemaBootstrap() {}
 
@@ -60,6 +66,7 @@ public final class StoreSchemaBootstrap {
             SqlScriptRunner.execute(dataSource, SQLITE_MULTIMODAL_RESOURCE);
         }
         ensureSqliteBubbleStateSchema(dataSource, createIfNotExist);
+        ensureSqliteItemTemporalSchema(dataSource, createIfNotExist);
         ensureSqliteInsightConfidenceRemoved(dataSource, createIfNotExist);
         boolean hasInsightTypeTable =
                 SchemaVerifier.hasSqliteTable(dataSource, "memory_insight_type");
@@ -88,6 +95,7 @@ public final class StoreSchemaBootstrap {
             SqlScriptRunner.execute(dataSource, MYSQL_MULTIMODAL_RESOURCE);
         }
         ensureMysqlBubbleStateSchema(dataSource, createIfNotExist);
+        ensureMysqlItemTemporalSchema(dataSource, createIfNotExist);
         ensureMysqlInsightConfidenceRemoved(dataSource, createIfNotExist);
         boolean hasInsightTypeTable =
                 SchemaVerifier.hasMysqlTable(dataSource, "memory_insight_type");
@@ -116,6 +124,7 @@ public final class StoreSchemaBootstrap {
             SqlScriptRunner.execute(dataSource, POSTGRESQL_MULTIMODAL_RESOURCE);
         }
         ensurePostgresqlBubbleStateSchema(dataSource, createIfNotExist);
+        ensurePostgresqlItemTemporalSchema(dataSource, createIfNotExist);
         ensurePostgresqlInsightConfidenceRemoved(dataSource, createIfNotExist);
         boolean hasInsightTypeTable =
                 SchemaVerifier.hasPostgresqlTable(dataSource, "memory_insight_type");
@@ -177,6 +186,33 @@ public final class StoreSchemaBootstrap {
         SqlScriptRunner.execute(dataSource, SQLITE_BUBBLE_STATE_RESOURCE);
     }
 
+    private static void ensureSqliteItemTemporalSchema(
+            DataSource dataSource, boolean createIfNotExist) {
+        if (hasRequiredSqliteItemTemporalSchema(dataSource)) {
+            return;
+        }
+        if (!createIfNotExist) {
+            throw new JdbcPluginException(
+                    "Missing required SQLite item temporal schema: occurred_start");
+        }
+        if (hasAnySqliteItemTemporalColumn(dataSource)) {
+            ensureSqliteItemTemporalColumn(
+                    dataSource,
+                    "occurred_start",
+                    "ALTER TABLE memory_item ADD COLUMN occurred_start TEXT");
+            ensureSqliteItemTemporalColumn(
+                    dataSource,
+                    "occurred_end",
+                    "ALTER TABLE memory_item ADD COLUMN occurred_end TEXT");
+            ensureSqliteItemTemporalColumn(
+                    dataSource,
+                    "time_granularity",
+                    "ALTER TABLE memory_item ADD COLUMN time_granularity TEXT");
+            return;
+        }
+        SqlScriptRunner.execute(dataSource, SQLITE_ITEM_TEMPORAL_RESOURCE);
+    }
+
     private static void ensureMysqlBubbleStateSchema(
             DataSource dataSource, boolean createIfNotExist) {
         if (SchemaVerifier.hasMysqlTable(dataSource, "memory_insight_bubble_state")) {
@@ -189,6 +225,33 @@ public final class StoreSchemaBootstrap {
         SqlScriptRunner.execute(dataSource, MYSQL_BUBBLE_STATE_RESOURCE);
     }
 
+    private static void ensureMysqlItemTemporalSchema(
+            DataSource dataSource, boolean createIfNotExist) {
+        if (hasRequiredMysqlItemTemporalSchema(dataSource)) {
+            return;
+        }
+        if (!createIfNotExist) {
+            throw new JdbcPluginException(
+                    "Missing required MySQL item temporal schema: occurred_start");
+        }
+        if (hasAnyMysqlItemTemporalColumn(dataSource)) {
+            ensureMysqlItemTemporalColumn(
+                    dataSource,
+                    "occurred_start",
+                    "ALTER TABLE memory_item ADD COLUMN occurred_start DATETIME(3) NULL");
+            ensureMysqlItemTemporalColumn(
+                    dataSource,
+                    "occurred_end",
+                    "ALTER TABLE memory_item ADD COLUMN occurred_end DATETIME(3) NULL");
+            ensureMysqlItemTemporalColumn(
+                    dataSource,
+                    "time_granularity",
+                    "ALTER TABLE memory_item ADD COLUMN time_granularity VARCHAR(16) NULL");
+            return;
+        }
+        SqlScriptRunner.execute(dataSource, MYSQL_ITEM_TEMPORAL_RESOURCE);
+    }
+
     private static void ensurePostgresqlBubbleStateSchema(
             DataSource dataSource, boolean createIfNotExist) {
         if (SchemaVerifier.hasPostgresqlTable(dataSource, "memory_insight_bubble_state")) {
@@ -199,6 +262,33 @@ public final class StoreSchemaBootstrap {
                     "Missing required PostgreSQL bubble schema: memory_insight_bubble_state");
         }
         SqlScriptRunner.execute(dataSource, POSTGRESQL_BUBBLE_STATE_RESOURCE);
+    }
+
+    private static void ensurePostgresqlItemTemporalSchema(
+            DataSource dataSource, boolean createIfNotExist) {
+        if (hasRequiredPostgresqlItemTemporalSchema(dataSource)) {
+            return;
+        }
+        if (!createIfNotExist) {
+            throw new JdbcPluginException(
+                    "Missing required PostgreSQL item temporal schema: occurred_start");
+        }
+        if (hasAnyPostgresqlItemTemporalColumn(dataSource)) {
+            ensurePostgresqlItemTemporalColumn(
+                    dataSource,
+                    "occurred_start",
+                    "ALTER TABLE memory_item ADD COLUMN occurred_start TIMESTAMPTZ");
+            ensurePostgresqlItemTemporalColumn(
+                    dataSource,
+                    "occurred_end",
+                    "ALTER TABLE memory_item ADD COLUMN occurred_end TIMESTAMPTZ");
+            ensurePostgresqlItemTemporalColumn(
+                    dataSource,
+                    "time_granularity",
+                    "ALTER TABLE memory_item ADD COLUMN time_granularity VARCHAR(16)");
+            return;
+        }
+        SqlScriptRunner.execute(dataSource, POSTGRESQL_ITEM_TEMPORAL_RESOURCE);
     }
 
     private static void ensureSqliteInsightConfidenceRemoved(
@@ -235,5 +325,67 @@ public final class StoreSchemaBootstrap {
                     "Legacy PostgreSQL insight schema requires confidence column removal");
         }
         JdbcExecutor.execute(dataSource, "ALTER TABLE memory_insight DROP COLUMN confidence");
+    }
+
+    private static boolean hasRequiredSqliteItemTemporalSchema(DataSource dataSource) {
+        return SchemaVerifier.hasSqliteColumn(dataSource, "memory_item", "occurred_start")
+                && SchemaVerifier.hasSqliteColumn(dataSource, "memory_item", "occurred_end")
+                && SchemaVerifier.hasSqliteColumn(dataSource, "memory_item", "time_granularity");
+    }
+
+    private static boolean hasAnySqliteItemTemporalColumn(DataSource dataSource) {
+        return SchemaVerifier.hasSqliteColumn(dataSource, "memory_item", "occurred_start")
+                || SchemaVerifier.hasSqliteColumn(dataSource, "memory_item", "occurred_end")
+                || SchemaVerifier.hasSqliteColumn(dataSource, "memory_item", "time_granularity");
+    }
+
+    private static void ensureSqliteItemTemporalColumn(
+            DataSource dataSource, String columnName, String sql) {
+        if (SchemaVerifier.hasSqliteColumn(dataSource, "memory_item", columnName)) {
+            return;
+        }
+        JdbcExecutor.execute(dataSource, sql);
+    }
+
+    private static boolean hasRequiredMysqlItemTemporalSchema(DataSource dataSource) {
+        return SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", "occurred_start")
+                && SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", "occurred_end")
+                && SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", "time_granularity");
+    }
+
+    private static boolean hasAnyMysqlItemTemporalColumn(DataSource dataSource) {
+        return SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", "occurred_start")
+                || SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", "occurred_end")
+                || SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", "time_granularity");
+    }
+
+    private static void ensureMysqlItemTemporalColumn(
+            DataSource dataSource, String columnName, String sql) {
+        if (SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", columnName)) {
+            return;
+        }
+        JdbcExecutor.execute(dataSource, sql);
+    }
+
+    private static boolean hasRequiredPostgresqlItemTemporalSchema(DataSource dataSource) {
+        return SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_item", "occurred_start")
+                && SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_item", "occurred_end")
+                && SchemaVerifier.hasPostgresqlColumn(
+                        dataSource, "memory_item", "time_granularity");
+    }
+
+    private static boolean hasAnyPostgresqlItemTemporalColumn(DataSource dataSource) {
+        return SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_item", "occurred_start")
+                || SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_item", "occurred_end")
+                || SchemaVerifier.hasPostgresqlColumn(
+                        dataSource, "memory_item", "time_granularity");
+    }
+
+    private static void ensurePostgresqlItemTemporalColumn(
+            DataSource dataSource, String columnName, String sql) {
+        if (SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_item", columnName)) {
+            return;
+        }
+        JdbcExecutor.execute(dataSource, sql);
     }
 }

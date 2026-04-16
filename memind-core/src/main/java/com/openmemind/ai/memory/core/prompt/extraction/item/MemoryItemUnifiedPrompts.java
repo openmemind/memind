@@ -21,11 +21,10 @@ import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptTemplate;
 import com.openmemind.ai.memory.core.prompt.PromptType;
 import java.time.Instant;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -38,9 +37,7 @@ import java.util.stream.Collectors;
  */
 public final class MemoryItemUnifiedPrompts {
 
-    static final DateTimeFormatter DATE_FMT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd (EEEE)", Locale.ENGLISH)
-                    .withZone(ZoneOffset.UTC);
+    static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ISO_LOCAL_DATE;
 
     static final Pattern MESSAGE_TIMESTAMP_PATTERN =
             Pattern.compile("\\[\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}]");
@@ -48,9 +45,9 @@ public final class MemoryItemUnifiedPrompts {
     static final String RESOLVE_DATES_INSTRUCTION =
             """
             Resolve relative expressions ("yesterday", "next month") to absolute dates. \
-            Only populate `occurredAt` when the text itself provides semantic temporal evidence \
-            for the memory. Do NOT infer `occurredAt` from the reference date or message \
-            timestamp alone.\
+            Use `time` as the primary temporal field. Set `time` to null when the text itself \
+            does not provide semantic temporal evidence for the memory. Do NOT infer `time` \
+            from the reference date or message timestamp alone.\
             """;
 
     // ── System & User Prompt Templates ───────────────────────────────────────
@@ -130,30 +127,47 @@ public final class MemoryItemUnifiedPrompts {
             - 0.70-0.84: Reasonable inference
             - < 0.70: Do not extract
 
-            ## occurredAt
-            Temporal Content Embedding rules for time-specific memories:
-            - Time-specific memories: embed the resolved absolute date in the content AND \
-            populate `occurredAt` with the ISO-8601 UTC timestamp only when the text itself \
-            states or clearly implies that time.
+            ## time
+            Temporal extraction rules for time-specific memories:
+            - Use `time` as the primary temporal field. Set `time` to null when no semantic \
+            temporal evidence exists in the source text.
+            - `time.expression`: the original temporal phrase from the source text, such as \
+            "昨天", "last week", or "March 2026".
+            - `time.start`: the normalized lower bound in ISO-8601 UTC.
+            - `time.end`: the normalized exclusive upper bound in ISO-8601 UTC for ranges and \
+            calendar buckets; use null for a single point in time.
+            - `time.granularity`: one of `point`, `day`, `week`, `month`, `year`, `range`, or \
+            `unknown`.
+            - Time-specific memories: embed the resolved absolute date or range in the content \
+            AND populate `time` only when the text itself states or clearly implies that time.
             - Profile, behavior, directive, playbook, resolution, and tool items should \
-            normally set `occurredAt` to null.
-            - Event items should populate `occurredAt` only when the text itself contains \
-            explicit temporal evidence such as a date, relative date phrase, or clear \
-            start/end marker.
-            - Do NOT use message timestamps or conversation timestamps as `occurredAt` by \
-            default. They are for resolving relative expressions, not for persistence defaults.
+            normally set `time` to null.
+            - Event items should populate `time` only when the text itself contains explicit \
+            temporal evidence such as a date, relative date phrase, or clear start/end marker.
+            - Do NOT use message timestamps or conversation timestamps as default temporal \
+            values. They are for resolving relative expressions, not persistence defaults.
+            - For `day`, `week`, `month`, and `year`, `time.start` and `time.end` must form a \
+            canonical half-open bucket in the System Time Zone before converting to UTC.
+            - During rollout the parser still tolerates legacy `occurredAt`, but your response \
+            should use `time`.
             """;
 
     private static final String OUTPUT =
             """
             <OutputFormat>
             Return a JSON object ONLY. No extra text.
+            Use `"time": null` when no semantic temporal evidence exists.
             {
               "items":[
                 {
                   "content": "Single, complete, self-contained sentence preserving ALL details",
                   "confidence": 0.95,
-                  "occurredAt": "2023-10-14T00:00:00Z",
+                  "time": {
+                    "expression": "on 2023-10-14 at 08:30 UTC",
+                    "start": "2023-10-14T08:30:00Z",
+                    "end": null,
+                    "granularity": "point"
+                  },
                   "insightTypes": ["Choose ONLY from the Available insightTypes listed under the assigned category"],
                   "category_reason": "CRITICAL: Briefly explain WHY this category was chosen based on the rules. This field is for reasoning only and will NOT be stored.",
                   "category": "<matched_category_from_list>"
@@ -252,7 +266,7 @@ public final class MemoryItemUnifiedPrompts {
                 {
                   "content": "User is a backend engineer with 5 years of Python experience",
                   "confidence": 1.0,
-                  "occurredAt": null,
+                  "time": null,
                   "insightTypes": ["identity"],
                   "category_reason": "Stable professional identity that remains true across projects.",
                   "category": "profile"
@@ -280,7 +294,7 @@ public final class MemoryItemUnifiedPrompts {
                 {
                   "content": "User reviews pull requests before morning standup every workday",
                   "confidence": 1.0,
-                  "occurredAt": null,
+                  "time": null,
                   "insightTypes": ["behavior"],
                   "category_reason": "Recurring routine with explicit frequency evidence.",
                   "category": "behavior"
@@ -308,7 +322,7 @@ public final class MemoryItemUnifiedPrompts {
                 {
                   "content": "User's team uses Redis for caching with a 10-minute TTL",
                   "confidence": 0.95,
-                  "occurredAt": null,
+                  "time": null,
                   "insightTypes": ["experiences"],
                   "category_reason": "Current team infrastructure setup, no specific time anchor.",
                   "category": "event"
@@ -336,7 +350,7 @@ public final class MemoryItemUnifiedPrompts {
                 {
                   "content": "User requires the agent to show the plan before substantial code changes",
                   "confidence": 1.0,
-                  "occurredAt": null,
+                  "time": null,
                   "insightTypes": ["directives"],
                   "category_reason": "Durable collaboration rule for future interactions.",
                   "category": "directive"
@@ -363,7 +377,7 @@ public final class MemoryItemUnifiedPrompts {
                 {
                   "content": "For repository comparisons, first align memory scope, then compare taxonomy, extraction flow, and storage path",
                   "confidence": 0.95,
-                  "occurredAt": null,
+                  "time": null,
                   "insightTypes": ["playbooks"],
                   "category_reason": "Reusable workflow for a recurring class of tasks.",
                   "category": "playbook"
@@ -390,7 +404,7 @@ public final class MemoryItemUnifiedPrompts {
                 {
                   "content": "Virtual threads caused HikariCP connection pool exhaustion because virtual thread count exceeded pool size; solved by setting maximumPoolSize to 10-20",
                   "confidence": 0.95,
-                  "occurredAt": null,
+                  "time": null,
                   "insightTypes": ["resolutions"],
                   "category_reason": "Named problem plus usable fix with future reuse value.",
                   "category": "resolution"
@@ -598,34 +612,59 @@ public final class MemoryItemUnifiedPrompts {
     static String buildTimeContext(String segmentText, Instant referenceTime) {
         boolean hasTimestamps =
                 segmentText != null && MESSAGE_TIMESTAMP_PATTERN.matcher(segmentText).find();
+        ZoneId systemZone = ZoneId.systemDefault();
+        String zoneLine = "System Time Zone: " + systemZone.getId() + "\n";
+        String bucketRule =
+                "For `day`, `week`, `month`, and `year`, `time.start` and `time.end` must"
+                        + " form canonical half-open bucket boundaries in this system time"
+                        + " zone before converting to UTC.\n";
 
         if (hasTimestamps) {
             String fallback =
                     referenceTime != null
-                            ? "\nFallback Reference Date: " + DATE_FMT.format(referenceTime)
+                            ? "\nFallback Reference Date: "
+                                    + formatReferenceDate(referenceTime, systemZone)
                             : "";
             return "# Temporal Resolution\n"
+                    + zoneLine
                     + "Messages contain timestamps (e.g., [2023-05-25 13:17]). Use each message's"
                     + " timestamp only as a reference anchor for resolving relative expressions"
-                    + " within that message. Do NOT copy message timestamps into occurredAt unless"
-                    + " the memory text itself makes that time semantically explicit."
+                    + " within that message. Do NOT copy message timestamps into `time` or"
+                    + " legacy `occurredAt` unless the memory text itself makes that time"
+                    + " semantically explicit."
                     + fallback
                     + "\n\n"
+                    + bucketRule
+                    + "\n"
                     + RESOLVE_DATES_INSTRUCTION
                     + "\n";
         } else if (referenceTime != null) {
             return "# Temporal Resolution\n"
+                    + zoneLine
                     + "Today's date: "
-                    + DATE_FMT.format(referenceTime)
+                    + formatReferenceDate(referenceTime, systemZone)
                     + ". Use this only to resolve relative temporal references. Do NOT treat it"
-                    + " as a default occurredAt.\n\n"
+                    + " as a default temporal value.\n\n"
+                    + bucketRule
+                    + "\n"
                     + RESOLVE_DATES_INSTRUCTION
                     + "\n";
         } else {
             return """
             # Temporal Resolution
-            No absolute dates available. Do not resolve relative dates.
-            """;
+            System Time Zone:\
+            """
+                    + systemZone.getId()
+                    + """
+
+                    No absolute dates available. Do not resolve relative dates.
+                    For `day`, `week`, `month`, and `year`, `time.start` and `time.end` must form canonical \
+                    half-open bucket boundaries in this system time zone before converting to UTC.
+                    """;
         }
+    }
+
+    private static String formatReferenceDate(Instant referenceTime, ZoneId systemZone) {
+        return referenceTime.atZone(systemZone).toLocalDate().format(DATE_FMT);
     }
 }

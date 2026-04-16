@@ -26,6 +26,9 @@ import java.util.Map;
  * @param content Memory content
  * @param confidence Confidence level (used only for filtering, not persisted)
  * @param occurredAt Semantic time when the memory occurred (null for non-temporal items)
+ * @param occurredStart Normalized semantic interval lower bound (null for non-temporal items)
+ * @param occurredEnd Normalized semantic interval exclusive upper bound
+ * @param timeGranularity Normalized temporal granularity
  * @param observedAt Source observation time from the original message/segment
  * @param rawDataId Source data ID
  * @param contentHash Content hash (filled after deduplication)
@@ -36,6 +39,9 @@ public record ExtractedMemoryEntry(
         String content,
         float confidence,
         Instant occurredAt,
+        Instant occurredStart,
+        Instant occurredEnd,
+        String timeGranularity,
         Instant observedAt,
         String rawDataId,
         String contentHash,
@@ -43,6 +49,33 @@ public record ExtractedMemoryEntry(
         Map<String, Object> metadata,
         MemoryItemType type,
         String category) {
+
+    public ExtractedMemoryEntry(
+            String content,
+            float confidence,
+            Instant occurredAt,
+            Instant observedAt,
+            String rawDataId,
+            String contentHash,
+            List<String> insightTypes,
+            Map<String, Object> metadata,
+            MemoryItemType type,
+            String category) {
+        this(
+                content,
+                confidence,
+                occurredAt,
+                null,
+                null,
+                null,
+                observedAt,
+                rawDataId,
+                contentHash,
+                insightTypes,
+                metadata,
+                type,
+                category);
+    }
 
     /**
      * Set contentHash
@@ -52,6 +85,9 @@ public record ExtractedMemoryEntry(
                 content,
                 confidence,
                 occurredAt,
+                occurredStart,
+                occurredEnd,
+                timeGranularity,
                 observedAt,
                 rawDataId,
                 contentHash,

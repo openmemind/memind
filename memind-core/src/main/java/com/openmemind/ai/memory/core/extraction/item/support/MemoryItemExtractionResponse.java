@@ -26,11 +26,23 @@ import java.util.Map;
 public record MemoryItemExtractionResponse(List<ExtractedItem> items) {
 
     /**
+     * Structured temporal extraction result.
+     *
+     * @param expression Original temporal phrase from source text
+     * @param start Normalized lower bound in ISO-8601 UTC
+     * @param end Normalized exclusive upper bound in ISO-8601 UTC
+     * @param granularity Temporal granularity
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ExtractedTime(String expression, String start, String end, String granularity) {}
+
+    /**
      * Single extraction result
      *
      * @param content Memory content
      * @param confidence Confidence level (0.0-1.0)
      * @param occurredAt Memory occurrence time ISO-8601 (LLM parsed, may be null)
+     * @param time Structured temporal extraction result
      * @param insightTypes List of matched InsightType names (may be empty)
      * @param metadata Additional metadata (may be null; includes whenToUse, etc.)
      */
@@ -39,7 +51,19 @@ public record MemoryItemExtractionResponse(List<ExtractedItem> items) {
             String content,
             float confidence,
             String occurredAt,
+            ExtractedTime time,
             List<String> insightTypes,
             Map<String, Object> metadata,
-            String category) {}
+            String category) {
+
+        public ExtractedItem(
+                String content,
+                float confidence,
+                String occurredAt,
+                List<String> insightTypes,
+                Map<String, Object> metadata,
+                String category) {
+            this(content, confidence, occurredAt, null, insightTypes, metadata, category);
+        }
+    }
 }
