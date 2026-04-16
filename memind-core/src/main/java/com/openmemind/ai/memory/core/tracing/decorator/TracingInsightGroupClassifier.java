@@ -55,4 +55,28 @@ public class TracingInsightGroupClassifier extends TracingSupport
                 r -> Map.of(MemoryAttributes.EXTRACTION_INSIGHT_GROUP_COUNT, r.size()),
                 () -> delegate.classify(insightType, items, existingGroupNames));
     }
+
+    @Override
+    public Mono<Map<String, List<MemoryItem>>> classify(
+            MemoryInsightType insightType,
+            List<MemoryItem> items,
+            List<String> existingGroupNames,
+            String additionalContext,
+            String language) {
+        return trace(
+                MemorySpanNames.EXTRACTION_INSIGHT_GROUP_CLASSIFY,
+                Map.of(
+                        MemoryAttributes.EXTRACTION_INSIGHT_TYPE,
+                        insightType.name(),
+                        MemoryAttributes.EXTRACTION_ITEM_COUNT,
+                        items.size()),
+                r -> Map.of(MemoryAttributes.EXTRACTION_INSIGHT_GROUP_COUNT, r.size()),
+                () ->
+                        delegate.classify(
+                                insightType,
+                                items,
+                                existingGroupNames,
+                                additionalContext,
+                                language));
+    }
 }

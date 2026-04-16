@@ -140,6 +140,21 @@ public class InMemoryGraphOperations implements GraphOperations {
     }
 
     @Override
+    public List<ItemEntityMention> listItemEntityMentions(
+            MemoryId memoryId, Collection<Long> itemIds) {
+        var itemIdSet = normalizeItemIds(itemIds);
+        if (itemIdSet.isEmpty()) {
+            return List.of();
+        }
+        return mentions.getOrDefault(memoryId.toIdentifier(), Map.of()).values().stream()
+                .filter(mention -> itemIdSet.contains(mention.itemId()))
+                .sorted(
+                        Comparator.comparing(ItemEntityMention::itemId)
+                                .thenComparing(ItemEntityMention::entityKey))
+                .toList();
+    }
+
+    @Override
     public List<EntityCooccurrence> listEntityCooccurrences(MemoryId memoryId) {
         return entityCooccurrences.getOrDefault(memoryId.toIdentifier(), Map.of()).values().stream()
                 .sorted(
@@ -151,6 +166,27 @@ public class InMemoryGraphOperations implements GraphOperations {
     @Override
     public List<ItemLink> listItemLinks(MemoryId memoryId) {
         return itemLinks.getOrDefault(memoryId.toIdentifier(), Map.of()).values().stream()
+                .sorted(
+                        Comparator.comparing(ItemLink::sourceItemId)
+                                .thenComparing(ItemLink::targetItemId)
+                                .thenComparing(ItemLink::linkType))
+                .toList();
+    }
+
+    @Override
+    public List<ItemLink> listItemLinks(
+            MemoryId memoryId, Collection<Long> itemIds, Collection<ItemLinkType> linkTypes) {
+        var itemIdSet = normalizeItemIds(itemIds);
+        if (itemIdSet.isEmpty()) {
+            return List.of();
+        }
+        var typeSet = normalizeLinkTypes(linkTypes);
+        return itemLinks.getOrDefault(memoryId.toIdentifier(), Map.of()).values().stream()
+                .filter(
+                        link ->
+                                itemIdSet.contains(link.sourceItemId())
+                                        && itemIdSet.contains(link.targetItemId()))
+                .filter(link -> typeSet.isEmpty() || typeSet.contains(link.linkType()))
                 .sorted(
                         Comparator.comparing(ItemLink::sourceItemId)
                                 .thenComparing(ItemLink::targetItemId)
@@ -182,6 +218,24 @@ public class InMemoryGraphOperations implements GraphOperations {
         }
         Set<String> normalized = new HashSet<>();
         entityKeys.stream().filter(Objects::nonNull).forEach(normalized::add);
+        return normalized;
+    }
+
+    private static Set<Long> normalizeItemIds(Collection<Long> itemIds) {
+        if (itemIds == null || itemIds.isEmpty()) {
+            return Set.of();
+        }
+        Set<Long> normalized = new HashSet<>();
+        itemIds.stream().filter(Objects::nonNull).forEach(normalized::add);
+        return normalized;
+    }
+
+    private static Set<ItemLinkType> normalizeLinkTypes(Collection<ItemLinkType> linkTypes) {
+        if (linkTypes == null || linkTypes.isEmpty()) {
+            return Set.of();
+        }
+        Set<ItemLinkType> normalized = new HashSet<>();
+        linkTypes.stream().filter(Objects::nonNull).forEach(normalized::add);
         return normalized;
     }
 

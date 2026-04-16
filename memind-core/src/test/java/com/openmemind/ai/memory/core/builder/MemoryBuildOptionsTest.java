@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
+import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
@@ -98,5 +99,24 @@ class MemoryBuildOptionsTest {
         var options = new ItemExtractionOptions(false);
 
         assertThat(options.graph()).isEqualTo(ItemGraphOptions.defaults());
+    }
+
+    @Test
+    void insightGraphAssistDefaultsStayDisabledAndBounded() {
+        var options = InsightGraphAssistOptions.defaults();
+
+        assertThat(options.enabled()).isFalse();
+        assertThat(options.maxGroupingClusters()).isEqualTo(3);
+        assertThat(options.maxRepresentativeItems()).isEqualTo(6);
+        assertThat(options.maxRelationHints()).isEqualTo(6);
+        assertThat(options.maxContextChars()).isEqualTo(1200);
+        assertThat(options.reorderEvidence()).isTrue();
+    }
+
+    @Test
+    void legacyInsightExtractionOptionsConstructorStillBuildsDisabledGraphAssist() {
+        var options = new InsightExtractionOptions(true, InsightBuildConfig.defaults());
+
+        assertThat(options.graphAssist()).isEqualTo(InsightGraphAssistOptions.defaults());
     }
 }

@@ -18,7 +18,10 @@ import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.EXTRACTION_
 import static com.openmemind.ai.memory.core.tracing.MemorySpanNames.EXTRACTION_INSIGHT_GROUP_CLASSIFY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
@@ -111,5 +114,59 @@ class TracingInsightGroupClassifierTest {
                 .verify();
 
         assertThat(observer.monoContexts()).hasSize(1);
+    }
+
+    @Test
+    void classifyWithAdditionalContextShouldDelegateToOverload() {
+        var observer = new RecordingMemoryObserver();
+        var delegate = mock(InsightGroupClassifier.class);
+        var item =
+                new MemoryItem(
+                        1L,
+                        "user1:agent1",
+                        "content",
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null);
+        var result = Map.of("group-1", List.of(item));
+        when(delegate.classify(
+                        any(),
+                        anyList(),
+                        anyList(),
+                        eq("GraphGroupingHints: cluster alpha"),
+                        eq("English")))
+                .thenReturn(Mono.just(result));
+        var insightType =
+                new MemoryInsightType(
+                        1L, "PROFILE", "desc", null, List.of(), 400, null, null, null, null, null,
+                        null);
+
+        var traced = new TracingInsightGroupClassifier(delegate, observer);
+
+        StepVerifier.create(
+                        traced.classify(
+                                insightType,
+                                List.of(item),
+                                List.of("group-1"),
+                                "GraphGroupingHints: cluster alpha",
+                                "English"))
+                .expectNext(result)
+                .verifyComplete();
+
+        verify(delegate)
+                .classify(
+                        eq(insightType),
+                        anyList(),
+                        anyList(),
+                        eq("GraphGroupingHints: cluster alpha"),
+                        eq("English"));
     }
 }

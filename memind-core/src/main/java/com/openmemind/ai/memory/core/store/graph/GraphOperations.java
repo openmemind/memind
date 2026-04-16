@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core.store.graph;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Optional graph storage domain for item graph primitives.
@@ -34,7 +35,28 @@ public interface GraphOperations {
 
     List<ItemEntityMention> listItemEntityMentions(MemoryId memoryId);
 
+    default List<ItemEntityMention> listItemEntityMentions(
+            MemoryId memoryId, Collection<Long> itemIds) {
+        var itemIdSet = Set.copyOf(itemIds);
+        return listItemEntityMentions(memoryId).stream()
+                .filter(mention -> itemIdSet.contains(mention.itemId()))
+                .toList();
+    }
+
     List<EntityCooccurrence> listEntityCooccurrences(MemoryId memoryId);
 
     List<ItemLink> listItemLinks(MemoryId memoryId);
+
+    default List<ItemLink> listItemLinks(
+            MemoryId memoryId, Collection<Long> itemIds, Collection<ItemLinkType> linkTypes) {
+        var itemIdSet = Set.copyOf(itemIds);
+        var typeSet = Set.copyOf(linkTypes);
+        return listItemLinks(memoryId).stream()
+                .filter(
+                        link ->
+                                itemIdSet.contains(link.sourceItemId())
+                                        && itemIdSet.contains(link.targetItemId()))
+                .filter(link -> typeSet.isEmpty() || typeSet.contains(link.linkType()))
+                .toList();
+    }
 }

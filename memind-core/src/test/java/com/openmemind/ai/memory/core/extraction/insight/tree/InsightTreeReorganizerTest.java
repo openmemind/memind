@@ -40,6 +40,9 @@ import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightPointGenerateResponse;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightPointOpsResponse;
+import com.openmemind.ai.memory.core.extraction.insight.graph.InsightGraphAssistContext.BranchAssist;
+import com.openmemind.ai.memory.core.extraction.insight.graph.InsightGraphAssistContext.RootAssist;
+import com.openmemind.ai.memory.core.extraction.insight.graph.InsightGraphAssistant;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.utils.IdUtils;
@@ -70,6 +73,7 @@ class InsightTreeReorganizerTest {
     @Mock private MemoryVector vector;
     @Mock private MemoryStore store;
     @Mock private InsightOperations insightOps;
+    @Mock private InsightGraphAssistant graphAssistant;
 
     private final MemoryId memoryId = () -> "test-memory";
     private final IdUtils.SnowflakeIdGenerator idGenerator = IdUtils.snowflake();
@@ -86,8 +90,15 @@ class InsightTreeReorganizerTest {
         config = InsightTreeConfig.defaults(); // branchBubble=3, rootBubble=2, minBranches=2
         bubbleTracker = new BubbleTracker();
         when(store.insightOperations()).thenReturn(insightOps);
+        lenient()
+                .when(graphAssistant.branchAssist(any(), any(), anyList()))
+                .thenAnswer(invocation -> new BranchAssist(invocation.getArgument(2), ""));
+        lenient()
+                .when(graphAssistant.rootAssist(any(), any(), anyList()))
+                .thenAnswer(invocation -> new RootAssist(invocation.getArgument(2), ""));
         reorganizer =
-                new InsightTreeReorganizer(generator, vector, store, bubbleTracker, idGenerator);
+                new InsightTreeReorganizer(
+                        generator, vector, store, bubbleTracker, idGenerator, graphAssistant);
     }
 
     @Nested
@@ -302,6 +313,54 @@ class InsightTreeReorganizerTest {
         }
 
         @Test
+        @DisplayName("branch re-summarize should pass ordered leafs and graph coherence context")
+        void branchResummarizeShouldPassOrderedLeafsAndGraphCoherenceContext() {
+            var branch = createBranch(10L);
+            var leafA = createLeaf(1L, "First piece");
+            var leafB = createLeaf(2L, "Second piece");
+
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch));
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME))
+                    .thenReturn(List.of(leafA, leafB));
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
+                    .thenReturn(List.of(branch));
+            when(insightOps.listInsightTypes()).thenReturn(List.of());
+            when(graphAssistant.branchAssist(any(), any(), anyList()))
+                    .thenReturn(
+                            new BranchAssist(
+                                    List.of(leafB, leafA),
+                                    "GraphBranchHints: shared entity project-x"));
+            when(generator.generateBranchPointOps(
+                            any(),
+                            anyList(),
+                            eq(List.of(leafB, leafA)),
+                            anyInt(),
+                            eq("GraphBranchHints: shared entity project-x"),
+                            eq("English")))
+                    .thenReturn(Mono.just(new InsightPointOpsResponse(List.of())));
+
+            bubbleTracker.markDirty(DIRTY_KEY);
+            bubbleTracker.markDirty(DIRTY_KEY);
+
+            reorganizer.onLeafsUpdated(
+                    memoryId,
+                    TYPE_NAME,
+                    createInsightType(),
+                    List.of(leafA, leafB),
+                    config,
+                    "English");
+
+            verify(generator)
+                    .generateBranchPointOps(
+                            any(),
+                            anyList(),
+                            eq(List.of(leafB, leafA)),
+                            anyInt(),
+                            eq("GraphBranchHints: shared entity project-x"),
+                            eq("English"));
+        }
+
+        @Test
         @DisplayName("should not trigger re-summarize when dirtyCount does not reach threshold")
         void shouldNotResummarizeBelowThreshold() {
             var leaf = createLeaf(1L, "First piece");
@@ -416,6 +475,65 @@ class InsightTreeReorganizerTest {
             verify(generator)
                     .generateBranchSummary(
                             any(), anyList(), anyList(), anyInt(), nullable(String.class));
+        }
+
+        @Test
+        @DisplayName("branch full rewrite fallback should reuse graph coherence context")
+        void branchFullRewriteFallbackShouldReuseGraphCoherenceContext() {
+            var branch = createBranch(10L);
+            var leafA = createLeaf(1L, "First piece");
+            var leafB = createLeaf(2L, "Second piece");
+
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch));
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME))
+                    .thenReturn(List.of(leafA, leafB));
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
+                    .thenReturn(List.of(branch));
+            when(insightOps.listInsightTypes()).thenReturn(List.of());
+            when(graphAssistant.branchAssist(any(), any(), anyList()))
+                    .thenReturn(
+                            new BranchAssist(
+                                    List.of(leafB, leafA),
+                                    "GraphBranchHints: shared entity project-x"));
+            when(generator.generateBranchPointOps(
+                            any(), anyList(), anyList(), anyInt(), any(), any()))
+                    .thenReturn(Mono.empty());
+            when(generator.generateBranchSummary(
+                            any(),
+                            anyList(),
+                            eq(List.of(leafB, leafA)),
+                            anyInt(),
+                            eq("GraphBranchHints: shared entity project-x"),
+                            eq("English")))
+                    .thenReturn(
+                            Mono.just(
+                                    new InsightPointGenerateResponse(
+                                            List.of(
+                                                    new InsightPoint(
+                                                            InsightPoint.PointType.SUMMARY,
+                                                            "fallback",
+                                                            List.of("1", "2"))))));
+            when(vector.embed(anyString())).thenReturn(Mono.just(List.of(0.1f, 0.2f)));
+
+            bubbleTracker.markDirty(DIRTY_KEY);
+            bubbleTracker.markDirty(DIRTY_KEY);
+
+            reorganizer.onLeafsUpdated(
+                    memoryId,
+                    TYPE_NAME,
+                    createInsightType(),
+                    List.of(leafA, leafB),
+                    config,
+                    "English");
+
+            verify(generator)
+                    .generateBranchSummary(
+                            any(),
+                            anyList(),
+                            eq(List.of(leafB, leafA)),
+                            anyInt(),
+                            eq("GraphBranchHints: shared entity project-x"),
+                            eq("English"));
         }
 
         @Test
@@ -681,6 +799,66 @@ class InsightTreeReorganizerTest {
                             anyList(),
                             anyInt(),
                             nullable(String.class));
+        }
+
+        @Test
+        @DisplayName("root re-summarize should pass graph coherence guard without changing links")
+        void rootResummarizeShouldPassGraphCoherenceGuardWithoutChangingTreeLinks() {
+            var branch1 = createBranchWithType(10L, TYPE_NAME);
+            var branch2 = createBranchWithType(20L, "other-type");
+            var root = createRoot(100L, ROOT_TYPE_NAME, List.of(10L, 20L));
+            var leaf = createLeaf(3L, "New information");
+            var rootInsightType = createRootInsightType(ROOT_TYPE_NAME);
+
+            when(insightOps.getBranchByType(memoryId, TYPE_NAME)).thenReturn(Optional.of(branch1));
+            when(insightOps.getInsight(memoryId, 100L)).thenReturn(Optional.of(root));
+            when(insightOps.getInsightsByType(memoryId, TYPE_NAME))
+                    .thenReturn(List.of(createLeaf(1L, "Old information"), leaf));
+            when(insightOps.getInsightsByTier(memoryId, InsightTier.BRANCH))
+                    .thenReturn(List.of(branch1, branch2));
+            when(insightOps.listInsightTypes()).thenReturn(List.of(rootInsightType));
+            when(insightOps.getRootByType(memoryId, ROOT_TYPE_NAME)).thenReturn(Optional.of(root));
+            when(graphAssistant.rootAssist(any(), any(), anyList()))
+                    .thenReturn(
+                            new RootAssist(
+                                    List.of(branch2, branch1),
+                                    "GraphRootHints: weak bridge between branches"));
+
+            var branchPoint =
+                    new InsightPoint(InsightPoint.PointType.SUMMARY, "BRANCH summary", List.of());
+            when(generator.generateBranchSummary(
+                            any(), any(), anyList(), anyInt(), nullable(String.class)))
+                    .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(branchPoint))));
+            var rootPoint =
+                    new InsightPoint(
+                            InsightPoint.PointType.SUMMARY, "ROOT comprehensive", List.of());
+            when(generator.generateRootSynthesis(
+                            any(MemoryInsightType.class),
+                            anyList(),
+                            eq(List.of(branch2, branch1)),
+                            anyInt(),
+                            eq("GraphRootHints: weak bridge between branches"),
+                            eq("English")))
+                    .thenReturn(Mono.just(new InsightPointGenerateResponse(List.of(rootPoint))));
+            when(vector.embed(anyString())).thenReturn(Mono.just(List.of(0.1f, 0.2f)));
+
+            bubbleTracker.markDirty(DIRTY_KEY);
+            bubbleTracker.markDirty(DIRTY_KEY);
+            bubbleTracker.markDirty("test-memory::root::" + ROOT_TYPE_NAME);
+
+            reorganizer.onLeafsUpdated(
+                    memoryId, TYPE_NAME, createInsightType(), List.of(leaf), config, "English");
+            reorganizer.drainRootTasks(memoryId, 2, TimeUnit.SECONDS);
+
+            verify(generator, timeout(2000))
+                    .generateRootSynthesis(
+                            any(MemoryInsightType.class),
+                            anyList(),
+                            eq(List.of(branch2, branch1)),
+                            anyInt(),
+                            eq("GraphRootHints: weak bridge between branches"),
+                            eq("English"));
+            verify(insightOps, never()).deleteInsights(any(), anyList());
         }
 
         @Test

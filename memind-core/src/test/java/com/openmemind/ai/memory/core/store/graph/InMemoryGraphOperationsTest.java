@@ -14,12 +14,14 @@
 package com.openmemind.ai.memory.core.store.graph;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class InMemoryGraphOperationsTest {
@@ -77,6 +79,36 @@ class InMemoryGraphOperationsTest {
                 .singleElement()
                 .extracting(EntityCooccurrence::cooccurrenceCount)
                 .isEqualTo(2);
+    }
+
+    @Test
+    void boundedGraphReadsShouldReturnOnlyLocalSubgraphEdgesForRequestedItemIdsAndLinkTypes() {
+        var ops = new InMemoryGraphOperations();
+
+        ops.upsertItemEntityMentions(
+                MEMORY_ID,
+                List.of(
+                        mention(101L, "organization:openai"),
+                        mention(102L, "person:sam_altman"),
+                        mention(103L, "organization:anthropic")));
+        ops.upsertItemLinks(
+                MEMORY_ID,
+                List.of(
+                        link(101L, 102L, ItemLinkType.CAUSAL),
+                        link(101L, 103L, ItemLinkType.CAUSAL),
+                        link(102L, 103L, ItemLinkType.SEMANTIC)));
+
+        assertThat(ops.listItemEntityMentions(MEMORY_ID, List.of(101L)))
+                .extracting(ItemEntityMention::itemId)
+                .containsExactly(101L);
+        assertThat(ops.listItemLinks(MEMORY_ID, List.of(101L, 102L), List.of(ItemLinkType.CAUSAL)))
+                .allMatch(
+                        link ->
+                                Set.of(101L, 102L).contains(link.sourceItemId())
+                                        && Set.of(101L, 102L).contains(link.targetItemId()))
+                .allMatch(link -> link.linkType() == ItemLinkType.CAUSAL)
+                .extracting(ItemLink::sourceItemId, ItemLink::targetItemId)
+                .containsExactly(tuple(101L, 102L));
     }
 
     private static GraphEntity entity(String entityKey, String canonicalName) {

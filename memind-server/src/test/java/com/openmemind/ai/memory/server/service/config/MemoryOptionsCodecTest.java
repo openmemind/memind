@@ -15,7 +15,16 @@ package com.openmemind.ai.memory.server.service.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.builder.ExtractionCommonOptions;
+import com.openmemind.ai.memory.core.builder.ExtractionOptions;
+import com.openmemind.ai.memory.core.builder.InsightExtractionOptions;
+import com.openmemind.ai.memory.core.builder.InsightGraphAssistOptions;
+import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
+import com.openmemind.ai.memory.core.builder.ItemGraphOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.builder.PromptBudgetOptions;
+import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
+import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
@@ -26,6 +35,30 @@ class MemoryOptionsCodecTest {
     @Test
     void roundTripsMemoryBuildOptions() {
         var options = MemoryBuildOptions.builder().build();
+
+        String json = codec.write(options);
+
+        assertThat(codec.read(json)).isEqualTo(options);
+    }
+
+    @Test
+    void roundTripsGraphAssistOptions() {
+        var options =
+                MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults().withEnabled(true)),
+                                        new InsightExtractionOptions(
+                                                true,
+                                                InsightBuildConfig.defaults(),
+                                                new InsightGraphAssistOptions(
+                                                        true, 4, 8, 7, 1600, false))))
+                        .build();
 
         String json = codec.write(options);
 

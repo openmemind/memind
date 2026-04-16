@@ -20,6 +20,10 @@ import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector
 import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.generator.LlmInsightGenerator;
+import com.openmemind.ai.memory.core.extraction.insight.graph.DefaultInsightGraphAssistant;
+import com.openmemind.ai.memory.core.extraction.insight.graph.GraphPromptContextFormatter;
+import com.openmemind.ai.memory.core.extraction.insight.graph.InsightGraphAssistant;
+import com.openmemind.ai.memory.core.extraction.insight.graph.NoOpInsightGraphAssistant;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassifier;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupRouter;
 import com.openmemind.ai.memory.core.extraction.insight.group.LlmInsightGroupClassifier;
@@ -71,10 +75,13 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 final class MemoryExtractionAssembler {
 
     private static final ResourceFetcher DEFAULT_RESOURCE_FETCHER = new HttpResourceFetcher();
+    private static final Logger log = LoggerFactory.getLogger(MemoryExtractionAssembler.class);
 
     MemoryExtractionAssembly assemble(MemoryAssemblyContext context) {
         ChatClientRegistry registry = context.chatClientRegistry();
@@ -126,6 +133,7 @@ final class MemoryExtractionAssembler {
                 new LlmInsightGenerator(
                         registry.resolve(ChatClientSlot.INSIGHT_GENERATOR),
                         context.promptRegistry());
+        InsightGraphAssistant insightGraphAssistant = insightGraphAssistant(context);
         InsightGroupClassifier insightGroupClassifier =
                 new LlmInsightGroupClassifier(
                         registry.resolve(ChatClientSlot.INSIGHT_GROUP_CLASSIFIER),
@@ -144,7 +152,8 @@ final class MemoryExtractionAssembler {
                         bubbleTrackerStore,
                         IdUtils.snowflake(),
                         identityManager,
-                        evidenceNormalizer);
+                        evidenceNormalizer,
+                        insightGraphAssistant);
         InsightGroupRouter insightGroupRouter = new InsightGroupRouter(insightGroupClassifier);
         InsightBuildScheduler insightBuildScheduler =
                 new InsightBuildScheduler(
@@ -159,6 +168,7 @@ final class MemoryExtractionAssembler {
                         context.options().extraction().insight().build(),
                         identityManager,
                         evidenceNormalizer,
+                        insightGraphAssistant,
                         null);
         InsightLayer insightLayer =
                 new InsightLayer(
@@ -192,6 +202,28 @@ final class MemoryExtractionAssembler {
 
     private ResourceFetcher resolveResourceFetcher(ResourceFetcher runtimeFetcher) {
         return runtimeFetcher != null ? runtimeFetcher : DEFAULT_RESOURCE_FETCHER;
+    }
+
+    private InsightGraphAssistant insightGraphAssistant(MemoryAssemblyContext context) {
+        boolean itemGraphEnabled = context.options().extraction().item().graph().enabled();
+        boolean insightGraphAssistEnabled =
+                context.options().extraction().insight().graphAssist().enabled();
+        if (!itemGraphEnabled) {
+            if (insightGraphAssistEnabled) {
+                log.warn(
+                        "Insight graph assist enabled but item graph is disabled; degrading to"
+                                + " NoOpInsightGraphAssistant");
+            }
+            return NoOpInsightGraphAssistant.INSTANCE;
+        }
+        if (!insightGraphAssistEnabled) {
+            return NoOpInsightGraphAssistant.INSTANCE;
+        }
+        return new DefaultInsightGraphAssistant(
+                context.memoryStore(),
+                context.options().extraction().insight().graphAssist(),
+                new GraphPromptContextFormatter(
+                        context.options().extraction().insight().graphAssist()));
     }
 
     private ItemGraphMaterializer graphMaterializer(MemoryAssemblyContext context) {

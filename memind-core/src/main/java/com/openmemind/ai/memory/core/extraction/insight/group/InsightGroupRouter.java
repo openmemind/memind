@@ -51,10 +51,35 @@ public class InsightGroupRouter {
             List<MemoryItem> items,
             List<String> existingGroupNames,
             String language) {
-
         return switch (category.groupingStrategy()) {
             case GroupingStrategy.LlmClassify() ->
                     llmClassifier.classify(insightType, items, existingGroupNames, language);
+            case GroupingStrategy.MetadataField(var fieldName) ->
+                    Mono.just(groupByMetadata(items, fieldName));
+        };
+    }
+
+    public Mono<Map<String, List<MemoryItem>>> groupSemantic(
+            MemoryInsightType insightType,
+            List<MemoryItem> items,
+            List<String> existingGroupNames,
+            String additionalContext,
+            String language) {
+        return llmClassifier.classify(
+                insightType, items, existingGroupNames, additionalContext, language);
+    }
+
+    public Mono<Map<String, List<MemoryItem>>> group(
+            MemoryInsightType insightType,
+            MemoryCategory category,
+            List<MemoryItem> items,
+            List<String> existingGroupNames,
+            String additionalContext,
+            String language) {
+        return switch (category.groupingStrategy()) {
+            case GroupingStrategy.LlmClassify() ->
+                    groupSemantic(
+                            insightType, items, existingGroupNames, additionalContext, language);
             case GroupingStrategy.MetadataField(var fieldName) ->
                     Mono.just(groupByMetadata(items, fieldName));
         };

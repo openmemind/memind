@@ -86,8 +86,36 @@ public class MemoryOptionsProjectionMapper {
                             "extraction.item.foresightEnabled",
                             "Whether extraction should synthesize foresight-style item memories."),
                     Map.entry(
+                            "extraction.item.graph.enabled",
+                            "Whether item extraction should materialize the bounded item graph used"
+                                    + " by graph-assisted insight building."),
+                    Map.entry(
                             "extraction.insight.enabled",
                             "Whether insight building is enabled during extraction."),
+                    Map.entry(
+                            "extraction.insight.graphAssist.enabled",
+                            "Whether insight grouping and synthesis prompts may consume bounded"
+                                    + " graph-derived hint context."),
+                    Map.entry(
+                            "extraction.insight.graphAssist.maxGroupingClusters",
+                            "Maximum number of graph-derived grouping clusters injected into"
+                                    + " grouping prompts."),
+                    Map.entry(
+                            "extraction.insight.graphAssist.maxRepresentativeItems",
+                            "Maximum number of representative entities or items surfaced in graph"
+                                    + " hint blocks."),
+                    Map.entry(
+                            "extraction.insight.graphAssist.maxRelationHints",
+                            "Maximum number of local graph relation hints injected into insight"
+                                    + " prompts."),
+                    Map.entry(
+                            "extraction.insight.graphAssist.maxContextChars",
+                            "Hard character budget for graph-derived prompt context added during"
+                                    + " insight building."),
+                    Map.entry(
+                            "extraction.insight.graphAssist.reorderEvidence",
+                            "Whether graph assist may reorder LEAF or higher-tier evidence inputs"
+                                    + " without changing their membership."),
                     Map.entry(
                             "retrieval.common.cacheEnabled",
                             "Whether retrieval can reuse cached ranking artifacts for repeated"

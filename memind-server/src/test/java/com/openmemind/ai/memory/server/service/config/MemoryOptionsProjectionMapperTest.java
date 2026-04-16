@@ -55,6 +55,28 @@ class MemoryOptionsProjectionMapperTest {
     }
 
     @Test
+    void projectionExposesInsightGraphAssistKeysAndRoundTripsValues() {
+        var projection = mapper.toProjection(MemoryBuildOptions.defaults());
+
+        assertThat(projection.get("extraction"))
+                .extracting(MemoryOptionItemView::key)
+                .contains(
+                        "extraction.item.graph.enabled",
+                        "extraction.insight.graphAssist.enabled",
+                        "extraction.insight.graphAssist.maxContextChars");
+
+        updateValue(projection, "extraction.item.graph.enabled", true);
+        updateValue(projection, "extraction.insight.graphAssist.enabled", true);
+        updateValue(projection, "extraction.insight.graphAssist.maxContextChars", 1600);
+
+        var rebuilt = mapper.toOptions(projection);
+
+        assertThat(rebuilt.extraction().item().graph().enabled()).isTrue();
+        assertThat(rebuilt.extraction().insight().graphAssist().enabled()).isTrue();
+        assertThat(rebuilt.extraction().insight().graphAssist().maxContextChars()).isEqualTo(1600);
+    }
+
+    @Test
     void ignoresNullRuntimeOnlyFieldsFromProjectionDefinitions() {
         var projection = mapper.toProjection(MemoryBuildOptions.defaults());
 

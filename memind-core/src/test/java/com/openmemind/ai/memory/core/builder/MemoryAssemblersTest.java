@@ -22,6 +22,8 @@ import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
+import com.openmemind.ai.memory.core.extraction.insight.graph.DefaultInsightGraphAssistant;
+import com.openmemind.ai.memory.core.extraction.insight.graph.NoOpInsightGraphAssistant;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
@@ -209,6 +211,70 @@ class MemoryAssemblersTest {
 
         assertThat(readField(reorganizer, "bubbleTracker", BubbleTrackerStore.class))
                 .isSameAs(customBubbleTracker);
+    }
+
+    @Test
+    void extractionAssemblerKeepsInsightGraphAssistantNoOpWhenItemGraphIsDisabled() {
+        var context =
+                context(
+                        MemoryBuildOptions.builder()
+                                .extraction(
+                                        new ExtractionOptions(
+                                                ExtractionCommonOptions.defaults(),
+                                                RawDataExtractionOptions.defaults(),
+                                                ItemExtractionOptions.defaults(),
+                                                new InsightExtractionOptions(
+                                                        true,
+                                                        InsightBuildConfig.defaults(),
+                                                        InsightGraphAssistOptions.defaults()
+                                                                .withEnabled(true))))
+                                .build(),
+                        CONTENT_PARSER_REGISTRY,
+                        RESOURCE_FETCHER);
+
+        var assembly = new MemoryExtractionAssembler().assemble(context);
+        var scheduler =
+                readField(assembly.insightLayer(), "scheduler", InsightBuildScheduler.class);
+        var reorganizer = readField(scheduler, "treeReorganizer", InsightTreeReorganizer.class);
+
+        assertThat(readField(scheduler, "graphAssistant", Object.class))
+                .isInstanceOf(NoOpInsightGraphAssistant.class);
+        assertThat(readField(reorganizer, "graphAssistant", Object.class))
+                .isInstanceOf(NoOpInsightGraphAssistant.class);
+    }
+
+    @Test
+    void extractionAssemblerBuildsInsightGraphAssistantWhenBothGraphSwitchesAreEnabled() {
+        var context =
+                context(
+                        MemoryBuildOptions.builder()
+                                .extraction(
+                                        new ExtractionOptions(
+                                                ExtractionCommonOptions.defaults(),
+                                                RawDataExtractionOptions.defaults(),
+                                                new ItemExtractionOptions(
+                                                        false,
+                                                        PromptBudgetOptions.defaults(),
+                                                        ItemGraphOptions.defaults()
+                                                                .withEnabled(true)),
+                                                new InsightExtractionOptions(
+                                                        true,
+                                                        InsightBuildConfig.defaults(),
+                                                        InsightGraphAssistOptions.defaults()
+                                                                .withEnabled(true))))
+                                .build(),
+                        CONTENT_PARSER_REGISTRY,
+                        RESOURCE_FETCHER);
+
+        var assembly = new MemoryExtractionAssembler().assemble(context);
+        var scheduler =
+                readField(assembly.insightLayer(), "scheduler", InsightBuildScheduler.class);
+        var reorganizer = readField(scheduler, "treeReorganizer", InsightTreeReorganizer.class);
+
+        assertThat(readField(scheduler, "graphAssistant", Object.class))
+                .isInstanceOf(DefaultInsightGraphAssistant.class);
+        assertThat(readField(reorganizer, "graphAssistant", Object.class))
+                .isInstanceOf(DefaultInsightGraphAssistant.class);
     }
 
     @Test

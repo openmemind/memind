@@ -78,13 +78,7 @@ public class LlmInsightGenerator implements InsightGenerator {
                         newItems,
                         targetTokens);
         var promptResult = template.render(language);
-        var userPrompt =
-                additionalContext != null && !additionalContext.isBlank()
-                        ? promptResult.userPrompt()
-                                + "\n\n<AdditionalContext>\n"
-                                + additionalContext
-                                + "\n</AdditionalContext>"
-                        : promptResult.userPrompt();
+        var userPrompt = appendAdditionalContext(promptResult.userPrompt(), additionalContext);
         var messages = ChatMessages.systemUser(promptResult.systemPrompt(), userPrompt);
 
         return structuredChatClient
@@ -125,13 +119,7 @@ public class LlmInsightGenerator implements InsightGenerator {
                         newItems,
                         targetTokens);
         var promptResult = template.render(language);
-        var userPrompt =
-                additionalContext != null && !additionalContext.isBlank()
-                        ? promptResult.userPrompt()
-                                + "\n\n<AdditionalContext>\n"
-                                + additionalContext
-                                + "\n</AdditionalContext>"
-                        : promptResult.userPrompt();
+        var userPrompt = appendAdditionalContext(promptResult.userPrompt(), additionalContext);
         var messages = ChatMessages.systemUser(promptResult.systemPrompt(), userPrompt);
 
         return structuredChatClient
@@ -160,6 +148,18 @@ public class LlmInsightGenerator implements InsightGenerator {
             List<MemoryInsight> leafInsights,
             int targetTokens,
             String language) {
+        return generateBranchSummary(
+                insightType, existingPoints, leafInsights, targetTokens, null, language);
+    }
+
+    @Override
+    public Mono<InsightPointGenerateResponse> generateBranchSummary(
+            MemoryInsightType insightType,
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> leafInsights,
+            int targetTokens,
+            String additionalContext,
+            String language) {
 
         var promptResult =
                 BranchAggregationPrompts.build(
@@ -169,8 +169,8 @@ public class LlmInsightGenerator implements InsightGenerator {
                                 leafInsights,
                                 targetTokens)
                         .render(language);
-        var messages =
-                ChatMessages.systemUser(promptResult.systemPrompt(), promptResult.userPrompt());
+        var userPrompt = appendAdditionalContext(promptResult.userPrompt(), additionalContext);
+        var messages = ChatMessages.systemUser(promptResult.systemPrompt(), userPrompt);
 
         return structuredChatClient
                 .call(messages, InsightPointGenerateResponse.class)
@@ -197,6 +197,18 @@ public class LlmInsightGenerator implements InsightGenerator {
             List<MemoryInsight> leafInsights,
             int targetTokens,
             String language) {
+        return generateBranchPointOps(
+                insightType, existingPoints, leafInsights, targetTokens, null, language);
+    }
+
+    @Override
+    public Mono<InsightPointOpsResponse> generateBranchPointOps(
+            MemoryInsightType insightType,
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> leafInsights,
+            int targetTokens,
+            String additionalContext,
+            String language) {
 
         var promptResult =
                 BranchAggregationPrompts.buildPointOps(
@@ -206,8 +218,8 @@ public class LlmInsightGenerator implements InsightGenerator {
                                 leafInsights,
                                 targetTokens)
                         .render(language);
-        var messages =
-                ChatMessages.systemUser(promptResult.systemPrompt(), promptResult.userPrompt());
+        var userPrompt = appendAdditionalContext(promptResult.userPrompt(), additionalContext);
+        var messages = ChatMessages.systemUser(promptResult.systemPrompt(), userPrompt);
 
         return structuredChatClient
                 .call(messages, InsightPointOpsResponse.class)
@@ -234,6 +246,18 @@ public class LlmInsightGenerator implements InsightGenerator {
             List<MemoryInsight> branchInsights,
             int targetTokens,
             String language) {
+        return generateRootSynthesis(
+                rootInsightType, existingPoints, branchInsights, targetTokens, null, language);
+    }
+
+    @Override
+    public Mono<InsightPointGenerateResponse> generateRootSynthesis(
+            MemoryInsightType rootInsightType,
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> branchInsights,
+            int targetTokens,
+            String additionalContext,
+            String language) {
 
         var template =
                 switch (rootInsightType.name()) {
@@ -253,8 +277,8 @@ public class LlmInsightGenerator implements InsightGenerator {
                                     targetTokens);
                 };
         var promptResult = template.render(language);
-        var messages =
-                ChatMessages.systemUser(promptResult.systemPrompt(), promptResult.userPrompt());
+        var userPrompt = appendAdditionalContext(promptResult.userPrompt(), additionalContext);
+        var messages = ChatMessages.systemUser(promptResult.systemPrompt(), userPrompt);
 
         return structuredChatClient
                 .call(messages, InsightPointGenerateResponse.class)
@@ -278,5 +302,15 @@ public class LlmInsightGenerator implements InsightGenerator {
             return new InsightPointGenerateResponse(List.of());
         }
         return response;
+    }
+
+    private String appendAdditionalContext(String userPrompt, String additionalContext) {
+        if (additionalContext == null || additionalContext.isBlank()) {
+            return userPrompt;
+        }
+        return userPrompt
+                + "\n\n<AdditionalContext>\n"
+                + additionalContext
+                + "\n</AdditionalContext>";
     }
 }
