@@ -57,6 +57,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
@@ -286,6 +287,100 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
                         });
     }
 
+    @Test
+    @DisplayName("insertItems round-trips structured temporal fields")
+    void insertItemsRoundTripsStructuredTemporalFields() {
+        newContextRunner(tempDir.resolve("structured-temporal-items.db"))
+                .run(
+                        context -> {
+                            ItemOperations itemOps =
+                                    context.getBean(MemoryStore.class).itemOperations();
+                            Instant occurredAt = BASE_TIME.minusSeconds(120);
+                            Instant occurredStart = BASE_TIME.minusSeconds(120);
+                            Instant occurredEnd = BASE_TIME.plusSeconds(3600);
+
+                            itemOps.insertItems(
+                                    MEMORY_ID,
+                                    List.of(
+                                            memoryItem(
+                                                    11L,
+                                                    "temporal range item",
+                                                    occurredAt,
+                                                    occurredStart,
+                                                    occurredEnd,
+                                                    "range")));
+
+                            assertThat(itemOps.getItemsByIds(MEMORY_ID, List.of(11L)))
+                                    .singleElement()
+                                    .satisfies(
+                                            item -> {
+                                                assertThat(item.occurredAt()).isEqualTo(occurredAt);
+                                                assertThat(item.occurredStart())
+                                                        .isEqualTo(occurredStart);
+                                                assertThat(item.occurredEnd())
+                                                        .isEqualTo(occurredEnd);
+                                                assertThat(item.timeGranularity())
+                                                        .isEqualTo("range");
+                                            });
+                        });
+    }
+
+    @Test
+    @DisplayName("legacy rows fall back to occurredAt when structured temporal fields are empty")
+    void legacyRowsFallbackToOccurredAtWhenStructuredTemporalFieldsAreEmpty() {
+        newContextRunner(tempDir.resolve("legacy-temporal-items.db"))
+                .run(
+                        context -> {
+                            ItemOperations itemOps =
+                                    context.getBean(MemoryStore.class).itemOperations();
+                            JdbcTemplate jdbcTemplate =
+                                    new JdbcTemplate(context.getBean(DataSource.class));
+                            Instant occurredAt = BASE_TIME.minusSeconds(1800);
+                            Instant observedAt = BASE_TIME.plusSeconds(45);
+
+                            jdbcTemplate.update(
+                                    """
+                                    INSERT INTO memory_item
+                                        (biz_id, user_id, agent_id, memory_id, content, scope,
+                                         category, vector_id, raw_data_id, content_hash, occurred_at,
+                                         observed_at, type, raw_data_type, metadata, created_at,
+                                         updated_at, deleted)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    """,
+                                    12L,
+                                    MEMORY_ID.getAttribute("userId"),
+                                    MEMORY_ID.getAttribute("agentId"),
+                                    MEMORY_ID.toIdentifier(),
+                                    "legacy temporal item",
+                                    MemoryScope.USER.name(),
+                                    MemoryCategory.EVENT.name(),
+                                    "vector-12",
+                                    "raw-12",
+                                    "hash-12",
+                                    occurredAt.toString(),
+                                    observedAt.toString(),
+                                    MemoryItemType.FACT.name(),
+                                    "conversation",
+                                    "{\"legacy\":true}",
+                                    BASE_TIME.toString(),
+                                    BASE_TIME.toString(),
+                                    0);
+
+                            assertThat(itemOps.getItemsByIds(MEMORY_ID, List.of(12L)))
+                                    .singleElement()
+                                    .satisfies(
+                                            item -> {
+                                                assertThat(item.occurredAt()).isEqualTo(occurredAt);
+                                                assertThat(item.occurredStart())
+                                                        .isEqualTo(occurredAt);
+                                                assertThat(item.occurredEnd()).isNull();
+                                                assertThat(item.timeGranularity())
+                                                        .isEqualTo("unknown");
+                                                assertThat(item.observedAt()).isEqualTo(observedAt);
+                                            });
+                        });
+    }
+
     private ApplicationContextRunner newContextRunner(Path dbPath) {
         return new ApplicationContextRunner()
                 .withConfiguration(
@@ -333,6 +428,33 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
                 "raw-" + id,
                 "hash-" + id,
                 occurredAt,
+                BASE_TIME.plusSeconds(30),
+                Map.of("content", content),
+                BASE_TIME,
+                MemoryItemType.FACT);
+    }
+
+    private static MemoryItem memoryItem(
+            Long id,
+            String content,
+            Instant occurredAt,
+            Instant occurredStart,
+            Instant occurredEnd,
+            String timeGranularity) {
+        return new MemoryItem(
+                id,
+                MEMORY_ID.toIdentifier(),
+                content,
+                MemoryScope.USER,
+                MemoryCategory.EVENT,
+                "conversation",
+                "vector-" + id,
+                "raw-" + id,
+                "hash-" + id,
+                occurredAt,
+                occurredStart,
+                occurredEnd,
+                timeGranularity,
                 BASE_TIME.plusSeconds(30),
                 Map.of("content", content),
                 BASE_TIME,

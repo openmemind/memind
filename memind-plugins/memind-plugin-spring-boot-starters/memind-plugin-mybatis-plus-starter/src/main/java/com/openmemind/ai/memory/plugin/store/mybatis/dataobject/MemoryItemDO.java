@@ -42,6 +42,14 @@ public class MemoryItemDO extends BaseDO {
     private Instant occurredAt;
 
     @TableField(typeHandler = InstantTypeHandler.class)
+    private Instant occurredStart;
+
+    @TableField(typeHandler = InstantTypeHandler.class)
+    private Instant occurredEnd;
+
+    private String timeGranularity;
+
+    @TableField(typeHandler = InstantTypeHandler.class)
     private Instant observedAt;
 
     @TableField(typeHandler = Jackson3TypeHandler.class)
@@ -149,6 +157,30 @@ public class MemoryItemDO extends BaseDO {
 
     public Instant getObservedAt() {
         return observedAt;
+    }
+
+    public Instant getOccurredStart() {
+        return occurredStart;
+    }
+
+    public void setOccurredStart(Instant occurredStart) {
+        this.occurredStart = occurredStart;
+    }
+
+    public Instant getOccurredEnd() {
+        return occurredEnd;
+    }
+
+    public void setOccurredEnd(Instant occurredEnd) {
+        this.occurredEnd = occurredEnd;
+    }
+
+    public String getTimeGranularity() {
+        return timeGranularity;
+    }
+
+    public void setTimeGranularity(String timeGranularity) {
+        this.timeGranularity = timeGranularity;
     }
 
     public void setObservedAt(Instant observedAt) {

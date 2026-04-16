@@ -32,9 +32,12 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
+import org.junit.jupiter.api.parallel.Resources;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -235,6 +238,72 @@ class LlmItemExtractionStrategyTest {
                 .containsEntry("truncationReason", "prompt_budget")
                 .containsEntry("retainedTokenCount", 100)
                 .containsEntry("source", "llm");
+    }
+
+    @Test
+    @ResourceLock(Resources.SYSTEM_PROPERTIES)
+    @DisplayName("extract should normalize structured week time")
+    void extractShouldNormalizeStructuredWeekTime() {
+        var originalTimeZone = TimeZone.getDefault();
+        TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
+        try {
+            var client =
+                    new FakeStructuredChatClient(
+                            new MemoryItemExtractionResponse(
+                                    List.of(
+                                            new MemoryItemExtractionResponse.ExtractedItem(
+                                                    "User traveled to Hangzhou during the week"
+                                                            + " of 2026-04-06 to 2026-04-12",
+                                                    0.95f,
+                                                    null,
+                                                    new MemoryItemExtractionResponse.ExtractedTime(
+                                                            "上周",
+                                                            "2026-04-06T00:00:00Z",
+                                                            "2026-04-13T00:00:00Z",
+                                                            "week"),
+                                                    List.of("experiences"),
+                                                    Map.of(),
+                                                    "event"))),
+                            new ForesightExtractionResponse(List.of()));
+            var strategy = new LlmItemExtractionStrategy(client);
+
+            StepVerifier.create(
+                            strategy.extract(
+                                    List.of(
+                                            new ParsedSegment(
+                                                    "user: 我上周去了杭州",
+                                                    null,
+                                                    0,
+                                                    1,
+                                                    "raw-structured-time",
+                                                    Map.of(),
+                                                    new SegmentRuntimeContext(
+                                                            Instant.parse("2026-04-16T10:00:00Z"),
+                                                            Instant.parse("2026-04-16T10:00:00Z"),
+                                                            "Alice"))),
+                                    List.of(),
+                                    new ItemExtractionConfig(
+                                            MemoryScope.USER,
+                                            ConversationContent.TYPE,
+                                            MemoryCategory.userCategories(),
+                                            false,
+                                            "English")))
+                    .assertNext(
+                            entries -> {
+                                assertThat(entries).hasSize(1);
+                                assertThat(entries.getFirst().occurredStart())
+                                        .isEqualTo(Instant.parse("2026-04-06T00:00:00Z"));
+                                assertThat(entries.getFirst().occurredEnd())
+                                        .isEqualTo(Instant.parse("2026-04-13T00:00:00Z"));
+                                assertThat(entries.getFirst().timeGranularity()).isEqualTo("week");
+                                assertThat(entries.getFirst().occurredAt()).isNull();
+                                assertThat(entries.getFirst().metadata())
+                                        .containsEntry("timeExpression", "上周");
+                            })
+                    .verifyComplete();
+        } finally {
+            TimeZone.setDefault(originalTimeZone);
+        }
     }
 
     private static ParsedSegment sampleSegment() {

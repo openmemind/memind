@@ -50,6 +50,15 @@ public record MemoryItem(
         /* Semantic memory occurrence time (null for non-temporal items) */
         Instant occurredAt,
 
+        /* Normalized semantic interval lower bound (null for non-temporal items) */
+        Instant occurredStart,
+
+        /* Normalized semantic interval exclusive upper bound (null for open/point items) */
+        Instant occurredEnd,
+
+        /* Normalized temporal granularity */
+        String timeGranularity,
+
         /* Source observation time from the original message/segment (null when unavailable) */
         Instant observedAt,
 
@@ -60,4 +69,40 @@ public record MemoryItem(
         Instant createdAt,
 
         /* Item type (FACT / FORESIGHT) */
-        MemoryItemType type) {}
+        MemoryItemType type) {
+
+    public MemoryItem(
+            Long id,
+            String memoryId,
+            String content,
+            MemoryScope scope,
+            MemoryCategory category,
+            String contentType,
+            String vectorId,
+            String rawDataId,
+            String contentHash,
+            Instant occurredAt,
+            Instant observedAt,
+            Map<String, Object> metadata,
+            Instant createdAt,
+            MemoryItemType type) {
+        this(
+                id,
+                memoryId,
+                content,
+                scope,
+                category,
+                contentType,
+                vectorId,
+                rawDataId,
+                contentHash,
+                occurredAt,
+                null,
+                null,
+                null,
+                observedAt,
+                metadata,
+                createdAt,
+                type);
+    }
+}

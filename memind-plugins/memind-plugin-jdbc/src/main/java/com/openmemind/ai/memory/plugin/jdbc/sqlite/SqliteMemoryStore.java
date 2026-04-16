@@ -357,9 +357,9 @@ public class SqliteMemoryStore
                                     INSERT INTO memory_item
                                         (biz_id, user_id, agent_id, memory_id, content, scope, category,
                                          vector_id, raw_data_id, content_hash, occurred_at,
-                                         observed_at, type, raw_data_type, metadata, created_at,
-                                         updated_at, deleted)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                                         occurred_start, occurred_end, time_granularity, observed_at,
+                                         type, raw_data_type, metadata, created_at, updated_at, deleted)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                                     """)) {
                         Instant now = Instant.now();
                         for (MemoryItem item : items) {
@@ -879,14 +879,17 @@ public class SqliteMemoryStore
         statement.setString(9, item.rawDataId());
         statement.setString(10, item.contentHash());
         statement.setString(11, writeInstant(item.occurredAt()));
-        statement.setString(12, writeInstant(item.observedAt()));
+        statement.setString(12, writeInstant(item.occurredStart()));
+        statement.setString(13, writeInstant(item.occurredEnd()));
+        statement.setString(14, item.timeGranularity());
+        statement.setString(15, writeInstant(item.observedAt()));
         statement.setString(
-                13, item.type() != null ? item.type().name() : MemoryItemType.FACT.name());
+                16, item.type() != null ? item.type().name() : MemoryItemType.FACT.name());
         statement.setString(
-                14, item.contentType() != null ? item.contentType() : ConversationContent.TYPE);
-        statement.setString(15, jsonHelper.toJson(item.metadata()));
-        statement.setString(16, writeInstant(item.createdAt() != null ? item.createdAt() : now));
-        statement.setString(17, writeInstant(now));
+                17, item.contentType() != null ? item.contentType() : ConversationContent.TYPE);
+        statement.setString(18, jsonHelper.toJson(item.metadata()));
+        statement.setString(19, writeInstant(item.createdAt() != null ? item.createdAt() : now));
+        statement.setString(20, writeInstant(now));
     }
 
     private void bindInsightTypeUpsert(
@@ -968,6 +971,15 @@ public class SqliteMemoryStore
     }
 
     private MemoryItem mapItem(ResultSet resultSet) throws SQLException {
+        Instant occurredAt = parseInstant(resultSet.getString("occurred_at"));
+        Instant occurredStart = parseInstant(resultSet.getString("occurred_start"));
+        if (occurredStart == null) {
+            occurredStart = occurredAt;
+        }
+        String timeGranularity = resultSet.getString("time_granularity");
+        if (occurredStart != null && (timeGranularity == null || timeGranularity.isBlank())) {
+            timeGranularity = "unknown";
+        }
         return new MemoryItem(
                 resultSet.getLong("biz_id"),
                 resultSet.getString("memory_id"),
@@ -978,7 +990,10 @@ public class SqliteMemoryStore
                 resultSet.getString("vector_id"),
                 resultSet.getString("raw_data_id"),
                 resultSet.getString("content_hash"),
-                parseInstant(resultSet.getString("occurred_at")),
+                occurredAt,
+                occurredStart,
+                parseInstant(resultSet.getString("occurred_end")),
+                timeGranularity,
                 parseInstant(resultSet.getString("observed_at")),
                 jsonHelper.fromJson(resultSet.getString("metadata"), OBJECT_MAP_TYPE),
                 parseInstant(resultSet.getString("created_at")),

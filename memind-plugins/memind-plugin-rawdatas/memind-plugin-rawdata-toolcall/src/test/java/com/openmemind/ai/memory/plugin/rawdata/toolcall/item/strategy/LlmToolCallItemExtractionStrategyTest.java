@@ -54,6 +54,29 @@ class LlmToolCallItemExtractionStrategyTest {
                 .contains("Custom tool item instruction");
     }
 
+    @Test
+    @DisplayName("extract should keep tool call temporal fields empty")
+    void extractShouldKeepToolCallTemporalFieldsEmpty() {
+        var client = new FakeStructuredChatClient(new ToolItemResponse("Tool usage insight", 1.0));
+        var strategy = new LlmToolCallItemExtractionStrategy(client);
+
+        StepVerifier.create(
+                        strategy.extract(
+                                List.of(sampleSegment()),
+                                List.of(),
+                                ItemExtractionConfig.defaults()))
+                .assertNext(
+                        entries -> {
+                            assertThat(entries).hasSize(1);
+                            var entry = entries.getFirst();
+                            assertThat(entry.occurredAt()).isNull();
+                            assertThat(entry.occurredStart()).isNull();
+                            assertThat(entry.occurredEnd()).isNull();
+                            assertThat(entry.timeGranularity()).isNull();
+                        })
+                .verifyComplete();
+    }
+
     private static ParsedSegment sampleSegment() {
         return new ParsedSegment(
                 "tool-call summary",

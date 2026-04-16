@@ -18,8 +18,10 @@ import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionStrategy;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
+import com.openmemind.ai.memory.core.extraction.item.support.ExtractedTemporal;
 import com.openmemind.ai.memory.core.extraction.item.support.ForesightExtractionResponse;
 import com.openmemind.ai.memory.core.extraction.item.support.MemoryItemExtractionResponse;
+import com.openmemind.ai.memory.core.extraction.item.support.TemporalNormalizer;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
@@ -141,22 +143,31 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
         var observedAt = resolveObservedAt(segment);
 
         return response.items().stream()
-                .map(
-                        item ->
-                                new ExtractedMemoryEntry(
-                                        item.content(),
-                                        clamp(item.confidence()),
-                                        resolveOccurredAt(item.occurredAt()),
-                                        observedAt,
-                                        segment.rawDataId(),
-                                        null,
-                                        item.insightTypes() != null
-                                                ? item.insightTypes()
-                                                : List.of(),
-                                        mergeMetadata(segment, item),
-                                        MemoryItemType.FACT,
-                                        item.category()))
+                .map(item -> toFactEntry(item, observedAt, segment, referenceTime))
                 .toList();
+    }
+
+    private static ExtractedMemoryEntry toFactEntry(
+            MemoryItemExtractionResponse.ExtractedItem item,
+            Instant observedAt,
+            ParsedSegment segment,
+            Instant referenceTime) {
+        ExtractedTemporal temporal =
+                TemporalNormalizer.normalize(item.time(), item.occurredAt(), referenceTime);
+        return new ExtractedMemoryEntry(
+                item.content(),
+                clamp(item.confidence()),
+                temporal.compatibilityOccurredAt(),
+                temporal.occurredStart(),
+                temporal.occurredEnd(),
+                temporal.granularity(),
+                observedAt,
+                segment.rawDataId(),
+                null,
+                item.insightTypes() != null ? item.insightTypes() : List.of(),
+                mergeMetadata(segment, item, temporal),
+                MemoryItemType.FACT,
+                item.category());
     }
 
     private Mono<List<ExtractedMemoryEntry>> extractForesight(
@@ -247,6 +258,13 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
 
     static Map<String, Object> mergeMetadata(
             ParsedSegment segment, MemoryItemExtractionResponse.ExtractedItem item) {
+        return mergeMetadata(segment, item, null);
+    }
+
+    static Map<String, Object> mergeMetadata(
+            ParsedSegment segment,
+            MemoryItemExtractionResponse.ExtractedItem item,
+            ExtractedTemporal temporal) {
         var merged = new LinkedHashMap<String, Object>();
         if (segment.metadata() != null) {
             merged.putAll(segment.metadata());
@@ -254,6 +272,9 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
         }
         if (item.metadata() != null) {
             merged.putAll(item.metadata());
+        }
+        if (temporal != null && temporal.expression() != null && !temporal.expression().isBlank()) {
+            merged.put("timeExpression", temporal.expression());
         }
         return merged.isEmpty() ? null : Map.copyOf(merged);
     }

@@ -128,28 +128,44 @@ public final class SelfVerificationPrompts {
             """
             # Scoring Guidelines
 
-            ## occurredAt
-            - Time-specific memories: embed the resolved absolute date in the content AND \
-            populate `occurredAt` with the ISO-8601 UTC timestamp only when the text itself \
-            states or clearly implies that time.
+            ## time
+            - Use `time` as the primary temporal field. Set `time` to null when no semantic \
+            temporal evidence exists in the source text.
+            - `time.expression`: the original temporal phrase from the source text.
+            - `time.start`: the normalized lower bound in ISO-8601 UTC.
+            - `time.end`: the normalized exclusive upper bound in ISO-8601 UTC for ranges and \
+            calendar buckets; use null for a single point in time.
+            - `time.granularity`: one of `point`, `day`, `week`, `month`, `year`, `range`, or \
+            `unknown`.
+            - Time-specific memories: embed the resolved absolute date or range in the content \
+            AND populate `time` only when the text itself states or clearly implies that time.
             - Profile, behavior, directive, playbook, resolution, and tool items should \
-            normally set `occurredAt` to null.
-            - Event items should populate `occurredAt` only when the text itself contains \
-            explicit temporal evidence such as a date, relative date phrase, or clear \
-            start/end marker.
-            - Do NOT use message timestamps or conversation timestamps as `occurredAt` by \
-            default. They are for resolving relative expressions, not for persistence defaults.
+            normally set `time` to null.
+            - Event items should populate `time` only when the text itself contains explicit \
+            temporal evidence such as a date, relative date phrase, or clear start/end marker.
+            - Do NOT use message timestamps or conversation timestamps as default temporal \
+            values. They are for resolving relative expressions, not persistence defaults.
+            - For `day`, `week`, `month`, and `year`, `time.start` and `time.end` must form a \
+            canonical half-open bucket in the System Time Zone before converting to UTC.
+            - During rollout the parser still tolerates legacy `occurredAt`, but your response \
+            should use `time`.
             """;
 
     private static final String OUTPUT =
             """
             <OutputFormat>
             Return a JSON object ONLY. No extra text. No markdown fences.
+            Use `"time": null` when no semantic temporal evidence exists.
             {
               "items": [
                 {
                   "content": "Single, complete, self-contained sentence preserving ALL details",
-                  "occurredAt": "2026-03-18T00:00:00Z",
+                  "time": {
+                    "expression": "on 2026-03-18 at 10:00 UTC",
+                    "start": "2026-03-18T10:00:00Z",
+                    "end": null,
+                    "granularity": "point"
+                  },
                   "insightTypes": ["Choose ONLY from the Available insightTypes listed under the assigned category"],
                   "category_reason": "CRITICAL: Briefly explain WHY this category was chosen AND why this item was missed by the first pass. This field is for reasoning only and will NOT be stored.",
                   "category": "<matched_category_from_list>"
@@ -178,14 +194,14 @@ public final class SelfVerificationPrompts {
               "items": [
                 {
                   "content": "User's payment service migration uses Spring Boot 3.2",
-                  "occurredAt": null,
+                  "time": null,
                   "insightTypes": ["experiences"],
                   "category_reason": "Current project tech stack detail. Missed because the first pass captured the migration but not the specific framework version.",
                   "category": "event"
                 },
                 {
                   "content": "Zhang San is responsible for frontend in User's team",
-                  "occurredAt": null,
+                  "time": null,
                   "insightTypes": ["experiences"],
                   "category_reason": "Team member role, current project context. Missed because the first pass focused on the migration fact and overlooked the team structure.",
                   "category": "event"
@@ -210,7 +226,7 @@ public final class SelfVerificationPrompts {
               "items": [
                 {
                   "content": "Virtual threads caused HikariCP connection pool exhaustion because virtual thread count far exceeds pool size limit; solved by setting maximumPoolSize to 10-20",
-                  "occurredAt": null,
+                  "time": null,
                   "insightTypes": ["resolutions"],
                   "category_reason": "Resolution item: named problem, cause, and usable fix. The first pass only captured the symptom and missed the fix from the assistant response.",
                   "category": "resolution"
@@ -234,7 +250,7 @@ public final class SelfVerificationPrompts {
               "items": [
                 {
                   "content": "User instructed the agent to respond in Chinese and keep answers concise",
-                  "occurredAt": null,
+                  "time": null,
                   "insightTypes": ["directives"],
                   "category_reason": "Directive item: durable rule for future interaction behavior. Commonly missed because it appears as a brief aside rather than the main task content.",
                   "category": "directive"
@@ -258,7 +274,7 @@ public final class SelfVerificationPrompts {
               "items": [
                 {
                   "content": "For repository comparisons, first align memory scope, then compare taxonomy, extraction flow, and storage path",
-                  "occurredAt": null,
+                  "time": null,
                   "insightTypes": ["playbooks"],
                   "category_reason": "Playbook item: reusable handling workflow for a recurring class of tasks. The first pass captured the request but missed the reusable method.",
                   "category": "playbook"
