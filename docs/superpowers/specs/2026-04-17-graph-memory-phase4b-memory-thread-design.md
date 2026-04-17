@@ -1,4 +1,4 @@
-# Graph Memory Phase 4B EpisodeThread Design
+# Graph Memory Phase 4B MemoryThread Design
 
 Date: 2026-04-17
 
@@ -8,16 +8,16 @@ Proposed design. Derived from the approved phase 4B direction after phase 4A com
 
 ## Summary
 
-This document defines phase 4B of `memind` graph memory: the `EpisodeThread` derived episodic layer plus bounded coarse-to-fine retrieval over episode threads.
+This document defines phase 4B of `memind` graph memory: the `MemoryThread` derived episodic memory layer plus bounded coarse-to-fine retrieval over memory threads.
 
 The design completes the second half of the original phase 4 roadmap:
 
 - derived thread/story storage and derivation
 - coarse-to-fine retrieval over story threads
 
-For this project, the higher-order process layer is named `EpisodeThread` rather than `StoryThread`.
+For this project, the higher-order process layer is named `MemoryThread` rather than `StoryThread` or `EpisodeThread`.
 
-`EpisodeThread` is a derived process-memory layer built on top of the typed item graph. It groups multiple `MemoryItem`s into one coherent ongoing process line such as:
+`MemoryThread` is a derived episodic memory layer built on top of the typed item graph. It groups multiple `MemoryItem`s into one coherent ongoing process line such as:
 
 - breakup recovery
 - relationship repair
@@ -28,9 +28,9 @@ For this project, the higher-order process layer is named `EpisodeThread` rather
 
 Phase 4B includes:
 
-- `EpisodeThread` persistence
+- `MemoryThread` persistence
 - asynchronous thread derivation and rebuild
-- retrieval-time episode recall and narrowing
+- retrieval-time memory-thread recall and narrowing
 - runtime config, projection, and codec support
 - server/admin inspection and rebuild controls
 
@@ -44,7 +44,7 @@ Phase 4B does **not** replace:
 The central architectural rule is:
 
 - typed item graph stores bounded local relations between items
-- `EpisodeThread` stores higher-order episodic organization derived from those relations
+- `MemoryThread` stores higher-order episodic organization derived from those relations
 
 ## Goals
 
@@ -60,11 +60,11 @@ The central architectural rule is:
 
 - Replacing `MemoryItem` with thread-level primary objects.
 - Replacing typed item graph traversal with thread-only retrieval.
-- Treating `EpisodeThread` as authoritative temporal or causal truth.
+- Treating `MemoryThread` as authoritative temporal or causal truth.
 - Using raw caption text as direct thread membership truth.
 - Using LLM output to decide thread membership truth.
 - Replacing insight leaf/branch/root generation with thread summaries.
-- Making `EpisodeThread` mandatory for all deployments.
+- Making `MemoryThread` mandatory for all deployments.
 - Adding global-first thread search as the primary retrieval backbone.
 
 ## Existing Context
@@ -88,7 +88,7 @@ Today, the system can answer:
 But it still lacks a first-class answer to:
 
 - which items belong to the same ongoing process
-- which items should be recalled together as one life episode, issue line, or project line
+- which items should be recalled together as one ongoing memory thread, issue line, or project line
 - which bounded process should narrow retrieval before graph expansion fans out locally
 
 That gap is especially visible in companionship chat. Users often ask questions such as:
@@ -119,23 +119,31 @@ Phase 4A already delivered the first item.
 
 This document covers the remaining two items as one phase:
 
-- `EpisodeThread` storage and derivation
-- coarse-to-fine retrieval over `EpisodeThread`
+- `MemoryThread` storage and derivation
+- coarse-to-fine retrieval over `MemoryThread`
 
 This phase therefore starts after the typed item graph and phase 4A deep graph assist are already available.
 
 ## Naming Decision
 
-The higher-order process layer is named `EpisodeThread`.
+The higher-order process layer is named `MemoryThread`.
 
-This name is preferred over `StoryThread` because:
+This name is preferred over `StoryThread` and `EpisodeThread` because:
 
+- it aligns better with the existing `MemoryItem` and `MemoryInsight` naming family
 - it is more neutral and less likely to imply narrative fabrication
 - it fits companionship chat, project workflows, and incident tracking equally well
 - it does not overlap as strongly with caption-like or summary-like language
 - it emphasizes continuity without claiming abstraction ownership
 
-The corresponding membership object is named `EpisodeThreadItem`.
+To avoid the name becoming too broad, this document fixes one semantic clarification:
+
+- `MemoryThread` specifically means a derived episodic process line across multiple `MemoryItem`s
+- it is not a conversation thread
+- it is not an execution thread
+- it is not a generic grouping bucket
+
+The corresponding membership object is named `MemoryThreadItem`.
 
 ## Approach Comparison
 
@@ -143,7 +151,7 @@ The corresponding membership object is named `EpisodeThreadItem`.
 
 The recommended design is:
 
-1. persist a derived `EpisodeThread` layer
+1. persist a derived `MemoryThread` layer
 2. derive thread membership asynchronously from item-level structure
 3. keep membership truth rule-driven and deterministic
 4. use direct item recall to discover candidate threads at query time
@@ -179,7 +187,7 @@ This is rejected because it would:
 
 ### Rejected: global thread-first retrieval
 
-This would search episode threads first and treat item recall as a secondary step.
+This would search memory threads first and treat item recall as a secondary step.
 
 This is rejected because it would:
 
@@ -191,19 +199,19 @@ This is rejected because it would:
 
 ### 1. `MemoryItem` remains the only atomic source of truth
 
-`EpisodeThread` may group items, but it does not replace or supersede item-level truth.
+`MemoryThread` may group items, but it does not replace or supersede item-level truth.
 
 ### 2. typed item graph remains the structural truth layer
 
-Temporal, causal, semantic, and entity-based relations continue to live in the typed item graph. `EpisodeThread` only consumes these signals.
+Temporal, causal, semantic, and entity-based relations continue to live in the typed item graph. `MemoryThread` only consumes these signals.
 
-### 3. `EpisodeThread` is derived and rebuildable
+### 3. `MemoryThread` is derived and rebuildable
 
 Thread data must always be safe to regenerate from persisted items and graph state.
 
 ### 4. Retrieval remains item-centered
 
-The final retrieval result remains item-centered. `EpisodeThread` is an intermediate narrowing layer, not the final retrieval object.
+The final retrieval result remains item-centered. `MemoryThread` is an intermediate narrowing layer, not the final retrieval object.
 
 ### 5. Membership truth is rule-driven
 
@@ -225,7 +233,7 @@ When graph memory is enabled, the architecture becomes:
 - `MemoryItem -> Typed Item Graph`
 - `Typed Item Graph -> Insight Signals`
 - `Typed Item Graph -> Graph Retrieval Channel`
-- `Typed Item Graph -> EpisodeThread Layer`
+- `Typed Item Graph -> MemoryThread Layer`
 - `Insight Signals + MemoryItem -> Insight Tree`
 
 This preserves clear boundaries:
@@ -233,18 +241,18 @@ This preserves clear boundaries:
 - `RawData` captures the source
 - `MemoryItem` captures atomic memory facts
 - typed item graph captures local structure
-- `EpisodeThread` captures process continuity
+- `MemoryThread` captures process continuity
 - insight tree captures abstraction and summarization
 
 ## Layer Boundaries
 
-### `EpisodeThread` vs rawdata caption
+### `MemoryThread` vs rawdata caption
 
 `rawdata caption` answers:
 
 - what one raw segment is about
 
-`EpisodeThread` answers:
+`MemoryThread` answers:
 
 - which items belong to the same ongoing process
 
@@ -255,30 +263,30 @@ Required rules:
 - one raw segment may contribute items to multiple threads
 - one thread may span many raw segments and many captions
 
-### `EpisodeThread` vs typed item graph
+### `MemoryThread` vs typed item graph
 
 typed item graph answers:
 
 - which items are locally related by semantic, temporal, causal, or entity signals
 
-`EpisodeThread` answers:
+`MemoryThread` answers:
 
 - which items together form one coherent process line
 
 Required rules:
 
 - typed item graph remains the structural truth layer
-- `EpisodeThread` is derived from the graph plus item metadata
-- `EpisodeThread` must not rewrite authoritative temporal or causal truth back into the graph
-- `EpisodeThread` may store `sequenceHint`, but not a second authoritative temporal graph
+- `MemoryThread` is derived from the graph plus item metadata
+- `MemoryThread` must not rewrite authoritative temporal or causal truth back into the graph
+- `MemoryThread` may store `sequenceHint`, but not a second authoritative temporal graph
 
-### `EpisodeThread` vs insight tree
+### `MemoryThread` vs insight tree
 
 insight tree answers:
 
 - what abstractions or conclusions can be drawn from groups of items
 
-`EpisodeThread` answers:
+`MemoryThread` answers:
 
 - what process line is unfolding across multiple items
 
@@ -287,11 +295,11 @@ Required rules:
 - thread membership is not an insight
 - thread title and summary are not replacements for leaf/branch/root summaries
 - insight tree remains the abstraction layer
-- `EpisodeThread` remains the episodic continuity layer
+- `MemoryThread` remains the episodic continuity layer
 
 ## Data Model
 
-### `EpisodeThread`
+### `MemoryThread`
 
 Suggested fields:
 
@@ -331,7 +339,7 @@ Field intent:
 
 Identity contract:
 
-- `EpisodeThread` identity is scoped per `memory_id`
+- `MemoryThread` identity is scoped per `memory_id`
 - `id` may be an internal storage identifier, but phase 4B must not rely on it as rebuild identity
 - `thread_key` is the stable per-memory business identity and must be unique under `(memory_id, thread_key)`
 - v1 should derive `thread_key` deterministically from `origin_item_id`, for example `ep:<origin_item_id>`
@@ -341,7 +349,7 @@ Identity contract:
 
 This contract intentionally gives the project stable thread identity under the same persisted data and config. If historical backfill or a legitimate split or merge changes the underlying earliest-member structure, a thread identity change is allowed because the derived process itself has materially changed.
 
-### `EpisodeThreadItem`
+### `MemoryThreadItem`
 
 Suggested fields:
 
@@ -367,7 +375,7 @@ Field intent:
 
 Storage invariants:
 
-- `EpisodeThreadItem` identity must be unique on `(thread_id, item_id)`
+- `MemoryThreadItem` identity must be unique on `(thread_id, item_id)`
 - because phase 4B fixes single-thread-per-item membership, the persisted membership model must also prevent the same item from belonging to multiple threads under the same `memory_id`
 - a practical v1 uniqueness contract is `(memory_id, item_id)` at the membership layer
 
@@ -401,20 +409,20 @@ Storage invariants:
 
 Phase 4B fixes one important v1 decision:
 
-- one `MemoryItem` may belong to at most one `EpisodeThread`
+- one `MemoryItem` may belong to at most one `MemoryThread`
 
 This single-thread-per-item rule is chosen because it:
 
 - keeps derivation deterministic
 - avoids noisy duplicate recall from overlapping threads
 - keeps lifecycle and rebuild behavior simpler
-- prevents `EpisodeThread` from becoming a soft-tagging layer
+- prevents `MemoryThread` from becoming a soft-tagging layer
 
 Future phases may revisit multi-membership if a clear need emerges, but phase 4B should not start there.
 
 ## Persistence Contract
 
-`EpisodeThread` data is secondary and derived.
+`MemoryThread` data is secondary and derived.
 
 The required persistence contract is:
 
@@ -658,7 +666,7 @@ Under these rules:
 
 ## Retrieval principle
 
-`EpisodeThread` is an additive intermediate retrieval layer.
+`MemoryThread` is an additive intermediate retrieval layer.
 
 It must not replace:
 
@@ -669,14 +677,14 @@ It must not replace:
 The intended retrieval flow becomes:
 
 1. direct recall
-2. episode recall
-3. candidate narrowing to episode members
+2. memory-thread recall
+3. candidate narrowing to memory-thread members
 4. bounded typed item-graph expansion
 5. final rerank
 
-## Episode recall
+## Memory-thread recall
 
-Episode recall must be seeded, not global-first.
+Memory-thread recall must be seeded, not global-first.
 
 The default query-time behavior is:
 
@@ -690,17 +698,17 @@ This prevents phase 4B from becoming a second full-search subsystem.
 
 ## Direct-backbone protection and cardinality invariant
 
-Episode assist must not be allowed to suppress strong direct evidence merely because a thread hit is noisy or partially wrong.
+Memory-thread assist must not be allowed to suppress strong direct evidence merely because a thread hit is noisy or partially wrong.
 
 Phase 4B fixes the following invariant:
 
-- let `directWindow` be the bounded pre-episode candidate list produced by the strategy's direct retrieval path
+- let `directWindow` be the bounded pre-memory-thread candidate list produced by the strategy's direct retrieval path
 - preserve a pinned direct prefix of size `protectDirectTopK`
-- episode recall and thread-member enrichment may affect only the unpinned tail
-- the episode-enriched candidate pool must contain at most `directWindow.size()` items
-- episode assist may replace candidates only inside the unpinned tail, and must not enlarge the window
+- memory-thread recall and thread-member enrichment may affect only the unpinned tail
+- the memory-thread-enriched candidate pool must contain at most `directWindow.size()` items
+- memory-thread assist may replace candidates only inside the unpinned tail, and must not enlarge the window
 
-This keeps episode assist additive and bounded in exactly the same architectural spirit as phase 4A graph assist.
+This keeps memory-thread assist additive and bounded in exactly the same architectural spirit as phase 4A graph assist.
 
 ## Simple retrieval integration
 
@@ -712,7 +720,7 @@ For `SimpleRetrievalStrategy`:
 4. then run bounded typed graph expansion
 5. then dedupe and rank
 
-`EpisodeThread` therefore enriches the candidate pool before graph expansion, but after direct retrieval has already established evidence.
+`MemoryThread` therefore enriches the candidate pool before graph expansion, but after direct retrieval has already established evidence.
 
 ## Deep retrieval integration
 
@@ -722,7 +730,7 @@ For `DeepRetrievalStrategy`:
 2. in the slow path, after direct candidate formation and before graph assist and rerank:
    - detect candidate threads from direct candidates
    - fuse bounded thread-member candidates only into the unpinned tail of the direct window
-   - then run typed graph assist on the episode-enriched bounded set
+   - then run typed graph assist on the memory-thread-enriched bounded set
 3. rerank the fused result normally
 
 This makes phase 4B a clean continuation of phase 4A rather than a competing deep path.
@@ -731,23 +739,23 @@ This makes phase 4B a clean continuation of phase 4A rather than a competing dee
 
 Phase 4B must enforce:
 
-- episode recall only from direct seeds
+- memory-thread recall only from direct seeds
 - bounded number of candidate threads
 - bounded members per thread used for retrieval
 - preserve a pinned direct prefix of size `protectDirectTopK`
-- episode assist must not enlarge the bounded direct candidate window
-- retrieval timeout for episode assist
-- thread failure degrades to non-episode retrieval
+- memory-thread assist must not enlarge the bounded direct candidate window
+- retrieval timeout for memory-thread assist
+- thread failure degrades to non-memory-thread retrieval
 - typed graph expansion remains bounded and item-centered
 
 ## Result shaping
 
-`EpisodeThread` may help explain or lightly organize results, but item results remain primary.
+`MemoryThread` may help explain or lightly organize results, but item results remain primary.
 
 Allowed:
 
-- episode provenance on result items
-- episode title in debug or admin payload
+- memory-thread provenance on result items
+- memory-thread title in debug or admin payload
 - grouping hints for presentation
 
 Not allowed in phase 4B:
@@ -768,12 +776,12 @@ Phase 4B should expose:
 
 Suggested capability shape:
 
-- `GET /admin/v1/episode-threads`
-- `GET /admin/v1/episode-threads/{id}`
-- `GET /admin/v1/episode-threads/{id}/items`
-- `GET /admin/v1/items/{id}/episode-thread`
-- `POST /admin/v1/episode-threads/rebuild`
-- `POST /admin/v1/episode-threads/rebuild/{memoryId}`
+- `GET /admin/v1/memory-threads`
+- `GET /admin/v1/memory-threads/{id}`
+- `GET /admin/v1/memory-threads/{id}/items`
+- `GET /admin/v1/items/{id}/memory-thread`
+- `POST /admin/v1/memory-threads/rebuild`
+- `POST /admin/v1/memory-threads/rebuild/{memoryId}`
 
 The exact route structure may adapt to existing server conventions, but these capabilities should all exist.
 
@@ -781,28 +789,28 @@ The exact route structure may adapt to existing server conventions, but these ca
 
 Suggested config groups:
 
-- `episodeThread.enabled`
-- `episodeThread.derivation.enabled`
-- `episodeThread.derivation.async`
-- `episodeThread.rule.matchThreshold`
-- `episodeThread.rule.newThreadThreshold`
-- `episodeThread.rule.maxCandidateThreads`
-- `episodeThread.rule.maxMembersPerThread`
-- `episodeThread.rule.maxRetrievalMembersPerThread`
-- `episodeThread.lifecycle.dormantAfter`
-- `episodeThread.lifecycle.closeAfter`
-- `episodeThread.llmSummary.enabled`
+- `memoryThread.enabled`
+- `memoryThread.derivation.enabled`
+- `memoryThread.derivation.async`
+- `memoryThread.rule.matchThreshold`
+- `memoryThread.rule.newThreadThreshold`
+- `memoryThread.rule.maxCandidateThreads`
+- `memoryThread.rule.maxMembersPerThread`
+- `memoryThread.rule.maxRetrievalMembersPerThread`
+- `memoryThread.lifecycle.dormantAfter`
+- `memoryThread.lifecycle.closeAfter`
+- `memoryThread.llmSummary.enabled`
 
 Retrieval-specific config:
 
-- `retrieval.simple.episodeAssist.enabled`
-- `retrieval.simple.episodeAssist.protectDirectTopK`
-- `retrieval.simple.episodeAssist.maxThreads`
-- `retrieval.simple.episodeAssist.maxMembersPerThread`
-- `retrieval.deep.episodeAssist.enabled`
-- `retrieval.deep.episodeAssist.protectDirectTopK`
-- `retrieval.deep.episodeAssist.maxThreads`
-- `retrieval.deep.episodeAssist.maxMembersPerThread`
+- `retrieval.simple.memoryThreadAssist.enabled`
+- `retrieval.simple.memoryThreadAssist.protectDirectTopK`
+- `retrieval.simple.memoryThreadAssist.maxThreads`
+- `retrieval.simple.memoryThreadAssist.maxMembersPerThread`
+- `retrieval.deep.memoryThreadAssist.enabled`
+- `retrieval.deep.memoryThreadAssist.protectDirectTopK`
+- `retrieval.deep.memoryThreadAssist.maxThreads`
+- `retrieval.deep.memoryThreadAssist.maxMembersPerThread`
 
 Defaults must be conservative and should preserve current behavior when the feature is disabled.
 
@@ -835,18 +843,18 @@ Rebuild must be:
 
 ### Disabled mode
 
-When `EpisodeThread` is disabled:
+When `MemoryThread` is disabled:
 
 - item writes continue normally
 - graph writes continue normally
-- retrieval continues without episode assist
+- retrieval continues without memory-thread assist
 - admin surfaces may return disabled or empty behavior rather than failing
 
 ## Failure and Degradation Rules
 
 ### Derivation failure
 
-If episode derivation fails:
+If memory-thread derivation fails:
 
 - item write still succeeds
 - graph retrieval still succeeds
@@ -855,9 +863,9 @@ If episode derivation fails:
 
 ### Retrieval failure
 
-If episode assist fails at query time:
+If memory-thread assist fails at query time:
 
-- drop only the episode assist contribution
+- drop only the memory-thread assist contribution
 - continue with existing direct plus graph retrieval
 - do not fail the query
 
@@ -877,19 +885,19 @@ Phase 4B should add tracing and metrics for:
 - attach, create, and no-op outcomes
 - rebuild duration
 - thread size distribution
-- retrieval episode-hit rate
+- retrieval memory-thread-hit rate
 - retrieval narrowing effectiveness
 - derivation failures
 - retrieval assist fallbacks
 
 Suggested trace spans:
 
-- `episode_thread.derive`
-- `episode_thread.attach`
-- `episode_thread.create`
-- `episode_thread.refresh`
-- `episode_thread.rebuild`
-- `retrieval.episode_assist`
+- `memory_thread.derive`
+- `memory_thread.attach`
+- `memory_thread.create`
+- `memory_thread.refresh`
+- `memory_thread.rebuild`
+- `retrieval.memory_thread_assist`
 
 ## Anti-Bloat Controls
 
@@ -910,8 +918,8 @@ Phase 4B must not require rewriting existing `MemoryItem` rows.
 
 Migration requirements:
 
-- add new episode-thread tables only
-- support empty episode state
+- add new memory-thread tables only
+- support empty memory-thread state
 - support staged backfill
 - allow partial deployment where episode storage exists but derivation is disabled
 
@@ -919,7 +927,7 @@ Migration requirements:
 
 Companionship-chat example:
 
-`EpisodeThread`
+`MemoryThread`
 
 - `episode_type`: `emotional_recovery`
 - `title`: `Breakup Recovery Line`
@@ -954,7 +962,7 @@ Phase 4B implementation must include at least:
 - fallback title and summary generation tests
 - simple retrieval episode-assist tests
 - deep retrieval episode-assist tests
-- direct-prefix preservation tests for simple and deep episode assist
+- direct-prefix preservation tests for simple and deep memory-thread assist
 - degradation tests when episode storage is unavailable
 - rebuild idempotence tests
 - config projection and codec tests
@@ -965,8 +973,8 @@ Phase 4B implementation must include at least:
 
 The following work remains explicitly out of scope:
 
-- multi-membership items belonging to multiple threads
-- thread-first global search as the default retrieval entry point
+- multi-membership items belonging to multiple memory threads
+- memory-thread-first global search as the default retrieval entry point
 - LLM-driven membership truth
 - thread-driven rewriting of typed graph edges
 - thread-only final retrieval result types
@@ -977,14 +985,14 @@ The following work remains explicitly out of scope:
 
 The following decisions are intentionally fixed by this document:
 
-- `StoryThread` is renamed to `EpisodeThread`
-- `EpisodeThread` is derived, not authoritative
+- `StoryThread` and `EpisodeThread` are replaced by `MemoryThread`
+- `MemoryThread` is derived, not authoritative
 - typed item graph remains the structural truth layer
 - rawdata caption remains the raw-content description layer
 - insight tree remains the abstraction layer
 - membership truth is rule-driven
 - optional LLM use is limited to display text only
 - retrieval remains item-centered
-- episode recall is seeded from direct recall, not global-first
+- memory-thread recall is seeded from direct recall, not global-first
 - phase 4B uses single-thread-per-item membership in v1
-- episode assist is bounded and optional
+- memory-thread assist is bounded and optional
