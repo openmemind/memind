@@ -19,9 +19,7 @@ import java.util.List;
 /**
  * Graph-assist output plus bounded observability counters.
  */
-public record RetrievalGraphAssistResult(
-        List<ScoredResult> items,
-        GraphAssistStats stats) {
+public record RetrievalGraphAssistResult(List<ScoredResult> items, GraphAssistStats stats) {
 
     public RetrievalGraphAssistResult {
         items = items == null ? List.of() : List.copyOf(items);
@@ -31,17 +29,13 @@ public record RetrievalGraphAssistResult(
     public static RetrievalGraphAssistResult directOnly(
             List<ScoredResult> items, boolean graphEnabled) {
         return new RetrievalGraphAssistResult(
-                items,
-                new GraphAssistStats(
-                        graphEnabled, false, false, 0, 0, 0, 0, 0, 0, 0, 0));
+                items, new GraphAssistStats(graphEnabled, false, false, 0, 0, 0, 0, 0, 0, 0, 0));
     }
 
     public static RetrievalGraphAssistResult degraded(
             List<ScoredResult> items, boolean graphEnabled, boolean timedOut) {
         return new RetrievalGraphAssistResult(
-                items,
-                new GraphAssistStats(
-                        graphEnabled, true, timedOut, 0, 0, 0, 0, 0, 0, 0, 0));
+                items, new GraphAssistStats(graphEnabled, true, timedOut, 0, 0, 0, 0, 0, 0, 0, 0));
     }
 
     public record GraphAssistStats(
@@ -58,8 +52,7 @@ public record RetrievalGraphAssistResult(
             int skippedOverFanoutEntityCount) {
 
         public static GraphAssistStats disabled() {
-            return new GraphAssistStats(
-                    false, false, false, 0, 0, 0, 0, 0, 0, 0, 0);
+            return new GraphAssistStats(false, false, false, 0, 0, 0, 0, 0, 0, 0, 0);
         }
     }
 }

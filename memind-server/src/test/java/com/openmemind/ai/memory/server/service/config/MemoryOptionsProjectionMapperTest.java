@@ -107,6 +107,42 @@ class MemoryOptionsProjectionMapperTest {
     }
 
     @Test
+    void projectionExposesDeepRetrievalGraphAssistKeysAndRoundTripsValues() {
+        var projection = mapper.toProjection(MemoryBuildOptions.defaults());
+
+        assertThat(projection.get("retrieval"))
+                .extracting(MemoryOptionItemView::key)
+                .contains(
+                        "retrieval.deep.graphAssist.enabled",
+                        "retrieval.deep.graphAssist.maxSeedItems",
+                        "retrieval.deep.graphAssist.timeout");
+        assertThat(
+                        projection.get("retrieval").stream()
+                                .filter(
+                                        item ->
+                                                item.key()
+                                                        .equals(
+                                                                "retrieval.deep.graphAssist.enabled"))
+                                .findFirst()
+                                .orElseThrow()
+                                .description())
+                .isEqualTo(
+                        "Whether deep retrieval may expand direct slow-path hits through the"
+                                + " bounded item graph before rerank.");
+
+        updateValue(projection, "retrieval.deep.graphAssist.enabled", true);
+        updateValue(projection, "retrieval.deep.graphAssist.maxSeedItems", 6);
+        updateValue(projection, "retrieval.deep.graphAssist.timeout", "PT0.45S");
+
+        var rebuilt = mapper.toOptions(projection);
+
+        assertThat(rebuilt.retrieval().deep().graphAssist().enabled()).isTrue();
+        assertThat(rebuilt.retrieval().deep().graphAssist().maxSeedItems()).isEqualTo(6);
+        assertThat(rebuilt.retrieval().deep().graphAssist().timeout())
+                .isEqualTo(java.time.Duration.ofMillis(450));
+    }
+
+    @Test
     void ignoresNullRuntimeOnlyFieldsFromProjectionDefinitions() {
         var projection = mapper.toProjection(MemoryBuildOptions.defaults());
 

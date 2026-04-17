@@ -13,11 +13,11 @@
  */
 package com.openmemind.ai.memory.core.retrieval.strategy;
 
+import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
+import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.graph.NoOpRetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistResult;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistant;
-import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
-import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.RawDataAggregator;
 import com.openmemind.ai.memory.core.retrieval.scoring.ResultMerger;
@@ -164,7 +164,11 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
 
                             var directItems = mergedItems;
                             return graphAssistant
-                                    .assist(context, config, simpleConfig, directItems)
+                                    .assist(
+                                            context,
+                                            config,
+                                            simpleConfig.graphAssist(),
+                                            directItems)
                                     .onErrorResume(
                                             error -> {
                                                 log.warn("Simple: Graph assist failed", error);
@@ -178,8 +182,7 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
                                     .map(
                                             result ->
                                                     new PipelineInputs(
-                                                            insightResult,
-                                                            result.items()));
+                                                            insightResult, result.items()));
                         })
                 .map(inputs -> finalizeResult(context, config, inputs));
     }
@@ -222,9 +225,7 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
 
     /** BM25 keyword search */
     private Mono<List<TextSearchResult>> executeBm25(
-            QueryContext context,
-            RetrievalConfig config,
-            SimpleStrategyConfig simpleConfig) {
+            QueryContext context, RetrievalConfig config, SimpleStrategyConfig simpleConfig) {
         if (textSearch == null || !simpleConfig.enableKeywordSearch()) {
             return Mono.just(List.of());
         }

@@ -57,7 +57,8 @@ class GraphStatementTimeoutInterceptorTest {
                                     }
                                     return defaultValue(method.getReturnType());
                                 });
-        Method prepareMethod = StatementHandler.class.getMethod("prepare", Connection.class, Integer.class);
+        Method prepareMethod =
+                StatementHandler.class.getMethod("prepare", Connection.class, Integer.class);
         return new Invocation(handler, prepareMethod, new Object[] {null, null});
     }
 

@@ -19,6 +19,9 @@ import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.deep.ExpandedQuery;
 import com.openmemind.ai.memory.core.retrieval.deep.TypedQueryExpander;
+import com.openmemind.ai.memory.core.retrieval.graph.NoOpRetrievalGraphAssistant;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistResult;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.RawDataAggregator;
 import com.openmemind.ai.memory.core.retrieval.scoring.ResultMerger;
@@ -72,6 +75,7 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
     private final Reranker reranker;
     private final MemoryTextSearch textSearch;
     private final MemoryStore memoryStore; // nullable
+    private final RetrievalGraphAssistant graphAssistant;
 
     /** Tier2 initial retrieval result */
     private record Tier2InitResult(
@@ -84,6 +88,24 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
             TypedQueryExpander typedQueryExpander,
             Reranker reranker,
             MemoryStore memoryStore) {
+        this(
+                insightRetriever,
+                itemRetriever,
+                sufficiencyGate,
+                typedQueryExpander,
+                reranker,
+                memoryStore,
+                NoOpRetrievalGraphAssistant.INSTANCE);
+    }
+
+    public DeepRetrievalStrategy(
+            InsightTierRetriever insightRetriever,
+            ItemTierRetriever itemRetriever,
+            SufficiencyGate sufficiencyGate,
+            TypedQueryExpander typedQueryExpander,
+            Reranker reranker,
+            MemoryStore memoryStore,
+            RetrievalGraphAssistant graphAssistant) {
         this.insightRetriever =
                 Objects.requireNonNull(insightRetriever, "insightRetriever must not be null");
         this.itemRetriever =
@@ -95,6 +117,8 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
         this.reranker = reranker; // nullable
         this.textSearch = itemRetriever.textSearch(); // nullable
         this.memoryStore = memoryStore; // nullable
+        this.graphAssistant =
+                graphAssistant != null ? graphAssistant : NoOpRetrievalGraphAssistant.INSTANCE;
     }
 
     @Override
@@ -260,13 +284,14 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
                 .onErrorResume(
                         e -> {
                             log.warn("Tier2 expansion process failed", e);
-                            var aggregation = aggregateItems(vectorResult.results(), context);
-                            return Mono.just(
-                                    buildResult(
-                                            insightResults,
-                                            aggregation,
-                                            expandedInsights,
-                                            context));
+                            return mergeAndFinalize(
+                                    context,
+                                    config,
+                                    insightResults,
+                                    bm25ProbeResults,
+                                    vectorResult,
+                                    List.of(),
+                                    expandedInsights);
                         });
     }
 
@@ -361,7 +386,7 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
                         });
     }
 
-    /** Merge all channel results → RRF truncation → Rerank → rawDataId aggregation */
+    /** Merge all channel results → graph assist → Rerank → rawDataId aggregation */
     private Mono<RetrievalResult> mergeAndFinalize(
             QueryContext context,
             RetrievalConfig baseConfig,
@@ -424,30 +449,43 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
 
         // BM25-only results apply time decay
         merged = TimeDecay.applyToBm25Only(merged, context, baseConfig.scoring());
+        merged =
+                merged.stream()
+                        .sorted(Comparator.comparingDouble(ScoredResult::finalScore).reversed())
+                        .toList();
 
-        // RRF merged truncation to tier2.topK (default 50)
-        int rrfTopK = baseConfig.tier2().topK();
-        List<ScoredResult> rrfCandidates =
-                merged.size() > rrfTopK ? merged.subList(0, rrfTopK) : merged;
+        int directWindowSize = baseConfig.tier2().topK();
+        List<ScoredResult> directWindow =
+                merged.size() > directWindowSize ? merged.subList(0, directWindowSize) : merged;
 
-        log.debug("RRF merged truncation: {} candidates", rrfCandidates.size());
+        log.debug("RRF merged truncation: {} candidates", directWindow.size());
 
-        // Rerank → take rerank.topK (default 10)
-        Mono<List<ScoredResult>> rerankedMono;
-        if (reranker != null && baseConfig.rerank().enabled() && !rrfCandidates.isEmpty()) {
-            rerankedMono =
-                    reranker.rerank(
-                            context.searchQuery(), rrfCandidates, baseConfig.rerank().topK());
-        } else {
-            rerankedMono = Mono.just(rrfCandidates);
-        }
+        return applyGraphAssist(context, baseConfig, directWindow)
+                .flatMap(
+                        candidatePool -> {
+                            Mono<List<ScoredResult>> rerankedMono;
+                            if (reranker != null
+                                    && baseConfig.rerank().enabled()
+                                    && !candidatePool.isEmpty()) {
+                                rerankedMono =
+                                        reranker.rerank(
+                                                context.searchQuery(),
+                                                candidatePool,
+                                                baseConfig.rerank().topK());
+                            } else {
+                                rerankedMono = Mono.just(candidatePool);
+                            }
 
-        // After Rerank, perform rawDataId aggregation (caption source depends on final item)
-        return rerankedMono.map(
-                rerankedItems -> {
-                    var aggregation = aggregateItems(rerankedItems, context);
-                    return buildResult(insightResults, aggregation, expandedInsights, context);
-                });
+                            return rerankedMono.map(
+                                    rerankedItems -> {
+                                        var aggregation = aggregateItems(rerankedItems, context);
+                                        return buildResult(
+                                                insightResults,
+                                                aggregation,
+                                                expandedInsights,
+                                                context);
+                                    });
+                        });
     }
 
     /**
@@ -523,6 +561,33 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
             return RawDataAggregator.aggregate(items, context.memoryId(), memoryStore);
         }
         return new RawDataAggregator.AggregationResult(items, List.of());
+    }
+
+    private Mono<List<ScoredResult>> applyGraphAssist(
+            QueryContext context, RetrievalConfig config, List<ScoredResult> directWindow) {
+        var graphSettings = deepConfig(config).graphAssist();
+        if (directWindow.isEmpty() || !graphSettings.enabled()) {
+            return Mono.just(directWindow);
+        }
+
+        return graphAssistant
+                .assist(context, config, graphSettings, directWindow)
+                .onErrorResume(
+                        error -> {
+                            log.warn("DeepRetrieval graph assist failed", error);
+                            return Mono.just(
+                                    RetrievalGraphAssistResult.directOnly(
+                                            directWindow, graphSettings.enabled()));
+                        })
+                .map(result -> boundGraphWindow(result.items(), directWindow.size()));
+    }
+
+    private List<ScoredResult> boundGraphWindow(
+            List<ScoredResult> graphEnrichedItems, int directWindowSize) {
+        if (graphEnrichedItems.size() <= directWindowSize) {
+            return graphEnrichedItems;
+        }
+        return graphEnrichedItems.subList(0, directWindowSize);
     }
 
     /** Build result (without evidences) */

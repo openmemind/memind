@@ -50,7 +50,8 @@ public final class GraphStatementTimeoutInterceptor implements Interceptor {
                             try {
                                 statement.setQueryTimeout(seconds);
                             } catch (SQLException ignored) {
-                                // Graph reads stay best-effort; caller-level timeout remains authoritative.
+                                // Graph reads stay best-effort; caller-level timeout remains
+                                // authoritative.
                             }
                         });
         return result;

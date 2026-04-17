@@ -17,7 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
@@ -38,7 +37,6 @@ import com.openmemind.ai.memory.core.support.TestMemoryIds;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -55,7 +53,8 @@ class DefaultRetrievalGraphAssistantTest {
     private static final MemoryId MEMORY_ID = TestMemoryIds.userAgent();
     private static final RetrievalConfig CONFIG = RetrievalConfig.simple();
     private static final QueryContext CONTEXT =
-            new QueryContext(MEMORY_ID, "what changed this week", null, List.of(), Map.of(), null, null);
+            new QueryContext(
+                    MEMORY_ID, "what changed this week", null, List.of(), Map.of(), null, null);
     private static final Instant NOW = Instant.parse("2026-04-17T00:00:00Z");
     private static final SimpleStrategyConfig SIMPLE_CONFIG =
             new SimpleStrategyConfig(
@@ -93,7 +92,8 @@ class DefaultRetrievalGraphAssistantTest {
 
         lenient().when(store.itemOperations()).thenReturn(itemOperations);
         lenient().when(store.graphOperations()).thenReturn(graphOperations);
-        lenient().when(itemOperations.getItemsByIds(eq(MEMORY_ID), any(Collection.class)))
+        lenient()
+                .when(itemOperations.getItemsByIds(eq(MEMORY_ID), any(Collection.class)))
                 .thenAnswer(
                         invocation ->
                                 invocation.<Collection<Long>>getArgument(1).stream()
@@ -106,29 +106,31 @@ class DefaultRetrievalGraphAssistantTest {
 
     @Test
     void graphAssistantPinsDirectPrefixAndInterleavesGraphTailOnly() {
-        var direct =
-                List.of(
-                        scored("101", 1.00d),
-                        scored("102", 0.85d),
-                        scored("103", 0.75d));
+        var direct = List.of(scored("101", 1.00d), scored("102", 0.85d), scored("103", 0.75d));
 
-        StepVerifier.create(assistant.assist(CONTEXT, CONFIG, SIMPLE_CONFIG, direct))
+        StepVerifier.create(assistant.assist(CONTEXT, CONFIG, SIMPLE_CONFIG.graphAssist(), direct))
                 .assertNext(
                         result -> {
                             assertThat(result.items().get(0).sourceId()).isEqualTo("101");
                             assertThat(result.items().get(1).sourceId()).isEqualTo("102");
-                            assertThat(result.items()).extracting(ScoredResult::sourceId).contains("201");
+                            assertThat(result.items())
+                                    .extracting(ScoredResult::sourceId)
+                                    .contains("201");
                         })
                 .verifyComplete();
     }
 
     @Test
     void overlappingDirectCandidatesAreTrackedButNeverBoosted() {
-        StepVerifier.create(assistant.assist(CONTEXT, CONFIG, OVERLAP_CONFIG, directWithOverlap()))
+        StepVerifier.create(
+                        assistant.assist(
+                                CONTEXT, CONFIG, OVERLAP_CONFIG.graphAssist(), directWithOverlap()))
                 .assertNext(
                         result -> {
                             assertThat(result.items().get(0).sourceId()).isEqualTo("101");
-                            assertThat(result.items().stream().filter(item -> item.sourceId().equals("101")))
+                            assertThat(
+                                            result.items().stream()
+                                                    .filter(item -> item.sourceId().equals("101")))
                                     .hasSize(1);
                             assertThat(result.stats().overlapCount()).isEqualTo(1);
                         })
@@ -137,7 +139,9 @@ class DefaultRetrievalGraphAssistantTest {
 
     @Test
     void overFanoutEntityIsDroppedWhenReverseMentionReadReturnsLimitPlusOne() {
-        StepVerifier.create(assistant.assist(CONTEXT, CONFIG, SIMPLE_CONFIG, directSeeds()))
+        StepVerifier.create(
+                        assistant.assist(
+                                CONTEXT, CONFIG, SIMPLE_CONFIG.graphAssist(), directSeeds()))
                 .assertNext(
                         result -> {
                             assertThat(result.items())
@@ -152,8 +156,9 @@ class DefaultRetrievalGraphAssistantTest {
     void timeoutDegradesToDirectOnlyResult() {
         var slowAssistant =
                 new DefaultRetrievalGraphAssistant(
-                        storeWithSlowGraphReads(Duration.ofMillis(250), itemsById, graphOperations));
-        var timeoutConfig = SIMPLE_CONFIG.withGraphAssist(SIMPLE_CONFIG.graphAssist().withTimeout(Duration.ofMillis(50)));
+                        storeWithSlowGraphReads(
+                                Duration.ofMillis(250), itemsById, graphOperations));
+        var timeoutConfig = SIMPLE_CONFIG.graphAssist().withTimeout(Duration.ofMillis(50));
 
         StepVerifier.create(slowAssistant.assist(CONTEXT, CONFIG, timeoutConfig, directSeeds()))
                 .assertNext(
@@ -169,7 +174,12 @@ class DefaultRetrievalGraphAssistantTest {
     void graphAssistDisabledReturnsExactDirectListInstanceOrder() {
         var direct = List.of(scored("101", 1.0d), scored("102", 0.9d));
 
-        StepVerifier.create(assistant.assist(CONTEXT, CONFIG, SimpleStrategyConfig.defaults(), direct))
+        StepVerifier.create(
+                        assistant.assist(
+                                CONTEXT,
+                                CONFIG,
+                                SimpleStrategyConfig.defaults().graphAssist(),
+                                direct))
                 .assertNext(result -> assertThat(result.items()).containsExactlyElementsOf(direct))
                 .verifyComplete();
     }
@@ -183,13 +193,32 @@ class DefaultRetrievalGraphAssistantTest {
     }
 
     private void seedItems() {
-        itemsById.put(101L, item(101L, "rolled out the OpenAI migration", Instant.parse("2026-04-16T10:00:00Z")));
-        itemsById.put(102L, item(102L, "documented the deployment outcome", Instant.parse("2026-04-16T11:00:00Z")));
-        itemsById.put(103L, item(103L, "older direct tail item", Instant.parse("2026-04-10T10:00:00Z")));
-        itemsById.put(201L, item(201L, "the migration caused a latency drop", Instant.parse("2026-04-16T12:00:00Z")));
-        itemsById.put(401L, item(401L, "OpenAI sibling item A", Instant.parse("2026-04-16T13:00:00Z")));
-        itemsById.put(402L, item(402L, "OpenAI sibling item B", Instant.parse("2026-04-16T14:00:00Z")));
-        itemsById.put(403L, item(403L, "OpenAI sibling item C", Instant.parse("2026-04-16T15:00:00Z")));
+        itemsById.put(
+                101L,
+                item(
+                        101L,
+                        "rolled out the OpenAI migration",
+                        Instant.parse("2026-04-16T10:00:00Z")));
+        itemsById.put(
+                102L,
+                item(
+                        102L,
+                        "documented the deployment outcome",
+                        Instant.parse("2026-04-16T11:00:00Z")));
+        itemsById.put(
+                103L, item(103L, "older direct tail item", Instant.parse("2026-04-10T10:00:00Z")));
+        itemsById.put(
+                201L,
+                item(
+                        201L,
+                        "the migration caused a latency drop",
+                        Instant.parse("2026-04-16T12:00:00Z")));
+        itemsById.put(
+                401L, item(401L, "OpenAI sibling item A", Instant.parse("2026-04-16T13:00:00Z")));
+        itemsById.put(
+                402L, item(402L, "OpenAI sibling item B", Instant.parse("2026-04-16T14:00:00Z")));
+        itemsById.put(
+                403L, item(403L, "OpenAI sibling item C", Instant.parse("2026-04-16T15:00:00Z")));
     }
 
     private void seedGraph() {
@@ -212,7 +241,8 @@ class DefaultRetrievalGraphAssistantTest {
             Duration delay, Map<Long, MemoryItem> itemsById, InMemoryGraphOperations delegate) {
         return new MemoryStore() {
             @Override
-            public com.openmemind.ai.memory.core.store.rawdata.RawDataOperations rawDataOperations() {
+            public com.openmemind.ai.memory.core.store.rawdata.RawDataOperations
+                    rawDataOperations() {
                 return null;
             }
 
@@ -224,16 +254,21 @@ class DefaultRetrievalGraphAssistantTest {
 
                     @Override
                     public List<MemoryItem> getItemsByIds(MemoryId id, Collection<Long> itemIds) {
-                        return itemIds.stream().map(itemsById::get).filter(java.util.Objects::nonNull).toList();
+                        return itemIds.stream()
+                                .map(itemsById::get)
+                                .filter(java.util.Objects::nonNull)
+                                .toList();
                     }
 
                     @Override
-                    public List<MemoryItem> getItemsByVectorIds(MemoryId id, Collection<String> vectorIds) {
+                    public List<MemoryItem> getItemsByVectorIds(
+                            MemoryId id, Collection<String> vectorIds) {
                         return List.of();
                     }
 
                     @Override
-                    public List<MemoryItem> getItemsByContentHashes(MemoryId id, Collection<String> contentHashes) {
+                    public List<MemoryItem> getItemsByContentHashes(
+                            MemoryId id, Collection<String> contentHashes) {
                         return List.of();
                     }
 
@@ -253,7 +288,8 @@ class DefaultRetrievalGraphAssistantTest {
             }
 
             @Override
-            public com.openmemind.ai.memory.core.store.insight.InsightOperations insightOperations() {
+            public com.openmemind.ai.memory.core.store.insight.InsightOperations
+                    insightOperations() {
                 return null;
             }
 
@@ -261,21 +297,27 @@ class DefaultRetrievalGraphAssistantTest {
             public com.openmemind.ai.memory.core.store.graph.GraphOperations graphOperations() {
                 return new InMemoryGraphOperations() {
                     @Override
-                    public List<ItemEntityMention> listItemEntityMentions(MemoryId memoryId, Collection<Long> itemIds) {
+                    public List<ItemEntityMention> listItemEntityMentions(
+                            MemoryId memoryId, Collection<Long> itemIds) {
                         sleep(delay);
                         return delegate.listItemEntityMentions(memoryId, itemIds);
                     }
 
                     @Override
                     public List<ItemEntityMention> listItemEntityMentionsByEntityKeys(
-                            MemoryId memoryId, Collection<String> entityKeys, int perEntityLimitPlusOne) {
+                            MemoryId memoryId,
+                            Collection<String> entityKeys,
+                            int perEntityLimitPlusOne) {
                         sleep(delay);
-                        return delegate.listItemEntityMentionsByEntityKeys(memoryId, entityKeys, perEntityLimitPlusOne);
+                        return delegate.listItemEntityMentionsByEntityKeys(
+                                memoryId, entityKeys, perEntityLimitPlusOne);
                     }
 
                     @Override
                     public List<ItemLink> listAdjacentItemLinks(
-                            MemoryId memoryId, Collection<Long> seedItemIds, Collection<ItemLinkType> linkTypes) {
+                            MemoryId memoryId,
+                            Collection<Long> seedItemIds,
+                            Collection<ItemLinkType> linkTypes) {
                         sleep(delay);
                         return delegate.listAdjacentItemLinks(memoryId, seedItemIds, linkTypes);
                     }
@@ -312,15 +354,24 @@ class DefaultRetrievalGraphAssistantTest {
     }
 
     private static ScoredResult scored(String itemId, double score) {
-        return new ScoredResult(ScoredResult.SourceType.ITEM, itemId, "item-" + itemId, 0.8f, score);
+        return new ScoredResult(
+                ScoredResult.SourceType.ITEM, itemId, "item-" + itemId, 0.8f, score);
     }
 
     private static ItemLink link(
             long sourceItemId, long targetItemId, ItemLinkType type, double strength) {
-        return new ItemLink(MEMORY_ID.toIdentifier(), sourceItemId, targetItemId, type, strength, Map.of(), NOW);
+        return new ItemLink(
+                MEMORY_ID.toIdentifier(),
+                sourceItemId,
+                targetItemId,
+                type,
+                strength,
+                Map.of(),
+                NOW);
     }
 
     private static ItemEntityMention mention(long itemId, String entityKey, float confidence) {
-        return new ItemEntityMention(MEMORY_ID.toIdentifier(), itemId, entityKey, confidence, Map.of(), NOW);
+        return new ItemEntityMention(
+                MEMORY_ID.toIdentifier(), itemId, entityKey, confidence, Map.of(), NOW);
     }
 }

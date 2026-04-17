@@ -14,6 +14,7 @@
 package com.openmemind.ai.memory.core.builder;
 
 import java.time.Duration;
+import java.util.Objects;
 
 public record DeepRetrievalOptions(
         Duration timeout,
@@ -22,7 +23,34 @@ public record DeepRetrievalOptions(
         boolean rawDataEnabled,
         int rawDataTopK,
         QueryExpansionOptions queryExpansion,
-        SufficiencyOptions sufficiency) {
+        SufficiencyOptions sufficiency,
+        DeepRetrievalGraphOptions graphAssist) {
+
+    public DeepRetrievalOptions {
+        timeout = Objects.requireNonNull(timeout, "timeout");
+        queryExpansion = queryExpansion != null ? queryExpansion : QueryExpansionOptions.defaults();
+        sufficiency = sufficiency != null ? sufficiency : SufficiencyOptions.defaults();
+        graphAssist = graphAssist != null ? graphAssist : DeepRetrievalGraphOptions.defaults();
+    }
+
+    public DeepRetrievalOptions(
+            Duration timeout,
+            int insightTopK,
+            int itemTopK,
+            boolean rawDataEnabled,
+            int rawDataTopK,
+            QueryExpansionOptions queryExpansion,
+            SufficiencyOptions sufficiency) {
+        this(
+                timeout,
+                insightTopK,
+                itemTopK,
+                rawDataEnabled,
+                rawDataTopK,
+                queryExpansion,
+                sufficiency,
+                DeepRetrievalGraphOptions.defaults());
+    }
 
     public static DeepRetrievalOptions defaults() {
         return new DeepRetrievalOptions(
@@ -32,6 +60,7 @@ public record DeepRetrievalOptions(
                 false,
                 0,
                 QueryExpansionOptions.defaults(),
-                SufficiencyOptions.defaults());
+                SufficiencyOptions.defaults(),
+                DeepRetrievalGraphOptions.defaults());
     }
 }

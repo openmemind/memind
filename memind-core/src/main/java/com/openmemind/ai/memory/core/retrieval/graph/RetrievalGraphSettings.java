@@ -13,20 +13,36 @@
  */
 package com.openmemind.ai.memory.core.retrieval.graph;
 
-import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
-import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
-import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
-import java.util.List;
-import reactor.core.publisher.Mono;
+import java.time.Duration;
 
 /**
- * Bounded graph-assist enrichment for direct item retrieval.
+ * Shared runtime switches and caps for bounded graph-assisted retrieval.
  */
-public interface RetrievalGraphAssistant {
+public interface RetrievalGraphSettings {
 
-    Mono<RetrievalGraphAssistResult> assist(
-            QueryContext context,
-            RetrievalConfig config,
-            RetrievalGraphSettings graphSettings,
-            List<ScoredResult> directItems);
+    boolean enabled();
+
+    int maxSeedItems();
+
+    int maxExpandedItems();
+
+    int maxSemanticNeighborsPerSeed();
+
+    int maxTemporalNeighborsPerSeed();
+
+    int maxCausalNeighborsPerSeed();
+
+    int maxEntitySiblingItemsPerSeed();
+
+    int maxItemsPerEntity();
+
+    double graphChannelWeight();
+
+    double minLinkStrength();
+
+    float minMentionConfidence();
+
+    int protectDirectTopK();
+
+    Duration timeout();
 }

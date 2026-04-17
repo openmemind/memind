@@ -16,9 +16,9 @@ package com.openmemind.ai.memory.plugin.store.mybatis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
+import com.baomidou.mybatisplus.autoconfigure.ConfigurationCustomizer;
 import com.baomidou.mybatisplus.autoconfigure.DdlApplicationRunner;
 import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
-import com.baomidou.mybatisplus.autoconfigure.ConfigurationCustomizer;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -34,7 +34,6 @@ import com.openmemind.ai.memory.plugin.store.mybatis.handler.InstantTypeHandler;
 import com.openmemind.ai.memory.plugin.store.mybatis.schema.MemorySchemaAutoConfiguration;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import javax.sql.DataSource;
@@ -76,7 +75,8 @@ class MybatisGraphOperationsTest {
         newContextRunner(tempDir.resolve("graph-idempotent.db"))
                 .run(
                         context -> {
-                            GraphOperations ops = context.getBean(MemoryStore.class).graphOperations();
+                            GraphOperations ops =
+                                    context.getBean(MemoryStore.class).graphOperations();
 
                             seedGraph(ops);
                             seedGraph(ops);
@@ -93,16 +93,15 @@ class MybatisGraphOperationsTest {
         newContextRunner(tempDir.resolve("graph-cooccurrence.db"))
                 .run(
                         context -> {
-                            GraphOperations ops = context.getBean(MemoryStore.class).graphOperations();
+                            GraphOperations ops =
+                                    context.getBean(MemoryStore.class).graphOperations();
                             seedMentions(ops, "organization:openai", 101L, 102L);
                             seedMentions(ops, "person:sam_altman", 101L, 102L);
 
                             ops.rebuildEntityCooccurrences(
-                                    MEMORY_ID,
-                                    List.of("organization:openai", "person:sam_altman"));
+                                    MEMORY_ID, List.of("organization:openai", "person:sam_altman"));
                             ops.rebuildEntityCooccurrences(
-                                    MEMORY_ID,
-                                    List.of("organization:openai", "person:sam_altman"));
+                                    MEMORY_ID, List.of("organization:openai", "person:sam_altman"));
 
                             assertThat(ops.listEntityCooccurrences(MEMORY_ID))
                                     .singleElement()
@@ -112,12 +111,15 @@ class MybatisGraphOperationsTest {
     }
 
     @Test
-    @DisplayName("seed-side mention reads honor requested item ids without falling back to full-memory scans")
+    @DisplayName(
+            "seed-side mention reads honor requested item ids without falling back to full-memory"
+                    + " scans")
     void seedSideMentionReadsHonorRequestedItemIds(@TempDir Path tempDir) {
         newContextRunner(tempDir.resolve("graph-seed-mentions.db"))
                 .run(
                         context -> {
-                            GraphOperations ops = context.getBean(MemoryStore.class).graphOperations();
+                            GraphOperations ops =
+                                    context.getBean(MemoryStore.class).graphOperations();
                             seedMentions(ops, "organization:openai", 101L, 102L, 103L);
                             seedMentions(ops, "person:sam_altman", 102L);
 
@@ -137,7 +139,8 @@ class MybatisGraphOperationsTest {
         newContextRunner(tempDir.resolve("graph-local-subgraph.db"))
                 .run(
                         context -> {
-                            GraphOperations ops = context.getBean(MemoryStore.class).graphOperations();
+                            GraphOperations ops =
+                                    context.getBean(MemoryStore.class).graphOperations();
                             seedGraph(ops);
 
                             assertThat(
@@ -156,7 +159,8 @@ class MybatisGraphOperationsTest {
         newContextRunner(tempDir.resolve("graph-adjacency.db"))
                 .run(
                         context -> {
-                            GraphOperations ops = context.getBean(MemoryStore.class).graphOperations();
+                            GraphOperations ops =
+                                    context.getBean(MemoryStore.class).graphOperations();
                             seedGraph(ops);
 
                             assertThat(
@@ -175,25 +179,27 @@ class MybatisGraphOperationsTest {
         newContextRunner(tempDir.resolve("graph-reverse-mentions.db"))
                 .run(
                         context -> {
-                            GraphOperations ops = context.getBean(MemoryStore.class).graphOperations();
+                            GraphOperations ops =
+                                    context.getBean(MemoryStore.class).graphOperations();
                             seedMentions(ops, "organization:openai", 101L, 102L, 103L, 104L);
 
                             assertThat(
                                             ops.listItemEntityMentionsByEntityKeys(
-                                                    MEMORY_ID,
-                                                    List.of("organization:openai"),
-                                                    3))
+                                                    MEMORY_ID, List.of("organization:openai"), 3))
                                     .hasSize(3);
                         });
     }
 
     @Test
-    @DisplayName("graph write and read round trip supports phase two and phase three paths together")
-    void graphWriteAndReadRoundTripSupportsPhaseTwoAndPhaseThreePathsTogether(@TempDir Path tempDir) {
+    @DisplayName(
+            "graph write and read round trip supports phase two and phase three paths together")
+    void graphWriteAndReadRoundTripSupportsPhaseTwoAndPhaseThreePathsTogether(
+            @TempDir Path tempDir) {
         newContextRunner(tempDir.resolve("graph-roundtrip.db"))
                 .run(
                         context -> {
-                            GraphOperations ops = context.getBean(MemoryStore.class).graphOperations();
+                            GraphOperations ops =
+                                    context.getBean(MemoryStore.class).graphOperations();
                             seedGraph(ops);
 
                             assertThat(
@@ -233,9 +239,7 @@ class MybatisGraphOperationsTest {
                         entity("person:sam_altman", "Sam Altman", GraphEntityType.PERSON)));
         ops.upsertItemEntityMentions(
                 MEMORY_ID,
-                List.of(
-                        mention(101L, "organization:openai"),
-                        mention(102L, "person:sam_altman")));
+                List.of(mention(101L, "organization:openai"), mention(102L, "person:sam_altman")));
         ops.upsertItemLinks(
                 MEMORY_ID,
                 List.of(
@@ -247,7 +251,9 @@ class MybatisGraphOperationsTest {
     private static void seedMentions(GraphOperations ops, String entityKey, Long... itemIds) {
         ops.upsertItemEntityMentions(
                 MEMORY_ID,
-                java.util.Arrays.stream(itemIds).map(itemId -> mention(itemId, entityKey)).toList());
+                java.util.Arrays.stream(itemIds)
+                        .map(itemId -> mention(itemId, entityKey))
+                        .toList());
     }
 
     private static GraphEntity entity(
@@ -257,7 +263,8 @@ class MybatisGraphOperationsTest {
     }
 
     private static ItemEntityMention mention(long itemId, String entityKey) {
-        return new ItemEntityMention(MEMORY_ID.toIdentifier(), itemId, entityKey, 1.0f, Map.of(), NOW);
+        return new ItemEntityMention(
+                MEMORY_ID.toIdentifier(), itemId, entityKey, 1.0f, Map.of(), NOW);
     }
 
     private static ItemLink link(long sourceItemId, long targetItemId, ItemLinkType linkType) {

@@ -22,6 +22,7 @@ import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
+import com.openmemind.ai.memory.core.builder.DeepRetrievalGraphOptions;
 import com.openmemind.ai.memory.core.builder.DeepRetrievalOptions;
 import com.openmemind.ai.memory.core.builder.ExtractionCommonOptions;
 import com.openmemind.ai.memory.core.builder.ExtractionOptions;
@@ -30,11 +31,13 @@ import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
 import com.openmemind.ai.memory.core.builder.ItemGraphOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuilder;
+import com.openmemind.ai.memory.core.builder.QueryExpansionOptions;
 import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalAdvancedOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalCommonOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
+import com.openmemind.ai.memory.core.builder.SufficiencyOptions;
 import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
@@ -54,8 +57,10 @@ import com.openmemind.ai.memory.core.prompt.PromptType;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
+import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepRetrievalStrategy;
+import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
@@ -156,6 +161,64 @@ class DefaultMemoryBuilderTest {
 
         assertThat(readField(memory, "buildOptions", MemoryBuildOptions.class))
                 .isEqualTo(configured);
+    }
+
+    @Test
+    void defaultRetrievalConfigMapsDeepGraphAssistOptionsIntoRuntimeStrategyConfig() {
+        var configured =
+                MemoryBuildOptions.builder()
+                        .retrieval(
+                                new RetrievalOptions(
+                                        RetrievalCommonOptions.defaults(),
+                                        SimpleRetrievalOptions.defaults(),
+                                        new DeepRetrievalOptions(
+                                                java.time.Duration.ofSeconds(90),
+                                                5,
+                                                40,
+                                                false,
+                                                0,
+                                                QueryExpansionOptions.defaults(),
+                                                SufficiencyOptions.defaults(),
+                                                new DeepRetrievalGraphOptions(
+                                                        true,
+                                                        8,
+                                                        16,
+                                                        2,
+                                                        2,
+                                                        2,
+                                                        4,
+                                                        8,
+                                                        0.30d,
+                                                        0.55d,
+                                                        0.70f,
+                                                        5,
+                                                        java.time.Duration.ofMillis(300))),
+                                        RetrievalAdvancedOptions.defaults()))
+                        .build();
+
+        var memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(CHAT_CLIENT)
+                                .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .options(configured)
+                                .build();
+
+        RetrievalConfig runtimeConfig =
+                invokeMethod(
+                        memory,
+                        "defaultRetrievalConfig",
+                        RetrievalConfig.class,
+                        new Class<?>[] {RetrievalConfig.Strategy.class},
+                        RetrievalConfig.Strategy.DEEP);
+
+        assertThat(runtimeConfig.strategyConfig()).isInstanceOf(DeepStrategyConfig.class);
+        var deepConfig = (DeepStrategyConfig) runtimeConfig.strategyConfig();
+        assertThat(deepConfig.graphAssist().enabled()).isTrue();
+        assertThat(deepConfig.graphAssist().maxExpandedItems()).isEqualTo(16);
+        assertThat(deepConfig.graphAssist().protectDirectTopK()).isEqualTo(5);
     }
 
     @Test
@@ -683,6 +746,23 @@ class DefaultMemoryBuilderTest {
                             }
                             return null;
                         });
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T invokeMethod(
+            Object target,
+            String methodName,
+            Class<T> returnType,
+            Class<?>[] parameterTypes,
+            Object... args) {
+        try {
+            var method = target.getClass().getDeclaredMethod(methodName, parameterTypes);
+            method.setAccessible(true);
+            return (T) returnType.cast(method.invoke(target, args));
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(
+                    "Failed to invoke method '" + methodName + "' on " + target.getClass(), e);
+        }
     }
 
     @SuppressWarnings("unchecked")

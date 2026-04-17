@@ -44,6 +44,65 @@ class StrategyConfigTest {
     }
 
     @Test
+    @DisplayName("legacy deep strategy json without graph assist still deserializes")
+    void legacyDeepStrategyJsonWithoutGraphAssistStillDeserializes() throws Exception {
+        var mapper = JsonUtils.newMapper();
+
+        StrategyConfig config =
+                mapper.readValue(
+                        """
+                        {
+                          "type":"deep",
+                          "queryExpansion":{"maxExpandedQueries":4},
+                          "sufficiency":{"itemTopK":12},
+                          "tier2InitTopK":40,
+                          "bm25InitTopK":30,
+                          "minScore":0.25
+                        }
+                        """,
+                        StrategyConfig.class);
+
+        assertThat(config).isInstanceOf(DeepStrategyConfig.class);
+        var deep = (DeepStrategyConfig) config;
+        assertThat(deep.graphAssist()).isEqualTo(DeepStrategyConfig.GraphAssistConfig.defaults());
+        assertThat(deep.queryExpansion().maxExpandedQueries()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("legacy deep strategy constructor defaults graph assist")
+    void legacyDeepStrategyConstructorDefaultsGraphAssist() {
+        var config =
+                new DeepStrategyConfig(
+                        new DeepStrategyConfig.QueryExpansionConfig(4),
+                        new DeepStrategyConfig.SufficiencyConfig(12),
+                        40,
+                        30,
+                        0.25d);
+
+        assertThat(config.graphAssist()).isEqualTo(DeepStrategyConfig.GraphAssistConfig.defaults());
+        assertThat(config.queryExpansion().maxExpandedQueries()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("invalid deep strategy graph assist weight fails fast")
+    void invalidDeepStrategyGraphAssistWeightFailsFast() {
+        var mapper = JsonUtils.newMapper();
+
+        assertThatThrownBy(
+                        () ->
+                                mapper.readValue(
+                                        """
+                                        {
+                                          "type":"deep",
+                                          "graphAssist":{"enabled":true,"graphChannelWeight":1.0,"timeout":"PT0.3S"}
+                                        }
+                                        """,
+                                        StrategyConfig.class))
+                .isInstanceOf(Exception.class)
+                .hasMessageContaining("graph retrieval weights must keep graph below direct");
+    }
+
+    @Test
     @DisplayName("legacy simple strategy json without graph assist still deserializes")
     void legacySimpleStrategyJsonWithoutGraphAssistStillDeserializes() throws Exception {
         var mapper = JsonUtils.newMapper();

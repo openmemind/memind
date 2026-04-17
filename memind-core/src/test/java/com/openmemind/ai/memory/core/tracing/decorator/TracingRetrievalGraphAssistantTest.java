@@ -20,6 +20,7 @@ import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistResult;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
+import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
 import com.openmemind.ai.memory.core.support.RecordingMemoryObserver;
 import com.openmemind.ai.memory.core.support.TestMemoryIds;
@@ -42,17 +43,7 @@ class TracingRetrievalGraphAssistantTest {
                                 new RetrievalGraphAssistResult(
                                         directItems,
                                         new RetrievalGraphAssistResult.GraphAssistStats(
-                                                true,
-                                                false,
-                                                false,
-                                                2,
-                                                3,
-                                                4,
-                                                5,
-                                                6,
-                                                1,
-                                                1,
-                                                1)));
+                                                true, false, false, 2, 3, 4, 5, 6, 1, 1, 1)));
         var traced = new TracingRetrievalGraphAssistant(delegate, observer);
         var context =
                 new QueryContext(
@@ -63,7 +54,10 @@ class TracingRetrievalGraphAssistantTest {
                         Map.of(),
                         null,
                         null);
-        var direct = List.of(new ScoredResult(ScoredResult.SourceType.ITEM, "101", "item-101", 0.8f, 1.0d));
+        var direct =
+                List.of(
+                        new ScoredResult(
+                                ScoredResult.SourceType.ITEM, "101", "item-101", 0.8f, 1.0d));
 
         StepVerifier.create(
                         traced.assist(
@@ -71,7 +65,9 @@ class TracingRetrievalGraphAssistantTest {
                                 RetrievalConfig.simple(),
                                 SimpleStrategyConfig.defaults()
                                         .withGraphAssist(
-                                                SimpleStrategyConfig.GraphAssistConfig.defaults().withEnabled(true)),
+                                                SimpleStrategyConfig.GraphAssistConfig.defaults()
+                                                        .withEnabled(true))
+                                        .graphAssist(),
                                 direct))
                 .assertNext(result -> assertThat(result.items()).containsExactlyElementsOf(direct))
                 .verifyComplete();
@@ -85,23 +81,15 @@ class TracingRetrievalGraphAssistantTest {
 
         @SuppressWarnings("unchecked")
         var resultAttributes =
-                ((com.openmemind.ai.memory.core.tracing.ObservationContext<RetrievalGraphAssistResult>) observation)
+                ((com.openmemind.ai.memory.core.tracing.ObservationContext<
+                                        RetrievalGraphAssistResult>)
+                                observation)
                         .resultExtractor()
                         .extract(
                                 new RetrievalGraphAssistResult(
                                         direct,
                                         new RetrievalGraphAssistResult.GraphAssistStats(
-                                                true,
-                                                false,
-                                                false,
-                                                2,
-                                                3,
-                                                4,
-                                                5,
-                                                6,
-                                                1,
-                                                1,
-                                                1)));
+                                                true, false, false, 2, 3, 4, 5, 6, 1, 1, 1)));
         assertThat(resultAttributes)
                 .containsEntry(MemoryAttributes.RETRIEVAL_GRAPH_SEED_COUNT, 2)
                 .containsEntry(MemoryAttributes.RETRIEVAL_GRAPH_LINK_EXPANSION_COUNT, 3)
@@ -113,5 +101,48 @@ class TracingRetrievalGraphAssistantTest {
                 .containsEntry(MemoryAttributes.RETRIEVAL_GRAPH_SKIPPED_OVERFANOUT_ENTITY_COUNT, 1)
                 .containsEntry(MemoryAttributes.RETRIEVAL_GRAPH_TIMEOUT, false)
                 .containsEntry(MemoryAttributes.RETRIEVAL_GRAPH_DEGRADED, false);
+    }
+
+    @Test
+    void tracingDecoratorShouldAcceptDeepGraphSettings() {
+        var observer = new RecordingMemoryObserver();
+        RetrievalGraphAssistant delegate =
+                (context, config, graphSettings, directItems) ->
+                        Mono.just(
+                                new RetrievalGraphAssistResult(
+                                        directItems,
+                                        new RetrievalGraphAssistResult.GraphAssistStats(
+                                                true, false, false, 1, 2, 3, 4, 1, 0, 0, 0)));
+        var traced = new TracingRetrievalGraphAssistant(delegate, observer);
+        var context =
+                new QueryContext(
+                        TestMemoryIds.userAgent(),
+                        "what changed",
+                        null,
+                        List.of(),
+                        Map.of(),
+                        null,
+                        null);
+        var direct =
+                List.of(
+                        new ScoredResult(
+                                ScoredResult.SourceType.ITEM, "101", "item-101", 0.8f, 1.0d));
+        var deepConfig =
+                DeepStrategyConfig.defaults()
+                        .withGraphAssist(
+                                DeepStrategyConfig.GraphAssistConfig.defaults().withEnabled(true));
+
+        StepVerifier.create(
+                        traced.assist(
+                                context,
+                                RetrievalConfig.deep(deepConfig),
+                                deepConfig.graphAssist(),
+                                direct))
+                .assertNext(result -> assertThat(result.items()).containsExactlyElementsOf(direct))
+                .verifyComplete();
+
+        assertThat(observer.monoContexts()).hasSize(1);
+        assertThat(observer.monoContexts().getFirst().requestAttributes())
+                .containsEntry(MemoryAttributes.RETRIEVAL_GRAPH_ENABLED, true);
     }
 }

@@ -307,6 +307,7 @@ public class DefaultMemory implements Memory {
             case DEEP -> {
                 var base = RetrievalConfig.deep();
                 var baseStrategy = (DeepStrategyConfig) base.strategyConfig();
+                var graph = retrieval.deep().graphAssist();
                 var strategyConfig =
                         new DeepStrategyConfig(
                                 new DeepStrategyConfig.QueryExpansionConfig(
@@ -315,7 +316,21 @@ public class DefaultMemory implements Memory {
                                         retrieval.deep().sufficiency().itemTopK()),
                                 baseStrategy.tier2InitTopK(),
                                 baseStrategy.bm25InitTopK(),
-                                baseStrategy.minScore());
+                                baseStrategy.minScore(),
+                                new DeepStrategyConfig.GraphAssistConfig(
+                                        graph.enabled(),
+                                        graph.maxSeedItems(),
+                                        graph.maxExpandedItems(),
+                                        graph.maxSemanticNeighborsPerSeed(),
+                                        graph.maxTemporalNeighborsPerSeed(),
+                                        graph.maxCausalNeighborsPerSeed(),
+                                        graph.maxEntitySiblingItemsPerSeed(),
+                                        graph.maxItemsPerEntity(),
+                                        graph.graphChannelWeight(),
+                                        graph.minLinkStrength(),
+                                        graph.minMentionConfidence(),
+                                        graph.protectDirectTopK(),
+                                        graph.timeout()));
                 var tier3 =
                         retrieval.deep().rawDataEnabled()
                                 ? new RetrievalConfig.TierConfig(

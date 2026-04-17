@@ -15,9 +15,9 @@ package com.openmemind.ai.memory.plugin.store.mybatis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.baomidou.mybatisplus.autoconfigure.ConfigurationCustomizer;
 import com.baomidou.mybatisplus.autoconfigure.DdlApplicationRunner;
 import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
-import com.baomidou.mybatisplus.autoconfigure.ConfigurationCustomizer;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -61,7 +61,8 @@ class MybatisGraphReadParityTest {
         newContextRunner(tempDir.resolve("graph-parity.db"))
                 .run(
                         context -> {
-                            GraphOperations mybatis = context.getBean(MemoryStore.class).graphOperations();
+                            GraphOperations mybatis =
+                                    context.getBean(MemoryStore.class).graphOperations();
                             fixture.seed(mybatis);
 
                             assertThat(
@@ -69,7 +70,8 @@ class MybatisGraphReadParityTest {
                                                     MEMORY_ID,
                                                     fixture.seedIds(),
                                                     fixture.linkTypes()))
-                                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields("createdAt")
+                                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(
+                                            "createdAt")
                                     .isEqualTo(
                                             inMemory.listAdjacentItemLinks(
                                                     MEMORY_ID,
@@ -78,15 +80,12 @@ class MybatisGraphReadParityTest {
 
                             assertThat(
                                             mybatis.listItemEntityMentionsByEntityKeys(
-                                                    MEMORY_ID,
-                                                    fixture.entityKeys(),
-                                                    4))
-                                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields("createdAt")
+                                                    MEMORY_ID, fixture.entityKeys(), 4))
+                                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(
+                                            "createdAt")
                                     .isEqualTo(
                                             inMemory.listItemEntityMentionsByEntityKeys(
-                                                    MEMORY_ID,
-                                                    fixture.entityKeys(),
-                                                    4));
+                                                    MEMORY_ID, fixture.entityKeys(), 4));
                         });
     }
 

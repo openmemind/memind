@@ -15,6 +15,8 @@ package com.openmemind.ai.memory.server.service.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.builder.DeepRetrievalGraphOptions;
+import com.openmemind.ai.memory.core.builder.DeepRetrievalOptions;
 import com.openmemind.ai.memory.core.builder.ExtractionCommonOptions;
 import com.openmemind.ai.memory.core.builder.ExtractionOptions;
 import com.openmemind.ai.memory.core.builder.InsightExtractionOptions;
@@ -85,9 +87,46 @@ class MemoryOptionsCodecTest {
                                                         .withEnabled(true)
                                                         .withMaxSeedItems(4)
                                                         .withTimeout(
-                                                                java.time.Duration.ofMillis(
-                                                                        350))),
+                                                                java.time.Duration.ofMillis(350))),
                                         RetrievalOptions.defaults().deep(),
+                                        RetrievalOptions.defaults().advanced()))
+                        .build();
+
+        String json = codec.write(options);
+
+        assertThat(codec.read(json)).isEqualTo(options);
+    }
+
+    @Test
+    void roundTripsDeepRetrievalGraphAssistOptions() {
+        var options =
+                MemoryBuildOptions.builder()
+                        .retrieval(
+                                new RetrievalOptions(
+                                        RetrievalOptions.defaults().common(),
+                                        RetrievalOptions.defaults().simple(),
+                                        new DeepRetrievalOptions(
+                                                RetrievalOptions.defaults().deep().timeout(),
+                                                RetrievalOptions.defaults().deep().insightTopK(),
+                                                RetrievalOptions.defaults().deep().itemTopK(),
+                                                RetrievalOptions.defaults().deep().rawDataEnabled(),
+                                                RetrievalOptions.defaults().deep().rawDataTopK(),
+                                                RetrievalOptions.defaults().deep().queryExpansion(),
+                                                RetrievalOptions.defaults().deep().sufficiency(),
+                                                new DeepRetrievalGraphOptions(
+                                                        true,
+                                                        6,
+                                                        14,
+                                                        2,
+                                                        2,
+                                                        2,
+                                                        4,
+                                                        8,
+                                                        0.30d,
+                                                        0.55d,
+                                                        0.70f,
+                                                        5,
+                                                        java.time.Duration.ofMillis(450))),
                                         RetrievalOptions.defaults().advanced()))
                         .build();
 

@@ -79,7 +79,9 @@ public class MybatisGraphOperations implements GraphOperations {
                                 memoryQuery(memoryId, MemoryGraphEntityDO.class)
                                         .in(
                                                 "entity_key",
-                                                entities.stream().map(GraphEntity::entityKey).toList()))
+                                                entities.stream()
+                                                        .map(GraphEntity::entityKey)
+                                                        .toList()))
                         .stream()
                         .collect(
                                 Collectors.toMap(
@@ -110,10 +112,14 @@ public class MybatisGraphOperations implements GraphOperations {
                                 memoryQuery(memoryId, MemoryItemEntityMentionDO.class)
                                         .in(
                                                 "entity_key",
-                                                mentions.stream().map(ItemEntityMention::entityKey).toList())
+                                                mentions.stream()
+                                                        .map(ItemEntityMention::entityKey)
+                                                        .toList())
                                         .in(
                                                 "item_id",
-                                                mentions.stream().map(ItemEntityMention::itemId).toList()))
+                                                mentions.stream()
+                                                        .map(ItemEntityMention::itemId)
+                                                        .toList()))
                         .stream()
                         .collect(
                                 Collectors.toMap(
@@ -153,7 +159,8 @@ public class MybatisGraphOperations implements GraphOperations {
                 .forEach(
                         mention ->
                                 mentionsByItem
-                                        .computeIfAbsent(mention.itemId(), ignored -> new HashSet<>())
+                                        .computeIfAbsent(
+                                                mention.itemId(), ignored -> new HashSet<>())
                                         .add(mention.entityKey()));
 
         Map<CooccurrenceIdentity, Integer> counts = new HashMap<>();
@@ -227,7 +234,8 @@ public class MybatisGraphOperations implements GraphOperations {
     @Override
     public List<GraphEntity> listEntities(MemoryId memoryId) {
         return graphEntityMapper
-                .selectList(memoryQuery(memoryId, MemoryGraphEntityDO.class).orderByAsc("entity_key"))
+                .selectList(
+                        memoryQuery(memoryId, MemoryGraphEntityDO.class).orderByAsc("entity_key"))
                 .stream()
                 .map(GraphEntityConverter::toRecord)
                 .toList();
@@ -250,7 +258,9 @@ public class MybatisGraphOperations implements GraphOperations {
         if (itemIds == null || itemIds.isEmpty()) {
             return List.of();
         }
-        return itemEntityMentionMapper.selectByItemIds(memoryId.toIdentifier(), normalizeItemIds(itemIds)).stream()
+        return itemEntityMentionMapper
+                .selectByItemIds(memoryId.toIdentifier(), normalizeItemIds(itemIds))
+                .stream()
                 .map(ItemEntityMentionConverter::toRecord)
                 .toList();
     }
@@ -286,9 +296,7 @@ public class MybatisGraphOperations implements GraphOperations {
         }
         return itemLinkMapper
                 .selectLocalSubgraphLinks(
-                        memoryId.toIdentifier(),
-                        normalizedItemIds,
-                        normalizeLinkTypes(linkTypes))
+                        memoryId.toIdentifier(), normalizedItemIds, normalizeLinkTypes(linkTypes))
                 .stream()
                 .map(ItemLinkConverter::toRecord)
                 .toList();
@@ -303,9 +311,7 @@ public class MybatisGraphOperations implements GraphOperations {
         }
         return itemLinkMapper
                 .selectAdjacentLinks(
-                        memoryId.toIdentifier(),
-                        normalizedSeedIds,
-                        normalizeLinkTypes(linkTypes))
+                        memoryId.toIdentifier(), normalizedSeedIds, normalizeLinkTypes(linkTypes))
                 .stream()
                 .map(ItemLinkConverter::toRecord)
                 .toList();
@@ -350,9 +356,7 @@ public class MybatisGraphOperations implements GraphOperations {
                     continue;
                 }
                 counts.merge(
-                        new CooccurrenceIdentity(leftEntityKey, rightEntityKey),
-                        1,
-                        Integer::sum);
+                        new CooccurrenceIdentity(leftEntityKey, rightEntityKey), 1, Integer::sum);
             }
         }
     }

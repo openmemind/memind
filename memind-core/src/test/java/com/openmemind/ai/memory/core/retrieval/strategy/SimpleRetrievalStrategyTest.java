@@ -22,15 +22,16 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.data.MemoryItem;
+import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
-import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistResult;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistant;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphSettings;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.tier.InsightTierRetriever;
@@ -81,12 +82,12 @@ class SimpleRetrievalStrategyTest {
         lenient().when(memoryStore.rawDataOperations()).thenReturn(rawDataOperations);
         lenient().when(itemOperations.getItemsByIds(any(), any())).thenReturn(List.of());
         lenient().when(rawDataOperations.getRawData(any(), any())).thenReturn(Optional.empty());
-        lenient().when(graphAssistant.assist(any(), any(), any(), any()))
+        lenient()
+                .when(graphAssistant.assist(any(), any(), any(), any()))
                 .thenAnswer(
                         invocation -> {
-                            var simpleConfig = invocation.<SimpleStrategyConfig>getArgument(2);
-                            boolean enabled =
-                                    simpleConfig != null && simpleConfig.graphAssist().enabled();
+                            var graphSettings = invocation.<RetrievalGraphSettings>getArgument(2);
+                            boolean enabled = graphSettings != null && graphSettings.enabled();
                             return Mono.just(
                                     RetrievalGraphAssistResult.directOnly(
                                             invocation.getArgument(3), enabled));
@@ -316,7 +317,9 @@ class SimpleRetrievalStrategyTest {
         @Test
         @DisplayName("Keyword search flag skips BM25 even when textSearch bean exists")
         void keywordSearchFlagSkipsBm25EvenWhenTextSearchBeanExists() {
-            var config = RetrievalConfig.simple(SimpleStrategyConfig.defaults().withKeywordSearch(false));
+            var config =
+                    RetrievalConfig.simple(
+                            SimpleStrategyConfig.defaults().withKeywordSearch(false));
             when(insightRetriever.retrieve(any(), any())).thenReturn(Mono.just(TierResult.empty()));
             when(itemRetriever.searchByVector(any(), any()))
                     .thenReturn(
@@ -344,7 +347,8 @@ class SimpleRetrievalStrategyTest {
             var graphConfig =
                     SimpleStrategyConfig.defaults()
                             .withGraphAssist(
-                                    SimpleStrategyConfig.GraphAssistConfig.defaults().withEnabled(true));
+                                    SimpleStrategyConfig.GraphAssistConfig.defaults()
+                                            .withEnabled(true));
             var config = RetrievalConfig.simple(graphConfig);
             var graphAssistantResult =
                     new RetrievalGraphAssistResult(
@@ -358,7 +362,8 @@ class SimpleRetrievalStrategyTest {
                                     new TierResult(
                                             List.of(scored("101", 1.0d), scored("102", 0.9d)),
                                             List.of())));
-            when(textSearch.search(any(), anyString(), anyInt(), eq(MemoryTextSearch.SearchTarget.ITEM)))
+            when(textSearch.search(
+                            any(), anyString(), anyInt(), eq(MemoryTextSearch.SearchTarget.ITEM)))
                     .thenReturn(Mono.just(List.of()));
             when(graphAssistant.assist(any(), any(), any(), any()))
                     .thenReturn(Mono.just(graphAssistantResult));
@@ -379,12 +384,15 @@ class SimpleRetrievalStrategyTest {
             var graphConfig =
                     SimpleStrategyConfig.defaults()
                             .withGraphAssist(
-                                    SimpleStrategyConfig.GraphAssistConfig.defaults().withEnabled(true));
+                                    SimpleStrategyConfig.GraphAssistConfig.defaults()
+                                            .withEnabled(true));
             var config = RetrievalConfig.simple(graphConfig);
 
             when(insightRetriever.retrieve(any(), any())).thenReturn(Mono.just(TierResult.empty()));
-            when(itemRetriever.searchByVector(any(), any())).thenReturn(Mono.just(TierResult.empty()));
-            when(textSearch.search(any(), anyString(), anyInt(), eq(MemoryTextSearch.SearchTarget.ITEM)))
+            when(itemRetriever.searchByVector(any(), any()))
+                    .thenReturn(Mono.just(TierResult.empty()));
+            when(textSearch.search(
+                            any(), anyString(), anyInt(), eq(MemoryTextSearch.SearchTarget.ITEM)))
                     .thenReturn(
                             Mono.just(
                                     List.of(
@@ -407,8 +415,11 @@ class SimpleRetrievalStrategyTest {
                             });
 
             StepVerifier.create(strategy.retrieve(context, config))
-                    .assertNext(result -> assertThat(result.items()).extracting(ScoredResult::sourceId)
-                            .containsExactly("102", "101"))
+                    .assertNext(
+                            result ->
+                                    assertThat(result.items())
+                                            .extracting(ScoredResult::sourceId)
+                                            .containsExactly("102", "101"))
                     .verifyComplete();
         }
 
@@ -422,7 +433,8 @@ class SimpleRetrievalStrategyTest {
                                     new TierResult(
                                             List.of(scored("101", 1.0d), scored("102", 0.9d)),
                                             List.of())));
-            when(textSearch.search(any(), anyString(), anyInt(), eq(MemoryTextSearch.SearchTarget.ITEM)))
+            when(textSearch.search(
+                            any(), anyString(), anyInt(), eq(MemoryTextSearch.SearchTarget.ITEM)))
                     .thenReturn(Mono.just(List.of()));
             when(graphAssistant.assist(any(), any(), any(), any()))
                     .thenReturn(Mono.error(new RuntimeException("graph failed")));
@@ -454,10 +466,14 @@ class SimpleRetrievalStrategyTest {
                                     new TierResult(
                                             List.of(scored("101", 1.0d), scored("102", 0.9d)),
                                             List.of())));
-            when(textSearch.search(any(), anyString(), anyInt(), eq(MemoryTextSearch.SearchTarget.ITEM)))
+            when(textSearch.search(
+                            any(), anyString(), anyInt(), eq(MemoryTextSearch.SearchTarget.ITEM)))
                     .thenReturn(Mono.just(List.of()));
 
-            StepVerifier.create(strategy.retrieve(context, RetrievalConfig.simple(SimpleStrategyConfig.defaults())))
+            StepVerifier.create(
+                            strategy.retrieve(
+                                    context,
+                                    RetrievalConfig.simple(SimpleStrategyConfig.defaults())))
                     .assertNext(
                             result ->
                                     assertThat(result.items())

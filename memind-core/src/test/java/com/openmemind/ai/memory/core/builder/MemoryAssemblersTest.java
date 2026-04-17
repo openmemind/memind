@@ -177,7 +177,7 @@ class MemoryAssemblersTest {
     }
 
     @Test
-    void retrievalAssemblerAlwaysWiresRuntimeGraphAssistantEvenWhenBuilderGraphDefaultIsDisabled() {
+    void retrievalAssemblerAlwaysWiresRuntimeGraphAssistantIntoBothStrategies() {
         var retriever =
                 new MemoryRetrievalAssembler()
                         .assemble(context(MemoryBuildOptions.defaults(), null, null));
@@ -185,8 +185,11 @@ class MemoryAssemblersTest {
         @SuppressWarnings("unchecked")
         var strategies = readField(retriever, "strategies", Map.class);
         var simple = strategies.get(RetrievalStrategies.SIMPLE);
+        var deep = strategies.get(RetrievalStrategies.DEEP_RETRIEVAL);
 
         assertThat(readField(simple, "graphAssistant", Object.class))
+                .isNotInstanceOf(NoOpRetrievalGraphAssistant.class);
+        assertThat(readField(deep, "graphAssistant", Object.class))
                 .isNotInstanceOf(NoOpRetrievalGraphAssistant.class);
     }
 

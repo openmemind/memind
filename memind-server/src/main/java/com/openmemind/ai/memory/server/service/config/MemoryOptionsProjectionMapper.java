@@ -159,7 +159,8 @@ public class MemoryOptionsProjectionMapper {
                             "Maximum causal-link neighbors expanded from each seed item."),
                     Map.entry(
                             "retrieval.simple.graphAssist.maxEntitySiblingItemsPerSeed",
-                            "Maximum sibling items pulled per seed through shared entity mentions."),
+                            "Maximum sibling items pulled per seed through shared entity"
+                                    + " mentions."),
                     Map.entry(
                             "retrieval.simple.graphAssist.maxItemsPerEntity",
                             "Maximum items examined for any single entity when expanding shared"
@@ -207,6 +208,58 @@ public class MemoryOptionsProjectionMapper {
                             "retrieval.deep.sufficiency.itemTopK",
                             "Number of item candidates inspected by the deep retrieval sufficiency"
                                     + " check."),
+                    Map.entry(
+                            "retrieval.deep.graphAssist.enabled",
+                            "Whether deep retrieval may expand direct slow-path hits through the"
+                                    + " bounded item graph before rerank."),
+                    Map.entry(
+                            "retrieval.deep.graphAssist.maxSeedItems",
+                            "Maximum number of direct slow-path item hits eligible to seed graph"
+                                    + " expansion before rerank."),
+                    Map.entry(
+                            "retrieval.deep.graphAssist.maxExpandedItems",
+                            "Maximum number of graph-derived deep retrieval candidates retained"
+                                    + " before rerank."),
+                    Map.entry(
+                            "retrieval.deep.graphAssist.maxSemanticNeighborsPerSeed",
+                            "Maximum semantic-link neighbors expanded from each deep retrieval"
+                                    + " seed item."),
+                    Map.entry(
+                            "retrieval.deep.graphAssist.maxTemporalNeighborsPerSeed",
+                            "Maximum temporal-link neighbors expanded from each deep retrieval"
+                                    + " seed item."),
+                    Map.entry(
+                            "retrieval.deep.graphAssist.maxCausalNeighborsPerSeed",
+                            "Maximum causal-link neighbors expanded from each deep retrieval seed"
+                                    + " item."),
+                    Map.entry(
+                            "retrieval.deep.graphAssist.maxEntitySiblingItemsPerSeed",
+                            "Maximum sibling items pulled per seed during deep retrieval through"
+                                    + " shared entity mentions."),
+                    Map.entry(
+                            "retrieval.deep.graphAssist.maxItemsPerEntity",
+                            "Maximum items examined for any single entity when deep retrieval"
+                                    + " expands shared mentions."),
+                    Map.entry(
+                            "retrieval.deep.graphAssist.graphChannelWeight",
+                            "Relative blend weight assigned to the graph-assisted channel inside"
+                                    + " deep retrieval candidate fusion."),
+                    Map.entry(
+                            "retrieval.deep.graphAssist.minLinkStrength",
+                            "Minimum graph link strength required before an adjacent item may"
+                                    + " contribute to deep retrieval."),
+                    Map.entry(
+                            "retrieval.deep.graphAssist.minMentionConfidence",
+                            "Minimum entity mention confidence required before deep retrieval"
+                                    + " sibling expansion is allowed."),
+                    Map.entry(
+                            "retrieval.deep.graphAssist.protectDirectTopK",
+                            "Number of highest-ranked direct slow-path hits pinned ahead of"
+                                    + " graph-only candidates before rerank."),
+                    Map.entry(
+                            "retrieval.deep.graphAssist.timeout",
+                            "Maximum time budget reserved for graph-assisted expansion during"
+                                    + " deep retrieval's insufficient slow path."),
                     Map.entry(
                             "retrieval.advanced.rerank.mode",
                             "Reranking mode used when combining retrieval candidates."),

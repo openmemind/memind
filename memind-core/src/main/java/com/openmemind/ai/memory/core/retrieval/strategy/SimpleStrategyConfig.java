@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core.retrieval.strategy;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalGraphOptions;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphSettings;
 import java.time.Duration;
 
 /**
@@ -64,7 +65,8 @@ public record SimpleStrategyConfig(boolean enableKeywordSearch, GraphAssistConfi
             double minLinkStrength,
             float minMentionConfidence,
             int protectDirectTopK,
-            Duration timeout) {
+            Duration timeout)
+            implements RetrievalGraphSettings {
 
         public GraphAssistConfig {
             SimpleRetrievalGraphOptions.validateGraphAssistShape(
@@ -105,13 +107,10 @@ public record SimpleStrategyConfig(boolean enableKeywordSearch, GraphAssistConfi
                 @JsonProperty("enabled") Boolean enabled,
                 @JsonProperty("maxSeedItems") Integer maxSeedItems,
                 @JsonProperty("maxExpandedItems") Integer maxExpandedItems,
-                @JsonProperty("maxSemanticNeighborsPerSeed")
-                        Integer maxSemanticNeighborsPerSeed,
-                @JsonProperty("maxTemporalNeighborsPerSeed")
-                        Integer maxTemporalNeighborsPerSeed,
+                @JsonProperty("maxSemanticNeighborsPerSeed") Integer maxSemanticNeighborsPerSeed,
+                @JsonProperty("maxTemporalNeighborsPerSeed") Integer maxTemporalNeighborsPerSeed,
                 @JsonProperty("maxCausalNeighborsPerSeed") Integer maxCausalNeighborsPerSeed,
-                @JsonProperty("maxEntitySiblingItemsPerSeed")
-                        Integer maxEntitySiblingItemsPerSeed,
+                @JsonProperty("maxEntitySiblingItemsPerSeed") Integer maxEntitySiblingItemsPerSeed,
                 @JsonProperty("maxItemsPerEntity") Integer maxItemsPerEntity,
                 @JsonProperty("graphChannelWeight") Double graphChannelWeight,
                 @JsonProperty("minLinkStrength") Double minLinkStrength,
@@ -136,16 +135,12 @@ public record SimpleStrategyConfig(boolean enableKeywordSearch, GraphAssistConfi
                             ? maxEntitySiblingItemsPerSeed
                             : defaults.maxEntitySiblingItemsPerSeed(),
                     maxItemsPerEntity != null ? maxItemsPerEntity : defaults.maxItemsPerEntity(),
-                    graphChannelWeight != null
-                            ? graphChannelWeight
-                            : defaults.graphChannelWeight(),
+                    graphChannelWeight != null ? graphChannelWeight : defaults.graphChannelWeight(),
                     minLinkStrength != null ? minLinkStrength : defaults.minLinkStrength(),
                     minMentionConfidence != null
                             ? minMentionConfidence
                             : defaults.minMentionConfidence(),
-                    protectDirectTopK != null
-                            ? protectDirectTopK
-                            : defaults.protectDirectTopK(),
+                    protectDirectTopK != null ? protectDirectTopK : defaults.protectDirectTopK(),
                     timeout != null ? timeout : defaults.timeout());
         }
 

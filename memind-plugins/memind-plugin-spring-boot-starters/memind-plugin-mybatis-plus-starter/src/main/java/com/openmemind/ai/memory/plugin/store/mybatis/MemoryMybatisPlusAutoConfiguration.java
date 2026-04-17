@@ -41,8 +41,8 @@ import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightBubbleS
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightTypeMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemEntityMentionMapper;
-import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemLinkMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryRawDataMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryResourceMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.schema.DatabaseDialect;
@@ -52,8 +52,8 @@ import com.openmemind.ai.memory.plugin.store.mybatis.textsearch.postgresql.Postg
 import com.openmemind.ai.memory.plugin.store.mybatis.textsearch.sqlite.SqliteFtsTextSearch;
 import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
-import org.apache.ibatis.plugin.Interceptor;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.plugin.Interceptor;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;

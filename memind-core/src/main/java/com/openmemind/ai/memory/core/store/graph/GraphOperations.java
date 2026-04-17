@@ -52,7 +52,10 @@ public interface GraphOperations {
         if (entityKeys == null || entityKeys.isEmpty() || perEntityLimitPlusOne <= 0) {
             return List.of();
         }
-        var entityKeySet = entityKeys.stream().filter(Objects::nonNull).collect(java.util.stream.Collectors.toSet());
+        var entityKeySet =
+                entityKeys.stream()
+                        .filter(Objects::nonNull)
+                        .collect(java.util.stream.Collectors.toSet());
         if (entityKeySet.isEmpty()) {
             return List.of();
         }
@@ -92,7 +95,10 @@ public interface GraphOperations {
         if (seedItemIds == null || seedItemIds.isEmpty()) {
             return List.of();
         }
-        var seedIdSet = seedItemIds.stream().filter(Objects::nonNull).collect(java.util.stream.Collectors.toSet());
+        var seedIdSet =
+                seedItemIds.stream()
+                        .filter(Objects::nonNull)
+                        .collect(java.util.stream.Collectors.toSet());
         if (seedIdSet.isEmpty()) {
             return List.of();
         }

@@ -16,7 +16,6 @@ package com.openmemind.ai.memory.core.retrieval.graph;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
-import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
 import java.util.List;
 import reactor.core.publisher.Mono;
 
@@ -25,8 +24,7 @@ import reactor.core.publisher.Mono;
  */
 public final class NoOpRetrievalGraphAssistant implements RetrievalGraphAssistant {
 
-    public static final NoOpRetrievalGraphAssistant INSTANCE =
-            new NoOpRetrievalGraphAssistant();
+    public static final NoOpRetrievalGraphAssistant INSTANCE = new NoOpRetrievalGraphAssistant();
 
     private NoOpRetrievalGraphAssistant() {}
 
@@ -34,8 +32,9 @@ public final class NoOpRetrievalGraphAssistant implements RetrievalGraphAssistan
     public Mono<RetrievalGraphAssistResult> assist(
             QueryContext context,
             RetrievalConfig config,
-            SimpleStrategyConfig strategyConfig,
+            RetrievalGraphSettings graphSettings,
             List<ScoredResult> directItems) {
-        return Mono.just(RetrievalGraphAssistResult.directOnly(directItems, false));
+        boolean enabled = graphSettings != null && graphSettings.enabled();
+        return Mono.just(RetrievalGraphAssistResult.directOnly(directItems, enabled));
     }
 }

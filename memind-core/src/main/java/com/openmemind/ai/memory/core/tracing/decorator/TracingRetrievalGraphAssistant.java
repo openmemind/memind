@@ -16,9 +16,9 @@ package com.openmemind.ai.memory.core.tracing.decorator;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistResult;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistant;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphSettings;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
-import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
 import com.openmemind.ai.memory.core.tracing.MemoryAttributes;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.tracing.MemorySpanNames;
@@ -46,7 +46,7 @@ public final class TracingRetrievalGraphAssistant extends TracingSupport
     public Mono<RetrievalGraphAssistResult> assist(
             QueryContext context,
             RetrievalConfig config,
-            SimpleStrategyConfig strategyConfig,
+            RetrievalGraphSettings graphSettings,
             List<ScoredResult> directItems) {
         return trace(
                 MemorySpanNames.RETRIEVAL_GRAPH_ASSIST,
@@ -54,7 +54,7 @@ public final class TracingRetrievalGraphAssistant extends TracingSupport
                         MemoryAttributes.MEMORY_ID,
                         context.memoryId().toIdentifier(),
                         MemoryAttributes.RETRIEVAL_GRAPH_ENABLED,
-                        strategyConfig.graphAssist().enabled()),
+                        graphSettings != null && graphSettings.enabled()),
                 result ->
                         Map.of(
                                 MemoryAttributes.RETRIEVAL_GRAPH_SEED_COUNT,
@@ -77,6 +77,6 @@ public final class TracingRetrievalGraphAssistant extends TracingSupport
                                 result.stats().timedOut(),
                                 MemoryAttributes.RETRIEVAL_GRAPH_DEGRADED,
                                 result.stats().degraded()),
-                () -> delegate.assist(context, config, strategyConfig, directItems));
+                () -> delegate.assist(context, config, graphSettings, directItems));
     }
 }

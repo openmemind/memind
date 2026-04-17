@@ -119,7 +119,9 @@ class InMemoryGraphOperationsTest {
                 .extracting(ItemLink::sourceItemId, ItemLink::targetItemId)
                 .containsExactly(tuple(101L, 102L));
 
-        assertThat(ops.listAdjacentItemLinks(MEMORY_ID, List.of(101L), List.of(ItemLinkType.CAUSAL)))
+        assertThat(
+                        ops.listAdjacentItemLinks(
+                                MEMORY_ID, List.of(101L), List.of(ItemLinkType.CAUSAL)))
                 .extracting(ItemLink::sourceItemId, ItemLink::targetItemId)
                 .containsExactly(tuple(101L, 102L), tuple(103L, 101L));
     }
@@ -140,9 +142,7 @@ class InMemoryGraphOperationsTest {
 
         assertThat(
                         ops.listItemEntityMentionsByEntityKeys(
-                                MEMORY_ID,
-                                List.of("organization:openai", "person:sam_altman"),
-                                3))
+                                MEMORY_ID, List.of("organization:openai", "person:sam_altman"), 3))
                 .extracting(ItemEntityMention::entityKey, ItemEntityMention::itemId)
                 .containsExactly(
                         tuple("organization:openai", 101L),

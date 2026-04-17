@@ -20,7 +20,6 @@ import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ResultMerger;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.TimeDecay;
-import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.graph.GraphOperations;
 import com.openmemind.ai.memory.core.store.graph.GraphQueryBudgetContext;
@@ -47,7 +46,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 /**
- * One-hop graph enrichment for simple retrieval.
+ * One-hop graph enrichment for direct retrieval candidates.
  */
 public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssistant {
 
@@ -70,18 +69,18 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
     public Mono<RetrievalGraphAssistResult> assist(
             QueryContext context,
             RetrievalConfig config,
-            SimpleStrategyConfig strategyConfig,
+            RetrievalGraphSettings graphSettings,
             List<ScoredResult> directItems) {
-        var graph = strategyConfig.graphAssist();
-        if (!graph.enabled() || directItems == null || directItems.isEmpty() || store == null) {
-            return Mono.just(RetrievalGraphAssistResult.directOnly(directItems, graph.enabled()));
+        boolean enabled = graphSettings != null && graphSettings.enabled();
+        if (!enabled || directItems == null || directItems.isEmpty() || store == null) {
+            return Mono.just(RetrievalGraphAssistResult.directOnly(directItems, enabled));
         }
 
-        Duration timeout = graph.timeout();
+        Duration timeout = graphSettings.timeout();
         return Mono.fromCallable(
                         () -> {
                             try (var ignored = GraphQueryBudgetContext.open(timeout)) {
-                                return expandAndFuse(context, config, strategyConfig, directItems);
+                                return expandAndFuse(context, config, graphSettings, directItems);
                             }
                         })
                 .subscribeOn(Schedulers.boundedElastic())
@@ -102,27 +101,27 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
     private RetrievalGraphAssistResult expandAndFuse(
             QueryContext context,
             RetrievalConfig config,
-            SimpleStrategyConfig strategyConfig,
+            RetrievalGraphSettings graphSettings,
             List<ScoredResult> directItems) {
-        var graph = strategyConfig.graphAssist();
         var directIds =
                 directItems.stream()
                         .map(ScoredResult::sourceId)
                         .collect(Collectors.toCollection(LinkedHashSet::new));
-        var seeds = materializeEligibleSeeds(context, directItems, graph.maxSeedItems());
+        var seeds = materializeEligibleSeeds(context, directItems, graphSettings.maxSeedItems());
         if (seeds.isEmpty()) {
             return RetrievalGraphAssistResult.directOnly(directItems, true);
         }
 
-        var candidateBundle = collectGraphCandidates(context, config, graph, seeds, directIds);
+        var candidateBundle =
+                collectGraphCandidates(context, config, graphSettings, seeds, directIds);
         var rankedGraph =
                 candidateBundle.candidates().values().stream()
                         .sorted(Comparator.comparingDouble(GraphCandidate::score).reversed())
-                        .limit(graph.maxExpandedItems())
+                        .limit(graphSettings.maxExpandedItems())
                         .map(GraphCandidate::toScoredResult)
                         .toList();
 
-        int pinned = Math.min(graph.protectDirectTopK(), directItems.size());
+        int pinned = Math.min(graphSettings.protectDirectTopK(), directItems.size());
         var pinnedPrefix = directItems.subList(0, pinned);
         var directTail = directItems.subList(pinned, directItems.size());
         var fusedTail =
@@ -132,7 +131,7 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
                                 config.scoring(),
                                 List.of(directTail, rankedGraph),
                                 1.0d,
-                                graph.graphChannelWeight());
+                                graphSettings.graphChannelWeight());
 
         var finalItems = Stream.concat(pinnedPrefix.stream(), fusedTail.stream()).toList();
         int admittedGraphCandidateCount =
@@ -205,7 +204,7 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
     private GraphCandidateBundle collectGraphCandidates(
             QueryContext context,
             RetrievalConfig config,
-            SimpleStrategyConfig.GraphAssistConfig graph,
+            RetrievalGraphSettings graphSettings,
             List<MaterializedSeed> seeds,
             Set<String> directIds) {
         GraphOperations graphOps = store.graphOperations();
@@ -218,12 +217,16 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
         var seedMentionsByItem =
                 graphOps.listItemEntityMentions(context.memoryId(), seedIds).stream()
                         .filter(this::hasEntitySignal)
-                        .filter(mention -> mention.confidence() >= graph.minMentionConfidence())
+                        .filter(
+                                mention ->
+                                        mention.confidence()
+                                                >= graphSettings.minMentionConfidence())
                         .filter(mention -> !isSpecialEntity(mention.entityKey()))
                         .collect(Collectors.groupingBy(ItemEntityMention::itemId));
 
         var reverseMentionBundle =
-                loadReverseMentionBundle(context, graph, seeds, seedMentionsByItem, graphOps);
+                loadReverseMentionBundle(
+                        context, graphSettings, seeds, seedMentionsByItem, graphOps);
         int skippedOverFanoutEntityCount = reverseMentionBundle.overFanoutEntityKeys().size();
 
         for (MaterializedSeed seed : seeds) {
@@ -232,7 +235,7 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
                     graphOps.listAdjacentItemLinks(
                             context.memoryId(), List.of(seed.item().id()), SUPPORTED_LINK_TYPES);
             for (ItemLink link : adjacentLinks) {
-                if (link.strength() == null || link.strength() < graph.minLinkStrength()) {
+                if (link.strength() == null || link.strength() < graphSettings.minLinkStrength()) {
                     continue;
                 }
 
@@ -247,7 +250,7 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
 
                 var family = toRelationFamily(link.linkType());
                 int offered = perSeedRelationCounts.getOrDefault(family, 0);
-                if (offered >= maxNeighborsPerSeed(graph, family)) {
+                if (offered >= maxNeighborsPerSeed(graphSettings, family)) {
                     continue;
                 }
                 perSeedRelationCounts.put(family, offered + 1);
@@ -282,7 +285,9 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
                     continue;
                 }
                 var mentionsForEntity =
-                        reverseMentionBundle.mentionsByEntityKey().getOrDefault(entityKey, List.of());
+                        reverseMentionBundle
+                                .mentionsByEntityKey()
+                                .getOrDefault(entityKey, List.of());
                 for (ItemEntityMention mention : mentionsForEntity) {
                     if (Objects.equals(mention.itemId(), seed.item().id())) {
                         continue;
@@ -291,7 +296,7 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
                         overlapItemIds.add(mention.itemId());
                         continue;
                     }
-                    if (entitySiblingCount >= graph.maxEntitySiblingItemsPerSeed()) {
+                    if (entitySiblingCount >= graphSettings.maxEntitySiblingItemsPerSeed()) {
                         break;
                     }
                     entitySiblingCount++;
@@ -330,7 +335,10 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
         }
 
         var candidateItemsById =
-                store.itemOperations().getItemsByIds(context.memoryId(), rawCandidates.keySet()).stream()
+                store
+                        .itemOperations()
+                        .getItemsByIds(context.memoryId(), rawCandidates.keySet())
+                        .stream()
                         .collect(Collectors.toMap(MemoryItem::id, Function.identity()));
         Map<Long, GraphCandidate> filteredCandidates = new LinkedHashMap<>();
         for (var entry : rawCandidates.entrySet()) {
@@ -347,7 +355,10 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
                                             entry.getValue().family(),
                                             entry.getValue().seedRelevance(),
                                             entry.getValue().relationStrength(),
-                                            TimeDecay.factor(item.occurredAt(), context, config.scoring()))));
+                                            TimeDecay.factor(
+                                                    item.occurredAt(),
+                                                    context,
+                                                    config.scoring()))));
         }
 
         return new GraphCandidateBundle(
@@ -360,7 +371,7 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
 
     private ReverseMentionBundle loadReverseMentionBundle(
             QueryContext context,
-            SimpleStrategyConfig.GraphAssistConfig graph,
+            RetrievalGraphSettings graphSettings,
             List<MaterializedSeed> seeds,
             Map<Long, List<ItemEntityMention>> seedMentionsByItem,
             GraphOperations graphOps) {
@@ -375,13 +386,17 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
         }
 
         var mentionsByEntityKey =
-                graphOps.listItemEntityMentionsByEntityKeys(
+                graphOps
+                        .listItemEntityMentionsByEntityKeys(
                                 context.memoryId(),
                                 uniqueSeedEntityKeys,
-                                graph.maxItemsPerEntity() + 1)
+                                graphSettings.maxItemsPerEntity() + 1)
                         .stream()
                         .filter(this::hasEntitySignal)
-                        .filter(mention -> mention.confidence() >= graph.minMentionConfidence())
+                        .filter(
+                                mention ->
+                                        mention.confidence()
+                                                >= graphSettings.minMentionConfidence())
                         .filter(mention -> !isSpecialEntity(mention.entityKey()))
                         .sorted(
                                 Comparator.comparing(ItemEntityMention::entityKey)
@@ -394,7 +409,10 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
 
         var overFanoutEntityKeys =
                 mentionsByEntityKey.entrySet().stream()
-                        .filter(entry -> entry.getValue().size() == graph.maxItemsPerEntity() + 1)
+                        .filter(
+                                entry ->
+                                        entry.getValue().size()
+                                                == graphSettings.maxItemsPerEntity() + 1)
                         .map(Map.Entry::getKey)
                         .collect(Collectors.toCollection(LinkedHashSet::new));
         overFanoutEntityKeys.forEach(mentionsByEntityKey::remove);
@@ -427,13 +445,12 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
         };
     }
 
-    private int maxNeighborsPerSeed(
-            SimpleStrategyConfig.GraphAssistConfig graph, RelationFamily family) {
+    private int maxNeighborsPerSeed(RetrievalGraphSettings graphSettings, RelationFamily family) {
         return switch (family) {
-            case SEMANTIC -> graph.maxSemanticNeighborsPerSeed();
-            case TEMPORAL -> graph.maxTemporalNeighborsPerSeed();
-            case CAUSAL -> graph.maxCausalNeighborsPerSeed();
-            case ENTITY_SIBLING -> graph.maxEntitySiblingItemsPerSeed();
+            case SEMANTIC -> graphSettings.maxSemanticNeighborsPerSeed();
+            case TEMPORAL -> graphSettings.maxTemporalNeighborsPerSeed();
+            case CAUSAL -> graphSettings.maxCausalNeighborsPerSeed();
+            case ENTITY_SIBLING -> graphSettings.maxEntitySiblingItemsPerSeed();
         };
     }
 
@@ -447,7 +464,9 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
     }
 
     private boolean hasEntitySignal(ItemEntityMention mention) {
-        return mention.confidence() != null && mention.entityKey() != null && !mention.entityKey().isBlank();
+        return mention.confidence() != null
+                && mention.entityKey() != null
+                && !mention.entityKey().isBlank();
     }
 
     private boolean isSpecialEntity(String entityKey) {

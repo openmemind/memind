@@ -123,7 +123,8 @@ public class ItemTierRetriever implements TierSearchable {
                                                                     e.getValue(), context))
                                             .collect(
                                                     Collectors.toMap(
-                                                            Map.Entry::getKey, Map.Entry::getValue));
+                                                            Map.Entry::getKey,
+                                                            Map.Entry::getValue));
 
                             List<ScoredResult> scoredResults = new ArrayList<>();
                             List<String> rawDataIds = new ArrayList<>();
@@ -228,7 +229,8 @@ public class ItemTierRetriever implements TierSearchable {
                                                                     e.getValue(), context))
                                             .collect(
                                                     Collectors.toMap(
-                                                            Map.Entry::getKey, Map.Entry::getValue));
+                                                            Map.Entry::getKey,
+                                                            Map.Entry::getValue));
 
                             List<ScoredResult> scoredResults = new ArrayList<>();
                             List<String> rawDataIds = new ArrayList<>();

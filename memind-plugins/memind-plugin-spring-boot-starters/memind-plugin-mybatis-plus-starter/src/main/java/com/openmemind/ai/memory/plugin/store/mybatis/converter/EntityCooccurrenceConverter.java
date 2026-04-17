@@ -22,8 +22,7 @@ public final class EntityCooccurrenceConverter {
 
     private EntityCooccurrenceConverter() {}
 
-    public static MemoryEntityCooccurrenceDO toDO(
-            MemoryId memoryId, EntityCooccurrence record) {
+    public static MemoryEntityCooccurrenceDO toDO(MemoryId memoryId, EntityCooccurrence record) {
         MemoryEntityCooccurrenceDO dataObject = new MemoryEntityCooccurrenceDO();
         dataObject.setUserId(memoryId.getAttribute("userId"));
         dataObject.setAgentId(memoryId.getAttribute("agentId"));

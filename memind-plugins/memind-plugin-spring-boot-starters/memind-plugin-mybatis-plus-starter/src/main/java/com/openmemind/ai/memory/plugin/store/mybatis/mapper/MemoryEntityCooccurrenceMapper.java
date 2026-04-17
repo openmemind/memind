@@ -17,16 +17,14 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryEntityCooccurrenceDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.sql.GraphQuerySqlProvider;
 import java.util.Collection;
-import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.DeleteProvider;
+import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 @Mapper
-public interface MemoryEntityCooccurrenceMapper
-        extends BaseMapper<MemoryEntityCooccurrenceDO> {
+public interface MemoryEntityCooccurrenceMapper extends BaseMapper<MemoryEntityCooccurrenceDO> {
 
     @DeleteProvider(type = GraphQuerySqlProvider.class, method = "deleteCooccurrencesByEntityKeys")
     int deleteByEntityKeys(
-            @Param("memoryId") String memoryId,
-            @Param("entityKeys") Collection<String> entityKeys);
+            @Param("memoryId") String memoryId, @Param("entityKeys") Collection<String> entityKeys);
 }

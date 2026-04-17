@@ -148,11 +148,52 @@ class MemoryBuildOptionsTest {
     }
 
     @Test
+    void deepRetrievalGraphOptionsDefaultToDisabledAndBounded() {
+        var options = DeepRetrievalGraphOptions.defaults();
+
+        assertThat(options.enabled()).isFalse();
+        assertThat(options.maxSeedItems()).isEqualTo(8);
+        assertThat(options.maxExpandedItems()).isEqualTo(16);
+        assertThat(options.maxSemanticNeighborsPerSeed()).isEqualTo(2);
+        assertThat(options.maxTemporalNeighborsPerSeed()).isEqualTo(2);
+        assertThat(options.maxCausalNeighborsPerSeed()).isEqualTo(2);
+        assertThat(options.maxEntitySiblingItemsPerSeed()).isEqualTo(4);
+        assertThat(options.maxItemsPerEntity()).isEqualTo(8);
+        assertThat(options.graphChannelWeight()).isEqualTo(0.30d);
+        assertThat(options.minLinkStrength()).isEqualTo(0.55d);
+        assertThat(options.minMentionConfidence()).isEqualTo(0.70f);
+        assertThat(options.protectDirectTopK()).isEqualTo(5);
+        assertThat(options.timeout()).isEqualTo(Duration.ofMillis(300));
+    }
+
+    @Test
+    void legacyDeepRetrievalOptionsConstructorStillBuildsDisabledGraphAssist() {
+        var options =
+                new DeepRetrievalOptions(
+                        Duration.ofSeconds(10),
+                        5,
+                        15,
+                        false,
+                        0,
+                        QueryExpansionOptions.defaults(),
+                        SufficiencyOptions.defaults());
+
+        assertThat(options.graphAssist()).isEqualTo(DeepRetrievalGraphOptions.defaults());
+    }
+
+    @Test
     void retrievalDefaultsExposeGraphAssistDefaults() {
         var options = RetrievalOptions.defaults();
 
         assertThat(options.simple().graphAssist())
                 .isEqualTo(SimpleRetrievalGraphOptions.defaults());
         assertThat(options.advanced().scoring()).isEqualTo(ScoringConfig.defaults());
+    }
+
+    @Test
+    void retrievalDefaultsExposeDeepGraphAssistDefaults() {
+        var options = RetrievalOptions.defaults();
+
+        assertThat(options.deep().graphAssist()).isEqualTo(DeepRetrievalGraphOptions.defaults());
     }
 }

@@ -19,9 +19,9 @@ import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.cache.CaffeineRetrievalCache;
 import com.openmemind.ai.memory.core.retrieval.cache.RetrievalCache;
 import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
+import com.openmemind.ai.memory.core.retrieval.deep.TypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.graph.DefaultRetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistant;
-import com.openmemind.ai.memory.core.retrieval.deep.TypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepRetrievalStrategy;
 import com.openmemind.ai.memory.core.retrieval.strategy.SimpleRetrievalStrategy;
 import com.openmemind.ai.memory.core.retrieval.sufficiency.LlmSufficiencyGate;
@@ -53,6 +53,10 @@ final class MemoryRetrievalAssembler {
         TypedQueryExpander typedQueryExpander =
                 new LlmTypedQueryExpander(
                         registry.resolve(ChatClientSlot.QUERY_EXPANDER), context.promptRegistry());
+        RetrievalGraphAssistant graphAssistant =
+                new TracingRetrievalGraphAssistant(
+                        new DefaultRetrievalGraphAssistant(context.memoryStore()),
+                        context.memoryObserver());
         DeepRetrievalStrategy deepRetrievalStrategy =
                 new DeepRetrievalStrategy(
                         insightTierRetriever,
@@ -60,11 +64,8 @@ final class MemoryRetrievalAssembler {
                         sufficiencyGate,
                         typedQueryExpander,
                         context.reranker(),
-                        context.memoryStore());
-        RetrievalGraphAssistant graphAssistant =
-                new TracingRetrievalGraphAssistant(
-                        new DefaultRetrievalGraphAssistant(context.memoryStore()),
-                        context.memoryObserver());
+                        context.memoryStore(),
+                        graphAssistant);
         SimpleRetrievalStrategy simpleRetrievalStrategy =
                 new SimpleRetrievalStrategy(
                         insightTierRetriever,

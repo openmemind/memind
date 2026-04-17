@@ -39,6 +39,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -203,7 +204,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 // insightTypes normalization
                 .map(entry -> entryWithNormalizedInsightTypes(entry, allowedInsightTypes))
                 .map(entry -> entryWithValidatedCategory(entry, allowedCategories))
-                .filter(entry -> entry != null)
+                .filter(Objects::nonNull)
                 // In-batch deduplication (keep the one with the highest confidence)
                 .collect(Collectors.groupingBy(ExtractedMemoryEntry::content))
                 .values()

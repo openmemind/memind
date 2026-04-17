@@ -13,6 +13,12 @@
  */
 package com.openmemind.ai.memory.core.retrieval.strategy;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.openmemind.ai.memory.core.builder.SimpleRetrievalGraphOptions;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphSettings;
+import java.time.Duration;
+
 /**
  * Deep Retrieval strategy configuration
  *
@@ -25,14 +31,37 @@ package com.openmemind.ai.memory.core.retrieval.strategy;
  * @param tier2InitTopK   Tier2 initial vector retrieval candidate amount
  * @param bm25InitTopK    Tier2 initial BM25 retrieval candidate amount
  * @param minScore        Insight/Item minimum score threshold (used to build internal TierConfig)
+ * @param graphAssist     Graph-assisted retrieval configuration
  */
 public record DeepStrategyConfig(
         QueryExpansionConfig queryExpansion,
         SufficiencyConfig sufficiency,
         int tier2InitTopK,
         int bm25InitTopK,
-        double minScore)
+        double minScore,
+        GraphAssistConfig graphAssist)
         implements StrategyConfig {
+
+    public DeepStrategyConfig {
+        queryExpansion = queryExpansion != null ? queryExpansion : QueryExpansionConfig.defaults();
+        sufficiency = sufficiency != null ? sufficiency : SufficiencyConfig.defaults();
+        graphAssist = graphAssist != null ? graphAssist : GraphAssistConfig.defaults();
+    }
+
+    public DeepStrategyConfig(
+            QueryExpansionConfig queryExpansion,
+            SufficiencyConfig sufficiency,
+            int tier2InitTopK,
+            int bm25InitTopK,
+            double minScore) {
+        this(
+                queryExpansion,
+                sufficiency,
+                tier2InitTopK,
+                bm25InitTopK,
+                minScore,
+                GraphAssistConfig.defaults());
+    }
 
     @Override
     public String strategyName() {
@@ -41,32 +70,42 @@ public record DeepStrategyConfig(
 
     public static DeepStrategyConfig defaults() {
         return new DeepStrategyConfig(
-                QueryExpansionConfig.defaults(), SufficiencyConfig.defaults(), 50, 50, 0.3);
+                QueryExpansionConfig.defaults(),
+                SufficiencyConfig.defaults(),
+                50,
+                50,
+                0.3,
+                GraphAssistConfig.defaults());
     }
 
     public DeepStrategyConfig withQueryExpansion(QueryExpansionConfig queryExpansion) {
         return new DeepStrategyConfig(
-                queryExpansion, sufficiency, tier2InitTopK, bm25InitTopK, minScore);
+                queryExpansion, sufficiency, tier2InitTopK, bm25InitTopK, minScore, graphAssist);
     }
 
     public DeepStrategyConfig withSufficiency(SufficiencyConfig sufficiency) {
         return new DeepStrategyConfig(
-                queryExpansion, sufficiency, tier2InitTopK, bm25InitTopK, minScore);
+                queryExpansion, sufficiency, tier2InitTopK, bm25InitTopK, minScore, graphAssist);
     }
 
     public DeepStrategyConfig withTier2InitTopK(int tier2InitTopK) {
         return new DeepStrategyConfig(
-                queryExpansion, sufficiency, tier2InitTopK, bm25InitTopK, minScore);
+                queryExpansion, sufficiency, tier2InitTopK, bm25InitTopK, minScore, graphAssist);
     }
 
     public DeepStrategyConfig withBm25InitTopK(int bm25InitTopK) {
         return new DeepStrategyConfig(
-                queryExpansion, sufficiency, tier2InitTopK, bm25InitTopK, minScore);
+                queryExpansion, sufficiency, tier2InitTopK, bm25InitTopK, minScore, graphAssist);
     }
 
     public DeepStrategyConfig withMinScore(double minScore) {
         return new DeepStrategyConfig(
-                queryExpansion, sufficiency, tier2InitTopK, bm25InitTopK, minScore);
+                queryExpansion, sufficiency, tier2InitTopK, bm25InitTopK, minScore, graphAssist);
+    }
+
+    public DeepStrategyConfig withGraphAssist(GraphAssistConfig graphAssist) {
+        return new DeepStrategyConfig(
+                queryExpansion, sufficiency, tier2InitTopK, bm25InitTopK, minScore, graphAssist);
     }
 
     /** Multi-query expansion */
@@ -80,6 +119,121 @@ public record DeepStrategyConfig(
     public record SufficiencyConfig(int itemTopK) {
         public static SufficiencyConfig defaults() {
             return new SufficiencyConfig(20);
+        }
+    }
+
+    /** Runtime graph assist configuration for deep retrieval. */
+    public record GraphAssistConfig(
+            boolean enabled,
+            int maxSeedItems,
+            int maxExpandedItems,
+            int maxSemanticNeighborsPerSeed,
+            int maxTemporalNeighborsPerSeed,
+            int maxCausalNeighborsPerSeed,
+            int maxEntitySiblingItemsPerSeed,
+            int maxItemsPerEntity,
+            double graphChannelWeight,
+            double minLinkStrength,
+            float minMentionConfidence,
+            int protectDirectTopK,
+            Duration timeout)
+            implements RetrievalGraphSettings {
+
+        public GraphAssistConfig {
+            SimpleRetrievalGraphOptions.validateGraphAssistShape(
+                    maxSeedItems,
+                    maxExpandedItems,
+                    maxSemanticNeighborsPerSeed,
+                    maxTemporalNeighborsPerSeed,
+                    maxCausalNeighborsPerSeed,
+                    maxEntitySiblingItemsPerSeed,
+                    maxItemsPerEntity,
+                    graphChannelWeight,
+                    minLinkStrength,
+                    minMentionConfidence,
+                    protectDirectTopK,
+                    timeout);
+        }
+
+        public static GraphAssistConfig defaults() {
+            return new GraphAssistConfig(
+                    false, 8, 16, 2, 2, 2, 4, 8, 0.30d, 0.55d, 0.70f, 5, Duration.ofMillis(300));
+        }
+
+        @JsonCreator
+        public static GraphAssistConfig fromJson(
+                @JsonProperty("enabled") Boolean enabled,
+                @JsonProperty("maxSeedItems") Integer maxSeedItems,
+                @JsonProperty("maxExpandedItems") Integer maxExpandedItems,
+                @JsonProperty("maxSemanticNeighborsPerSeed") Integer maxSemanticNeighborsPerSeed,
+                @JsonProperty("maxTemporalNeighborsPerSeed") Integer maxTemporalNeighborsPerSeed,
+                @JsonProperty("maxCausalNeighborsPerSeed") Integer maxCausalNeighborsPerSeed,
+                @JsonProperty("maxEntitySiblingItemsPerSeed") Integer maxEntitySiblingItemsPerSeed,
+                @JsonProperty("maxItemsPerEntity") Integer maxItemsPerEntity,
+                @JsonProperty("graphChannelWeight") Double graphChannelWeight,
+                @JsonProperty("minLinkStrength") Double minLinkStrength,
+                @JsonProperty("minMentionConfidence") Float minMentionConfidence,
+                @JsonProperty("protectDirectTopK") Integer protectDirectTopK,
+                @JsonProperty("timeout") Duration timeout) {
+            var defaults = defaults();
+            return new GraphAssistConfig(
+                    enabled != null ? enabled : defaults.enabled(),
+                    maxSeedItems != null ? maxSeedItems : defaults.maxSeedItems(),
+                    maxExpandedItems != null ? maxExpandedItems : defaults.maxExpandedItems(),
+                    maxSemanticNeighborsPerSeed != null
+                            ? maxSemanticNeighborsPerSeed
+                            : defaults.maxSemanticNeighborsPerSeed(),
+                    maxTemporalNeighborsPerSeed != null
+                            ? maxTemporalNeighborsPerSeed
+                            : defaults.maxTemporalNeighborsPerSeed(),
+                    maxCausalNeighborsPerSeed != null
+                            ? maxCausalNeighborsPerSeed
+                            : defaults.maxCausalNeighborsPerSeed(),
+                    maxEntitySiblingItemsPerSeed != null
+                            ? maxEntitySiblingItemsPerSeed
+                            : defaults.maxEntitySiblingItemsPerSeed(),
+                    maxItemsPerEntity != null ? maxItemsPerEntity : defaults.maxItemsPerEntity(),
+                    graphChannelWeight != null ? graphChannelWeight : defaults.graphChannelWeight(),
+                    minLinkStrength != null ? minLinkStrength : defaults.minLinkStrength(),
+                    minMentionConfidence != null
+                            ? minMentionConfidence
+                            : defaults.minMentionConfidence(),
+                    protectDirectTopK != null ? protectDirectTopK : defaults.protectDirectTopK(),
+                    timeout != null ? timeout : defaults.timeout());
+        }
+
+        public GraphAssistConfig withEnabled(boolean enabled) {
+            return new GraphAssistConfig(
+                    enabled,
+                    maxSeedItems,
+                    maxExpandedItems,
+                    maxSemanticNeighborsPerSeed,
+                    maxTemporalNeighborsPerSeed,
+                    maxCausalNeighborsPerSeed,
+                    maxEntitySiblingItemsPerSeed,
+                    maxItemsPerEntity,
+                    graphChannelWeight,
+                    minLinkStrength,
+                    minMentionConfidence,
+                    protectDirectTopK,
+                    timeout);
+        }
+
+        public GraphAssistConfig withTimeout(Duration timeout) {
+            return new GraphAssistConfig(
+                    enabled,
+                    maxSeedItems,
+                    maxExpandedItems,
+                    maxSemanticNeighborsPerSeed,
+                    maxTemporalNeighborsPerSeed,
+                    maxCausalNeighborsPerSeed,
+                    maxEntitySiblingItemsPerSeed,
+                    maxItemsPerEntity,
+                    graphChannelWeight,
+                    minLinkStrength,
+                    minMentionConfidence,
+                    protectDirectTopK,
+                    timeout);
         }
     }
 }

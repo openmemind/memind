@@ -117,8 +117,10 @@ class MemoryStoreDdlTest {
         ddl.runScript(
                 ds -> {
                     ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
-                    populator.addScript(new ClassPathResource("db/migration/sqlite/V1__init_store.sql"));
-                    populator.addScript(new ClassPathResource("db/migration/sqlite/V6__graph_store.sql"));
+                    populator.addScript(
+                            new ClassPathResource("db/migration/sqlite/V1__init_store.sql"));
+                    populator.addScript(
+                            new ClassPathResource("db/migration/sqlite/V6__graph_store.sql"));
                     populator.execute(ds);
                 });
 
@@ -203,7 +205,8 @@ class MemoryStoreDdlTest {
         try (Connection connection = dataSource.getConnection();
                 PreparedStatement statement =
                         connection.prepareStatement(
-                                "SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?")) {
+                                "SELECT name FROM sqlite_master WHERE type = 'index' AND name ="
+                                        + " ?")) {
             statement.setString(1, indexName);
             try (ResultSet resultSet = statement.executeQuery()) {
                 return resultSet.next();
