@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
+import com.openmemind.ai.memory.core.retrieval.scoring.ScoringConfig;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
@@ -118,5 +119,40 @@ class MemoryBuildOptionsTest {
         var options = new InsightExtractionOptions(true, InsightBuildConfig.defaults());
 
         assertThat(options.graphAssist()).isEqualTo(InsightGraphAssistOptions.defaults());
+    }
+
+    @Test
+    void simpleRetrievalGraphOptionsDefaultToDisabledAndBounded() {
+        var options = SimpleRetrievalGraphOptions.defaults();
+
+        assertThat(options.enabled()).isFalse();
+        assertThat(options.maxSeedItems()).isEqualTo(6);
+        assertThat(options.maxExpandedItems()).isEqualTo(12);
+        assertThat(options.maxSemanticNeighborsPerSeed()).isEqualTo(2);
+        assertThat(options.maxTemporalNeighborsPerSeed()).isEqualTo(2);
+        assertThat(options.maxCausalNeighborsPerSeed()).isEqualTo(2);
+        assertThat(options.maxEntitySiblingItemsPerSeed()).isEqualTo(3);
+        assertThat(options.maxItemsPerEntity()).isEqualTo(8);
+        assertThat(options.graphChannelWeight()).isEqualTo(0.35d);
+        assertThat(options.minLinkStrength()).isEqualTo(0.55d);
+        assertThat(options.minMentionConfidence()).isEqualTo(0.70f);
+        assertThat(options.protectDirectTopK()).isEqualTo(3);
+        assertThat(options.timeout()).isEqualTo(Duration.ofMillis(200));
+    }
+
+    @Test
+    void legacySimpleRetrievalOptionsConstructorStillBuildsDisabledGraphAssist() {
+        var options = new SimpleRetrievalOptions(Duration.ofSeconds(10), 5, 15, 5, true);
+
+        assertThat(options.graphAssist()).isEqualTo(SimpleRetrievalGraphOptions.defaults());
+    }
+
+    @Test
+    void retrievalDefaultsExposeGraphAssistDefaults() {
+        var options = RetrievalOptions.defaults();
+
+        assertThat(options.simple().graphAssist())
+                .isEqualTo(SimpleRetrievalGraphOptions.defaults());
+        assertThat(options.advanced().scoring()).isEqualTo(ScoringConfig.defaults());
     }
 }

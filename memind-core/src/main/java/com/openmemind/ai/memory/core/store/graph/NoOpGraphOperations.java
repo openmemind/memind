@@ -55,6 +55,12 @@ public final class NoOpGraphOperations implements GraphOperations {
     }
 
     @Override
+    public List<ItemEntityMention> listItemEntityMentionsByEntityKeys(
+            MemoryId memoryId, Collection<String> entityKeys, int perEntityLimitPlusOne) {
+        return List.of();
+    }
+
+    @Override
     public List<EntityCooccurrence> listEntityCooccurrences(MemoryId memoryId) {
         return List.of();
     }
@@ -67,6 +73,12 @@ public final class NoOpGraphOperations implements GraphOperations {
     @Override
     public List<ItemLink> listItemLinks(
             MemoryId memoryId, Collection<Long> itemIds, Collection<ItemLinkType> linkTypes) {
+        return List.of();
+    }
+
+    @Override
+    public List<ItemLink> listAdjacentItemLinks(
+            MemoryId memoryId, Collection<Long> seedItemIds, Collection<ItemLinkType> linkTypes) {
         return List.of();
     }
 }

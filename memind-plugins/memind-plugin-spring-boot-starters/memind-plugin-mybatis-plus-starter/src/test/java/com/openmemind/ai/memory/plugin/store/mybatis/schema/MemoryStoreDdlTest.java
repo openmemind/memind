@@ -67,7 +67,8 @@ class MemoryStoreDdlTest {
                         "db/migration/sqlite/V2__init_text_search.sql",
                         "db/migration/sqlite/V3__multimodal.sql",
                         "db/migration/sqlite/V4__bubble_state.sql",
-                        "db/migration/sqlite/V5__item_temporal_fields.sql");
+                        "db/migration/sqlite/V5__item_temporal_fields.sql",
+                        "db/migration/sqlite/V6__graph_store.sql");
     }
 
     @Test
@@ -83,7 +84,8 @@ class MemoryStoreDdlTest {
                         "db/migration/mysql/V2__init_text_search.sql",
                         "db/migration/mysql/V3__multimodal.sql",
                         "db/migration/mysql/V4__bubble_state.sql",
-                        "db/migration/mysql/V5__item_temporal_fields.sql");
+                        "db/migration/mysql/V5__item_temporal_fields.sql",
+                        "db/migration/mysql/V6__graph_store.sql");
     }
 
     @Test
@@ -101,7 +103,31 @@ class MemoryStoreDdlTest {
                         "db/migration/postgresql/V2__init_text_search.sql",
                         "db/migration/postgresql/V3__multimodal.sql",
                         "db/migration/postgresql/V4__bubble_state.sql",
-                        "db/migration/postgresql/V5__item_temporal_fields.sql");
+                        "db/migration/postgresql/V5__item_temporal_fields.sql",
+                        "db/migration/postgresql/V6__graph_store.sql");
+    }
+
+    @Test
+    @DisplayName("graph schema migration creates bounded-read indexes on SQLite")
+    void graphSchemaMigrationCreatesBoundedReadIndexesOnSqlite(@TempDir Path tempDir) {
+        SQLiteDataSource dataSource = new SQLiteDataSource();
+        dataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("graph-indexes.db"));
+        MemoryStoreDdl ddl = new MemoryStoreDdl(dataSource, detector);
+
+        ddl.runScript(
+                ds -> {
+                    ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
+                    populator.addScript(new ClassPathResource("db/migration/sqlite/V1__init_store.sql"));
+                    populator.addScript(new ClassPathResource("db/migration/sqlite/V6__graph_store.sql"));
+                    populator.execute(ds);
+                });
+
+        assertThat(indexExists(dataSource, "uk_item_entity_mention_identity")).isTrue();
+        assertThat(indexExists(dataSource, "idx_item_entity_mention_item")).isTrue();
+        assertThat(indexExists(dataSource, "idx_item_entity_mention_entity_key")).isTrue();
+        assertThat(indexExists(dataSource, "uk_item_link_identity")).isTrue();
+        assertThat(indexExists(dataSource, "idx_item_link_source_type")).isTrue();
+        assertThat(indexExists(dataSource, "idx_item_link_target_type")).isTrue();
     }
 
     @Test
@@ -167,6 +193,20 @@ class MemoryStoreDdlTest {
                     }
                 }
                 return false;
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private boolean indexExists(DataSource dataSource, String indexName) {
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?")) {
+            statement.setString(1, indexName);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next();
             }
         } catch (Exception e) {
             throw new RuntimeException(e);

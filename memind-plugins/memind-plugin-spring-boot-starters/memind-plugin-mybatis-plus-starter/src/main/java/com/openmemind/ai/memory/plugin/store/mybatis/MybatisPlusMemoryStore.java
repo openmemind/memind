@@ -24,6 +24,8 @@ import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.graph.GraphOperations;
+import com.openmemind.ai.memory.core.store.graph.NoOpGraphOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
@@ -67,13 +69,14 @@ public class MybatisPlusMemoryStore
     private final MemoryInsightMapper insightMapper;
     private final MemoryResourceMapper resourceMapper;
     private final ResourceStore resourceStore;
+    private final GraphOperations graphOperations;
 
     public MybatisPlusMemoryStore(
             MemoryRawDataMapper rawDataMapper,
             MemoryItemMapper itemMapper,
             MemoryInsightTypeMapper insightTypeMapper,
             MemoryInsightMapper insightMapper) {
-        this(rawDataMapper, itemMapper, insightTypeMapper, insightMapper, null, null);
+        this(rawDataMapper, itemMapper, insightTypeMapper, insightMapper, null, null, null);
     }
 
     public MybatisPlusMemoryStore(
@@ -83,12 +86,32 @@ public class MybatisPlusMemoryStore
             MemoryInsightMapper insightMapper,
             MemoryResourceMapper resourceMapper,
             ResourceStore resourceStore) {
+        this(
+                rawDataMapper,
+                itemMapper,
+                insightTypeMapper,
+                insightMapper,
+                resourceMapper,
+                resourceStore,
+                null);
+    }
+
+    public MybatisPlusMemoryStore(
+            MemoryRawDataMapper rawDataMapper,
+            MemoryItemMapper itemMapper,
+            MemoryInsightTypeMapper insightTypeMapper,
+            MemoryInsightMapper insightMapper,
+            MemoryResourceMapper resourceMapper,
+            ResourceStore resourceStore,
+            GraphOperations graphOperations) {
         this.rawDataMapper = rawDataMapper;
         this.itemMapper = itemMapper;
         this.insightTypeMapper = insightTypeMapper;
         this.insightMapper = insightMapper;
         this.resourceMapper = resourceMapper;
         this.resourceStore = resourceStore;
+        this.graphOperations =
+                graphOperations != null ? graphOperations : NoOpGraphOperations.INSTANCE;
     }
 
     @Override
@@ -114,6 +137,11 @@ public class MybatisPlusMemoryStore
     @Override
     public ResourceStore resourceStore() {
         return resourceStore;
+    }
+
+    @Override
+    public GraphOperations graphOperations() {
+        return graphOperations;
     }
 
     // ===== MemoryRawData =====

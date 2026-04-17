@@ -14,7 +14,9 @@
 package com.openmemind.ai.memory.core.retrieval.strategy;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.openmemind.ai.memory.core.utils.JsonUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -39,5 +41,63 @@ class StrategyConfigTest {
         assertThat(updated.queryExpansion().maxExpandedQueries()).isEqualTo(5);
         assertThat(updated.sufficiency()).isEqualTo(base.sufficiency());
         assertThat(updated.strategyName()).isEqualTo(RetrievalStrategies.DEEP_RETRIEVAL);
+    }
+
+    @Test
+    @DisplayName("legacy simple strategy json without graph assist still deserializes")
+    void legacySimpleStrategyJsonWithoutGraphAssistStillDeserializes() throws Exception {
+        var mapper = JsonUtils.newMapper();
+
+        StrategyConfig config =
+                mapper.readValue(
+                        """
+                        {"type":"simple","enableKeywordSearch":false}
+                        """,
+                        StrategyConfig.class);
+
+        assertThat(config).isInstanceOf(SimpleStrategyConfig.class);
+        assertThat(((SimpleStrategyConfig) config).enableKeywordSearch()).isFalse();
+        assertThat(((SimpleStrategyConfig) config).graphAssist())
+                .isEqualTo(SimpleStrategyConfig.GraphAssistConfig.defaults());
+    }
+
+    @Test
+    @DisplayName("invalid simple strategy graph assist json fails fast")
+    void invalidSimpleStrategyGraphAssistJsonFailsFast() {
+        var mapper = JsonUtils.newMapper();
+
+        assertThatThrownBy(
+                        () ->
+                                mapper.readValue(
+                                        """
+                                        {
+                                          "type":"simple",
+                                          "enableKeywordSearch":true,
+                                          "graphAssist":{"enabled":true,"maxSeedItems":0,"timeout":"PT0.2S"}
+                                        }
+                                        """,
+                                        StrategyConfig.class))
+                .isInstanceOf(Exception.class)
+                .hasMessageContaining("graph retrieval caps must be non-negative");
+    }
+
+    @Test
+    @DisplayName("invalid simple strategy graph assist weight fails fast")
+    void invalidSimpleStrategyGraphAssistWeightFailsFast() {
+        var mapper = JsonUtils.newMapper();
+
+        assertThatThrownBy(
+                        () ->
+                                mapper.readValue(
+                                        """
+                                        {
+                                          "type":"simple",
+                                          "enableKeywordSearch":true,
+                                          "graphAssist":{"enabled":true,"graphChannelWeight":1.0,"timeout":"PT0.2S"}
+                                        }
+                                        """,
+                                        StrategyConfig.class))
+                .isInstanceOf(Exception.class)
+                .hasMessageContaining("graph retrieval weights must keep graph below direct");
     }
 }

@@ -277,10 +277,25 @@ public class DefaultMemory implements Memory {
         var retrieval = buildOptions.retrieval();
         return switch (strategy) {
             case SIMPLE -> {
+                var graph = retrieval.simple().graphAssist();
                 var base =
                         RetrievalConfig.simple(
                                 new SimpleStrategyConfig(
-                                        retrieval.simple().keywordSearchEnabled()));
+                                        retrieval.simple().keywordSearchEnabled(),
+                                        new SimpleStrategyConfig.GraphAssistConfig(
+                                                graph.enabled(),
+                                                graph.maxSeedItems(),
+                                                graph.maxExpandedItems(),
+                                                graph.maxSemanticNeighborsPerSeed(),
+                                                graph.maxTemporalNeighborsPerSeed(),
+                                                graph.maxCausalNeighborsPerSeed(),
+                                                graph.maxEntitySiblingItemsPerSeed(),
+                                                graph.maxItemsPerEntity(),
+                                                graph.graphChannelWeight(),
+                                                graph.minLinkStrength(),
+                                                graph.minMentionConfidence(),
+                                                graph.protectDirectTopK(),
+                                                graph.timeout())));
                 yield applyCache(
                         base.withTier1(copyTier(base.tier1(), retrieval.simple().insightTopK()))
                                 .withTier2(copyTier(base.tier2(), retrieval.simple().itemTopK()))

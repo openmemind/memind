@@ -77,6 +77,36 @@ class MemoryOptionsProjectionMapperTest {
     }
 
     @Test
+    void projectionExposesRetrievalGraphAssistKeys() {
+        var projection = mapper.toProjection(MemoryBuildOptions.defaults());
+
+        assertThat(projection.get("retrieval"))
+                .extracting(MemoryOptionItemView::key)
+                .contains(
+                        "retrieval.simple.graphAssist.enabled",
+                        "retrieval.simple.graphAssist.maxSeedItems",
+                        "retrieval.simple.graphAssist.timeout");
+    }
+
+    @Test
+    void projectionRoundTripsRetrievalGraphAssistValues() {
+        var projection = mapper.toProjection(MemoryBuildOptions.defaults());
+
+        updateValue(projection, "retrieval.simple.keywordSearchEnabled", false);
+        updateValue(projection, "retrieval.simple.graphAssist.enabled", true);
+        updateValue(projection, "retrieval.simple.graphAssist.maxSeedItems", 4);
+        updateValue(projection, "retrieval.simple.graphAssist.timeout", "PT0.35S");
+
+        var rebuilt = mapper.toOptions(projection);
+
+        assertThat(rebuilt.retrieval().simple().keywordSearchEnabled()).isFalse();
+        assertThat(rebuilt.retrieval().simple().graphAssist().enabled()).isTrue();
+        assertThat(rebuilt.retrieval().simple().graphAssist().maxSeedItems()).isEqualTo(4);
+        assertThat(rebuilt.retrieval().simple().graphAssist().timeout())
+                .isEqualTo(java.time.Duration.ofMillis(350));
+    }
+
+    @Test
     void ignoresNullRuntimeOnlyFieldsFromProjectionDefinitions() {
         var projection = mapper.toProjection(MemoryBuildOptions.defaults());
 

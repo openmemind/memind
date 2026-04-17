@@ -26,11 +26,18 @@ class RetrievalConfigTest {
     @Test
     @DisplayName("simple factory uses passed strategy config and disables rerank")
     void simpleFactoryUsesPassedStrategyConfigAndDisablesRerank() {
-        var config = RetrievalConfig.simple(new SimpleStrategyConfig(false));
+        var config =
+                RetrievalConfig.simple(
+                        new SimpleStrategyConfig(
+                                false,
+                                SimpleStrategyConfig.GraphAssistConfig.defaults()
+                                        .withEnabled(true)));
 
         assertThat(config.strategyName()).isEqualTo("simple");
         assertThat(((SimpleStrategyConfig) config.strategyConfig()).enableKeywordSearch())
                 .isFalse();
+        assertThat(((SimpleStrategyConfig) config.strategyConfig()).graphAssist().enabled())
+                .isTrue();
         assertThat(config.rerank().enabled()).isFalse();
         assertThat(config.tier1().enabled()).isTrue();
     }

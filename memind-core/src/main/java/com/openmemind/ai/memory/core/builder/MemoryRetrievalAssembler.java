@@ -19,6 +19,8 @@ import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.cache.CaffeineRetrievalCache;
 import com.openmemind.ai.memory.core.retrieval.cache.RetrievalCache;
 import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
+import com.openmemind.ai.memory.core.retrieval.graph.DefaultRetrievalGraphAssistant;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.retrieval.deep.TypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepRetrievalStrategy;
 import com.openmemind.ai.memory.core.retrieval.strategy.SimpleRetrievalStrategy;
@@ -28,6 +30,7 @@ import com.openmemind.ai.memory.core.retrieval.tier.InsightTierRetriever;
 import com.openmemind.ai.memory.core.retrieval.tier.InsightTypeRouter;
 import com.openmemind.ai.memory.core.retrieval.tier.ItemTierRetriever;
 import com.openmemind.ai.memory.core.retrieval.tier.LlmInsightTypeRouter;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingRetrievalGraphAssistant;
 
 final class MemoryRetrievalAssembler {
 
@@ -58,12 +61,17 @@ final class MemoryRetrievalAssembler {
                         typedQueryExpander,
                         context.reranker(),
                         context.memoryStore());
+        RetrievalGraphAssistant graphAssistant =
+                new TracingRetrievalGraphAssistant(
+                        new DefaultRetrievalGraphAssistant(context.memoryStore()),
+                        context.memoryObserver());
         SimpleRetrievalStrategy simpleRetrievalStrategy =
                 new SimpleRetrievalStrategy(
                         insightTierRetriever,
                         itemTierRetriever,
                         context.textSearch(),
-                        context.memoryStore());
+                        context.memoryStore(),
+                        graphAssistant);
 
         RetrievalCache retrievalCache = new CaffeineRetrievalCache();
         DefaultMemoryRetriever memoryRetriever =

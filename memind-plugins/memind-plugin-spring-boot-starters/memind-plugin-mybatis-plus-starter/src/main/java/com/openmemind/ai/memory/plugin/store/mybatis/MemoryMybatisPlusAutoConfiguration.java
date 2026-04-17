@@ -24,6 +24,7 @@ import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.graph.GraphOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
@@ -34,10 +35,14 @@ import com.openmemind.ai.memory.plugin.store.mybatis.handler.DefaultDBFieldHandl
 import com.openmemind.ai.memory.plugin.store.mybatis.initializer.MemoryStoreProperties;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.ConversationBufferMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.InsightBufferMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryEntityCooccurrenceMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryGraphEntityMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightBubbleStateMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightTypeMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemEntityMentionMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemLinkMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryRawDataMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryResourceMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.schema.DatabaseDialect;
@@ -47,6 +52,7 @@ import com.openmemind.ai.memory.plugin.store.mybatis.textsearch.postgresql.Postg
 import com.openmemind.ai.memory.plugin.store.mybatis.textsearch.sqlite.SqliteFtsTextSearch;
 import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
+import org.apache.ibatis.plugin.Interceptor;
 import org.apache.ibatis.annotations.Mapper;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.beans.factory.ObjectProvider;
@@ -129,6 +135,7 @@ public class MemoryMybatisPlusAutoConfiguration {
             MemoryInsightTypeMapper insightTypeMapper,
             MemoryInsightMapper insightMapper,
             MemoryResourceMapper resourceMapper,
+            GraphOperations graphOperations,
             ObjectProvider<ResourceStore> resourceStoreProvider) {
         return new MybatisPlusMemoryStore(
                 rawDataMapper,
@@ -136,7 +143,25 @@ public class MemoryMybatisPlusAutoConfiguration {
                 insightTypeMapper,
                 insightMapper,
                 resourceMapper,
-                resourceStoreProvider.getIfAvailable());
+                resourceStoreProvider.getIfAvailable(),
+                graphOperations);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(GraphOperations.class)
+    public GraphOperations graphOperations(
+            MemoryGraphEntityMapper graphEntityMapper,
+            MemoryItemEntityMentionMapper itemEntityMentionMapper,
+            MemoryItemLinkMapper itemLinkMapper,
+            MemoryEntityCooccurrenceMapper entityCooccurrenceMapper,
+            DataSource dataSource) {
+        DatabaseDialect dialect = new DatabaseDialectDetector().detect(dataSource);
+        return new MybatisGraphOperations(
+                graphEntityMapper,
+                itemEntityMentionMapper,
+                itemLinkMapper,
+                entityCooccurrenceMapper,
+                dialect);
     }
 
     @Bean
@@ -174,5 +199,11 @@ public class MemoryMybatisPlusAutoConfiguration {
             MemoryInsightBubbleStateMapper bubbleStateMapper, DataSource dataSource) {
         return new MybatisPlusBubbleTrackerStore(
                 bubbleStateMapper, new DatabaseDialectDetector().detect(dataSource));
+    }
+
+    @Bean(name = "graphStatementTimeoutInterceptor")
+    @ConditionalOnMissingBean(name = "graphStatementTimeoutInterceptor")
+    public Interceptor graphStatementTimeoutInterceptor() {
+        return new GraphStatementTimeoutInterceptor();
     }
 }

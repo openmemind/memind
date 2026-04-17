@@ -24,6 +24,9 @@ import com.openmemind.ai.memory.core.builder.ItemGraphOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.PromptBudgetOptions;
 import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
+import com.openmemind.ai.memory.core.builder.RetrievalOptions;
+import com.openmemind.ai.memory.core.builder.SimpleRetrievalGraphOptions;
+import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
@@ -58,6 +61,34 @@ class MemoryOptionsCodecTest {
                                                 InsightBuildConfig.defaults(),
                                                 new InsightGraphAssistOptions(
                                                         true, 4, 8, 7, 1600, false))))
+                        .build();
+
+        String json = codec.write(options);
+
+        assertThat(codec.read(json)).isEqualTo(options);
+    }
+
+    @Test
+    void roundTripsRetrievalGraphAssistOptions() {
+        var options =
+                MemoryBuildOptions.builder()
+                        .retrieval(
+                                new RetrievalOptions(
+                                        RetrievalOptions.defaults().common(),
+                                        new SimpleRetrievalOptions(
+                                                RetrievalOptions.defaults().simple().timeout(),
+                                                RetrievalOptions.defaults().simple().insightTopK(),
+                                                RetrievalOptions.defaults().simple().itemTopK(),
+                                                RetrievalOptions.defaults().simple().rawDataTopK(),
+                                                false,
+                                                SimpleRetrievalGraphOptions.defaults()
+                                                        .withEnabled(true)
+                                                        .withMaxSeedItems(4)
+                                                        .withTimeout(
+                                                                java.time.Duration.ofMillis(
+                                                                        350))),
+                                        RetrievalOptions.defaults().deep(),
+                                        RetrievalOptions.defaults().advanced()))
                         .build();
 
         String json = codec.write(options);

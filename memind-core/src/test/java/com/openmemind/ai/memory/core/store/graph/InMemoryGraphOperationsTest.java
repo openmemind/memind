@@ -111,6 +111,58 @@ class InMemoryGraphOperationsTest {
                 .containsExactly(tuple(101L, 102L));
     }
 
+    @Test
+    void listAdjacentItemLinksTreatsEitherEndpointAsAdjacentWithoutChangingLocalSubgraphRead() {
+        var ops = seededGraph();
+
+        assertThat(ops.listItemLinks(MEMORY_ID, List.of(101L, 102L), List.of(ItemLinkType.CAUSAL)))
+                .extracting(ItemLink::sourceItemId, ItemLink::targetItemId)
+                .containsExactly(tuple(101L, 102L));
+
+        assertThat(ops.listAdjacentItemLinks(MEMORY_ID, List.of(101L), List.of(ItemLinkType.CAUSAL)))
+                .extracting(ItemLink::sourceItemId, ItemLink::targetItemId)
+                .containsExactly(tuple(101L, 102L), tuple(103L, 101L));
+    }
+
+    @Test
+    void reverseMentionLookupReturnsAtMostLimitPlusOneRowsPerEntityKey() {
+        var ops = new InMemoryGraphOperations();
+
+        ops.upsertItemEntityMentions(
+                MEMORY_ID,
+                List.of(
+                        mention(101L, "organization:openai"),
+                        mention(102L, "organization:openai"),
+                        mention(103L, "organization:openai"),
+                        mention(104L, "organization:openai"),
+                        mention(101L, "person:sam_altman"),
+                        mention(102L, "person:sam_altman")));
+
+        assertThat(
+                        ops.listItemEntityMentionsByEntityKeys(
+                                MEMORY_ID,
+                                List.of("organization:openai", "person:sam_altman"),
+                                3))
+                .extracting(ItemEntityMention::entityKey, ItemEntityMention::itemId)
+                .containsExactly(
+                        tuple("organization:openai", 101L),
+                        tuple("organization:openai", 102L),
+                        tuple("organization:openai", 103L),
+                        tuple("person:sam_altman", 101L),
+                        tuple("person:sam_altman", 102L));
+    }
+
+    private static InMemoryGraphOperations seededGraph() {
+        var ops = new InMemoryGraphOperations();
+        ops.upsertItemLinks(
+                MEMORY_ID,
+                List.of(
+                        link(101L, 102L, ItemLinkType.CAUSAL),
+                        link(103L, 101L, ItemLinkType.CAUSAL),
+                        link(101L, 104L, ItemLinkType.SEMANTIC)));
+        return ops;
+    }
+
     private static GraphEntity entity(String entityKey, String canonicalName) {
         return new GraphEntity(
                 entityKey,

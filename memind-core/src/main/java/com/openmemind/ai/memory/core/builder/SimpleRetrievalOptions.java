@@ -14,13 +14,35 @@
 package com.openmemind.ai.memory.core.builder;
 
 import java.time.Duration;
+import java.util.Objects;
 
 public record SimpleRetrievalOptions(
         Duration timeout,
         int insightTopK,
         int itemTopK,
         int rawDataTopK,
-        boolean keywordSearchEnabled) {
+        boolean keywordSearchEnabled,
+        SimpleRetrievalGraphOptions graphAssist) {
+
+    public SimpleRetrievalOptions {
+        timeout = Objects.requireNonNull(timeout, "timeout");
+        graphAssist = graphAssist != null ? graphAssist : SimpleRetrievalGraphOptions.defaults();
+    }
+
+    public SimpleRetrievalOptions(
+            Duration timeout,
+            int insightTopK,
+            int itemTopK,
+            int rawDataTopK,
+            boolean keywordSearchEnabled) {
+        this(
+                timeout,
+                insightTopK,
+                itemTopK,
+                rawDataTopK,
+                keywordSearchEnabled,
+                SimpleRetrievalGraphOptions.defaults());
+    }
 
     public static SimpleRetrievalOptions defaults() {
         return new SimpleRetrievalOptions(Duration.ofSeconds(10), 5, 15, 5, true);

@@ -14,7 +14,7 @@
 package com.openmemind.ai.memory.core.retrieval.tier;
 
 import com.openmemind.ai.memory.core.data.MemoryItem;
-import com.openmemind.ai.memory.core.retrieval.ForesightFilter;
+import com.openmemind.ai.memory.core.retrieval.ItemRetrievalGuard;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.RawDataAggregator;
@@ -115,30 +115,15 @@ public class ItemTierRetriever implements TierSearchable {
                                                             Function.identity(),
                                                             (a, b) -> a));
 
-                            var filteredItems = vectorIdToItem;
-                            if (context.scope() != null || context.categories() != null) {
-                                filteredItems =
-                                        vectorIdToItem.entrySet().stream()
-                                                .filter(
-                                                        e -> {
-                                                            var item = e.getValue();
-                                                            if (context.scope() != null
-                                                                    && !context.scope()
-                                                                            .equals(item.scope())) {
-                                                                return false;
-                                                            }
-                                                            return context.categories() == null
-                                                                    || item.category() == null
-                                                                    || context.categories()
-                                                                            .contains(
-                                                                                    item
-                                                                                            .category());
-                                                        })
-                                                .collect(
-                                                        Collectors.toMap(
-                                                                Map.Entry::getKey,
-                                                                Map.Entry::getValue));
-                            }
+                            var filteredItems =
+                                    vectorIdToItem.entrySet().stream()
+                                            .filter(
+                                                    e ->
+                                                            ItemRetrievalGuard.allows(
+                                                                    e.getValue(), context))
+                                            .collect(
+                                                    Collectors.toMap(
+                                                            Map.Entry::getKey, Map.Entry::getValue));
 
                             List<ScoredResult> scoredResults = new ArrayList<>();
                             List<String> rawDataIds = new ArrayList<>();
@@ -146,10 +131,6 @@ public class ItemTierRetriever implements TierSearchable {
                             for (VectorSearchResult vr : vectorResults) {
                                 MemoryItem item = filteredItems.get(vr.vectorId());
                                 if (item == null) {
-                                    continue;
-                                }
-
-                                if (!ForesightFilter.isNotExpired(item)) {
                                     continue;
                                 }
 
@@ -239,32 +220,15 @@ public class ItemTierRetriever implements TierSearchable {
                                                             Function.identity(),
                                                             (a, b) -> a));
 
-                            final Map<String, MemoryItem> filteredItems;
-                            if (context.scope() != null || context.categories() != null) {
-                                filteredItems =
-                                        vectorIdToItem.entrySet().stream()
-                                                .filter(
-                                                        e -> {
-                                                            var item = e.getValue();
-                                                            if (context.scope() != null
-                                                                    && !context.scope()
-                                                                            .equals(item.scope())) {
-                                                                return false;
-                                                            }
-                                                            return context.categories() == null
-                                                                    || item.category() == null
-                                                                    || context.categories()
-                                                                            .contains(
-                                                                                    item
-                                                                                            .category());
-                                                        })
-                                                .collect(
-                                                        Collectors.toMap(
-                                                                Map.Entry::getKey,
-                                                                Map.Entry::getValue));
-                            } else {
-                                filteredItems = vectorIdToItem;
-                            }
+                            final Map<String, MemoryItem> filteredItems =
+                                    vectorIdToItem.entrySet().stream()
+                                            .filter(
+                                                    e ->
+                                                            ItemRetrievalGuard.allows(
+                                                                    e.getValue(), context))
+                                            .collect(
+                                                    Collectors.toMap(
+                                                            Map.Entry::getKey, Map.Entry::getValue));
 
                             List<ScoredResult> scoredResults = new ArrayList<>();
                             List<String> rawDataIds = new ArrayList<>();
@@ -272,10 +236,6 @@ public class ItemTierRetriever implements TierSearchable {
                             for (VectorSearchResult vr : vectorResults) {
                                 MemoryItem item = filteredItems.get(vr.vectorId());
                                 if (item == null) {
-                                    continue;
-                                }
-
-                                if (!ForesightFilter.isNotExpired(item)) {
                                     continue;
                                 }
 

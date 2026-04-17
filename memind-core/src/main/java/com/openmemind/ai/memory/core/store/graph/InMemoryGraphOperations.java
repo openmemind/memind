@@ -155,6 +155,27 @@ public class InMemoryGraphOperations implements GraphOperations {
     }
 
     @Override
+    public List<ItemEntityMention> listItemEntityMentionsByEntityKeys(
+            MemoryId memoryId, Collection<String> entityKeys, int perEntityLimitPlusOne) {
+        var entityKeySet = normalizeEntityKeys(entityKeys);
+        if (entityKeySet.isEmpty() || perEntityLimitPlusOne <= 0) {
+            return List.of();
+        }
+        Map<String, Integer> seen = new HashMap<>();
+        return mentions.getOrDefault(memoryId.toIdentifier(), Map.of()).values().stream()
+                .filter(mention -> entityKeySet.contains(mention.entityKey()))
+                .sorted(
+                        Comparator.comparing(ItemEntityMention::entityKey)
+                                .thenComparing(ItemEntityMention::itemId))
+                .filter(
+                        mention -> {
+                            int next = seen.merge(mention.entityKey(), 1, Integer::sum);
+                            return next <= perEntityLimitPlusOne;
+                        })
+                .toList();
+    }
+
+    @Override
     public List<EntityCooccurrence> listEntityCooccurrences(MemoryId memoryId) {
         return entityCooccurrences.getOrDefault(memoryId.toIdentifier(), Map.of()).values().stream()
                 .sorted(
@@ -186,6 +207,27 @@ public class InMemoryGraphOperations implements GraphOperations {
                         link ->
                                 itemIdSet.contains(link.sourceItemId())
                                         && itemIdSet.contains(link.targetItemId()))
+                .filter(link -> typeSet.isEmpty() || typeSet.contains(link.linkType()))
+                .sorted(
+                        Comparator.comparing(ItemLink::sourceItemId)
+                                .thenComparing(ItemLink::targetItemId)
+                                .thenComparing(ItemLink::linkType))
+                .toList();
+    }
+
+    @Override
+    public List<ItemLink> listAdjacentItemLinks(
+            MemoryId memoryId, Collection<Long> seedItemIds, Collection<ItemLinkType> linkTypes) {
+        var seedIdSet = normalizeItemIds(seedItemIds);
+        if (seedIdSet.isEmpty()) {
+            return List.of();
+        }
+        var typeSet = normalizeLinkTypes(linkTypes);
+        return itemLinks.getOrDefault(memoryId.toIdentifier(), Map.of()).values().stream()
+                .filter(
+                        link ->
+                                seedIdSet.contains(link.sourceItemId())
+                                        || seedIdSet.contains(link.targetItemId()))
                 .filter(link -> typeSet.isEmpty() || typeSet.contains(link.linkType()))
                 .sorted(
                         Comparator.comparing(ItemLink::sourceItemId)

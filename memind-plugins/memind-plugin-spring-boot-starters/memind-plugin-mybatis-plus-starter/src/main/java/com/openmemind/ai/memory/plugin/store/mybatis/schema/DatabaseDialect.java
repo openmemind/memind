@@ -21,19 +21,22 @@ public enum DatabaseDialect {
             "db/migration/sqlite/V2__init_text_search.sql",
             "db/migration/sqlite/V3__multimodal.sql",
             "db/migration/sqlite/V4__bubble_state.sql",
-            "db/migration/sqlite/V5__item_temporal_fields.sql"),
+            "db/migration/sqlite/V5__item_temporal_fields.sql",
+            "db/migration/sqlite/V6__graph_store.sql"),
     MYSQL(
             "db/migration/mysql/V1__init_store.sql",
             "db/migration/mysql/V2__init_text_search.sql",
             "db/migration/mysql/V3__multimodal.sql",
             "db/migration/mysql/V4__bubble_state.sql",
-            "db/migration/mysql/V5__item_temporal_fields.sql"),
+            "db/migration/mysql/V5__item_temporal_fields.sql",
+            "db/migration/mysql/V6__graph_store.sql"),
     POSTGRESQL(
             "db/migration/postgresql/V1__init_store.sql",
             "db/migration/postgresql/V2__init_text_search.sql",
             "db/migration/postgresql/V3__multimodal.sql",
             "db/migration/postgresql/V4__bubble_state.sql",
-            "db/migration/postgresql/V5__item_temporal_fields.sql");
+            "db/migration/postgresql/V5__item_temporal_fields.sql",
+            "db/migration/postgresql/V6__graph_store.sql");
 
     private final List<String> scriptPaths;
 

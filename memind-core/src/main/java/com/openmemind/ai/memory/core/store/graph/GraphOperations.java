@@ -15,7 +15,11 @@ package com.openmemind.ai.memory.core.store.graph;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -43,6 +47,29 @@ public interface GraphOperations {
                 .toList();
     }
 
+    default List<ItemEntityMention> listItemEntityMentionsByEntityKeys(
+            MemoryId memoryId, Collection<String> entityKeys, int perEntityLimitPlusOne) {
+        if (entityKeys == null || entityKeys.isEmpty() || perEntityLimitPlusOne <= 0) {
+            return List.of();
+        }
+        var entityKeySet = entityKeys.stream().filter(Objects::nonNull).collect(java.util.stream.Collectors.toSet());
+        if (entityKeySet.isEmpty()) {
+            return List.of();
+        }
+        Map<String, Integer> seen = new HashMap<>();
+        return listItemEntityMentions(memoryId).stream()
+                .filter(mention -> entityKeySet.contains(mention.entityKey()))
+                .sorted(
+                        Comparator.comparing(ItemEntityMention::entityKey)
+                                .thenComparing(ItemEntityMention::itemId))
+                .filter(
+                        mention -> {
+                            int next = seen.merge(mention.entityKey(), 1, Integer::sum);
+                            return next <= perEntityLimitPlusOne;
+                        })
+                .toList();
+    }
+
     List<EntityCooccurrence> listEntityCooccurrences(MemoryId memoryId);
 
     List<ItemLink> listItemLinks(MemoryId memoryId);
@@ -56,6 +83,30 @@ public interface GraphOperations {
                         link ->
                                 itemIdSet.contains(link.sourceItemId())
                                         && itemIdSet.contains(link.targetItemId()))
+                .filter(link -> typeSet.isEmpty() || typeSet.contains(link.linkType()))
+                .toList();
+    }
+
+    default List<ItemLink> listAdjacentItemLinks(
+            MemoryId memoryId, Collection<Long> seedItemIds, Collection<ItemLinkType> linkTypes) {
+        if (seedItemIds == null || seedItemIds.isEmpty()) {
+            return List.of();
+        }
+        var seedIdSet = seedItemIds.stream().filter(Objects::nonNull).collect(java.util.stream.Collectors.toSet());
+        if (seedIdSet.isEmpty()) {
+            return List.of();
+        }
+        var typeSet =
+                linkTypes == null
+                        ? Set.<ItemLinkType>of()
+                        : linkTypes.stream()
+                                .filter(Objects::nonNull)
+                                .collect(java.util.stream.Collectors.toSet());
+        return listItemLinks(memoryId).stream()
+                .filter(
+                        link ->
+                                seedIdSet.contains(link.sourceItemId())
+                                        || seedIdSet.contains(link.targetItemId()))
                 .filter(link -> typeSet.isEmpty() || typeSet.contains(link.linkType()))
                 .toList();
     }

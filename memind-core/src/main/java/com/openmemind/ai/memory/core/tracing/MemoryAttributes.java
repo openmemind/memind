@@ -68,4 +68,22 @@ public final class MemoryAttributes {
     public static final String RETRIEVAL_SUFFICIENT = "memind.retrieval.sufficient";
     public static final String RETRIEVAL_CACHE_HIT = "memind.retrieval.cache_hit";
     public static final String RETRIEVAL_TOP_K = "memind.retrieval.top_k";
+    public static final String RETRIEVAL_GRAPH_ENABLED = "memind.retrieval.graph.enabled";
+    public static final String RETRIEVAL_GRAPH_SEED_COUNT = "memind.retrieval.graph.seed_count";
+    public static final String RETRIEVAL_GRAPH_LINK_EXPANSION_COUNT =
+            "memind.retrieval.graph.link_expansion_count";
+    public static final String RETRIEVAL_GRAPH_ENTITY_EXPANSION_COUNT =
+            "memind.retrieval.graph.entity_expansion_count";
+    public static final String RETRIEVAL_GRAPH_DEDUPED_CANDIDATE_COUNT =
+            "memind.retrieval.graph.deduped_candidate_count";
+    public static final String RETRIEVAL_GRAPH_ADMITTED_CANDIDATE_COUNT =
+            "memind.retrieval.graph.admitted_candidate_count";
+    public static final String RETRIEVAL_GRAPH_DISPLACED_DIRECT_COUNT =
+            "memind.retrieval.graph.displaced_direct_count";
+    public static final String RETRIEVAL_GRAPH_OVERLAP_COUNT =
+            "memind.retrieval.graph.overlap_count";
+    public static final String RETRIEVAL_GRAPH_SKIPPED_OVERFANOUT_ENTITY_COUNT =
+            "memind.retrieval.graph.skipped_overfanout_entity_count";
+    public static final String RETRIEVAL_GRAPH_TIMEOUT = "memind.retrieval.graph.timeout";
+    public static final String RETRIEVAL_GRAPH_DEGRADED = "memind.retrieval.graph.degraded";
 }

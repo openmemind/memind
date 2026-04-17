@@ -40,6 +40,7 @@ import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
+import com.openmemind.ai.memory.core.retrieval.graph.NoOpRetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
@@ -173,6 +174,20 @@ class MemoryAssemblersTest {
         assertThat(strategies.keySet())
                 .containsExactlyInAnyOrder(
                         RetrievalStrategies.SIMPLE, RetrievalStrategies.DEEP_RETRIEVAL);
+    }
+
+    @Test
+    void retrievalAssemblerAlwaysWiresRuntimeGraphAssistantEvenWhenBuilderGraphDefaultIsDisabled() {
+        var retriever =
+                new MemoryRetrievalAssembler()
+                        .assemble(context(MemoryBuildOptions.defaults(), null, null));
+
+        @SuppressWarnings("unchecked")
+        var strategies = readField(retriever, "strategies", Map.class);
+        var simple = strategies.get(RetrievalStrategies.SIMPLE);
+
+        assertThat(readField(simple, "graphAssistant", Object.class))
+                .isNotInstanceOf(NoOpRetrievalGraphAssistant.class);
     }
 
     @Test

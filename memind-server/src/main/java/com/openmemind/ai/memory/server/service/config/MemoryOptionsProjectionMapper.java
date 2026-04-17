@@ -137,6 +137,54 @@ public class MemoryOptionsProjectionMapper {
                             "Whether simple retrieval should blend keyword search results with"
                                     + " vector results."),
                     Map.entry(
+                            "retrieval.simple.graphAssist.enabled",
+                            "Whether simple retrieval may expand direct hits through the bounded"
+                                    + " item graph before final fusion."),
+                    Map.entry(
+                            "retrieval.simple.graphAssist.maxSeedItems",
+                            "Maximum number of top direct item hits eligible to seed graph"
+                                    + " expansion."),
+                    Map.entry(
+                            "retrieval.simple.graphAssist.maxExpandedItems",
+                            "Maximum number of graph-derived item candidates retained before"
+                                    + " fusion."),
+                    Map.entry(
+                            "retrieval.simple.graphAssist.maxSemanticNeighborsPerSeed",
+                            "Maximum semantic-link neighbors expanded from each seed item."),
+                    Map.entry(
+                            "retrieval.simple.graphAssist.maxTemporalNeighborsPerSeed",
+                            "Maximum temporal-link neighbors expanded from each seed item."),
+                    Map.entry(
+                            "retrieval.simple.graphAssist.maxCausalNeighborsPerSeed",
+                            "Maximum causal-link neighbors expanded from each seed item."),
+                    Map.entry(
+                            "retrieval.simple.graphAssist.maxEntitySiblingItemsPerSeed",
+                            "Maximum sibling items pulled per seed through shared entity mentions."),
+                    Map.entry(
+                            "retrieval.simple.graphAssist.maxItemsPerEntity",
+                            "Maximum items examined for any single entity when expanding shared"
+                                    + " mentions."),
+                    Map.entry(
+                            "retrieval.simple.graphAssist.graphChannelWeight",
+                            "Relative blend weight assigned to the graph-assisted retrieval"
+                                    + " channel."),
+                    Map.entry(
+                            "retrieval.simple.graphAssist.minLinkStrength",
+                            "Minimum graph link strength required before an adjacent item may"
+                                    + " contribute."),
+                    Map.entry(
+                            "retrieval.simple.graphAssist.minMentionConfidence",
+                            "Minimum entity mention confidence required before sibling expansion is"
+                                    + " allowed."),
+                    Map.entry(
+                            "retrieval.simple.graphAssist.protectDirectTopK",
+                            "Number of highest-ranked direct hits pinned ahead of any graph-only"
+                                    + " candidates."),
+                    Map.entry(
+                            "retrieval.simple.graphAssist.timeout",
+                            "Maximum time budget reserved for graph-assisted expansion during a"
+                                    + " simple retrieval request."),
+                    Map.entry(
                             "retrieval.deep.timeout",
                             "Maximum time allowed for a deep retrieval request."),
                     Map.entry(
@@ -356,6 +404,12 @@ public class MemoryOptionsProjectionMapper {
                 return value.doubleValue();
             }
             return Double.parseDouble(String.valueOf(rawValue));
+        }
+        if (type == Float.class) {
+            if (rawValue instanceof Number value) {
+                return value.floatValue();
+            }
+            return Float.parseFloat(String.valueOf(rawValue));
         }
         if (type == Duration.class) {
             if (rawValue instanceof Duration value) {

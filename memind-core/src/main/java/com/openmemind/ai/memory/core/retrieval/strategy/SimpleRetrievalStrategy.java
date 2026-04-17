@@ -13,6 +13,9 @@
  */
 package com.openmemind.ai.memory.core.retrieval.strategy;
 
+import com.openmemind.ai.memory.core.retrieval.graph.NoOpRetrievalGraphAssistant;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistResult;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
@@ -57,18 +60,35 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
     private final ItemTierRetriever itemRetriever;
     private final MemoryTextSearch textSearch; // nullable
     private final MemoryStore memoryStore; // nullable
+    private final RetrievalGraphAssistant graphAssistant;
 
     public SimpleRetrievalStrategy(
             InsightTierRetriever insightRetriever,
             ItemTierRetriever itemRetriever,
             MemoryTextSearch textSearch,
-            MemoryStore memoryStore) {
+            MemoryStore memoryStore,
+            RetrievalGraphAssistant graphAssistant) {
         this.insightRetriever =
                 Objects.requireNonNull(insightRetriever, "insightRetriever must not be null");
         this.itemRetriever =
                 Objects.requireNonNull(itemRetriever, "itemRetriever must not be null");
         this.textSearch = textSearch; // nullable
         this.memoryStore = memoryStore; // nullable
+        this.graphAssistant =
+                graphAssistant != null ? graphAssistant : NoOpRetrievalGraphAssistant.INSTANCE;
+    }
+
+    public SimpleRetrievalStrategy(
+            InsightTierRetriever insightRetriever,
+            ItemTierRetriever itemRetriever,
+            MemoryTextSearch textSearch,
+            MemoryStore memoryStore) {
+        this(
+                insightRetriever,
+                itemRetriever,
+                textSearch,
+                memoryStore,
+                NoOpRetrievalGraphAssistant.INSTANCE);
     }
 
     @Override
@@ -84,6 +104,11 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
     }
 
     private Mono<RetrievalResult> executePipeline(QueryContext context, RetrievalConfig config) {
+        var simpleConfig =
+                config.strategyConfig() instanceof SimpleStrategyConfig simple
+                        ? simple
+                        : SimpleStrategyConfig.defaults();
+
         // Channel 1: Insight vector search
         Mono<TierResult> insightMono =
                 insightRetriever
@@ -105,11 +130,11 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
                                 });
 
         // Channel 3: Item BM25 search
-        Mono<List<TextSearchResult>> bm25Mono = executeBm25(context, config);
+        Mono<List<TextSearchResult>> bm25Mono = executeBm25(context, config, simpleConfig);
 
         // Three channels in parallel
         return Mono.zip(insightMono, itemVectorMono, bm25Mono)
-                .map(
+                .flatMap(
                         tuple -> {
                             TierResult insightResult = tuple.getT1();
                             TierResult itemVectorResult = tuple.getT2();
@@ -129,52 +154,78 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
                             mergedItems =
                                     TimeDecay.applyToBm25Only(
                                             mergedItems, context, config.scoring());
+                            mergedItems =
+                                    mergedItems.stream()
+                                            .sorted(
+                                                    Comparator.comparingDouble(
+                                                                    ScoredResult::finalScore)
+                                                            .reversed())
+                                            .toList();
 
-                            // rawDataId aggregation (return items + rawDataResults)
-                            RawDataAggregator.AggregationResult aggregation;
-                            if (memoryStore != null && !mergedItems.isEmpty()) {
-                                aggregation =
-                                        RawDataAggregator.aggregate(
-                                                mergedItems, context.memoryId(), memoryStore);
-                                mergedItems = aggregation.items();
-                            } else {
-                                aggregation =
-                                        new RawDataAggregator.AggregationResult(
-                                                mergedItems, List.of());
-                            }
+                            var directItems = mergedItems;
+                            return graphAssistant
+                                    .assist(context, config, simpleConfig, directItems)
+                                    .onErrorResume(
+                                            error -> {
+                                                log.warn("Simple: Graph assist failed", error);
+                                                return Mono.just(
+                                                        RetrievalGraphAssistResult.directOnly(
+                                                                directItems,
+                                                                simpleConfig
+                                                                        .graphAssist()
+                                                                        .enabled()));
+                                            })
+                                    .map(
+                                            result ->
+                                                    new PipelineInputs(
+                                                            insightResult,
+                                                            result.items()));
+                        })
+                .map(inputs -> finalizeResult(context, config, inputs));
+    }
 
-                            // Adaptive truncation
-                            var truncationResult =
-                                    AdaptiveTruncator.truncate(
-                                            mergedItems, config.tier2().truncation());
+    private RetrievalResult finalizeResult(
+            QueryContext context, RetrievalConfig config, PipelineInputs inputs) {
+        List<ScoredResult> mergedItems = inputs.items();
+        TierResult insightResult = inputs.insightResult();
 
-                            // tier3 topK truncate rawDataResults
-                            var rawDataResults = aggregation.rawDataResults();
-                            int rawDataTopK = config.tier3().topK();
-                            if (config.tier3().enabled() && rawDataResults.size() > rawDataTopK) {
-                                rawDataResults = rawDataResults.subList(0, rawDataTopK);
-                            }
+        RawDataAggregator.AggregationResult aggregation;
+        if (memoryStore != null && !mergedItems.isEmpty()) {
+            aggregation = RawDataAggregator.aggregate(mergedItems, context.memoryId(), memoryStore);
+            mergedItems = aggregation.items();
+        } else {
+            aggregation = new RawDataAggregator.AggregationResult(mergedItems, List.of());
+        }
 
-                            log.debug(
-                                    "Simple pipeline completed: insights={}, items={}/{},"
-                                            + " rawData={}",
-                                    insightResult.results().size(),
-                                    truncationResult.results().size(),
-                                    truncationResult.originalSize(),
-                                    rawDataResults.size());
+        var truncationResult = AdaptiveTruncator.truncate(mergedItems, config.tier2().truncation());
 
-                            return buildResult(
-                                    insightResult.results(),
-                                    truncationResult.results(),
-                                    rawDataResults,
-                                    insightResult.expandedInsights(),
-                                    context);
-                        });
+        var rawDataResults = aggregation.rawDataResults();
+        int rawDataTopK = config.tier3().topK();
+        if (config.tier3().enabled() && rawDataResults.size() > rawDataTopK) {
+            rawDataResults = rawDataResults.subList(0, rawDataTopK);
+        }
+
+        log.debug(
+                "Simple pipeline completed: insights={}, items={}/{}, rawData={}",
+                insightResult.results().size(),
+                truncationResult.results().size(),
+                truncationResult.originalSize(),
+                rawDataResults.size());
+
+        return buildResult(
+                insightResult.results(),
+                truncationResult.results(),
+                rawDataResults,
+                insightResult.expandedInsights(),
+                context);
     }
 
     /** BM25 keyword search */
-    private Mono<List<TextSearchResult>> executeBm25(QueryContext context, RetrievalConfig config) {
-        if (textSearch == null) {
+    private Mono<List<TextSearchResult>> executeBm25(
+            QueryContext context,
+            RetrievalConfig config,
+            SimpleStrategyConfig simpleConfig) {
+        if (textSearch == null || !simpleConfig.enableKeywordSearch()) {
             return Mono.just(List.of());
         }
         return textSearch
@@ -189,6 +240,8 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
                             return Mono.just(List.of());
                         });
     }
+
+    private record PipelineInputs(TierResult insightResult, List<ScoredResult> items) {}
 
     /** Merge Item vector results with BM25 results */
     private List<ScoredResult> mergeItemResults(
