@@ -233,6 +233,24 @@ If `SufficiencyGate` returns `insufficient`, the strategy continues with today's
 
 Graph assist begins only after those direct candidate formation steps are complete.
 
+### Step 3A: slow-path degradation semantics are explicit
+
+Phase 4A fixes one explicit degradation rule here so implementation does not drift:
+
+- if typed query expansion itself fails, the strategy must degrade to the best available
+  direct slow-path candidate formation built from the already available initial direct channels
+  only
+- in that fallback, the strategy must still continue through the normal downstream stages:
+  direct merge, `occurredAt` backfill, BM25-only time decay, direct candidate window bounding,
+  graph assist eligibility, rerank, and final result assembly
+- individual expanded channel failures remain best-effort and should drop only the failed
+  channel rather than collapsing the whole slow path
+- if the strategy cannot build any bounded direct candidate window after fallback, graph assist
+  is skipped and the best available direct-only result is returned
+
+For clarity, the phase 4A fallback target is not a vector-only shortcut. It is the normal deep
+slow path with the unavailable expanded channels removed.
+
 ### Step 4: build a bounded direct candidate window for graph assist
 
 Before graph assist runs, deep retrieval should derive a graph input window from the already merged direct item candidates.
@@ -284,7 +302,16 @@ The fusion policy should remain the same as phase 3:
 - keep `graphChannelWeight < 1.0`
 - admit graph candidates conservatively
 
-The resulting fused pool should remain bounded. Phase 4A should not allow graph expansion to inflate the rerank input arbitrarily beyond the deep strategy's candidate budget.
+Phase 4A fixes one explicit cardinality invariant here:
+
+- let `directWindow` be the bounded pre-graph candidate list produced in step 4
+- the graph-enriched candidate pool passed into rerank must contain at most `directWindow.size()`
+  items
+- because `directWindow` is already bounded to `tier2.topK`, the rerank input after graph fusion
+  is therefore also bounded to `tier2.topK`
+
+Graph assist may replace candidates inside the bounded direct window, but it must not increase the
+window size.
 
 ### Step 8: rerank sees the graph-enriched pool
 
@@ -414,10 +441,12 @@ Add a dedicated `DeepRetrievalStrategyTest` covering:
 - sufficient fast path does not invoke graph assist
 - insufficient slow path invokes graph assist before rerank
 - strong-signal slow path still invokes graph assist after direct candidate formation
+- query expansion failure degrades to the base direct slow path rather than a vector-only shortcut
 - graph assist receives post-decay, post-sort, bounded direct candidates
 - graph assist timeout degrades to direct-only deep candidates
 - graph assist failure degrades to direct-only deep candidates
 - rerank receives graph-enriched candidates when graph assist is enabled
+- rerank input after graph fusion never exceeds the bounded direct window size
 
 ### Config and compatibility tests
 
@@ -460,7 +489,9 @@ The following decisions are intentionally fixed by this document:
 
 - graph assist is added to `DeepRetrievalStrategy` only in the insufficient slow path
 - sufficiency input and sufficiency fast path stay graph-free
+- typed query expansion failure degrades to the base direct slow path, not a vector-only shortcut
 - graph assist runs after direct deep candidate formation and before rerank
+- graph assist may replace candidates inside the bounded direct window, but may not enlarge it
 - the phase 3 graph engine is reused rather than duplicated
 - the graph assistant contract is generalized away from `SimpleStrategyConfig`
 - phase 4A does not include any story/thread retrieval work
