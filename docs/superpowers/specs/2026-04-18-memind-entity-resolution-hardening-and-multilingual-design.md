@@ -276,6 +276,14 @@ Input remains the extracted entity hint:
 
 The system should preserve the raw surface form for observability even if later normalization changes it.
 
+Pipeline ownership contract:
+
+- `GraphHintNormalizer` and its immediate collaborators remain extraction-side normalization components
+- extraction-side normalization components must stay pure and store-agnostic; they normalize, filter, and bound incoming hints but do not query previously persisted graph state
+- exact canonical mode may continue to normalize and persist the current batch without any store read
+- optional heuristic resolution is orchestrated above the normalization layer by a materializer-level resolver collaborator that can read bounded prior entity state before persistence
+- store-aware candidate lookup and store-aware merge decisions must not be pushed down into low-level canonicalizer, noise-filter, or hint-normalizer utilities
+
 ### Phase 1: Localized Type Mapping
 
 Introduce `EntityTypeMapper` with a default implementation `LocalizedEntityTypeMapper`.
@@ -539,6 +547,20 @@ Not acceptable for Stage 1 metadata:
 - storing every raw mention indefinitely
 - storing per-observation alias history without bounds
 - using metadata as a hidden replacement for a first-class alias table
+
+Metadata merge contract:
+
+- if Stage 1 alias evidence is stored in `GraphEntity.metadata`, entity upsert semantics must merge bounded aggregate evidence rather than replacing metadata wholesale
+- blind last-write-wins replacement is not acceptable for alias evidence fields
+- open-source backends should implement the same deterministic merge contract so in-memory and persistent stores behave consistently
+
+Required aggregate merge examples:
+
+- `evidenceCount` accumulates
+- `firstSeenAt` keeps the earliest observed timestamp
+- `lastSeenAt` keeps the latest observed timestamp
+- `topAliases` is merged as a bounded de-duplicated union with deterministic ranking and tie-breaking
+- `scriptSummary` is merged as a bounded aggregate summary rather than a raw history log
 
 Alias evidence examples:
 
