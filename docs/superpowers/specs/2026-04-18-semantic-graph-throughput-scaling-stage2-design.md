@@ -73,12 +73,12 @@ Implication:
 Stage 1 tracing and materialization stats already separate:
 
 - logical semantic search requests
-- physical vector-backend search invocations
+- lower-level search executions represented by the semantic linker's chosen result path
 
 Implication:
 
 - Stage 2 must preserve those semantics
-- the new design must not let the two counters silently drift in meaning
+- the new design must keep those counters internally consistent and operator-explainable
 
 ### Fact 4: Spring AI's generic `VectorStore` abstraction is single-query oriented
 
@@ -180,9 +180,9 @@ Required constructor semantics:
 
 `invocationCount` means:
 
-- the number of completed physical backend search invocations represented by the returned ordered batch result bundle
+- the number of completed search executions represented by the returned ordered batch result bundle
 - not the number of logical requests
-- not the number of attempted but failed optimistic calls that were later discarded
+- not the number of discarded optimistic attempts that produced no committed ordered bundle
 
 ### 1.3 `MemoryVector.searchBatch(...)`
 
@@ -291,7 +291,7 @@ Stage 2 must keep the Stage 1 stats surface and make the search counters more ex
   Counts logical semantic search requests and remains one-per-source-item with a non-blank canonical query, even if that logical request is later replayed during fallback.
 
 - `searchInvocationCount`
-  Counts completed physical vector-backend search invocations on the execution path the linker ultimately commits to after any window-level fallback. It includes committed per-source searches that return hits or fail into empty results, and excludes abandoned optimistic batch-search attempts that were discarded before fallback completed.
+  Counts completed search executions represented by the ordered result path the linker ultimately commits to for that window after any window-level fallback. It includes committed per-source searches that return hits or fail into empty results, and excludes discarded optimistic batch-search attempts that were abandoned before fallback completed.
 
 - `searchFallbackCount`
   Counts logical requests replayed after a window-level batch-search failure.
@@ -300,7 +300,8 @@ Implications:
 
 - on the default `MemoryVector.searchBatch(...)` path, `searchInvocationCount` will typically equal `searchRequestCount`
 - on a future native batch-search backend, `searchInvocationCount` may drop below `searchRequestCount`
-- on the required generic Spring AI plugin implementation, `searchInvocationCount` is expected to remain equal to `searchRequestCount`
+- on the generic Spring AI adapter path, `searchInvocationCount` is expected to remain equal to `searchRequestCount`
+- discarded optimistic attempts are intentionally surfaced through `searchFallbackCount` and `searchPhaseDurationMs`, not retroactively folded into `searchInvocationCount`
 
 ### 4.2 Duration semantics
 
@@ -313,38 +314,47 @@ If a window first attempts `searchBatch(...)` and then falls back to single-requ
 
 This preserves the Stage 1 duration definition and keeps degradation cost visible.
 
-## 5. Required Official Plugin Implementation: `SpringAiMemoryVector`
+## 5. Required Official Plugin Coverage: `SpringAiMemoryVector`
 
 `SpringAiMemoryVector` is part of the required Stage 2 scope.
 
-Required implementation behavior:
+Required contract behavior:
 
-- override `searchBatch(...)`
-- preserve the ordered bundle contract
+- satisfy the `MemoryVector.searchBatch(...)` ordered bundle contract under the generic Spring AI adapter path
 - honor `maxConcurrency`
-- reuse the same request-shaping semantics as single-query search:
+- preserve the same request-shaping semantics as single-query search:
   - same `memoryId` filter
   - same caller-provided metadata filters
   - same `topK`
   - same `minScore`
-- preserve the existing retry policy semantics for each physical search invocation
+- preserve the existing retry policy semantics for each delegated single-request search execution on the baseline adapter path
 - return all-or-error, not partial success
 - report `invocationCount = requests.size()` on successful completion
 
-Required implementation strategy:
+Default expectation:
 
-- adapt the current single-query `VectorStore.similaritySearch(SearchRequest)` capability into the new batch method
-- do not require native-client branching in the baseline implementation
+- the official plugin may inherit the default `MemoryVector.searchBatch(...)` implementation
+- a plugin-specific override is optional, not mandatory
+
+An explicit override is justified only when the plugin can materially do more than the default implementation, such as:
+
+- reducing search executions below one-per-logical-request
+- reusing plugin-specific request shaping more safely than the shared default path
+- improving throughput without weakening the ordered bundle contract
+
+Baseline restriction:
+
+- do not require native-client branching in the required baseline implementation
 
 Explicit non-promise:
 
-- this required Spring AI implementation does **not** promise physical invocation collapse under the generic `VectorStore` abstraction
-- its value is contract alignment, ordered batch behavior, and future upgrade readiness
+- generic Spring AI `VectorStore` support does **not** promise invocation collapse under the baseline adapter path
+- the value of including `SpringAiMemoryVector` in Stage 2 is contract coverage, ordered batch behavior validation, and future upgrade readiness
 
 Rationale:
 
 - keeps the first official plugin aligned with the new core API
-- avoids hard-coding assumptions about particular Spring AI vector-store clients into the baseline design
+- avoids duplicating the default batch decomposition logic in plugin code without proven gain
 - leaves room for a later backend-specific fast path without changing `SemanticItemLinker`
 
 ## Failure And Degradation Semantics
@@ -355,9 +365,9 @@ This section is mandatory.
 
    If any decomposed single-request search fails inside the default `MemoryVector.searchBatch(...)`, the method errors and returns no partial ordered bundle.
 
-2. **Plugin batch-search adapter failure**
+2. **Plugin contract failure**
 
-   If the Spring AI batch adapter cannot complete the ordered bundle, it errors and returns no partial ordered bundle.
+   If the generic Spring AI adapter path cannot complete the ordered bundle, it errors and returns no partial ordered bundle.
 
 3. **Semantic linker batch-search failure**
 
@@ -409,8 +419,6 @@ Rationale:
   Add the immutable ordered batch-search result bundle.
 - `memind-core/src/main/java/com/openmemind/ai/memory/core/extraction/item/graph/SemanticItemLinker.java`
   Adopt batch search at source-window granularity while preserving Stage 1 normalization and degradation behavior.
-- `memind-plugins/memind-plugin-ai-spring-ai/src/main/java/com/openmemind/ai/memory/plugin/ai/spring/SpringAiMemoryVector.java`
-  Override `searchBatch(...)` and align the official Spring AI plugin with the new contract.
 
 ### Required Tests
 
@@ -419,7 +427,12 @@ Rationale:
 - `memind-core/src/test/java/com/openmemind/ai/memory/core/extraction/item/graph/SemanticItemLinkerTest.java`
   Verify successful ordered batch-search mapping, malformed bundle fallback, batch-search failure fallback, and stable `searchRequestCount` / `searchInvocationCount` / `searchFallbackCount` semantics.
 - `memind-plugins/memind-plugin-ai-spring-ai/src/test/java/com/openmemind/ai/memory/plugin/ai/spring/SpringAiMemoryVectorTest.java`
-  Verify the official plugin's batch method preserves order, respects `maxConcurrency`, and reports the expected invocation count under the generic Spring AI adapter path.
+  Verify the official plugin satisfies the ordered batch-search contract, respects `maxConcurrency`, and reports the expected invocation count under the generic Spring AI adapter path.
+
+### Conditional
+
+- `memind-plugins/memind-plugin-ai-spring-ai/src/main/java/com/openmemind/ai/memory/plugin/ai/spring/SpringAiMemoryVector.java`
+  Override `searchBatch(...)` only if the plugin can materially improve on the default implementation without weakening the baseline contract.
 
 ### Explicitly Not Required
 
@@ -433,9 +446,9 @@ Rationale:
 1. For the same raw search results, Stage 2 produces the same normalized semantic links as Stage 1.
 2. `SemanticItemLinker` calls `searchBatch(...)` once per source window that contains at least one non-blank semantic query on the happy path.
 3. A failed `searchBatch(...)` attempt degrades only the affected source window and falls back to the existing single-request path.
-4. `searchRequestCount` remains a logical-request metric, and `searchInvocationCount` remains a physical-invocation metric, across both success and fallback paths.
+4. `searchRequestCount` remains a logical-request metric, and `searchInvocationCount` remains a committed-result-path execution metric, across both success and fallback paths.
 5. The default `MemoryVector.searchBatch(...)` implementation never exceeds the caller-provided `maxConcurrency` when decomposing into single-request searches.
-6. The required Spring AI plugin implementation passes the ordered batch-search contract without claiming generic `VectorStore` physical invocation collapse it cannot guarantee.
+6. The required Spring AI plugin coverage passes the ordered batch-search contract without requiring a redundant plugin override or claiming generic `VectorStore` invocation collapse it cannot guarantee.
 7. Stage 2 adds no new public item-graph runtime knobs.
 
 ## Comparison To Hindsight
