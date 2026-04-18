@@ -276,6 +276,8 @@ Input remains the extracted entity hint:
 
 The system should preserve the raw surface form for observability even if later normalization changes it.
 
+Optional later extraction revisions may add structured alias evidence alongside the entity hint, for example `aliasObservations` or an equivalent extraction-side structure.
+
 Pipeline ownership contract:
 
 - `GraphHintNormalizer` and its immediate collaborators remain extraction-side normalization components
@@ -375,6 +377,12 @@ The mapping decision may depend on:
 - extraction prompt contract
 - runtime conversation role context
 
+Stage 1 contract:
+
+- Stage 1 does not require a new runtime conversation-role context channel
+- Stage 1 special mapping must rely only on extraction-side evidence already carried by the entity hint path, in practice the extracted effective type being `SPECIAL`
+- if a later stage wants to use runtime conversation-role context, that stage must introduce an explicit interface / parameter contract at the materializer or resolver boundary rather than relying on an implicit ambient context
+
 Ordering contract:
 
 - special mapping runs after type mapping and exact-safe name normalization
@@ -467,7 +475,7 @@ Candidate generation contract:
 Allowed default candidate sources:
 
 - exact canonical-key hit
-- exact normalized-name hit within the same effective type
+- version-bridge normalized-name hit within the same effective type, but only when multiple versioned exact-normalization contracts are intentionally supported during an explicit migration / backfill window
 - bounded same-script safe-variant lookup
 - explicit alias-evidence hit
 - user-configured alias dictionary hit, if enabled
@@ -575,6 +583,12 @@ Key rule:
 
 - alias evidence informs candidate resolution
 - alias evidence does not redefine the primary canonical key
+
+Explicit alias-evidence ownership contract:
+
+- explicit alias evidence should originate from the extraction layer as structured output, not from ad-hoc free-text reparsing inside the resolver
+- the resolver may consume structured alias observations produced by extraction, but it must not become a general-purpose text-pattern parser for parentheses, slash-apposition, or other free-text alias syntax
+- if explicit alias evidence is needed in Stage 2, the extraction contract should be extended with a structured alias-observation field or equivalent typed evidence object
 
 ## Multilingual Rules
 
@@ -686,6 +700,7 @@ Recommended configuration shape:
 
 - `graph.entity.typeMappingMode = localized`
 - `graph.entity.resolutionMode = exact | conservative`
+- `graph.entity.maxResolutionCandidatesPerMention = 8`
 - `graph.entity.supportedLanguagePacks = [en, zh, ...]`
 - `graph.entity.crossScriptMergePolicy = off`
 - `graph.entity.aliasEvidenceMode = metadata | persisted`
@@ -694,9 +709,15 @@ Default open-source values:
 
 - `typeMappingMode = localized`
 - `resolutionMode = exact`
+- `maxResolutionCandidatesPerMention = 8`
 - `supportedLanguagePacks = [en, zh]`
 - `crossScriptMergePolicy = off`
 - `aliasEvidenceMode = metadata`
+
+Allowed values contract:
+
+- Stage 1 supports only `graph.entity.crossScriptMergePolicy = off`
+- future values must be introduced by a dedicated follow-up spec that defines semantics, safety gates, observability, and migration impact
 
 ## Observability Requirements
 
