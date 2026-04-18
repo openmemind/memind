@@ -367,6 +367,17 @@ The mapping decision may depend on:
 - extraction prompt contract
 - runtime conversation role context
 
+Ordering contract:
+
+- special mapping runs after type mapping and exact-safe name normalization
+- special mapping runs before generic pronoun-like / temporal noise filtering
+- once a mention has been safely mapped to a reserved special identity, later noise filtering must not drop it as a generic pronoun-like token
+
+Safety contract:
+
+- mapping to `special:self`, `special:user`, or `special:assistant` is allowed only when the effective type is already `SPECIAL` or when runtime conversational context explicitly confirms that the mention is a role anchor
+- otherwise the mention continues through the normal entity path without special rewriting
+
 ### Phase 4: Language-Aware Noise Filtering
 
 Introduce `EntityNoiseFilter` with a default implementation `LanguageAwareEntityNoiseFilter`.
@@ -408,6 +419,20 @@ This remains the default and safest entity-resolution mode:
 
 This mode must remain fully supported even after all later enhancements are added.
 
+Canonical-key stability contract:
+
+- exact canonical identity is part of the persisted truth model and must remain stable once deployed
+- language packs may improve type mapping, noise filtering, alias evidence accumulation, and heuristic resolution without changing the exact canonical key contract for already-supported paths
+- adding a new language pack must not silently rewrite existing entity keys in place
+
+If a future change truly requires different exact normalization semantics for canonical keys, it must be treated as a versioned identity-contract change with:
+
+- explicit migration / backfill design
+- compatibility rules for pre-existing entities
+- observability for key churn and merge / split impact
+
+It must not be introduced as an incidental language-pack refinement.
+
 ### Phase 6: Optional Conservative Entity Resolution
 
 Introduce `EntityResolutionStrategy`.
@@ -424,6 +449,27 @@ The default open-source behavior should remain `ExactCanonicalEntityResolutionSt
 #### Conservative heuristic behavior
 
 This mode may attempt to resolve a new mention against existing entities within the same `memoryId`, but only under guarded rules.
+
+Candidate generation contract:
+
+- candidate generation must be bounded and deterministic enough to reason about in the synchronous write path
+- the default open-source implementation must not scan all entities in a `memoryId` for every incoming mention
+- the default open-source implementation must not require DB-specific fuzzy lookup support
+
+Allowed default candidate sources:
+
+- exact canonical-key hit
+- exact normalized-name hit within the same effective type
+- bounded same-script safe-variant lookup
+- explicit alias-evidence hit
+- user-configured alias dictionary hit, if enabled
+
+Optional backend-specific accelerators may widen how candidates are fetched, but they must preserve the same bounded candidate contract at the strategy boundary.
+
+Required implementation rule:
+
+- heuristic resolution must operate over a capped candidate set, for example `maxResolutionCandidatesPerMention`
+- if no bounded candidate source yields candidates, the strategy must fall back to create-new-entity behavior rather than widening into an unbounded scan
 
 Allowed signals:
 
@@ -474,6 +520,25 @@ Recommended staged direction:
 
 - Stage 1: metadata-backed evidence is acceptable
 - Stage 2+: promote alias evidence to a dedicated persisted object if needed
+
+Stage 1 metadata contract:
+
+- metadata-backed alias evidence must remain bounded and aggregate-oriented
+- `GraphEntity.metadata` must not become an unbounded append-only log of every observed raw surface form
+
+Acceptable Stage 1 metadata examples:
+
+- `topAliases` with a small fixed cap
+- aggregate `evidenceCount`
+- aggregate `scriptSummary`
+- aggregate `firstSeenAt` / `lastSeenAt`
+- a bounded list of alias classes seen
+
+Not acceptable for Stage 1 metadata:
+
+- storing every raw mention indefinitely
+- storing per-observation alias history without bounds
+- using metadata as a hidden replacement for a first-class alias table
 
 Alias evidence examples:
 
