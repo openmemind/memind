@@ -44,5 +44,7 @@ public interface RetrievalGraphSettings {
 
     int protectDirectTopK();
 
+    double semanticEvidenceDecayFactor();
+
     Duration timeout();
 }

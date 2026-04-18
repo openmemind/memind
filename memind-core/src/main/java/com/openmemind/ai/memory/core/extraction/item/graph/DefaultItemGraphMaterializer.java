@@ -45,10 +45,10 @@ public final class DefaultItemGraphMaterializer implements ItemGraphMaterializer
     }
 
     @Override
-    public Mono<Void> materialize(
+    public Mono<ItemGraphMaterializationResult> materialize(
             MemoryId memoryId, List<MemoryItem> items, List<ExtractedMemoryEntry> sourceEntries) {
         if (!options.enabled() || items == null || items.isEmpty()) {
-            return Mono.empty();
+            return Mono.just(ItemGraphMaterializationResult.empty());
         }
 
         return Mono.fromSupplier(
@@ -61,29 +61,53 @@ public final class DefaultItemGraphMaterializer implements ItemGraphMaterializer
                                                 : List.of(),
                                         options))
                 .onErrorReturn(ResolvedGraphBatch.empty())
-                .flatMap(batch -> persistStructuredGraph(memoryId, batch))
-                .onErrorResume(ignored -> Mono.empty())
-                .then(
-                        semanticItemLinker
-                                .link(memoryId, items)
-                                .onErrorResume(ignored -> Mono.empty()));
+                .map(batch -> persistStructuredGraph(memoryId, batch))
+                .onErrorReturn(StructuredGraphStats.empty())
+                .flatMap(
+                        structuredStats ->
+                                semanticItemLinker
+                                        .link(memoryId, items)
+                                        .onErrorReturn(
+                                                SemanticItemLinker.SemanticLinkingStats.empty())
+                                        .map(
+                                                semanticStats ->
+                                                        new ItemGraphMaterializationResult(
+                                                                new ItemGraphMaterializationResult
+                                                                        .Stats(
+                                                                        structuredStats
+                                                                                .entityCount(),
+                                                                        structuredStats
+                                                                                .mentionCount(),
+                                                                        structuredStats
+                                                                                .structuredItemLinkCount(),
+                                                                        semanticStats
+                                                                                .searchHitCount(),
+                                                                        semanticStats
+                                                                                .createdLinkCount(),
+                                                                        semanticStats
+                                                                                .sameBatchHitCount()))));
     }
 
-    private Mono<Void> persistStructuredGraph(MemoryId memoryId, ResolvedGraphBatch batch) {
-        return Mono.fromRunnable(
-                () -> {
-                    graphOperations.upsertEntities(memoryId, batch.entities());
-                    graphOperations.upsertItemEntityMentions(memoryId, batch.mentions());
-                    graphOperations.upsertItemLinks(memoryId, batch.itemLinks());
+    private StructuredGraphStats persistStructuredGraph(
+            MemoryId memoryId, ResolvedGraphBatch batch) {
+        graphOperations.upsertEntities(memoryId, batch.entities());
+        graphOperations.upsertItemEntityMentions(memoryId, batch.mentions());
+        graphOperations.upsertItemLinks(memoryId, batch.itemLinks());
 
-                    List<String> affectedEntityKeys =
-                            batch.mentions().stream()
-                                    .map(ItemEntityMention::entityKey)
-                                    .distinct()
-                                    .toList();
-                    if (!affectedEntityKeys.isEmpty()) {
-                        graphOperations.rebuildEntityCooccurrences(memoryId, affectedEntityKeys);
-                    }
-                });
+        List<String> affectedEntityKeys =
+                batch.mentions().stream().map(ItemEntityMention::entityKey).distinct().toList();
+        if (!affectedEntityKeys.isEmpty()) {
+            graphOperations.rebuildEntityCooccurrences(memoryId, affectedEntityKeys);
+        }
+        return new StructuredGraphStats(
+                batch.entities().size(), batch.mentions().size(), batch.itemLinks().size());
+    }
+
+    private record StructuredGraphStats(
+            int entityCount, int mentionCount, int structuredItemLinkCount) {
+
+        private static StructuredGraphStats empty() {
+            return new StructuredGraphStats(0, 0, 0);
+        }
     }
 }

@@ -125,6 +125,7 @@ final class MemoryRetrievalAssembler {
                         graph.minLinkStrength(),
                         graph.minMentionConfidence(),
                         graph.protectDirectTopK(),
+                        graph.semanticEvidenceDecayFactor(),
                         graph.timeout()),
                 MemoryThreadAssistConfigMapper.toSimpleConfig(options));
     }
@@ -153,6 +154,7 @@ final class MemoryRetrievalAssembler {
                         graph.minLinkStrength(),
                         graph.minMentionConfidence(),
                         graph.protectDirectTopK(),
+                        graph.semanticEvidenceDecayFactor(),
                         graph.timeout()),
                 MemoryThreadAssistConfigMapper.toDeepConfig(options));
     }

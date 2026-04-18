@@ -31,6 +31,7 @@ public record DeepRetrievalGraphOptions(
         double minLinkStrength,
         float minMentionConfidence,
         int protectDirectTopK,
+        double semanticEvidenceDecayFactor,
         Duration timeout) {
 
     public DeepRetrievalGraphOptions {
@@ -46,11 +47,12 @@ public record DeepRetrievalGraphOptions(
                 minLinkStrength,
                 minMentionConfidence,
                 protectDirectTopK,
+                semanticEvidenceDecayFactor,
                 timeout);
     }
 
     public static DeepRetrievalGraphOptions defaults() {
         return new DeepRetrievalGraphOptions(
-                false, 8, 16, 2, 2, 2, 4, 8, 0.30d, 0.55d, 0.70f, 5, Duration.ofMillis(300));
+                false, 8, 16, 2, 2, 2, 4, 8, 0.30d, 0.55d, 0.70f, 5, 0.5d, Duration.ofMillis(300));
     }
 }

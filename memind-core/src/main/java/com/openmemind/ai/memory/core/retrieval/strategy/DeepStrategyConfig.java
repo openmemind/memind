@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core.retrieval.strategy;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.openmemind.ai.memory.core.builder.DeepMemoryThreadAssistOptions;
+import com.openmemind.ai.memory.core.builder.DeepRetrievalGraphOptions;
 import com.openmemind.ai.memory.core.builder.SimpleMemoryThreadAssistOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalGraphOptions;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphSettings;
@@ -210,6 +211,7 @@ public record DeepStrategyConfig(
             double minLinkStrength,
             float minMentionConfidence,
             int protectDirectTopK,
+            double semanticEvidenceDecayFactor,
             Duration timeout)
             implements RetrievalGraphSettings {
 
@@ -226,12 +228,27 @@ public record DeepStrategyConfig(
                     minLinkStrength,
                     minMentionConfidence,
                     protectDirectTopK,
+                    semanticEvidenceDecayFactor,
                     timeout);
         }
 
         public static GraphAssistConfig defaults() {
+            var defaults = DeepRetrievalGraphOptions.defaults();
             return new GraphAssistConfig(
-                    false, 8, 16, 2, 2, 2, 4, 8, 0.30d, 0.55d, 0.70f, 5, Duration.ofMillis(300));
+                    defaults.enabled(),
+                    defaults.maxSeedItems(),
+                    defaults.maxExpandedItems(),
+                    defaults.maxSemanticNeighborsPerSeed(),
+                    defaults.maxTemporalNeighborsPerSeed(),
+                    defaults.maxCausalNeighborsPerSeed(),
+                    defaults.maxEntitySiblingItemsPerSeed(),
+                    defaults.maxItemsPerEntity(),
+                    defaults.graphChannelWeight(),
+                    defaults.minLinkStrength(),
+                    defaults.minMentionConfidence(),
+                    defaults.protectDirectTopK(),
+                    defaults.semanticEvidenceDecayFactor(),
+                    defaults.timeout());
         }
 
         @JsonCreator
@@ -248,6 +265,7 @@ public record DeepStrategyConfig(
                 @JsonProperty("minLinkStrength") Double minLinkStrength,
                 @JsonProperty("minMentionConfidence") Float minMentionConfidence,
                 @JsonProperty("protectDirectTopK") Integer protectDirectTopK,
+                @JsonProperty("semanticEvidenceDecayFactor") Double semanticEvidenceDecayFactor,
                 @JsonProperty("timeout") Duration timeout) {
             var defaults = defaults();
             return new GraphAssistConfig(
@@ -273,6 +291,9 @@ public record DeepStrategyConfig(
                             ? minMentionConfidence
                             : defaults.minMentionConfidence(),
                     protectDirectTopK != null ? protectDirectTopK : defaults.protectDirectTopK(),
+                    semanticEvidenceDecayFactor != null
+                            ? semanticEvidenceDecayFactor
+                            : defaults.semanticEvidenceDecayFactor(),
                     timeout != null ? timeout : defaults.timeout());
         }
 
@@ -290,6 +311,7 @@ public record DeepStrategyConfig(
                     minLinkStrength,
                     minMentionConfidence,
                     protectDirectTopK,
+                    semanticEvidenceDecayFactor,
                     timeout);
         }
 
@@ -307,6 +329,7 @@ public record DeepStrategyConfig(
                     minLinkStrength,
                     minMentionConfidence,
                     protectDirectTopK,
+                    semanticEvidenceDecayFactor,
                     timeout);
         }
     }

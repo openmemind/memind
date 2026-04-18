@@ -29,8 +29,8 @@ public final class NoOpItemGraphMaterializer implements ItemGraphMaterializer {
     private NoOpItemGraphMaterializer() {}
 
     @Override
-    public Mono<Void> materialize(
+    public Mono<ItemGraphMaterializationResult> materialize(
             MemoryId memoryId, List<MemoryItem> items, List<ExtractedMemoryEntry> sourceEntries) {
-        return Mono.empty();
+        return Mono.just(ItemGraphMaterializationResult.empty());
     }
 }

@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.tracing.decorator;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
+import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializationResult;
 import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
 import com.openmemind.ai.memory.core.tracing.MemoryAttributes;
@@ -40,7 +41,7 @@ public final class TracingItemGraphMaterializer extends TracingSupport
     }
 
     @Override
-    public Mono<Void> materialize(
+    public Mono<ItemGraphMaterializationResult> materialize(
             MemoryId memoryId, List<MemoryItem> items, List<ExtractedMemoryEntry> sourceEntries) {
         return trace(
                 MemorySpanNames.GRAPH_MATERIALIZE,
@@ -49,6 +50,20 @@ public final class TracingItemGraphMaterializer extends TracingSupport
                         memoryId.toIdentifier(),
                         MemoryAttributes.EXTRACTION_ITEM_COUNT,
                         items != null ? items.size() : 0),
+                result ->
+                        Map.of(
+                                MemoryAttributes.EXTRACTION_GRAPH_ENTITY_COUNT,
+                                result.stats().entityCount(),
+                                MemoryAttributes.EXTRACTION_GRAPH_MENTION_COUNT,
+                                result.stats().mentionCount(),
+                                MemoryAttributes.EXTRACTION_GRAPH_STRUCTURED_LINK_COUNT,
+                                result.stats().structuredItemLinkCount(),
+                                MemoryAttributes.EXTRACTION_GRAPH_SEMANTIC_SEARCH_HIT_COUNT,
+                                result.stats().semanticSearchHitCount(),
+                                MemoryAttributes.EXTRACTION_GRAPH_SEMANTIC_LINK_COUNT,
+                                result.stats().semanticLinkCount(),
+                                MemoryAttributes.EXTRACTION_GRAPH_SEMANTIC_SAME_BATCH_HIT_COUNT,
+                                result.stats().semanticSameBatchHitCount()),
                 () -> delegate.materialize(memoryId, items, sourceEntries));
     }
 }

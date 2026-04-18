@@ -19,7 +19,9 @@ public record ItemGraphOptions(
         int maxCausalReferencesPerItem,
         int maxTemporalLinksPerItem,
         int maxSemanticLinksPerItem,
-        double semanticMinScore) {
+        double semanticMinScore,
+        int semanticSearchHeadroom,
+        int semanticLinkConcurrency) {
 
     public ItemGraphOptions {
         if (maxEntitiesPerItem <= 0) {
@@ -37,10 +39,16 @@ public record ItemGraphOptions(
         if (semanticMinScore < 0.0d || semanticMinScore > 1.0d) {
             throw new IllegalArgumentException("semanticMinScore must be in [0,1]");
         }
+        if (semanticSearchHeadroom < 0) {
+            throw new IllegalArgumentException("semanticSearchHeadroom must be non-negative");
+        }
+        if (semanticLinkConcurrency <= 0) {
+            throw new IllegalArgumentException("semanticLinkConcurrency must be positive");
+        }
     }
 
     public static ItemGraphOptions defaults() {
-        return new ItemGraphOptions(false, 8, 2, 10, 5, 0.82d);
+        return new ItemGraphOptions(false, 8, 2, 10, 5, 0.82d, 4, 1);
     }
 
     public ItemGraphOptions withEnabled(boolean enabled) {
@@ -50,6 +58,32 @@ public record ItemGraphOptions(
                 maxCausalReferencesPerItem,
                 maxTemporalLinksPerItem,
                 maxSemanticLinksPerItem,
-                semanticMinScore);
+                semanticMinScore,
+                semanticSearchHeadroom,
+                semanticLinkConcurrency);
+    }
+
+    public ItemGraphOptions withSemanticSearchHeadroom(int semanticSearchHeadroom) {
+        return new ItemGraphOptions(
+                enabled,
+                maxEntitiesPerItem,
+                maxCausalReferencesPerItem,
+                maxTemporalLinksPerItem,
+                maxSemanticLinksPerItem,
+                semanticMinScore,
+                semanticSearchHeadroom,
+                semanticLinkConcurrency);
+    }
+
+    public ItemGraphOptions withSemanticLinkConcurrency(int semanticLinkConcurrency) {
+        return new ItemGraphOptions(
+                enabled,
+                maxEntitiesPerItem,
+                maxCausalReferencesPerItem,
+                maxTemporalLinksPerItem,
+                maxSemanticLinksPerItem,
+                semanticMinScore,
+                semanticSearchHeadroom,
+                semanticLinkConcurrency);
     }
 }

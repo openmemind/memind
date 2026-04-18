@@ -34,6 +34,7 @@ public record SimpleRetrievalGraphOptions(
         double minLinkStrength,
         float minMentionConfidence,
         int protectDirectTopK,
+        double semanticEvidenceDecayFactor,
         Duration timeout) {
 
     public SimpleRetrievalGraphOptions {
@@ -49,6 +50,7 @@ public record SimpleRetrievalGraphOptions(
                 minLinkStrength,
                 minMentionConfidence,
                 protectDirectTopK,
+                semanticEvidenceDecayFactor,
                 timeout);
     }
 
@@ -64,6 +66,7 @@ public record SimpleRetrievalGraphOptions(
             double minLinkStrength,
             float minMentionConfidence,
             int protectDirectTopK,
+            double semanticEvidenceDecayFactor,
             Duration timeout) {
         if (maxSeedItems <= 0
                 || maxExpandedItems <= 0
@@ -85,12 +88,15 @@ public record SimpleRetrievalGraphOptions(
         if (minMentionConfidence < 0.0f || minMentionConfidence > 1.0f) {
             throw new IllegalArgumentException("minMentionConfidence must be in [0,1]");
         }
+        if (semanticEvidenceDecayFactor < 0.0d) {
+            throw new IllegalArgumentException("semanticEvidenceDecayFactor must be non-negative");
+        }
         Objects.requireNonNull(timeout, "timeout");
     }
 
     public static SimpleRetrievalGraphOptions defaults() {
         return new SimpleRetrievalGraphOptions(
-                false, 6, 12, 2, 2, 2, 3, 8, 0.35d, 0.55d, 0.70f, 3, Duration.ofMillis(200));
+                false, 6, 12, 2, 2, 2, 3, 8, 0.35d, 0.55d, 0.70f, 3, 0.5d, Duration.ofMillis(200));
     }
 
     @JsonCreator
@@ -107,6 +113,7 @@ public record SimpleRetrievalGraphOptions(
             @JsonProperty("minLinkStrength") Double minLinkStrength,
             @JsonProperty("minMentionConfidence") Float minMentionConfidence,
             @JsonProperty("protectDirectTopK") Integer protectDirectTopK,
+            @JsonProperty("semanticEvidenceDecayFactor") Double semanticEvidenceDecayFactor,
             @JsonProperty("timeout") Duration timeout) {
         var defaults = defaults();
         return new SimpleRetrievalGraphOptions(
@@ -132,6 +139,9 @@ public record SimpleRetrievalGraphOptions(
                         ? minMentionConfidence
                         : defaults.minMentionConfidence(),
                 protectDirectTopK != null ? protectDirectTopK : defaults.protectDirectTopK(),
+                semanticEvidenceDecayFactor != null
+                        ? semanticEvidenceDecayFactor
+                        : defaults.semanticEvidenceDecayFactor(),
                 timeout != null ? timeout : defaults.timeout());
     }
 
@@ -149,6 +159,7 @@ public record SimpleRetrievalGraphOptions(
                 minLinkStrength,
                 minMentionConfidence,
                 protectDirectTopK,
+                semanticEvidenceDecayFactor,
                 timeout);
     }
 
@@ -166,6 +177,7 @@ public record SimpleRetrievalGraphOptions(
                 minLinkStrength,
                 minMentionConfidence,
                 protectDirectTopK,
+                semanticEvidenceDecayFactor,
                 timeout);
     }
 
@@ -183,6 +195,7 @@ public record SimpleRetrievalGraphOptions(
                 minLinkStrength,
                 minMentionConfidence,
                 protectDirectTopK,
+                semanticEvidenceDecayFactor,
                 timeout);
     }
 }

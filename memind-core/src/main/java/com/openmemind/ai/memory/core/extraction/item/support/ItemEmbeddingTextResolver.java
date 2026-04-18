@@ -14,31 +14,19 @@
 package com.openmemind.ai.memory.core.extraction.item.support;
 
 import com.openmemind.ai.memory.core.data.MemoryItem;
-import java.util.Map;
 
 /**
- * Resolves the canonical text used for item vectorization and semantic graph linking.
+ * Resolves the canonical content used for item vectorization and semantic graph linking.
  */
 public final class ItemEmbeddingTextResolver {
 
     private ItemEmbeddingTextResolver() {}
 
     public static String resolve(ExtractedMemoryEntry entry) {
-        return resolve(
-                entry != null ? entry.metadata() : null, entry != null ? entry.content() : null);
+        return entry != null && entry.content() != null ? entry.content() : "";
     }
 
     public static String resolve(MemoryItem item) {
-        return resolve(item != null ? item.metadata() : null, item != null ? item.content() : null);
-    }
-
-    private static String resolve(Map<String, Object> metadata, String fallbackContent) {
-        if (metadata != null) {
-            Object whenToUse = metadata.get("whenToUse");
-            if (whenToUse instanceof String s && !s.isBlank()) {
-                return s;
-            }
-        }
-        return fallbackContent != null ? fallbackContent : "";
+        return item != null && item.content() != null ? item.content() : "";
     }
 }

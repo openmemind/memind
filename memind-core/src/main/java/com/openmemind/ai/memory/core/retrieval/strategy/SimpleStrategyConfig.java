@@ -86,6 +86,7 @@ public record SimpleStrategyConfig(
             double minLinkStrength,
             float minMentionConfidence,
             int protectDirectTopK,
+            double semanticEvidenceDecayFactor,
             Duration timeout)
             implements RetrievalGraphSettings {
 
@@ -102,6 +103,7 @@ public record SimpleStrategyConfig(
                     minLinkStrength,
                     minMentionConfidence,
                     protectDirectTopK,
+                    semanticEvidenceDecayFactor,
                     timeout);
         }
 
@@ -120,6 +122,7 @@ public record SimpleStrategyConfig(
                     defaults.minLinkStrength(),
                     defaults.minMentionConfidence(),
                     defaults.protectDirectTopK(),
+                    defaults.semanticEvidenceDecayFactor(),
                     defaults.timeout());
         }
 
@@ -137,6 +140,7 @@ public record SimpleStrategyConfig(
                 @JsonProperty("minLinkStrength") Double minLinkStrength,
                 @JsonProperty("minMentionConfidence") Float minMentionConfidence,
                 @JsonProperty("protectDirectTopK") Integer protectDirectTopK,
+                @JsonProperty("semanticEvidenceDecayFactor") Double semanticEvidenceDecayFactor,
                 @JsonProperty("timeout") Duration timeout) {
             var defaults = defaults();
             return new GraphAssistConfig(
@@ -162,6 +166,9 @@ public record SimpleStrategyConfig(
                             ? minMentionConfidence
                             : defaults.minMentionConfidence(),
                     protectDirectTopK != null ? protectDirectTopK : defaults.protectDirectTopK(),
+                    semanticEvidenceDecayFactor != null
+                            ? semanticEvidenceDecayFactor
+                            : defaults.semanticEvidenceDecayFactor(),
                     timeout != null ? timeout : defaults.timeout());
         }
 
@@ -179,6 +186,7 @@ public record SimpleStrategyConfig(
                     minLinkStrength,
                     minMentionConfidence,
                     protectDirectTopK,
+                    semanticEvidenceDecayFactor,
                     timeout);
         }
 
@@ -196,6 +204,7 @@ public record SimpleStrategyConfig(
                     minLinkStrength,
                     minMentionConfidence,
                     protectDirectTopK,
+                    semanticEvidenceDecayFactor,
                     timeout);
         }
 
@@ -213,6 +222,7 @@ public record SimpleStrategyConfig(
                     minLinkStrength,
                     minMentionConfidence,
                     protectDirectTopK,
+                    semanticEvidenceDecayFactor,
                     timeout);
         }
     }

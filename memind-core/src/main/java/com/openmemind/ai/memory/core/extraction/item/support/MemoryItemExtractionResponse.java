@@ -57,7 +57,8 @@ public record MemoryItemExtractionResponse(List<ExtractedItem> items) {
      * @param occurredAt Memory occurrence time ISO-8601 (LLM parsed, may be null)
      * @param time Structured temporal extraction result
      * @param insightTypes List of matched InsightType names (may be empty)
-     * @param metadata Additional metadata (may be null; includes whenToUse, etc.)
+     * @param metadata Additional metadata (may be null; tool items may include tool-scoped keys
+     *     such as whenToUse)
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record ExtractedItem(

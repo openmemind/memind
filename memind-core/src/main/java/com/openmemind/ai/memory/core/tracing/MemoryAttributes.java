@@ -40,6 +40,18 @@ public final class MemoryAttributes {
     public static final String EXTRACTION_EXISTED = "memind.extraction.existed";
     public static final String EXTRACTION_STATUS = "memind.extraction.status";
     public static final String EXTRACTION_DURATION_MS = "memind.extraction.duration_ms";
+    public static final String EXTRACTION_GRAPH_ENTITY_COUNT =
+            "memind.extraction.graph.entity_count";
+    public static final String EXTRACTION_GRAPH_MENTION_COUNT =
+            "memind.extraction.graph.mention_count";
+    public static final String EXTRACTION_GRAPH_STRUCTURED_LINK_COUNT =
+            "memind.extraction.graph.structured_link_count";
+    public static final String EXTRACTION_GRAPH_SEMANTIC_SEARCH_HIT_COUNT =
+            "memind.extraction.graph.semantic_search_hit_count";
+    public static final String EXTRACTION_GRAPH_SEMANTIC_LINK_COUNT =
+            "memind.extraction.graph.semantic_link_count";
+    public static final String EXTRACTION_GRAPH_SEMANTIC_SAME_BATCH_HIT_COUNT =
+            "memind.extraction.graph.semantic_same_batch_hit_count";
 
     // ===== Extraction (Insight Tree) =====
     public static final String EXTRACTION_INSIGHT_TYPE = "memind.extraction.insight_type";

@@ -208,7 +208,7 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
             List<MaterializedSeed> seeds,
             Set<String> directIds) {
         GraphOperations graphOps = store.graphOperations();
-        Map<Long, GraphCandidate> rawCandidates = new LinkedHashMap<>();
+        Map<Long, GraphCandidateAccumulator> rawCandidates = new LinkedHashMap<>();
         int linkExpansionCount = 0;
         int entityExpansionCount = 0;
         Set<Long> overlapItemIds = new LinkedHashSet<>();
@@ -256,22 +256,12 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
                 perSeedRelationCounts.put(family, offered + 1);
                 linkExpansionCount++;
 
-                var incoming =
-                        new GraphCandidate(
-                                neighborItemId,
+                rawCandidates
+                        .computeIfAbsent(neighborItemId, GraphCandidateAccumulator::new)
+                        .accept(
                                 family,
                                 seed.item().id(),
-                                seed.seedRelevance(),
-                                link.strength(),
-                                scoreCandidate(
-                                        family, seed.seedRelevance(), link.strength(), 1.0d));
-                rawCandidates.merge(
-                        neighborItemId,
-                        incoming,
-                        (existing, replacement) ->
-                                replacement.provisionalScore() > existing.provisionalScore()
-                                        ? replacement
-                                        : existing);
+                                baseScore(family, seed.seedRelevance(), link.strength()));
             }
 
             int entitySiblingCount = 0;
@@ -302,25 +292,15 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
                     entitySiblingCount++;
                     entityExpansionCount++;
 
-                    var incoming =
-                            new GraphCandidate(
-                                    mention.itemId(),
+                    rawCandidates
+                            .computeIfAbsent(mention.itemId(), GraphCandidateAccumulator::new)
+                            .accept(
                                     RelationFamily.ENTITY_SIBLING,
                                     seed.item().id(),
-                                    seed.seedRelevance(),
-                                    mention.confidence().doubleValue(),
-                                    scoreCandidate(
+                                    baseScore(
                                             RelationFamily.ENTITY_SIBLING,
                                             seed.seedRelevance(),
-                                            mention.confidence().doubleValue(),
-                                            1.0d));
-                    rawCandidates.merge(
-                            mention.itemId(),
-                            incoming,
-                            (existing, replacement) ->
-                                    replacement.provisionalScore() > existing.provisionalScore()
-                                            ? replacement
-                                            : existing);
+                                            mention.confidence().doubleValue()));
                 }
             }
         }
@@ -347,18 +327,7 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
                 continue;
             }
             filteredCandidates.put(
-                    entry.getKey(),
-                    entry.getValue()
-                            .withResolvedItem(
-                                    item,
-                                    scoreCandidate(
-                                            entry.getValue().family(),
-                                            entry.getValue().seedRelevance(),
-                                            entry.getValue().relationStrength(),
-                                            TimeDecay.factor(
-                                                    item.occurredAt(),
-                                                    context,
-                                                    config.scoring()))));
+                    entry.getKey(), entry.getValue().resolve(item, context, config, graphSettings));
         }
 
         return new GraphCandidateBundle(
@@ -454,13 +423,9 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
         };
     }
 
-    private double scoreCandidate(
-            RelationFamily family,
-            double seedRelevance,
-            double relationStrength,
-            double recencyAdjustment) {
+    private double baseScore(RelationFamily family, double seedRelevance, double relationStrength) {
         double relationWeight = DEFAULT_RELATION_WEIGHTS.getOrDefault(family, 1.0d);
-        return seedRelevance * relationWeight * relationStrength * recencyAdjustment;
+        return seedRelevance * relationWeight * relationStrength;
     }
 
     private boolean hasEntitySignal(ItemEntityMention mention) {
@@ -483,49 +448,61 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
 
     private record MaterializedSeed(MemoryItem item, double seedRelevance) {}
 
-    private record GraphCandidate(
-            long itemId,
-            RelationFamily family,
-            long seedItemId,
-            double seedRelevance,
-            double relationStrength,
-            double provisionalScore,
-            String content,
-            java.time.Instant occurredAt) {
+    private static final class GraphCandidateAccumulator {
+        private final long itemId;
+        private final Map<Long, Double> semanticBaseScoresBySeed = new LinkedHashMap<>();
+        private double bestNonSemanticBaseScore;
 
-        private GraphCandidate(
-                long itemId,
-                RelationFamily family,
-                long seedItemId,
-                double seedRelevance,
-                double relationStrength,
-                double provisionalScore) {
-            this(
-                    itemId,
-                    family,
-                    seedItemId,
-                    seedRelevance,
-                    relationStrength,
-                    provisionalScore,
-                    null,
-                    null);
+        private GraphCandidateAccumulator(long itemId) {
+            this.itemId = itemId;
         }
 
-        private GraphCandidate withResolvedItem(MemoryItem item, double resolvedScore) {
+        private void accept(RelationFamily family, long seedItemId, double baseScore) {
+            if (family == RelationFamily.SEMANTIC) {
+                semanticBaseScoresBySeed.merge(seedItemId, baseScore, Math::max);
+                return;
+            }
+            bestNonSemanticBaseScore = Math.max(bestNonSemanticBaseScore, baseScore);
+        }
+
+        private GraphCandidate resolve(
+                MemoryItem item,
+                QueryContext context,
+                RetrievalConfig config,
+                RetrievalGraphSettings graphSettings) {
+            double recencyAdjustment =
+                    TimeDecay.factor(item.occurredAt(), context, config.scoring());
+            double semanticScore =
+                    accumulateSemantic(graphSettings.semanticEvidenceDecayFactor())
+                            * recencyAdjustment;
+            double nonSemanticScore = bestNonSemanticBaseScore * recencyAdjustment;
             return new GraphCandidate(
                     itemId,
-                    family,
-                    seedItemId,
-                    seedRelevance,
-                    relationStrength,
-                    resolvedScore,
+                    Math.max(semanticScore, nonSemanticScore),
                     item.content(),
                     item.occurredAt());
         }
 
-        private double score() {
-            return provisionalScore;
+        private double accumulateSemantic(double decayFactor) {
+            if (semanticBaseScoresBySeed.isEmpty()) {
+                return 0.0d;
+            }
+
+            var contributions =
+                    semanticBaseScoresBySeed.values().stream()
+                            .sorted(Comparator.reverseOrder())
+                            .toList();
+            double raw = 0.0d;
+            for (int i = 0; i < contributions.size(); i++) {
+                double decay = 1.0d / (1.0d + (i * decayFactor));
+                raw += contributions.get(i) * decay;
+            }
+            return Math.tanh(raw);
         }
+    }
+
+    private record GraphCandidate(
+            long itemId, double score, String content, java.time.Instant occurredAt) {
 
         private ScoredResult toScoredResult() {
             return new ScoredResult(
@@ -533,7 +510,7 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
                     String.valueOf(itemId),
                     content == null ? "" : content,
                     0f,
-                    provisionalScore,
+                    score,
                     occurredAt);
         }
     }

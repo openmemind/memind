@@ -72,9 +72,28 @@ class DefaultRetrievalGraphAssistantTest {
                             0.55d,
                             0.70f,
                             2,
+                            0.5d,
                             Duration.ofMillis(200)));
     private static final SimpleStrategyConfig OVERLAP_CONFIG =
             SIMPLE_CONFIG.withGraphAssist(SIMPLE_CONFIG.graphAssist().withMaxSeedItems(1));
+    private static final SimpleStrategyConfig NON_SEMANTIC_MERGE_CONFIG =
+            new SimpleStrategyConfig(
+                    true,
+                    new SimpleStrategyConfig.GraphAssistConfig(
+                            SIMPLE_CONFIG.graphAssist().enabled(),
+                            SIMPLE_CONFIG.graphAssist().maxSeedItems(),
+                            SIMPLE_CONFIG.graphAssist().maxExpandedItems(),
+                            SIMPLE_CONFIG.graphAssist().maxSemanticNeighborsPerSeed(),
+                            SIMPLE_CONFIG.graphAssist().maxTemporalNeighborsPerSeed(),
+                            4,
+                            SIMPLE_CONFIG.graphAssist().maxEntitySiblingItemsPerSeed(),
+                            SIMPLE_CONFIG.graphAssist().maxItemsPerEntity(),
+                            SIMPLE_CONFIG.graphAssist().graphChannelWeight(),
+                            SIMPLE_CONFIG.graphAssist().minLinkStrength(),
+                            SIMPLE_CONFIG.graphAssist().minMentionConfidence(),
+                            SIMPLE_CONFIG.graphAssist().protectDirectTopK(),
+                            SIMPLE_CONFIG.graphAssist().semanticEvidenceDecayFactor(),
+                            SIMPLE_CONFIG.graphAssist().timeout()));
 
     @Mock private MemoryStore store;
     @Mock private ItemOperations itemOperations;
@@ -181,6 +200,126 @@ class DefaultRetrievalGraphAssistantTest {
                                 SimpleStrategyConfig.defaults().graphAssist(),
                                 direct))
                 .assertNext(result -> assertThat(result.items()).containsExactlyElementsOf(direct))
+                .verifyComplete();
+    }
+
+    @Test
+    void semanticConvergenceAcrossSeedsOutranksSingleSeedSemanticHit() {
+        itemsById.put(
+                301L,
+                item(301L, "shared semantic convergence", Instant.parse("2026-04-16T12:30:00Z")));
+        itemsById.put(
+                302L,
+                item(302L, "single stronger semantic hit", Instant.parse("2026-04-16T12:30:00Z")));
+        graphOperations.upsertItemLinks(
+                MEMORY_ID,
+                List.of(
+                        link(101L, 301L, ItemLinkType.SEMANTIC, 0.82d),
+                        link(102L, 301L, ItemLinkType.SEMANTIC, 0.80d),
+                        link(101L, 302L, ItemLinkType.SEMANTIC, 0.93d)));
+
+        StepVerifier.create(
+                        assistant.assist(
+                                CONTEXT, CONFIG, SIMPLE_CONFIG.graphAssist(), directSeeds()))
+                .assertNext(
+                        result ->
+                                assertThat(
+                                                result.items().stream()
+                                                        .map(ScoredResult::sourceId)
+                                                        .toList())
+                                        .containsSubsequence("301", "302"))
+                .verifyComplete();
+    }
+
+    @Test
+    void repeatedSemanticEvidenceFromSameSeedDoesNotStackPastBestPath() {
+        itemsById.put(
+                501L,
+                item(
+                        501L,
+                        "duplicate semantic path candidate",
+                        Instant.parse("2026-04-16T12:30:00Z")));
+        itemsById.put(
+                502L,
+                item(502L, "single best path candidate", Instant.parse("2026-04-16T12:30:00Z")));
+        graphOperations.upsertItemLinks(
+                MEMORY_ID,
+                List.of(
+                        link(101L, 501L, ItemLinkType.SEMANTIC, 0.60d),
+                        link(501L, 101L, ItemLinkType.SEMANTIC, 0.92d),
+                        link(101L, 502L, ItemLinkType.SEMANTIC, 0.91d)));
+
+        StepVerifier.create(
+                        assistant.assist(
+                                CONTEXT, CONFIG, OVERLAP_CONFIG.graphAssist(), directWithOverlap()))
+                .assertNext(
+                        result ->
+                                assertThat(
+                                                result.items().stream()
+                                                        .map(ScoredResult::sourceId)
+                                                        .toList())
+                                        .containsSubsequence("502", "501"))
+                .verifyComplete();
+    }
+
+    @Test
+    void nonSemanticFamiliesStillMergeByMaxInsteadOfAccumulating() {
+        itemsById.put(
+                601L,
+                item(601L, "mixed non-semantic candidate", Instant.parse("2026-04-16T12:00:00Z")));
+        itemsById.put(
+                602L,
+                item(
+                        602L,
+                        "single stronger causal candidate",
+                        Instant.parse("2026-04-16T12:00:00Z")));
+        graphOperations.upsertItemLinks(
+                MEMORY_ID,
+                List.of(
+                        link(101L, 601L, ItemLinkType.CAUSAL, 0.81d),
+                        link(102L, 601L, ItemLinkType.TEMPORAL, 0.80d),
+                        link(101L, 602L, ItemLinkType.CAUSAL, 0.90d)));
+
+        StepVerifier.create(
+                        assistant.assist(
+                                CONTEXT,
+                                CONFIG,
+                                NON_SEMANTIC_MERGE_CONFIG.graphAssist(),
+                                directSeeds()))
+                .assertNext(
+                        result ->
+                                assertThat(
+                                                result.items().stream()
+                                                        .map(ScoredResult::sourceId)
+                                                        .toList())
+                                        .containsSubsequence("602", "601"))
+                .verifyComplete();
+    }
+
+    @Test
+    void semanticAccumulationUsesBoundedGraphScores() {
+        itemsById.put(
+                701L,
+                item(701L, "bounded semantic candidate", Instant.parse("2026-04-16T12:45:00Z")));
+        graphOperations.upsertItemLinks(
+                MEMORY_ID,
+                List.of(
+                        link(101L, 701L, ItemLinkType.SEMANTIC, 0.99d),
+                        link(102L, 701L, ItemLinkType.SEMANTIC, 0.98d),
+                        link(103L, 701L, ItemLinkType.SEMANTIC, 0.97d)));
+
+        StepVerifier.create(
+                        assistant.assist(
+                                CONTEXT, CONFIG, SIMPLE_CONFIG.graphAssist(), directSeeds()))
+                .assertNext(
+                        result -> {
+                            var candidate =
+                                    result.items().stream()
+                                            .filter(item -> item.sourceId().equals("701"))
+                                            .findFirst()
+                                            .orElseThrow();
+                            assertThat(candidate.finalScore()).isLessThan(1.0d);
+                        })
                 .verifyComplete();
     }
 

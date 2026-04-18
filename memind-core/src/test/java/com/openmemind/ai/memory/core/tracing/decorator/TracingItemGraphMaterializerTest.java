@@ -20,9 +20,11 @@ import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializationResult;
 import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
 import com.openmemind.ai.memory.core.support.RecordingMemoryObserver;
+import com.openmemind.ai.memory.core.tracing.MemoryAttributes;
 import com.openmemind.ai.memory.core.tracing.MemorySpanNames;
 import com.openmemind.ai.memory.core.tracing.ObservationContext;
 import java.time.Instant;
@@ -39,18 +41,46 @@ class TracingItemGraphMaterializerTest {
         var observer = new RecordingMemoryObserver();
         ItemGraphMaterializer materializer =
                 new TracingItemGraphMaterializer(
-                        (memoryId, items, entries) -> Mono.empty(), observer);
+                        (memoryId, items, entries) ->
+                                Mono.just(
+                                        new ItemGraphMaterializationResult(
+                                                new ItemGraphMaterializationResult.Stats(
+                                                        2, 3, 1, 4, 2, 1))),
+                        observer);
 
         StepVerifier.create(
                         materializer.materialize(
                                 DefaultMemoryId.of("user-1", "agent-1"),
                                 List.of(newItem(101L)),
                                 List.of(newEntry())))
+                .assertNext(
+                        result ->
+                                assertThat(result.stats())
+                                        .isEqualTo(
+                                                new ItemGraphMaterializationResult.Stats(
+                                                        2, 3, 1, 4, 2, 1)))
                 .verifyComplete();
 
         assertThat(observer.monoContexts())
                 .extracting(ObservationContext::spanName)
                 .contains(MemorySpanNames.GRAPH_MATERIALIZE);
+
+        @SuppressWarnings("unchecked")
+        var resultAttributes =
+                ((ObservationContext<ItemGraphMaterializationResult>)
+                                observer.monoContexts().getFirst())
+                        .resultExtractor()
+                        .extract(
+                                new ItemGraphMaterializationResult(
+                                        new ItemGraphMaterializationResult.Stats(
+                                                2, 3, 1, 4, 2, 1)));
+        assertThat(resultAttributes)
+                .containsEntry(MemoryAttributes.EXTRACTION_GRAPH_ENTITY_COUNT, 2)
+                .containsEntry(MemoryAttributes.EXTRACTION_GRAPH_MENTION_COUNT, 3)
+                .containsEntry(MemoryAttributes.EXTRACTION_GRAPH_STRUCTURED_LINK_COUNT, 1)
+                .containsEntry(MemoryAttributes.EXTRACTION_GRAPH_SEMANTIC_SEARCH_HIT_COUNT, 4)
+                .containsEntry(MemoryAttributes.EXTRACTION_GRAPH_SEMANTIC_LINK_COUNT, 2)
+                .containsEntry(MemoryAttributes.EXTRACTION_GRAPH_SEMANTIC_SAME_BATCH_HIT_COUNT, 1);
     }
 
     private static MemoryItem newItem(Long id) {

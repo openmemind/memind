@@ -91,6 +91,14 @@ public class MemoryOptionsProjectionMapper {
                             "Whether item extraction should materialize the bounded item graph used"
                                     + " by graph-assisted insight building."),
                     Map.entry(
+                            "extraction.item.graph.semanticSearchHeadroom",
+                            "Additional vector hits fetched beyond maxSemanticLinksPerItem before"
+                                    + " deterministic semantic-link truncation."),
+                    Map.entry(
+                            "extraction.item.graph.semanticLinkConcurrency",
+                            "Maximum number of items whose semantic-link search may run"
+                                    + " concurrently during graph materialization."),
+                    Map.entry(
                             "extraction.insight.enabled",
                             "Whether insight building is enabled during extraction."),
                     Map.entry(
@@ -183,6 +191,10 @@ public class MemoryOptionsProjectionMapper {
                             "Number of highest-ranked direct hits pinned ahead of any graph-only"
                                     + " candidates."),
                     Map.entry(
+                            "retrieval.simple.graphAssist.semanticEvidenceDecayFactor",
+                            "Decay factor applied when multiple semantic graph paths converge on"
+                                    + " the same candidate during simple retrieval."),
+                    Map.entry(
                             "retrieval.simple.graphAssist.timeout",
                             "Maximum time budget reserved for graph-assisted expansion during a"
                                     + " simple retrieval request."),
@@ -273,6 +285,10 @@ public class MemoryOptionsProjectionMapper {
                             "retrieval.deep.graphAssist.protectDirectTopK",
                             "Number of highest-ranked direct slow-path hits pinned ahead of"
                                     + " graph-only candidates before rerank."),
+                    Map.entry(
+                            "retrieval.deep.graphAssist.semanticEvidenceDecayFactor",
+                            "Decay factor applied when multiple semantic graph paths converge on"
+                                    + " the same candidate during deep retrieval."),
                     Map.entry(
                             "retrieval.deep.graphAssist.timeout",
                             "Maximum time budget reserved for graph-assisted expansion during"

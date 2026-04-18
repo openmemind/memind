@@ -77,6 +77,29 @@ class SpringAiMemoryVectorTest {
         }
 
         @Test
+        @DisplayName("storeBatch should make fresh vectors immediately searchable")
+        void storeBatchShouldMakeFreshVectorsImmediatelySearchable() {
+            StepVerifier.create(
+                            memoryVector
+                                    .storeBatch(
+                                            memoryId,
+                                            List.of("alpha note", "beta note"),
+                                            List.of(Map.of(), Map.of()))
+                                    .then(
+                                            memoryVector
+                                                    .search(memoryId, "alpha note", 10)
+                                                    .collectList()))
+                    .assertNext(
+                            results -> {
+                                assertThat(results).isNotEmpty();
+                                assertThat(results)
+                                        .extracting(result -> result.text())
+                                        .contains("alpha note");
+                            })
+                    .verifyComplete();
+        }
+
+        @Test
         @DisplayName("should be able to search after storing")
         void shouldFindStoredDocument() {
             var vectorId = memoryVector.store(memoryId, "hello world", Map.of()).block();

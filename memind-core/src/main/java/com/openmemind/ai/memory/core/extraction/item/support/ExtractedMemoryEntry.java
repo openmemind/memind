@@ -33,7 +33,8 @@ import java.util.Map;
  * @param rawDataId Source data ID
  * @param contentHash Content hash (filled after deduplication)
  * @param insightTypes List of matched InsightType names (can be empty)
- * @param metadata Additional metadata (can be null; merged from ParsedSegment.metadata + LLM output metadata, including whenToUse)
+ * @param metadata Additional metadata (can be null; merged from ParsedSegment.metadata + LLM
+ *     output metadata, including tool-scoped keys such as whenToUse)
  */
 public record ExtractedMemoryEntry(
         String content,

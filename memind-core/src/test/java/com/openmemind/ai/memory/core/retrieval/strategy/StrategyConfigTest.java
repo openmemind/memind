@@ -122,6 +122,27 @@ class StrategyConfigTest {
     }
 
     @Test
+    @DisplayName("legacy simple strategy graph assist json defaults semantic evidence decay")
+    void legacySimpleStrategyGraphAssistJsonDefaultsSemanticEvidenceDecay() throws Exception {
+        var mapper = JsonUtils.newMapper();
+
+        StrategyConfig config =
+                mapper.readValue(
+                        """
+                        {
+                          "type":"simple",
+                          "enableKeywordSearch":true,
+                          "graphAssist":{"enabled":true,"timeout":"PT0.2S"}
+                        }
+                        """,
+                        StrategyConfig.class);
+
+        assertThat(config).isInstanceOf(SimpleStrategyConfig.class);
+        assertThat(((SimpleStrategyConfig) config).graphAssist().semanticEvidenceDecayFactor())
+                .isEqualTo(0.5d);
+    }
+
+    @Test
     @DisplayName("invalid simple strategy graph assist json fails fast")
     void invalidSimpleStrategyGraphAssistJsonFailsFast() {
         var mapper = JsonUtils.newMapper();
@@ -159,6 +180,26 @@ class StrategyConfigTest {
                                         StrategyConfig.class))
                 .isInstanceOf(Exception.class)
                 .hasMessageContaining("graph retrieval weights must keep graph below direct");
+    }
+
+    @Test
+    @DisplayName("invalid simple strategy semantic evidence decay fails fast")
+    void invalidSimpleStrategySemanticEvidenceDecayFailsFast() {
+        var mapper = JsonUtils.newMapper();
+
+        assertThatThrownBy(
+                        () ->
+                                mapper.readValue(
+                                        """
+                                        {
+                                          "type":"simple",
+                                          "enableKeywordSearch":true,
+                                          "graphAssist":{"enabled":true,"semanticEvidenceDecayFactor":-0.1,"timeout":"PT0.2S"}
+                                        }
+                                        """,
+                                        StrategyConfig.class))
+                .isInstanceOf(Exception.class)
+                .hasMessageContaining("semanticEvidenceDecayFactor must be non-negative");
     }
 
     @Test

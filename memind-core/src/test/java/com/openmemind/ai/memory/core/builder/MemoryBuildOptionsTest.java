@@ -181,6 +181,8 @@ class MemoryBuildOptionsTest {
         assertThat(options.maxTemporalLinksPerItem()).isEqualTo(10);
         assertThat(options.maxSemanticLinksPerItem()).isEqualTo(5);
         assertThat(options.semanticMinScore()).isEqualTo(0.82d);
+        assertThat(options.semanticSearchHeadroom()).isEqualTo(4);
+        assertThat(options.semanticLinkConcurrency()).isEqualTo(1);
     }
 
     @Test
@@ -225,6 +227,7 @@ class MemoryBuildOptionsTest {
         assertThat(options.minLinkStrength()).isEqualTo(0.55d);
         assertThat(options.minMentionConfidence()).isEqualTo(0.70f);
         assertThat(options.protectDirectTopK()).isEqualTo(3);
+        assertThat(options.semanticEvidenceDecayFactor()).isEqualTo(0.5d);
         assertThat(options.timeout()).isEqualTo(Duration.ofMillis(200));
     }
 
@@ -251,6 +254,7 @@ class MemoryBuildOptionsTest {
         assertThat(options.minLinkStrength()).isEqualTo(0.55d);
         assertThat(options.minMentionConfidence()).isEqualTo(0.70f);
         assertThat(options.protectDirectTopK()).isEqualTo(5);
+        assertThat(options.semanticEvidenceDecayFactor()).isEqualTo(0.5d);
         assertThat(options.timeout()).isEqualTo(Duration.ofMillis(300));
     }
 

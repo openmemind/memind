@@ -24,6 +24,6 @@ import reactor.core.publisher.Mono;
  */
 public interface ItemGraphMaterializer {
 
-    Mono<Void> materialize(
+    Mono<ItemGraphMaterializationResult> materialize(
             MemoryId memoryId, List<MemoryItem> items, List<ExtractedMemoryEntry> sourceEntries);
 }

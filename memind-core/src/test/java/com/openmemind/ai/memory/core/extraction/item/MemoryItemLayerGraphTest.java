@@ -18,6 +18,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
@@ -29,6 +30,7 @@ import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.item.dedup.DeduplicationResult;
 import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicator;
 import com.openmemind.ai.memory.core.extraction.item.extractor.MemoryItemExtractor;
+import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializationResult;
 import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
@@ -50,7 +52,7 @@ import reactor.test.StepVerifier;
 class MemoryItemLayerGraphTest {
 
     @Test
-    void extractShouldMaterializeGraphAfterItemInsertSucceeds() {
+    void extractShouldMaterializeGraphAfterStoreBatchAndItemInsert() {
         MemoryItemExtractor extractor = mock(MemoryItemExtractor.class);
         MemoryItemDeduplicator deduplicator = mock(MemoryItemDeduplicator.class);
         MemoryStore memoryStore = mock(MemoryStore.class);
@@ -106,7 +108,7 @@ class MemoryItemLayerGraphTest {
         when(vector.storeBatch(eq(memoryId), anyList(), anyList()))
                 .thenReturn(Mono.just(List.of("vec-1")));
         when(graphMaterializer.materialize(eq(memoryId), anyList(), eq(List.of(entry))))
-                .thenReturn(Mono.empty());
+                .thenReturn(Mono.just(ItemGraphMaterializationResult.empty()));
 
         StepVerifier.create(
                         layer.extract(
@@ -122,10 +124,23 @@ class MemoryItemLayerGraphTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<MemoryItem>> itemCaptor = ArgumentCaptor.forClass(List.class);
-        var inOrder = inOrder(itemOperations, graphMaterializer);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<String>> vectorTextCaptor = ArgumentCaptor.forClass(List.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Map<String, Object>>> vectorMetadataCaptor =
+                ArgumentCaptor.forClass(List.class);
+        var inOrder = inOrder(vector, itemOperations, graphMaterializer);
+        inOrder.verify(vector).storeBatch(eq(memoryId), anyList(), anyList());
         inOrder.verify(itemOperations).insertItems(eq(memoryId), itemCaptor.capture());
         inOrder.verify(graphMaterializer)
                 .materialize(eq(memoryId), eq(itemCaptor.getValue()), eq(List.of(entry)));
+        verify(vector)
+                .storeBatch(
+                        eq(memoryId), vectorTextCaptor.capture(), vectorMetadataCaptor.capture());
+        assertThat(vectorTextCaptor.getValue()).containsExactly("Remember OpenAI release note");
+        assertThat(itemCaptor.getValue().getFirst().metadata()).doesNotContainKey("whenToUse");
+        assertThat(vectorMetadataCaptor.getValue())
+                .containsExactly(Map.of("memoryId", memoryId.toIdentifier()));
     }
 
     @Test
@@ -194,5 +209,94 @@ class MemoryItemLayerGraphTest {
                                 config))
                 .assertNext(result -> assertThat(result.newItems()).hasSize(1))
                 .verifyComplete();
+    }
+
+    @Test
+    void extractShouldPreserveWhenToUseForToolItemsOnly() {
+        MemoryItemExtractor extractor = mock(MemoryItemExtractor.class);
+        MemoryItemDeduplicator deduplicator = mock(MemoryItemDeduplicator.class);
+        MemoryStore memoryStore = mock(MemoryStore.class);
+        InsightOperations insightOperations = mock(InsightOperations.class);
+        ItemOperations itemOperations = mock(ItemOperations.class);
+        MemoryVector vector = mock(MemoryVector.class);
+        ItemGraphMaterializer graphMaterializer = mock(ItemGraphMaterializer.class);
+        var layer =
+                new MemoryItemLayer(
+                        extractor, deduplicator, memoryStore, vector, graphMaterializer);
+        var memoryId = DefaultMemoryId.of("user1", "agent1");
+
+        var segment =
+                new ParsedSegment(
+                        "assistant: use web_search with site filters",
+                        "caption",
+                        0,
+                        1,
+                        "raw-1",
+                        Map.of(),
+                        new SegmentRuntimeContext(
+                                Instant.parse("2026-04-16T10:00:00Z"),
+                                Instant.parse("2026-04-16T10:00:00Z"),
+                                "User"));
+        var entry =
+                new ExtractedMemoryEntry(
+                        "web_search works best with site filters and narrow queries",
+                        0.95f,
+                        Instant.parse("2026-04-16T10:00:00Z"),
+                        Instant.parse("2026-04-16T10:00:00Z"),
+                        "raw-1",
+                        "hash-1",
+                        List.of(),
+                        Map.of(
+                                "whenToUse",
+                                "Use when searching documentation",
+                                "toolName",
+                                "web_search"),
+                        MemoryItemType.FACT,
+                        "tool");
+        var config =
+                new ItemExtractionConfig(
+                        MemoryScope.AGENT,
+                        ConversationContent.TYPE,
+                        MemoryCategory.agentCategories(),
+                        false,
+                        "English");
+
+        when(memoryStore.insightOperations()).thenReturn(insightOperations);
+        when(memoryStore.itemOperations()).thenReturn(itemOperations);
+        when(insightOperations.listInsightTypes()).thenReturn(DefaultInsightTypes.all());
+        when(extractor.extract(eq(List.of(segment)), anyList(), eq(config)))
+                .thenReturn(Mono.just(List.of(entry)));
+        when(deduplicator.deduplicate(eq(memoryId), anyList()))
+                .thenReturn(Mono.just(new DeduplicationResult(List.of(entry), List.of())));
+        when(deduplicator.spanName()).thenReturn("test");
+        when(vector.storeBatch(eq(memoryId), anyList(), anyList()))
+                .thenReturn(Mono.just(List.of("vec-1")));
+        when(graphMaterializer.materialize(eq(memoryId), anyList(), eq(List.of(entry))))
+                .thenReturn(Mono.just(ItemGraphMaterializationResult.empty()));
+
+        StepVerifier.create(
+                        layer.extract(
+                                memoryId,
+                                new RawDataResult(List.of(), List.of(segment), false),
+                                config))
+                .assertNext(result -> assertThat(result.newItems()).hasSize(1))
+                .verifyComplete();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<MemoryItem>> itemCaptor = ArgumentCaptor.forClass(List.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Map<String, Object>>> vectorMetadataCaptor =
+                ArgumentCaptor.forClass(List.class);
+        verify(itemOperations).insertItems(eq(memoryId), itemCaptor.capture());
+        verify(vector).storeBatch(eq(memoryId), anyList(), vectorMetadataCaptor.capture());
+        assertThat(itemCaptor.getValue().getFirst().metadata())
+                .containsEntry("whenToUse", "Use when searching documentation");
+        assertThat(vectorMetadataCaptor.getValue())
+                .containsExactly(
+                        Map.of(
+                                "memoryId",
+                                memoryId.toIdentifier(),
+                                "whenToUse",
+                                "Use when searching documentation"));
     }
 }

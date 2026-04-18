@@ -62,16 +62,22 @@ class MemoryOptionsProjectionMapperTest {
                 .extracting(MemoryOptionItemView::key)
                 .contains(
                         "extraction.item.graph.enabled",
+                        "extraction.item.graph.semanticSearchHeadroom",
+                        "extraction.item.graph.semanticLinkConcurrency",
                         "extraction.insight.graphAssist.enabled",
                         "extraction.insight.graphAssist.maxContextChars");
 
         updateValue(projection, "extraction.item.graph.enabled", true);
+        updateValue(projection, "extraction.item.graph.semanticSearchHeadroom", 6);
+        updateValue(projection, "extraction.item.graph.semanticLinkConcurrency", 2);
         updateValue(projection, "extraction.insight.graphAssist.enabled", true);
         updateValue(projection, "extraction.insight.graphAssist.maxContextChars", 1600);
 
         var rebuilt = mapper.toOptions(projection);
 
         assertThat(rebuilt.extraction().item().graph().enabled()).isTrue();
+        assertThat(rebuilt.extraction().item().graph().semanticSearchHeadroom()).isEqualTo(6);
+        assertThat(rebuilt.extraction().item().graph().semanticLinkConcurrency()).isEqualTo(2);
         assertThat(rebuilt.extraction().insight().graphAssist().enabled()).isTrue();
         assertThat(rebuilt.extraction().insight().graphAssist().maxContextChars()).isEqualTo(1600);
     }
@@ -85,6 +91,7 @@ class MemoryOptionsProjectionMapperTest {
                 .contains(
                         "retrieval.simple.graphAssist.enabled",
                         "retrieval.simple.graphAssist.maxSeedItems",
+                        "retrieval.simple.graphAssist.semanticEvidenceDecayFactor",
                         "retrieval.simple.graphAssist.timeout");
     }
 
@@ -95,6 +102,7 @@ class MemoryOptionsProjectionMapperTest {
         updateValue(projection, "retrieval.simple.keywordSearchEnabled", false);
         updateValue(projection, "retrieval.simple.graphAssist.enabled", true);
         updateValue(projection, "retrieval.simple.graphAssist.maxSeedItems", 4);
+        updateValue(projection, "retrieval.simple.graphAssist.semanticEvidenceDecayFactor", 0.65d);
         updateValue(projection, "retrieval.simple.graphAssist.timeout", "PT0.35S");
 
         var rebuilt = mapper.toOptions(projection);
@@ -102,6 +110,8 @@ class MemoryOptionsProjectionMapperTest {
         assertThat(rebuilt.retrieval().simple().keywordSearchEnabled()).isFalse();
         assertThat(rebuilt.retrieval().simple().graphAssist().enabled()).isTrue();
         assertThat(rebuilt.retrieval().simple().graphAssist().maxSeedItems()).isEqualTo(4);
+        assertThat(rebuilt.retrieval().simple().graphAssist().semanticEvidenceDecayFactor())
+                .isEqualTo(0.65d);
         assertThat(rebuilt.retrieval().simple().graphAssist().timeout())
                 .isEqualTo(java.time.Duration.ofMillis(350));
     }
@@ -115,6 +125,7 @@ class MemoryOptionsProjectionMapperTest {
                 .contains(
                         "retrieval.deep.graphAssist.enabled",
                         "retrieval.deep.graphAssist.maxSeedItems",
+                        "retrieval.deep.graphAssist.semanticEvidenceDecayFactor",
                         "retrieval.deep.graphAssist.timeout");
         assertThat(
                         projection.get("retrieval").stream()
@@ -132,12 +143,15 @@ class MemoryOptionsProjectionMapperTest {
 
         updateValue(projection, "retrieval.deep.graphAssist.enabled", true);
         updateValue(projection, "retrieval.deep.graphAssist.maxSeedItems", 6);
+        updateValue(projection, "retrieval.deep.graphAssist.semanticEvidenceDecayFactor", 0.40d);
         updateValue(projection, "retrieval.deep.graphAssist.timeout", "PT0.45S");
 
         var rebuilt = mapper.toOptions(projection);
 
         assertThat(rebuilt.retrieval().deep().graphAssist().enabled()).isTrue();
         assertThat(rebuilt.retrieval().deep().graphAssist().maxSeedItems()).isEqualTo(6);
+        assertThat(rebuilt.retrieval().deep().graphAssist().semanticEvidenceDecayFactor())
+                .isEqualTo(0.40d);
         assertThat(rebuilt.retrieval().deep().graphAssist().timeout())
                 .isEqualTo(java.time.Duration.ofMillis(450));
     }

@@ -21,6 +21,7 @@ import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.item.dedup.DeduplicationResult;
 import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicator;
 import com.openmemind.ai.memory.core.extraction.item.extractor.MemoryItemExtractor;
+import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializationResult;
 import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.item.graph.NoOpItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
@@ -335,7 +336,9 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                                             e.metadata() != null
                                                     ? e.metadata().get("whenToUse")
                                                     : null;
-                                    if (whenToUse instanceof String s && !s.isBlank()) {
+                                    if (shouldPersistWhenToUse(e)
+                                            && whenToUse instanceof String s
+                                            && !s.isBlank()) {
                                         meta.put("whenToUse", s);
                                     }
                                     return Map.<String, Object>copyOf(meta);
@@ -365,7 +368,11 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                         newItems ->
                                 graphMaterializer
                                         .materialize(memoryId, newItems, newEntries)
-                                        .onErrorResume(ignored -> Mono.empty())
+                                        .onErrorResume(
+                                                ignored ->
+                                                        Mono.just(
+                                                                ItemGraphMaterializationResult
+                                                                        .empty()))
                                         .thenReturn(
                                                 new MemoryItemResult(
                                                         newItems, resolvedInsightTypes)));
@@ -411,10 +418,20 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
         if (entry.metadata() != null) {
             result.putAll(entry.metadata());
         }
+        if (!shouldPersistWhenToUse(entry)) {
+            result.remove("whenToUse");
+        }
         if (entry.insightTypes() != null && !entry.insightTypes().isEmpty()) {
             result.put("insightTypes", entry.insightTypes());
         }
         return result.isEmpty() ? Map.of() : Map.copyOf(result);
+    }
+
+    private boolean shouldPersistWhenToUse(ExtractedMemoryEntry entry) {
+        if (entry == null || entry.category() == null) {
+            return false;
+        }
+        return MemoryCategory.byName(entry.category()).orElse(null) == MemoryCategory.TOOL;
     }
 
     private List<MemoryInsightType> resolveInsightTypes() {

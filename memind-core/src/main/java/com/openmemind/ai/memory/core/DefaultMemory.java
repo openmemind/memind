@@ -324,6 +324,7 @@ public class DefaultMemory implements Memory {
                                                 graph.minLinkStrength(),
                                                 graph.minMentionConfidence(),
                                                 graph.protectDirectTopK(),
+                                                graph.semanticEvidenceDecayFactor(),
                                                 graph.timeout()),
                                         MemoryThreadAssistConfigMapper.toSimpleConfig(
                                                 buildOptions)));
@@ -361,6 +362,7 @@ public class DefaultMemory implements Memory {
                                         graph.minLinkStrength(),
                                         graph.minMentionConfidence(),
                                         graph.protectDirectTopK(),
+                                        graph.semanticEvidenceDecayFactor(),
                                         graph.timeout()),
                                 MemoryThreadAssistConfigMapper.toDeepConfig(buildOptions));
                 var tier3 =

@@ -78,6 +78,29 @@ class MemoryOptionsCodecTest {
     }
 
     @Test
+    void roundTripsItemGraphSemanticHardeningOptions() {
+        var options =
+                MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults()
+                                                        .withEnabled(true)
+                                                        .withSemanticSearchHeadroom(6)
+                                                        .withSemanticLinkConcurrency(2)),
+                                        InsightExtractionOptions.defaults()))
+                        .build();
+
+        String json = codec.write(options);
+
+        assertThat(codec.read(json)).isEqualTo(options);
+    }
+
+    @Test
     void roundTripsRetrievalGraphAssistOptions() {
         var options =
                 MemoryBuildOptions.builder()
@@ -90,11 +113,21 @@ class MemoryOptionsCodecTest {
                                                 RetrievalOptions.defaults().simple().itemTopK(),
                                                 RetrievalOptions.defaults().simple().rawDataTopK(),
                                                 false,
-                                                SimpleRetrievalGraphOptions.defaults()
-                                                        .withEnabled(true)
-                                                        .withMaxSeedItems(4)
-                                                        .withTimeout(
-                                                                java.time.Duration.ofMillis(350))),
+                                                new SimpleRetrievalGraphOptions(
+                                                        true,
+                                                        4,
+                                                        12,
+                                                        2,
+                                                        2,
+                                                        2,
+                                                        3,
+                                                        8,
+                                                        0.35d,
+                                                        0.55d,
+                                                        0.70f,
+                                                        3,
+                                                        0.65d,
+                                                        java.time.Duration.ofMillis(350))),
                                         RetrievalOptions.defaults().deep(),
                                         RetrievalOptions.defaults().advanced()))
                         .build();
@@ -133,6 +166,7 @@ class MemoryOptionsCodecTest {
                                                         0.55d,
                                                         0.70f,
                                                         5,
+                                                        0.40d,
                                                         java.time.Duration.ofMillis(450))),
                                         RetrievalOptions.defaults().advanced()))
                         .build();

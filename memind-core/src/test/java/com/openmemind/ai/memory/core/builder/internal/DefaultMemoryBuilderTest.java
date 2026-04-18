@@ -39,6 +39,7 @@ import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalAdvancedOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalCommonOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalOptions;
+import com.openmemind.ai.memory.core.builder.SimpleRetrievalGraphOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
 import com.openmemind.ai.memory.core.builder.SufficiencyOptions;
 import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
@@ -65,6 +66,7 @@ import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepRetrievalStrategy;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
+import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
@@ -206,6 +208,61 @@ class DefaultMemoryBuilderTest {
     }
 
     @Test
+    void defaultRetrievalConfigMapsSimpleGraphAssistSemanticEvidenceDecayFactor() {
+        var configured =
+                MemoryBuildOptions.builder()
+                        .retrieval(
+                                new RetrievalOptions(
+                                        RetrievalCommonOptions.defaults(),
+                                        new SimpleRetrievalOptions(
+                                                java.time.Duration.ofSeconds(10),
+                                                5,
+                                                15,
+                                                5,
+                                                true,
+                                                new SimpleRetrievalGraphOptions(
+                                                        true,
+                                                        6,
+                                                        12,
+                                                        2,
+                                                        2,
+                                                        2,
+                                                        3,
+                                                        8,
+                                                        0.35d,
+                                                        0.55d,
+                                                        0.70f,
+                                                        3,
+                                                        0.65d,
+                                                        java.time.Duration.ofMillis(200))),
+                                        DeepRetrievalOptions.defaults(),
+                                        RetrievalAdvancedOptions.defaults()))
+                        .build();
+
+        var memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(CHAT_CLIENT)
+                                .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .options(configured)
+                                .build();
+
+        RetrievalConfig runtimeConfig =
+                invokeMethod(
+                        memory,
+                        "defaultRetrievalConfig",
+                        RetrievalConfig.class,
+                        new Class<?>[] {RetrievalConfig.Strategy.class},
+                        RetrievalConfig.Strategy.SIMPLE);
+
+        assertThat(runtimeConfig.strategyConfig()).isInstanceOf(SimpleStrategyConfig.class);
+        var simpleConfig = (SimpleStrategyConfig) runtimeConfig.strategyConfig();
+        assertThat(simpleConfig.graphAssist().semanticEvidenceDecayFactor()).isEqualTo(0.65d);
+    }
+
+    @Test
     void defaultRetrievalConfigMapsDeepGraphAssistOptionsIntoRuntimeStrategyConfig() {
         var configured =
                 MemoryBuildOptions.builder()
@@ -234,6 +291,7 @@ class DefaultMemoryBuilderTest {
                                                         0.55d,
                                                         0.70f,
                                                         5,
+                                                        0.45d,
                                                         java.time.Duration.ofMillis(300))),
                                         RetrievalAdvancedOptions.defaults()))
                         .build();
@@ -261,6 +319,7 @@ class DefaultMemoryBuilderTest {
         assertThat(deepConfig.graphAssist().enabled()).isTrue();
         assertThat(deepConfig.graphAssist().maxExpandedItems()).isEqualTo(16);
         assertThat(deepConfig.graphAssist().protectDirectTopK()).isEqualTo(5);
+        assertThat(deepConfig.graphAssist().semanticEvidenceDecayFactor()).isEqualTo(0.45d);
     }
 
     @Test

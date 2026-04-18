@@ -51,7 +51,7 @@ class DefaultItemGraphMaterializerTest {
         var graphOps = new InMemoryGraphOperations();
         var vector = new StubMemoryVector();
         vector.register(
-                "Use when asked about OpenAI rollout",
+                "User discussed OpenAI deployment",
                 new VectorSearchResult("vector-77", "existing note", 0.93f, Map.of()));
         var itemOps = new InMemoryItemOperations();
         itemOps.insertItems(
@@ -77,6 +77,21 @@ class DefaultItemGraphMaterializerTest {
                         Map.of("whenToUse", "Use when asked about OpenAI rollout"));
 
         StepVerifier.create(materializer.materialize(MEMORY_ID, List.of(item), List.of(newEntry())))
+                .assertNext(
+                        result ->
+                                assertThat(result.stats())
+                                        .extracting(
+                                                ItemGraphMaterializationResult.Stats::entityCount,
+                                                ItemGraphMaterializationResult.Stats::mentionCount,
+                                                ItemGraphMaterializationResult.Stats
+                                                        ::structuredItemLinkCount,
+                                                ItemGraphMaterializationResult.Stats
+                                                        ::semanticSearchHitCount,
+                                                ItemGraphMaterializationResult.Stats
+                                                        ::semanticLinkCount,
+                                                ItemGraphMaterializationResult.Stats
+                                                        ::semanticSameBatchHitCount)
+                                        .containsExactly(0, 0, 0, 1, 1, 0))
                 .verifyComplete();
 
         assertThat(graphOps.listItemLinks(MEMORY_ID))
@@ -95,8 +110,40 @@ class DefaultItemGraphMaterializerTest {
         var entries =
                 List.of(entryWithSharedEntities(), entryWithSharedEntitiesAndCausalReference());
 
-        StepVerifier.create(materializer.materialize(MEMORY_ID, items, entries)).verifyComplete();
-        StepVerifier.create(materializer.materialize(MEMORY_ID, items, entries)).verifyComplete();
+        StepVerifier.create(materializer.materialize(MEMORY_ID, items, entries))
+                .assertNext(
+                        result ->
+                                assertThat(result.stats())
+                                        .extracting(
+                                                ItemGraphMaterializationResult.Stats::entityCount,
+                                                ItemGraphMaterializationResult.Stats::mentionCount,
+                                                ItemGraphMaterializationResult.Stats
+                                                        ::structuredItemLinkCount,
+                                                ItemGraphMaterializationResult.Stats
+                                                        ::semanticSearchHitCount,
+                                                ItemGraphMaterializationResult.Stats
+                                                        ::semanticLinkCount,
+                                                ItemGraphMaterializationResult.Stats
+                                                        ::semanticSameBatchHitCount)
+                                        .containsExactly(2, 4, 2, 0, 0, 0))
+                .verifyComplete();
+        StepVerifier.create(materializer.materialize(MEMORY_ID, items, entries))
+                .assertNext(
+                        result ->
+                                assertThat(result.stats())
+                                        .extracting(
+                                                ItemGraphMaterializationResult.Stats::entityCount,
+                                                ItemGraphMaterializationResult.Stats::mentionCount,
+                                                ItemGraphMaterializationResult.Stats
+                                                        ::structuredItemLinkCount,
+                                                ItemGraphMaterializationResult.Stats
+                                                        ::semanticSearchHitCount,
+                                                ItemGraphMaterializationResult.Stats
+                                                        ::semanticLinkCount,
+                                                ItemGraphMaterializationResult.Stats
+                                                        ::semanticSameBatchHitCount)
+                                        .containsExactly(2, 4, 2, 0, 0, 0))
+                .verifyComplete();
 
         assertThat(graphOps.listItemEntityMentions(MEMORY_ID)).hasSize(4);
         assertThat(graphOps.listItemLinks(MEMORY_ID))
