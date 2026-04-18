@@ -22,11 +22,16 @@ public record SimpleRetrievalOptions(
         int itemTopK,
         int rawDataTopK,
         boolean keywordSearchEnabled,
-        SimpleRetrievalGraphOptions graphAssist) {
+        SimpleRetrievalGraphOptions graphAssist,
+        SimpleMemoryThreadAssistOptions memoryThreadAssist) {
 
     public SimpleRetrievalOptions {
         timeout = Objects.requireNonNull(timeout, "timeout");
         graphAssist = graphAssist != null ? graphAssist : SimpleRetrievalGraphOptions.defaults();
+        memoryThreadAssist =
+                memoryThreadAssist != null
+                        ? memoryThreadAssist
+                        : SimpleMemoryThreadAssistOptions.defaults();
     }
 
     public SimpleRetrievalOptions(
@@ -41,10 +46,40 @@ public record SimpleRetrievalOptions(
                 itemTopK,
                 rawDataTopK,
                 keywordSearchEnabled,
-                SimpleRetrievalGraphOptions.defaults());
+                SimpleRetrievalGraphOptions.defaults(),
+                SimpleMemoryThreadAssistOptions.defaults());
+    }
+
+    public SimpleRetrievalOptions(
+            Duration timeout,
+            int insightTopK,
+            int itemTopK,
+            int rawDataTopK,
+            boolean keywordSearchEnabled,
+            SimpleRetrievalGraphOptions graphAssist) {
+        this(
+                timeout,
+                insightTopK,
+                itemTopK,
+                rawDataTopK,
+                keywordSearchEnabled,
+                graphAssist,
+                SimpleMemoryThreadAssistOptions.defaults());
     }
 
     public static SimpleRetrievalOptions defaults() {
         return new SimpleRetrievalOptions(Duration.ofSeconds(10), 5, 15, 5, true);
+    }
+
+    public SimpleRetrievalOptions withMemoryThreadAssist(
+            SimpleMemoryThreadAssistOptions memoryThreadAssist) {
+        return new SimpleRetrievalOptions(
+                timeout,
+                insightTopK,
+                itemTopK,
+                rawDataTopK,
+                keywordSearchEnabled,
+                graphAssist,
+                memoryThreadAssist);
     }
 }

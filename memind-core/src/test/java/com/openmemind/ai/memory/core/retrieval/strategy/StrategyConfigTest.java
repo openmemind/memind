@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core.retrieval.strategy;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.openmemind.ai.memory.core.builder.SimpleMemoryThreadAssistOptions;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -158,5 +159,33 @@ class StrategyConfigTest {
                                         StrategyConfig.class))
                 .isInstanceOf(Exception.class)
                 .hasMessageContaining("graph retrieval weights must keep graph below direct");
+    }
+
+    @Test
+    @DisplayName("legacy simple strategy json without memory thread assist still deserializes")
+    void legacySimpleStrategyJsonWithoutMemoryThreadAssistStillDeserializes() throws Exception {
+        var mapper = JsonUtils.newMapper();
+
+        StrategyConfig config =
+                mapper.readValue(
+                        """
+                        {"type":"simple","enableKeywordSearch":false}
+                        """,
+                        StrategyConfig.class);
+
+        assertThat(config).isInstanceOf(SimpleStrategyConfig.class);
+        assertThat(((SimpleStrategyConfig) config).memoryThreadAssist())
+                .isEqualTo(SimpleStrategyConfig.MemoryThreadAssistConfig.defaults());
+    }
+
+    @Test
+    @DisplayName("memory thread assist options reject negative protect direct top k")
+    void memoryThreadAssistOptionsRejectNegativeProtectDirectTopK() {
+        assertThatThrownBy(
+                        () ->
+                                new SimpleMemoryThreadAssistOptions(
+                                        true, 2, 3, -1, java.time.Duration.ofMillis(150)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("protectDirectTopK");
     }
 }

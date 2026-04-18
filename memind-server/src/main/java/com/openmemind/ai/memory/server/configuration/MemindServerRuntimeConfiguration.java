@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.server.configuration;
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.builder.MemoryBuildOptionsSanitizer;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
@@ -82,6 +83,8 @@ public class MemindServerRuntimeConfiguration {
             MemoryStore memoryStore = requireRuntimeDependency(memoryStoreProvider);
             MemoryBuffer memoryBuffer = requireRuntimeDependency(memoryBufferProvider);
             MemoryVector memoryVector = requireRuntimeDependency(memoryVectorProvider);
+            MemoryBuildOptions effectiveOptions =
+                    new MemoryBuildOptionsSanitizer().sanitize(options, memoryStore).options();
             List<ContentParser> parsers = resolveContentParsers(contentParserProvider);
             ContentParserRegistry contentParserRegistry =
                     parsers.isEmpty() ? null : new DefaultContentParserRegistry(parsers);
@@ -94,7 +97,7 @@ public class MemindServerRuntimeConfiguration {
                             .store(memoryStore)
                             .buffer(memoryBuffer)
                             .vector(memoryVector)
-                            .options(options)
+                            .options(effectiveOptions)
                             .externallyManaged(true);
             if (bubbleTrackerStore != null) {
                 builder.bubbleTrackerStore(bubbleTrackerStore);
@@ -117,7 +120,7 @@ public class MemindServerRuntimeConfiguration {
             if (rerankerBean != null) {
                 builder.reranker(rerankerBean);
             }
-            return builder.build();
+            return new MemoryRuntimeFactory.CreationResult(builder.build(), effectiveOptions);
         };
     }
 
@@ -141,8 +144,9 @@ public class MemindServerRuntimeConfiguration {
         return arguments -> {
             InitialRuntimeState state = loadOrInitialize(repository, codec);
             try {
-                runtimeManager.swap(
-                        runtimeFactory.create(state.options()), state.options(), state.version());
+                MemoryRuntimeFactory.CreationResult created =
+                        runtimeFactory.create(state.options());
+                runtimeManager.swap(created.memory(), created.effectiveOptions(), state.version());
             } catch (MemoryRuntimeUnavailableException exception) {
                 log.warn("Memory runtime is unavailable at startup: {}", exception.getMessage());
             }

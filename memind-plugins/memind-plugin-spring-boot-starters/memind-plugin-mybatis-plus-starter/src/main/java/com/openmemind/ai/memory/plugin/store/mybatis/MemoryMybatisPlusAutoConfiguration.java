@@ -45,6 +45,8 @@ import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemLinkMapper
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryRawDataMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryResourceMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadItemMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.schema.DatabaseDialect;
 import com.openmemind.ai.memory.plugin.store.mybatis.schema.DatabaseDialectDetector;
 import com.openmemind.ai.memory.plugin.store.mybatis.textsearch.mysql.MysqlFulltextTextSearch;
@@ -135,6 +137,8 @@ public class MemoryMybatisPlusAutoConfiguration {
             MemoryInsightTypeMapper insightTypeMapper,
             MemoryInsightMapper insightMapper,
             MemoryResourceMapper resourceMapper,
+            MemoryThreadMapper threadMapper,
+            MemoryThreadItemMapper threadItemMapper,
             GraphOperations graphOperations,
             ObjectProvider<ResourceStore> resourceStoreProvider) {
         return new MybatisPlusMemoryStore(
@@ -144,7 +148,9 @@ public class MemoryMybatisPlusAutoConfiguration {
                 insightMapper,
                 resourceMapper,
                 resourceStoreProvider.getIfAvailable(),
-                graphOperations);
+                graphOperations,
+                threadMapper,
+                threadItemMapper);
     }
 
     @Bean

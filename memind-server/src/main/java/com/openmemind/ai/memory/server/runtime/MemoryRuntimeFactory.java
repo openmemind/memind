@@ -19,5 +19,7 @@ import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 @FunctionalInterface
 public interface MemoryRuntimeFactory {
 
-    Memory create(MemoryBuildOptions options);
+    CreationResult create(MemoryBuildOptions options);
+
+    record CreationResult(Memory memory, MemoryBuildOptions effectiveOptions) {}
 }

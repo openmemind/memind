@@ -55,6 +55,11 @@ import com.openmemind.ai.memory.core.extraction.rawdata.caption.LlmConversationC
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
+import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
+import com.openmemind.ai.memory.core.extraction.thread.MemoryThreadLayer;
+import com.openmemind.ai.memory.core.extraction.thread.derivation.RuleBasedMemoryThreadDeriver;
+import com.openmemind.ai.memory.core.extraction.thread.scheduler.MemoryThreadBuildScheduler;
+import com.openmemind.ai.memory.core.extraction.thread.text.RuleBasedMemoryThreadTextGenerator;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicy;
@@ -128,6 +133,8 @@ final class MemoryExtractionAssembler {
                         IdUtils.snowflake(),
                         null,
                         graphMaterializer);
+        MemoryItemExtractStep memoryItemStep = memoryItemLayer;
+        MemoryThreadLayer memoryThreadLayer = null;
 
         InsightGenerator insightGenerator =
                 new LlmInsightGenerator(
@@ -181,10 +188,29 @@ final class MemoryExtractionAssembler {
                         context.options().extraction().rawdata().commitDetection(),
                         registry.resolve(ChatClientSlot.CONTEXT_COMMIT_DETECTOR),
                         context.promptRegistry());
+        AutoCloseable extractionLifecycle = insightBuildScheduler;
+        if (context.options().memoryThread().enabled()) {
+            MemoryThreadBuildScheduler memoryThreadScheduler =
+                    new MemoryThreadBuildScheduler(
+                            context.memoryStore().threadOperations(),
+                            context.memoryStore(),
+                            new RuleBasedMemoryThreadDeriver(context.options().memoryThread()),
+                            new RuleBasedMemoryThreadTextGenerator(),
+                            context.options().memoryThread(),
+                            context.memoryObserver(),
+                            context.memoryThreadForcedDisableReason());
+            memoryThreadLayer =
+                    new MemoryThreadLayer(
+                            memoryItemLayer,
+                            memoryThreadScheduler,
+                            context.options().memoryThread());
+            memoryItemStep = memoryThreadLayer;
+            extractionLifecycle = lifecycle(insightBuildScheduler, memoryThreadLayer);
+        }
         MemoryExtractor pipeline =
                 new DefaultMemoryExtractor(
                         rawDataLayer,
-                        memoryItemLayer,
+                        memoryItemStep,
                         insightLayer,
                         rawDataLayer,
                         contextCommitDetector,
@@ -197,7 +223,8 @@ final class MemoryExtractionAssembler {
                         ingestionPolicyRegistry,
                         context.options().extraction().rawdata(),
                         context.options().extraction().item());
-        return new MemoryExtractionAssembly(pipeline, insightLayer, insightBuildScheduler);
+        return new MemoryExtractionAssembly(
+                pipeline, insightLayer, extractionLifecycle, memoryThreadLayer);
     }
 
     private ResourceFetcher resolveResourceFetcher(ResourceFetcher runtimeFetcher) {
@@ -354,5 +381,30 @@ final class MemoryExtractionAssembler {
                 .filter(processor -> !processor.supportsInsight())
                 .map(RawContentProcessor::contentType)
                 .collect(Collectors.toSet());
+    }
+
+    private AutoCloseable lifecycle(AutoCloseable... closeables) {
+        return () -> {
+            RuntimeException failure = null;
+            for (AutoCloseable closeable : closeables) {
+                if (closeable == null) {
+                    continue;
+                }
+                try {
+                    closeable.close();
+                } catch (Exception e) {
+                    if (failure == null) {
+                        failure =
+                                new IllegalStateException(
+                                        "Failed to close extraction lifecycle", e);
+                    } else {
+                        failure.addSuppressed(e);
+                    }
+                }
+            }
+            if (failure != null) {
+                throw failure;
+            }
+        };
     }
 }

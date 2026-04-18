@@ -21,6 +21,8 @@ import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
 import com.openmemind.ai.memory.core.data.MemoryResource;
+import com.openmemind.ai.memory.core.data.MemoryThread;
+import com.openmemind.ai.memory.core.data.MemoryThreadItem;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -30,9 +32,12 @@ import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
+import com.openmemind.ai.memory.core.store.thread.MemoryThreadOperations;
+import com.openmemind.ai.memory.core.store.thread.NoOpMemoryThreadOperations;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.InsightConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.InsightTypeConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.ItemConverter;
+import com.openmemind.ai.memory.plugin.store.mybatis.converter.MemoryThreadConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.RawDataConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.ResourceConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryInsightDO;
@@ -40,17 +45,23 @@ import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryInsightTyp
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryItemDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryRawDataDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryResourceDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadItemDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightTypeMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryRawDataMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryResourceMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadItemMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMapper;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -61,7 +72,8 @@ public class MybatisPlusMemoryStore
                 RawDataOperations,
                 ItemOperations,
                 InsightOperations,
-                ResourceOperations {
+                ResourceOperations,
+                MemoryThreadOperations {
 
     private final MemoryRawDataMapper rawDataMapper;
     private final MemoryItemMapper itemMapper;
@@ -70,13 +82,24 @@ public class MybatisPlusMemoryStore
     private final MemoryResourceMapper resourceMapper;
     private final ResourceStore resourceStore;
     private final GraphOperations graphOperations;
+    private final MemoryThreadMapper threadMapper;
+    private final MemoryThreadItemMapper threadItemMapper;
 
     public MybatisPlusMemoryStore(
             MemoryRawDataMapper rawDataMapper,
             MemoryItemMapper itemMapper,
             MemoryInsightTypeMapper insightTypeMapper,
             MemoryInsightMapper insightMapper) {
-        this(rawDataMapper, itemMapper, insightTypeMapper, insightMapper, null, null, null);
+        this(
+                rawDataMapper,
+                itemMapper,
+                insightTypeMapper,
+                insightMapper,
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     public MybatisPlusMemoryStore(
@@ -93,6 +116,8 @@ public class MybatisPlusMemoryStore
                 insightMapper,
                 resourceMapper,
                 resourceStore,
+                null,
+                null,
                 null);
     }
 
@@ -104,6 +129,28 @@ public class MybatisPlusMemoryStore
             MemoryResourceMapper resourceMapper,
             ResourceStore resourceStore,
             GraphOperations graphOperations) {
+        this(
+                rawDataMapper,
+                itemMapper,
+                insightTypeMapper,
+                insightMapper,
+                resourceMapper,
+                resourceStore,
+                graphOperations,
+                null,
+                null);
+    }
+
+    public MybatisPlusMemoryStore(
+            MemoryRawDataMapper rawDataMapper,
+            MemoryItemMapper itemMapper,
+            MemoryInsightTypeMapper insightTypeMapper,
+            MemoryInsightMapper insightMapper,
+            MemoryResourceMapper resourceMapper,
+            ResourceStore resourceStore,
+            GraphOperations graphOperations,
+            MemoryThreadMapper threadMapper,
+            MemoryThreadItemMapper threadItemMapper) {
         this.rawDataMapper = rawDataMapper;
         this.itemMapper = itemMapper;
         this.insightTypeMapper = insightTypeMapper;
@@ -112,6 +159,8 @@ public class MybatisPlusMemoryStore
         this.resourceStore = resourceStore;
         this.graphOperations =
                 graphOperations != null ? graphOperations : NoOpGraphOperations.INSTANCE;
+        this.threadMapper = threadMapper;
+        this.threadItemMapper = threadItemMapper;
     }
 
     @Override
@@ -142,6 +191,13 @@ public class MybatisPlusMemoryStore
     @Override
     public GraphOperations graphOperations() {
         return graphOperations;
+    }
+
+    @Override
+    public MemoryThreadOperations threadOperations() {
+        return threadMapper != null && threadItemMapper != null
+                ? this
+                : NoOpMemoryThreadOperations.INSTANCE;
     }
 
     // ===== MemoryRawData =====
@@ -401,6 +457,140 @@ public class MybatisPlusMemoryStore
         itemMapper.delete(memoryQuery(id, MemoryItemDO.class).in("biz_id", itemIds));
     }
 
+    // ===== MemoryThread =====
+
+    @Override
+    @Transactional
+    public void upsertThreads(MemoryId id, List<MemoryThread> threads) {
+        if (threadMapper == null || threads == null || threads.isEmpty()) {
+            return;
+        }
+
+        var threadIds = threads.stream().map(MemoryThread::id).filter(Objects::nonNull).toList();
+        Map<Long, MemoryThreadDO> existingByBizId =
+                threadIds.isEmpty()
+                        ? Map.of()
+                        : threadMapper
+                                .selectList(
+                                        memoryQuery(id, MemoryThreadDO.class)
+                                                .in("biz_id", threadIds))
+                                .stream()
+                                .collect(
+                                        Collectors.toMap(
+                                                MemoryThreadDO::getBizId, Function.identity()));
+
+        threads.forEach(
+                thread -> {
+                    Objects.requireNonNull(thread.id(), "memoryThread.id");
+                    MemoryThreadDO dataObject = MemoryThreadConverter.toDO(id, thread);
+                    MemoryThreadDO existing = existingByBizId.get(thread.id());
+                    if (existing != null) {
+                        dataObject.setId(existing.getId());
+                        threadMapper.updateById(dataObject);
+                    } else {
+                        threadMapper.insert(dataObject);
+                    }
+                });
+    }
+
+    @Override
+    @Transactional
+    public void upsertThreadItems(MemoryId id, List<MemoryThreadItem> items) {
+        if (threadItemMapper == null || items == null || items.isEmpty()) {
+            return;
+        }
+
+        validateIncomingMembershipBatch(items);
+
+        var membershipIds =
+                items.stream().map(MemoryThreadItem::id).filter(Objects::nonNull).toList();
+        var itemIds = items.stream().map(MemoryThreadItem::itemId).toList();
+        Map<Long, MemoryThreadItemDO> existingByBizId =
+                membershipIds.isEmpty()
+                        ? Map.of()
+                        : threadItemMapper
+                                .selectList(
+                                        memoryQuery(id, MemoryThreadItemDO.class)
+                                                .in("biz_id", membershipIds))
+                                .stream()
+                                .collect(
+                                        Collectors.toMap(
+                                                MemoryThreadItemDO::getBizId, Function.identity()));
+        Map<Long, MemoryThreadItemDO> existingByItemId =
+                itemIds.isEmpty()
+                        ? Map.of()
+                        : threadItemMapper
+                                .selectList(
+                                        memoryQuery(id, MemoryThreadItemDO.class)
+                                                .in("item_id", itemIds))
+                                .stream()
+                                .collect(
+                                        Collectors.toMap(
+                                                MemoryThreadItemDO::getItemId,
+                                                Function.identity(),
+                                                (left, right) -> left));
+
+        items.forEach(
+                item -> {
+                    Objects.requireNonNull(item.id(), "memoryThreadItem.id");
+                    MemoryThreadItemDO existingForItem = existingByItemId.get(item.itemId());
+                    if (existingForItem != null
+                            && !Objects.equals(existingForItem.getBizId(), item.id())) {
+                        throw new IllegalStateException(
+                                "single-thread-per-item violated for itemId=" + item.itemId());
+                    }
+
+                    MemoryThreadItemDO dataObject = MemoryThreadConverter.toDO(id, item);
+                    MemoryThreadItemDO existing = existingByBizId.get(item.id());
+                    if (existing != null) {
+                        dataObject.setId(existing.getId());
+                        threadItemMapper.updateById(dataObject);
+                    } else {
+                        threadItemMapper.insert(dataObject);
+                    }
+                });
+    }
+
+    @Override
+    public List<MemoryThread> listThreads(MemoryId id) {
+        if (threadMapper == null) {
+            return List.of();
+        }
+        return threadMapper.selectList(memoryQuery(id, MemoryThreadDO.class)).stream()
+                .map(MemoryThreadConverter::toRecord)
+                .sorted(
+                        Comparator.comparingInt(MemoryThread::displayOrderHint)
+                                .thenComparing(
+                                        thread ->
+                                                thread.id() != null ? thread.id() : Long.MAX_VALUE)
+                                .thenComparing(MemoryThread::threadKey))
+                .toList();
+    }
+
+    @Override
+    public List<MemoryThreadItem> listThreadItems(MemoryId id) {
+        if (threadItemMapper == null) {
+            return List.of();
+        }
+        return threadItemMapper.selectList(memoryQuery(id, MemoryThreadItemDO.class)).stream()
+                .map(MemoryThreadConverter::toRecord)
+                .sorted(
+                        Comparator.comparingInt(MemoryThreadItem::sequenceHint)
+                                .thenComparing(MemoryThreadItem::itemId)
+                                .thenComparing(
+                                        item -> item.id() != null ? item.id() : Long.MAX_VALUE))
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public void deleteMembershipsByItemIds(MemoryId id, List<Long> itemIds) {
+        if (threadItemMapper == null || itemIds == null || itemIds.isEmpty()) {
+            return;
+        }
+        threadItemMapper.delete(memoryQuery(id, MemoryThreadItemDO.class).in("item_id", itemIds));
+    }
+
     // ===== MemoryInsightType =====
 
     @Override
@@ -573,6 +763,17 @@ public class MybatisPlusMemoryStore
         return new QueryWrapper<T>()
                 .eq("user_id", id.getAttribute("userId"))
                 .eq("agent_id", id.getAttribute("agentId"));
+    }
+
+    private void validateIncomingMembershipBatch(List<MemoryThreadItem> items) {
+        Map<Long, Long> threadByItemId = new HashMap<>();
+        for (MemoryThreadItem item : items) {
+            Long existingThreadId = threadByItemId.putIfAbsent(item.itemId(), item.threadId());
+            if (existingThreadId != null && !Objects.equals(existingThreadId, item.threadId())) {
+                throw new IllegalStateException(
+                        "single-thread-per-item violated for itemId=" + item.itemId());
+            }
+        }
     }
 
     /**

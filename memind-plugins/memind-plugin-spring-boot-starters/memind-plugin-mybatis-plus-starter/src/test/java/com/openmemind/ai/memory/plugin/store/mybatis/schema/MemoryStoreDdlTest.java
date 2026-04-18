@@ -68,7 +68,8 @@ class MemoryStoreDdlTest {
                         "db/migration/sqlite/V3__multimodal.sql",
                         "db/migration/sqlite/V4__bubble_state.sql",
                         "db/migration/sqlite/V5__item_temporal_fields.sql",
-                        "db/migration/sqlite/V6__graph_store.sql");
+                        "db/migration/sqlite/V6__graph_store.sql",
+                        "db/migration/sqlite/V7__memory_thread.sql");
     }
 
     @Test
@@ -85,7 +86,8 @@ class MemoryStoreDdlTest {
                         "db/migration/mysql/V3__multimodal.sql",
                         "db/migration/mysql/V4__bubble_state.sql",
                         "db/migration/mysql/V5__item_temporal_fields.sql",
-                        "db/migration/mysql/V6__graph_store.sql");
+                        "db/migration/mysql/V6__graph_store.sql",
+                        "db/migration/mysql/V7__memory_thread.sql");
     }
 
     @Test
@@ -104,7 +106,8 @@ class MemoryStoreDdlTest {
                         "db/migration/postgresql/V3__multimodal.sql",
                         "db/migration/postgresql/V4__bubble_state.sql",
                         "db/migration/postgresql/V5__item_temporal_fields.sql",
-                        "db/migration/postgresql/V6__graph_store.sql");
+                        "db/migration/postgresql/V6__graph_store.sql",
+                        "db/migration/postgresql/V7__memory_thread.sql");
     }
 
     @Test
@@ -130,6 +133,29 @@ class MemoryStoreDdlTest {
         assertThat(indexExists(dataSource, "uk_item_link_identity")).isTrue();
         assertThat(indexExists(dataSource, "idx_item_link_source_type")).isTrue();
         assertThat(indexExists(dataSource, "idx_item_link_target_type")).isTrue();
+    }
+
+    @Test
+    @DisplayName("memory thread migration creates bounded-read tables and indexes on SQLite")
+    void memoryThreadSchemaMigrationCreatesTablesAndIndexesOnSqlite(@TempDir Path tempDir) {
+        SQLiteDataSource dataSource = new SQLiteDataSource();
+        dataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("memory-thread.db"));
+        MemoryStoreDdl ddl = new MemoryStoreDdl(dataSource, detector);
+
+        ddl.runScript(
+                ds -> {
+                    ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
+                    populator.addScript(
+                            new ClassPathResource("db/migration/sqlite/V1__init_store.sql"));
+                    populator.addScript(
+                            new ClassPathResource("db/migration/sqlite/V7__memory_thread.sql"));
+                    populator.execute(ds);
+                });
+
+        assertThat(tableExists(dataSource, "memory_thread")).isTrue();
+        assertThat(tableExists(dataSource, "memory_thread_item")).isTrue();
+        assertThat(indexExists(dataSource, "uk_memory_thread_key")).isTrue();
+        assertThat(indexExists(dataSource, "idx_memory_thread_item_thread_sequence")).isTrue();
     }
 
     @Test
@@ -195,6 +221,21 @@ class MemoryStoreDdlTest {
                     }
                 }
                 return false;
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private boolean tableExists(DataSource dataSource, String tableName) {
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "SELECT name FROM sqlite_master WHERE type = 'table' AND name ="
+                                        + " ?")) {
+            statement.setString(1, tableName);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next();
             }
         } catch (Exception e) {
             throw new RuntimeException(e);

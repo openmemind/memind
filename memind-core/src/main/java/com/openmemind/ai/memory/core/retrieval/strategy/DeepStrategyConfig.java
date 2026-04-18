@@ -15,8 +15,11 @@ package com.openmemind.ai.memory.core.retrieval.strategy;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.openmemind.ai.memory.core.builder.DeepMemoryThreadAssistOptions;
+import com.openmemind.ai.memory.core.builder.SimpleMemoryThreadAssistOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalGraphOptions;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphSettings;
+import com.openmemind.ai.memory.core.retrieval.thread.RetrievalMemoryThreadSettings;
 import java.time.Duration;
 
 /**
@@ -39,13 +42,18 @@ public record DeepStrategyConfig(
         int tier2InitTopK,
         int bm25InitTopK,
         double minScore,
-        GraphAssistConfig graphAssist)
+        GraphAssistConfig graphAssist,
+        MemoryThreadAssistConfig memoryThreadAssist)
         implements StrategyConfig {
 
     public DeepStrategyConfig {
         queryExpansion = queryExpansion != null ? queryExpansion : QueryExpansionConfig.defaults();
         sufficiency = sufficiency != null ? sufficiency : SufficiencyConfig.defaults();
         graphAssist = graphAssist != null ? graphAssist : GraphAssistConfig.defaults();
+        memoryThreadAssist =
+                memoryThreadAssist != null
+                        ? memoryThreadAssist
+                        : MemoryThreadAssistConfig.defaults();
     }
 
     public DeepStrategyConfig(
@@ -60,7 +68,25 @@ public record DeepStrategyConfig(
                 tier2InitTopK,
                 bm25InitTopK,
                 minScore,
-                GraphAssistConfig.defaults());
+                GraphAssistConfig.defaults(),
+                MemoryThreadAssistConfig.defaults());
+    }
+
+    public DeepStrategyConfig(
+            QueryExpansionConfig queryExpansion,
+            SufficiencyConfig sufficiency,
+            int tier2InitTopK,
+            int bm25InitTopK,
+            double minScore,
+            GraphAssistConfig graphAssist) {
+        this(
+                queryExpansion,
+                sufficiency,
+                tier2InitTopK,
+                bm25InitTopK,
+                minScore,
+                graphAssist,
+                MemoryThreadAssistConfig.defaults());
     }
 
     @Override
@@ -75,37 +101,85 @@ public record DeepStrategyConfig(
                 50,
                 50,
                 0.3,
-                GraphAssistConfig.defaults());
+                GraphAssistConfig.defaults(),
+                MemoryThreadAssistConfig.defaults());
     }
 
     public DeepStrategyConfig withQueryExpansion(QueryExpansionConfig queryExpansion) {
         return new DeepStrategyConfig(
-                queryExpansion, sufficiency, tier2InitTopK, bm25InitTopK, minScore, graphAssist);
+                queryExpansion,
+                sufficiency,
+                tier2InitTopK,
+                bm25InitTopK,
+                minScore,
+                graphAssist,
+                memoryThreadAssist);
     }
 
     public DeepStrategyConfig withSufficiency(SufficiencyConfig sufficiency) {
         return new DeepStrategyConfig(
-                queryExpansion, sufficiency, tier2InitTopK, bm25InitTopK, minScore, graphAssist);
+                queryExpansion,
+                sufficiency,
+                tier2InitTopK,
+                bm25InitTopK,
+                minScore,
+                graphAssist,
+                memoryThreadAssist);
     }
 
     public DeepStrategyConfig withTier2InitTopK(int tier2InitTopK) {
         return new DeepStrategyConfig(
-                queryExpansion, sufficiency, tier2InitTopK, bm25InitTopK, minScore, graphAssist);
+                queryExpansion,
+                sufficiency,
+                tier2InitTopK,
+                bm25InitTopK,
+                minScore,
+                graphAssist,
+                memoryThreadAssist);
     }
 
     public DeepStrategyConfig withBm25InitTopK(int bm25InitTopK) {
         return new DeepStrategyConfig(
-                queryExpansion, sufficiency, tier2InitTopK, bm25InitTopK, minScore, graphAssist);
+                queryExpansion,
+                sufficiency,
+                tier2InitTopK,
+                bm25InitTopK,
+                minScore,
+                graphAssist,
+                memoryThreadAssist);
     }
 
     public DeepStrategyConfig withMinScore(double minScore) {
         return new DeepStrategyConfig(
-                queryExpansion, sufficiency, tier2InitTopK, bm25InitTopK, minScore, graphAssist);
+                queryExpansion,
+                sufficiency,
+                tier2InitTopK,
+                bm25InitTopK,
+                minScore,
+                graphAssist,
+                memoryThreadAssist);
     }
 
     public DeepStrategyConfig withGraphAssist(GraphAssistConfig graphAssist) {
         return new DeepStrategyConfig(
-                queryExpansion, sufficiency, tier2InitTopK, bm25InitTopK, minScore, graphAssist);
+                queryExpansion,
+                sufficiency,
+                tier2InitTopK,
+                bm25InitTopK,
+                minScore,
+                graphAssist,
+                memoryThreadAssist);
+    }
+
+    public DeepStrategyConfig withMemoryThreadAssist(MemoryThreadAssistConfig memoryThreadAssist) {
+        return new DeepStrategyConfig(
+                queryExpansion,
+                sufficiency,
+                tier2InitTopK,
+                bm25InitTopK,
+                minScore,
+                graphAssist,
+                memoryThreadAssist);
     }
 
     /** Multi-query expansion */
@@ -234,6 +308,49 @@ public record DeepStrategyConfig(
                     minMentionConfidence,
                     protectDirectTopK,
                     timeout);
+        }
+    }
+
+    /** Runtime memory-thread assist configuration for deep retrieval. */
+    public record MemoryThreadAssistConfig(
+            boolean enabled,
+            int maxThreads,
+            int maxMembersPerThread,
+            int protectDirectTopK,
+            Duration timeout)
+            implements RetrievalMemoryThreadSettings {
+
+        public MemoryThreadAssistConfig {
+            SimpleMemoryThreadAssistOptions.validateAssistShape(
+                    maxThreads, maxMembersPerThread, protectDirectTopK, timeout);
+        }
+
+        public static MemoryThreadAssistConfig defaults() {
+            var defaults = DeepMemoryThreadAssistOptions.defaults();
+            return new MemoryThreadAssistConfig(
+                    defaults.enabled(),
+                    defaults.maxThreads(),
+                    defaults.maxMembersPerThread(),
+                    defaults.protectDirectTopK(),
+                    defaults.timeout());
+        }
+
+        @JsonCreator
+        public static MemoryThreadAssistConfig fromJson(
+                @JsonProperty("enabled") Boolean enabled,
+                @JsonProperty("maxThreads") Integer maxThreads,
+                @JsonProperty("maxMembersPerThread") Integer maxMembersPerThread,
+                @JsonProperty("protectDirectTopK") Integer protectDirectTopK,
+                @JsonProperty("timeout") Duration timeout) {
+            var defaults = defaults();
+            return new MemoryThreadAssistConfig(
+                    enabled != null ? enabled : defaults.enabled(),
+                    maxThreads != null ? maxThreads : defaults.maxThreads(),
+                    maxMembersPerThread != null
+                            ? maxMembersPerThread
+                            : defaults.maxMembersPerThread(),
+                    protectDirectTopK != null ? protectDirectTopK : defaults.protectDirectTopK(),
+                    timeout != null ? timeout : defaults.timeout());
         }
     }
 }

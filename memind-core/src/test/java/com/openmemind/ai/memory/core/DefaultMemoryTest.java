@@ -19,26 +19,35 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
+import com.openmemind.ai.memory.core.builder.DeepMemoryThreadAssistOptions;
+import com.openmemind.ai.memory.core.builder.DeepRetrievalGraphOptions;
 import com.openmemind.ai.memory.core.builder.DeepRetrievalOptions;
 import com.openmemind.ai.memory.core.builder.ExtractionCommonOptions;
 import com.openmemind.ai.memory.core.builder.ExtractionOptions;
 import com.openmemind.ai.memory.core.builder.InsightExtractionOptions;
 import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.builder.MemoryThreadOptions;
+import com.openmemind.ai.memory.core.builder.MemoryThreadRuleOptions;
 import com.openmemind.ai.memory.core.builder.QueryExpansionOptions;
 import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalAdvancedOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalCommonOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalOptions;
+import com.openmemind.ai.memory.core.builder.SimpleMemoryThreadAssistOptions;
+import com.openmemind.ai.memory.core.builder.SimpleRetrievalGraphOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
 import com.openmemind.ai.memory.core.builder.SufficiencyOptions;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
+import com.openmemind.ai.memory.core.data.MemoryThreadRuntimeStatus;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
@@ -46,6 +55,7 @@ import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
+import com.openmemind.ai.memory.core.extraction.context.ContextRequest;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.result.InsightResult;
@@ -53,14 +63,17 @@ import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.extraction.source.FileExtractionSource;
 import com.openmemind.ai.memory.core.extraction.source.UrlExtractionSource;
+import com.openmemind.ai.memory.core.extraction.thread.MemoryThreadLayer;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
+import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
+import com.openmemind.ai.memory.core.store.thread.MemoryThreadOperations;
 import com.openmemind.ai.memory.core.support.TestMemoryIds;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Duration;
@@ -404,6 +417,149 @@ class DefaultMemoryTest {
                                                 && sufficiencyTopK == 9;
                                     }));
         }
+
+        @Test
+        @DisplayName("retrieve simple materializes memory thread assist from build options")
+        void retrieveSimpleMaterializesMemoryThreadAssistFromBuildOptions() {
+            var memory =
+                    new DefaultMemory(
+                            extractor,
+                            retriever,
+                            store,
+                            memoryBuffer,
+                            vector,
+                            null,
+                            null,
+                            MemoryBuildOptions.builder()
+                                    .memoryThread(
+                                            MemoryThreadOptions.defaults()
+                                                    .withEnabled(true)
+                                                    .withRule(
+                                                            MemoryThreadRuleOptions.defaults()
+                                                                    .withMaxRetrievalMembersPerThread(
+                                                                            2)))
+                                    .retrieval(
+                                            new RetrievalOptions(
+                                                    RetrievalCommonOptions.defaults(),
+                                                    new SimpleRetrievalOptions(
+                                                            Duration.ofSeconds(10),
+                                                            5,
+                                                            15,
+                                                            5,
+                                                            true,
+                                                            SimpleRetrievalGraphOptions.defaults(),
+                                                            new SimpleMemoryThreadAssistOptions(
+                                                                    true,
+                                                                    2,
+                                                                    5,
+                                                                    2,
+                                                                    Duration.ofMillis(150))),
+                                                    DeepRetrievalOptions.defaults(),
+                                                    RetrievalAdvancedOptions.defaults()))
+                                    .build());
+            when(retriever.retrieve(any(RetrievalRequest.class)))
+                    .thenReturn(Mono.just(RetrievalResult.empty("simple", "sleep")));
+
+            StepVerifier.create(memory.retrieve(memoryId, "sleep", RetrievalConfig.Strategy.SIMPLE))
+                    .expectNextCount(1)
+                    .verifyComplete();
+
+            verify(retriever)
+                    .retrieve(
+                            argThat(
+                                    request -> {
+                                        var strategyConfig =
+                                                (SimpleStrategyConfig)
+                                                        request.config().strategyConfig();
+                                        return strategyConfig.memoryThreadAssist().enabled()
+                                                && strategyConfig
+                                                                .memoryThreadAssist()
+                                                                .protectDirectTopK()
+                                                        == 2
+                                                && strategyConfig
+                                                                .memoryThreadAssist()
+                                                                .maxMembersPerThread()
+                                                        == 2;
+                                    }));
+        }
+
+        @Test
+        @DisplayName("get context materializes deep memory thread assist from build options")
+        void getContextMaterializesDeepMemoryThreadAssistFromBuildOptions() {
+            var recentConversationBuffer = mock(RecentConversationBuffer.class);
+            when(memoryBuffer.recentConversationBuffer()).thenReturn(recentConversationBuffer);
+            when(recentConversationBuffer.loadRecent(memoryId.toIdentifier(), 10))
+                    .thenReturn(List.of(Message.user("what happened after that conversation")));
+            when(retriever.retrieve(any(RetrievalRequest.class)))
+                    .thenReturn(
+                            Mono.just(
+                                    RetrievalResult.empty(
+                                            "deep_retrieval",
+                                            "what happened after that conversation")));
+            var memory =
+                    new DefaultMemory(
+                            extractor,
+                            retriever,
+                            store,
+                            memoryBuffer,
+                            vector,
+                            null,
+                            null,
+                            MemoryBuildOptions.builder()
+                                    .memoryThread(
+                                            MemoryThreadOptions.defaults()
+                                                    .withEnabled(true)
+                                                    .withRule(
+                                                            MemoryThreadRuleOptions.defaults()
+                                                                    .withMaxRetrievalMembersPerThread(
+                                                                            2)))
+                                    .retrieval(
+                                            new RetrievalOptions(
+                                                    RetrievalCommonOptions.defaults(),
+                                                    SimpleRetrievalOptions.defaults(),
+                                                    new DeepRetrievalOptions(
+                                                            Duration.ofSeconds(120),
+                                                            5,
+                                                            50,
+                                                            false,
+                                                            0,
+                                                            QueryExpansionOptions.defaults(),
+                                                            SufficiencyOptions.defaults(),
+                                                            DeepRetrievalGraphOptions.defaults(),
+                                                            new DeepMemoryThreadAssistOptions(
+                                                                    true,
+                                                                    2,
+                                                                    5,
+                                                                    2,
+                                                                    Duration.ofMillis(150))),
+                                                    RetrievalAdvancedOptions.defaults()))
+                                    .build());
+
+            StepVerifier.create(
+                            memory.getContext(
+                                    ContextRequest.of(
+                                            memoryId, 512, RetrievalConfig.Strategy.DEEP)))
+                    .expectNextCount(1)
+                    .verifyComplete();
+
+            verify(retriever)
+                    .retrieve(
+                            argThat(
+                                    request -> {
+                                        var strategyConfig =
+                                                (DeepStrategyConfig)
+                                                        request.config().strategyConfig();
+                                        return strategyConfig.memoryThreadAssist().enabled()
+                                                && strategyConfig
+                                                                .memoryThreadAssist()
+                                                                .protectDirectTopK()
+                                                        == 2
+                                                && strategyConfig
+                                                                .memoryThreadAssist()
+                                                                .maxMembersPerThread()
+                                                        == 2;
+                                    }));
+        }
     }
 
     @Nested
@@ -444,6 +600,26 @@ class DefaultMemoryTest {
         }
 
         @Test
+        @DisplayName("deleteItems also removes thread memberships before deleting items")
+        void deleteItemsAlsoRemovesThreadMembershipsBeforeDeletingItems() {
+            var itemIds = List.of(101L);
+            var threadOperations = mock(MemoryThreadOperations.class);
+            when(store.threadOperations()).thenReturn(threadOperations);
+            when(itemOperations.getItemsByIds(memoryId, itemIds))
+                    .thenReturn(List.of(memoryItem(101L, "vec-101")));
+            when(vector.deleteBatch(memoryId, List.of("vec-101"))).thenReturn(Mono.empty());
+
+            StepVerifier.create(memind.deleteItems(memoryId, itemIds)).verifyComplete();
+
+            InOrder inOrder = inOrder(itemOperations, vector, threadOperations, retriever);
+            inOrder.verify(itemOperations).getItemsByIds(memoryId, itemIds);
+            inOrder.verify(vector).deleteBatch(memoryId, List.of("vec-101"));
+            inOrder.verify(threadOperations).deleteMembershipsByItemIds(memoryId, itemIds);
+            inOrder.verify(itemOperations).deleteItems(memoryId, itemIds);
+            inOrder.verify(retriever).onDataChanged(memoryId);
+        }
+
+        @Test
         @DisplayName("deleteInsights deletes only requested insights and invalidates retriever")
         void deleteInsightsDeletesOnlyRequestedInsightsAndInvalidatesRetriever() {
             var insightIds = List.of(11L, 12L);
@@ -455,6 +631,52 @@ class DefaultMemoryTest {
             inOrder.verify(retriever).onDataChanged(memoryId);
             verifyNoInteractions(vector);
         }
+    }
+
+    @Test
+    @DisplayName("flush and rebuild memory threads delegate to the memory thread layer")
+    void flushAndRebuildMemoryThreadsDelegateToTheMemoryThreadLayer() {
+        var threadLayer = mock(MemoryThreadLayer.class);
+        var memory =
+                new DefaultMemory(
+                        extractor,
+                        retriever,
+                        store,
+                        memoryBuffer,
+                        vector,
+                        null,
+                        null,
+                        MemoryBuildOptions.defaults(),
+                        threadLayer);
+
+        memory.flushMemoryThreads(memoryId);
+        memory.rebuildMemoryThreads(memoryId);
+
+        verify(threadLayer).flush(memoryId);
+        verify(threadLayer).rebuild(memoryId);
+    }
+
+    @Test
+    @DisplayName("memoryThreadStatus delegates to the memory thread layer")
+    void memoryThreadStatusDelegatesToTheMemoryThreadLayer() {
+        var threadLayer = mock(MemoryThreadLayer.class);
+        var status =
+                new MemoryThreadRuntimeStatus(
+                        true, true, true, null, 2, Instant.parse("2026-04-18T00:00:00Z"), null, 0L);
+        when(threadLayer.status()).thenReturn(status);
+        var memory =
+                new DefaultMemory(
+                        extractor,
+                        retriever,
+                        store,
+                        memoryBuffer,
+                        vector,
+                        null,
+                        null,
+                        MemoryBuildOptions.defaults(),
+                        threadLayer);
+
+        assertThat(memory.memoryThreadStatus()).isEqualTo(status);
     }
 
     @Test

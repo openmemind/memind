@@ -68,6 +68,20 @@ public final class MemoryAttributes {
     public static final String RETRIEVAL_SUFFICIENT = "memind.retrieval.sufficient";
     public static final String RETRIEVAL_CACHE_HIT = "memind.retrieval.cache_hit";
     public static final String RETRIEVAL_TOP_K = "memind.retrieval.top_k";
+    public static final String RETRIEVAL_MEMORY_THREAD_ENABLED =
+            "memind.retrieval.memory_thread.enabled";
+    public static final String RETRIEVAL_MEMORY_THREAD_SEED_THREAD_COUNT =
+            "memind.retrieval.memory_thread.seed_thread_count";
+    public static final String RETRIEVAL_MEMORY_THREAD_CANDIDATE_COUNT =
+            "memind.retrieval.memory_thread.candidate_count";
+    public static final String RETRIEVAL_MEMORY_THREAD_ADMITTED_COUNT =
+            "memind.retrieval.memory_thread.admitted_count";
+    public static final String RETRIEVAL_MEMORY_THREAD_CLAMPED =
+            "memind.retrieval.memory_thread.clamped";
+    public static final String RETRIEVAL_MEMORY_THREAD_DEGRADED =
+            "memind.retrieval.memory_thread.degraded";
+    public static final String RETRIEVAL_MEMORY_THREAD_TIMEOUT =
+            "memind.retrieval.memory_thread.timeout";
     public static final String RETRIEVAL_GRAPH_ENABLED = "memind.retrieval.graph.enabled";
     public static final String RETRIEVAL_GRAPH_SEED_COUNT = "memind.retrieval.graph.seed_count";
     public static final String RETRIEVAL_GRAPH_LINK_EXPANSION_COUNT =

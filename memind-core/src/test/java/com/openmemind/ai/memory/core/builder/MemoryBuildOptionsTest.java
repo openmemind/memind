@@ -20,6 +20,11 @@ import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoringConfig;
+import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
+import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.insight.InMemoryInsightOperations;
+import com.openmemind.ai.memory.core.store.item.InMemoryItemOperations;
+import com.openmemind.ai.memory.core.store.rawdata.InMemoryRawDataOperations;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
@@ -73,6 +78,89 @@ class MemoryBuildOptionsTest {
                                         0))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("vectorBatchSize");
+    }
+
+    @Test
+    void memoryThreadDefaultsStayDisabledAndConservative() {
+        var defaults = MemoryBuildOptions.defaults().memoryThread();
+
+        assertThat(defaults.enabled()).isFalse();
+        assertThat(defaults.derivation().enabled()).isFalse();
+        assertThat(defaults.derivation().async()).isTrue();
+        assertThat(defaults.rule().maxCandidateThreads()).isEqualTo(4);
+        assertThat(defaults.rule().maxMembersPerThread()).isEqualTo(32);
+        assertThat(defaults.rule().maxRetrievalMembersPerThread()).isEqualTo(6);
+    }
+
+    @Test
+    void sanitizerForceDisablesDerivationWhenItemGraphIsDisabled() {
+        var invalid =
+                MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        ItemExtractionOptions.defaults(),
+                                        InsightExtractionOptions.defaults()))
+                        .memoryThread(
+                                MemoryThreadOptions.defaults()
+                                        .withEnabled(true)
+                                        .withDerivation(
+                                                MemoryThreadDerivationOptions.defaults()
+                                                        .withEnabled(true)))
+                        .build();
+
+        var result = new MemoryBuildOptionsSanitizer().sanitize(invalid, new InMemoryMemoryStore());
+
+        assertThat(result.options().memoryThread().derivation().enabled()).isFalse();
+        assertThat(result.warnings())
+                .containsExactly(
+                        "memoryThread.derivation.enabled requires extraction.item.graph.enabled;"
+                                + " derivation was force-disabled");
+        assertThat(result.memoryThreadForcedDisableReason()).isPresent();
+        assertThat(result.memoryThreadForcedDisableReason().orElseThrow())
+                .contains("memoryThread.derivation.enabled requires extraction.item.graph.enabled");
+    }
+
+    @Test
+    void sanitizerForceDisablesDerivationWhenStoreGraphOperationsAreUnavailable() {
+        var requested =
+                MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults().withEnabled(true)),
+                                        InsightExtractionOptions.defaults()))
+                        .memoryThread(
+                                MemoryThreadOptions.defaults()
+                                        .withEnabled(true)
+                                        .withDerivation(
+                                                MemoryThreadDerivationOptions.defaults()
+                                                        .withEnabled(true)))
+                        .build();
+
+        MemoryStore legacyStore =
+                MemoryStore.of(
+                        new InMemoryRawDataOperations(),
+                        new InMemoryItemOperations(),
+                        new InMemoryInsightOperations());
+
+        var result = new MemoryBuildOptionsSanitizer().sanitize(requested, legacyStore);
+
+        assertThat(result.options().memoryThread().derivation().enabled()).isFalse();
+        assertThat(result.warnings())
+                .containsExactly(
+                        "memoryThread.derivation.enabled requires store-backed typed item graph"
+                                + " operations; derivation was force-disabled");
+        assertThat(result.memoryThreadForcedDisableReason()).isPresent();
+        assertThat(result.memoryThreadForcedDisableReason().orElseThrow())
+                .contains(
+                        "memoryThread.derivation.enabled requires store-backed typed item graph"
+                                + " operations");
     }
 
     @Test

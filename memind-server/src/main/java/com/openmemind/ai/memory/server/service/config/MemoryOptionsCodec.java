@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.server.service.config;
 
 import com.openmemind.ai.memory.core.builder.ExtractionOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.builder.MemoryThreadOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalOptions;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
@@ -44,14 +45,25 @@ public final class MemoryOptionsCodec {
     }
 
     private record PersistedMemoryOptions(
-            ExtractionOptions extraction, RetrievalOptions retrieval) {
+            ExtractionOptions extraction,
+            RetrievalOptions retrieval,
+            MemoryThreadOptions memoryThread) {
+
+        private PersistedMemoryOptions {
+            memoryThread = memoryThread != null ? memoryThread : MemoryThreadOptions.defaults();
+        }
 
         private static PersistedMemoryOptions from(MemoryBuildOptions options) {
-            return new PersistedMemoryOptions(options.extraction(), options.retrieval());
+            return new PersistedMemoryOptions(
+                    options.extraction(), options.retrieval(), options.memoryThread());
         }
 
         private MemoryBuildOptions toOptions() {
-            return MemoryBuildOptions.builder().extraction(extraction).retrieval(retrieval).build();
+            return MemoryBuildOptions.builder()
+                    .extraction(extraction)
+                    .retrieval(retrieval)
+                    .memoryThread(memoryThread)
+                    .build();
         }
     }
 }

@@ -15,8 +15,10 @@ package com.openmemind.ai.memory.core.retrieval.strategy;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.openmemind.ai.memory.core.builder.SimpleMemoryThreadAssistOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalGraphOptions;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphSettings;
+import com.openmemind.ai.memory.core.retrieval.thread.RetrievalMemoryThreadSettings;
 import java.time.Duration;
 
 /**
@@ -24,15 +26,29 @@ import java.time.Duration;
  *
  * @param enableKeywordSearch Whether to enable BM25 keyword search (only effective at the Item level)
  */
-public record SimpleStrategyConfig(boolean enableKeywordSearch, GraphAssistConfig graphAssist)
+public record SimpleStrategyConfig(
+        boolean enableKeywordSearch,
+        GraphAssistConfig graphAssist,
+        MemoryThreadAssistConfig memoryThreadAssist)
         implements StrategyConfig {
 
     public SimpleStrategyConfig {
         graphAssist = graphAssist != null ? graphAssist : GraphAssistConfig.defaults();
+        memoryThreadAssist =
+                memoryThreadAssist != null
+                        ? memoryThreadAssist
+                        : MemoryThreadAssistConfig.defaults();
     }
 
     public SimpleStrategyConfig(boolean enableKeywordSearch) {
-        this(enableKeywordSearch, GraphAssistConfig.defaults());
+        this(
+                enableKeywordSearch,
+                GraphAssistConfig.defaults(),
+                MemoryThreadAssistConfig.defaults());
+    }
+
+    public SimpleStrategyConfig(boolean enableKeywordSearch, GraphAssistConfig graphAssist) {
+        this(enableKeywordSearch, graphAssist, MemoryThreadAssistConfig.defaults());
     }
 
     @Override
@@ -45,11 +61,16 @@ public record SimpleStrategyConfig(boolean enableKeywordSearch, GraphAssistConfi
     }
 
     public SimpleStrategyConfig withKeywordSearch(boolean enabled) {
-        return new SimpleStrategyConfig(enabled, graphAssist);
+        return new SimpleStrategyConfig(enabled, graphAssist, memoryThreadAssist);
     }
 
     public SimpleStrategyConfig withGraphAssist(GraphAssistConfig graphAssist) {
-        return new SimpleStrategyConfig(enableKeywordSearch, graphAssist);
+        return new SimpleStrategyConfig(enableKeywordSearch, graphAssist, memoryThreadAssist);
+    }
+
+    public SimpleStrategyConfig withMemoryThreadAssist(
+            MemoryThreadAssistConfig memoryThreadAssist) {
+        return new SimpleStrategyConfig(enableKeywordSearch, graphAssist, memoryThreadAssist);
     }
 
     public record GraphAssistConfig(
@@ -193,6 +214,49 @@ public record SimpleStrategyConfig(boolean enableKeywordSearch, GraphAssistConfi
                     minMentionConfidence,
                     protectDirectTopK,
                     timeout);
+        }
+    }
+
+    /** Runtime memory-thread assist configuration for simple retrieval. */
+    public record MemoryThreadAssistConfig(
+            boolean enabled,
+            int maxThreads,
+            int maxMembersPerThread,
+            int protectDirectTopK,
+            Duration timeout)
+            implements RetrievalMemoryThreadSettings {
+
+        public MemoryThreadAssistConfig {
+            SimpleMemoryThreadAssistOptions.validateAssistShape(
+                    maxThreads, maxMembersPerThread, protectDirectTopK, timeout);
+        }
+
+        public static MemoryThreadAssistConfig defaults() {
+            var defaults = SimpleMemoryThreadAssistOptions.defaults();
+            return new MemoryThreadAssistConfig(
+                    defaults.enabled(),
+                    defaults.maxThreads(),
+                    defaults.maxMembersPerThread(),
+                    defaults.protectDirectTopK(),
+                    defaults.timeout());
+        }
+
+        @JsonCreator
+        public static MemoryThreadAssistConfig fromJson(
+                @JsonProperty("enabled") Boolean enabled,
+                @JsonProperty("maxThreads") Integer maxThreads,
+                @JsonProperty("maxMembersPerThread") Integer maxMembersPerThread,
+                @JsonProperty("protectDirectTopK") Integer protectDirectTopK,
+                @JsonProperty("timeout") Duration timeout) {
+            var defaults = defaults();
+            return new MemoryThreadAssistConfig(
+                    enabled != null ? enabled : defaults.enabled(),
+                    maxThreads != null ? maxThreads : defaults.maxThreads(),
+                    maxMembersPerThread != null
+                            ? maxMembersPerThread
+                            : defaults.maxMembersPerThread(),
+                    protectDirectTopK != null ? protectDirectTopK : defaults.protectDirectTopK(),
+                    timeout != null ? timeout : defaults.timeout());
         }
     }
 }

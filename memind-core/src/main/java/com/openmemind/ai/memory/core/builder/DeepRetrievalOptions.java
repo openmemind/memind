@@ -24,13 +24,18 @@ public record DeepRetrievalOptions(
         int rawDataTopK,
         QueryExpansionOptions queryExpansion,
         SufficiencyOptions sufficiency,
-        DeepRetrievalGraphOptions graphAssist) {
+        DeepRetrievalGraphOptions graphAssist,
+        DeepMemoryThreadAssistOptions memoryThreadAssist) {
 
     public DeepRetrievalOptions {
         timeout = Objects.requireNonNull(timeout, "timeout");
         queryExpansion = queryExpansion != null ? queryExpansion : QueryExpansionOptions.defaults();
         sufficiency = sufficiency != null ? sufficiency : SufficiencyOptions.defaults();
         graphAssist = graphAssist != null ? graphAssist : DeepRetrievalGraphOptions.defaults();
+        memoryThreadAssist =
+                memoryThreadAssist != null
+                        ? memoryThreadAssist
+                        : DeepMemoryThreadAssistOptions.defaults();
     }
 
     public DeepRetrievalOptions(
@@ -49,7 +54,29 @@ public record DeepRetrievalOptions(
                 rawDataTopK,
                 queryExpansion,
                 sufficiency,
-                DeepRetrievalGraphOptions.defaults());
+                DeepRetrievalGraphOptions.defaults(),
+                DeepMemoryThreadAssistOptions.defaults());
+    }
+
+    public DeepRetrievalOptions(
+            Duration timeout,
+            int insightTopK,
+            int itemTopK,
+            boolean rawDataEnabled,
+            int rawDataTopK,
+            QueryExpansionOptions queryExpansion,
+            SufficiencyOptions sufficiency,
+            DeepRetrievalGraphOptions graphAssist) {
+        this(
+                timeout,
+                insightTopK,
+                itemTopK,
+                rawDataEnabled,
+                rawDataTopK,
+                queryExpansion,
+                sufficiency,
+                graphAssist,
+                DeepMemoryThreadAssistOptions.defaults());
     }
 
     public static DeepRetrievalOptions defaults() {
@@ -61,6 +88,21 @@ public record DeepRetrievalOptions(
                 0,
                 QueryExpansionOptions.defaults(),
                 SufficiencyOptions.defaults(),
-                DeepRetrievalGraphOptions.defaults());
+                DeepRetrievalGraphOptions.defaults(),
+                DeepMemoryThreadAssistOptions.defaults());
+    }
+
+    public DeepRetrievalOptions withMemoryThreadAssist(
+            DeepMemoryThreadAssistOptions memoryThreadAssist) {
+        return new DeepRetrievalOptions(
+                timeout,
+                insightTopK,
+                itemTopK,
+                rawDataEnabled,
+                rawDataTopK,
+                queryExpansion,
+                sufficiency,
+                graphAssist,
+                memoryThreadAssist);
     }
 }

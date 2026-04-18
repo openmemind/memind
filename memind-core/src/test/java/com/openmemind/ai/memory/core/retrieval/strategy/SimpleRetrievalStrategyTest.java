@@ -34,6 +34,8 @@ import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphSettings;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
+import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistResult;
+import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistant;
 import com.openmemind.ai.memory.core.retrieval.tier.InsightTierRetriever;
 import com.openmemind.ai.memory.core.retrieval.tier.InsightTreeExpander;
 import com.openmemind.ai.memory.core.retrieval.tier.ItemTierRetriever;
@@ -72,6 +74,7 @@ class SimpleRetrievalStrategyTest {
     @Mock private ItemOperations itemOperations;
     @Mock private RawDataOperations rawDataOperations;
     @Mock private RetrievalGraphAssistant graphAssistant;
+    @Mock private MemoryThreadAssistant memoryThreadAssistant;
 
     private SimpleRetrievalStrategy strategy;
     private QueryContext context;
@@ -92,9 +95,21 @@ class SimpleRetrievalStrategyTest {
                                     RetrievalGraphAssistResult.directOnly(
                                             invocation.getArgument(3), enabled));
                         });
+        lenient()
+                .when(memoryThreadAssistant.assist(any(), any(), any(), any()))
+                .thenAnswer(
+                        invocation ->
+                                Mono.just(
+                                        MemoryThreadAssistResult.directOnly(
+                                                invocation.getArgument(3), false)));
         strategy =
                 new SimpleRetrievalStrategy(
-                        insightRetriever, itemRetriever, textSearch, memoryStore, graphAssistant);
+                        insightRetriever,
+                        itemRetriever,
+                        textSearch,
+                        memoryStore,
+                        graphAssistant,
+                        memoryThreadAssistant);
         context = new QueryContext(MEMORY_ID, "test query", null, List.of(), Map.of(), null, null);
     }
 
@@ -479,6 +494,61 @@ class SimpleRetrievalStrategyTest {
                                     assertThat(result.items())
                                             .extracting(ScoredResult::sourceId)
                                             .containsExactly("101", "102"))
+                    .verifyComplete();
+        }
+
+        @Test
+        @DisplayName("memory thread assist replaces only the unpinned tail before graph assist")
+        void memoryThreadAssistReplacesOnlyTheUnpinnedTailBeforeGraphAssist() {
+            var config =
+                    RetrievalConfig.simple(
+                                    new SimpleStrategyConfig(
+                                            true,
+                                            SimpleStrategyConfig.GraphAssistConfig.defaults()
+                                                    .withEnabled(false),
+                                            new SimpleStrategyConfig.MemoryThreadAssistConfig(
+                                                    true,
+                                                    1,
+                                                    2,
+                                                    2,
+                                                    java.time.Duration.ofMillis(150))))
+                            .withTier2(
+                                    new RetrievalConfig.TierConfig(
+                                            true,
+                                            4,
+                                            RetrievalConfig.simple().tier2().minScore(),
+                                            RetrievalConfig.simple().tier2().truncation()));
+            when(insightRetriever.retrieve(any(), any())).thenReturn(Mono.just(TierResult.empty()));
+            when(itemRetriever.searchByVector(any(), any()))
+                    .thenReturn(
+                            Mono.just(
+                                    new TierResult(
+                                            List.of(
+                                                    scored("101", 0.95d),
+                                                    scored("102", 0.90d),
+                                                    scored("103", 0.80d),
+                                                    scored("104", 0.75d)),
+                                            List.of())));
+            when(textSearch.search(any(), anyString(), anyInt(), any()))
+                    .thenReturn(Mono.just(List.of()));
+            when(memoryThreadAssistant.assist(any(), any(), any(), any()))
+                    .thenReturn(
+                            Mono.just(
+                                    new MemoryThreadAssistResult(
+                                            List.of(
+                                                    scored("101", 0.95d),
+                                                    scored("102", 0.90d),
+                                                    scored("201", 0.81d),
+                                                    scored("202", 0.79d)),
+                                            MemoryThreadAssistResult.Stats.success(
+                                                    1, 2, 2, false))));
+
+            StepVerifier.create(strategy.retrieve(context, config))
+                    .assertNext(
+                            result ->
+                                    assertThat(result.items())
+                                            .extracting(ScoredResult::sourceId)
+                                            .containsExactly("101", "102", "201", "202"))
                     .verifyComplete();
         }
     }

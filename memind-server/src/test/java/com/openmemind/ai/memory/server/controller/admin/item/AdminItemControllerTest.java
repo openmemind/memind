@@ -24,9 +24,11 @@ import com.openmemind.ai.memory.server.domain.common.BatchDeleteResult;
 import com.openmemind.ai.memory.server.domain.common.PageResponse;
 import com.openmemind.ai.memory.server.domain.item.query.ItemPageQuery;
 import com.openmemind.ai.memory.server.domain.item.view.AdminItemView;
+import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadItemView;
 import com.openmemind.ai.memory.server.handler.ApiExceptionHandler;
 import com.openmemind.ai.memory.server.service.item.ItemDeleteService;
 import com.openmemind.ai.memory.server.service.item.ItemQueryService;
+import com.openmemind.ai.memory.server.service.memorythread.MemoryThreadQueryService;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +43,8 @@ class AdminItemControllerTest {
 
     private final StubItemQueryService queryService = new StubItemQueryService();
     private final StubItemDeleteService deleteService = new StubItemDeleteService();
+    private final StubMemoryThreadQueryService memoryThreadQueryService =
+            new StubMemoryThreadQueryService();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private MockMvc mockMvc;
@@ -51,7 +55,8 @@ class AdminItemControllerTest {
         validator.afterPropertiesSet();
         this.mockMvc =
                 MockMvcBuilders.standaloneSetup(
-                                new AdminItemController(queryService, deleteService))
+                                new AdminItemController(
+                                        queryService, deleteService, memoryThreadQueryService))
                         .setControllerAdvice(new ApiExceptionHandler())
                         .setValidator(validator)
                         .build();
@@ -109,6 +114,17 @@ class AdminItemControllerTest {
                 .andExpect(jsonPath("$.traceId").isNotEmpty());
     }
 
+    @Test
+    void memoryThreadReturnsOwningThreadForItem() throws Exception {
+        mockMvc.perform(get("/admin/v1/items/101/memory-thread"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.timestamp").isNotEmpty())
+                .andExpect(jsonPath("$.data.threadId").value(201))
+                .andExpect(jsonPath("$.data.threadKey").value("mt:201"))
+                .andExpect(jsonPath("$.data.role").value("core"));
+    }
+
     private static final class StubItemQueryService extends ItemQueryService {
 
         private ItemPageQuery recordedQuery;
@@ -145,6 +161,18 @@ class AdminItemControllerTest {
         }
     }
 
+    private static final class StubMemoryThreadQueryService extends MemoryThreadQueryService {
+
+        private StubMemoryThreadQueryService() {
+            super(null, null);
+        }
+
+        @Override
+        public AdminMemoryThreadItemView getThreadByItemId(Long itemId) {
+            return memoryThreadItemView();
+        }
+    }
+
     private static AdminItemView itemView() {
         return new AdminItemView(
                 101L,
@@ -164,5 +192,23 @@ class AdminItemControllerTest {
                 "conversation",
                 Instant.parse("2026-03-31T10:00:02Z"),
                 Instant.parse("2026-03-31T10:00:03Z"));
+    }
+
+    private static AdminMemoryThreadItemView memoryThreadItemView() {
+        return new AdminMemoryThreadItemView(
+                401L,
+                "u1",
+                "a1",
+                "u1:a1",
+                201L,
+                "mt:201",
+                101L,
+                "core",
+                0.91d,
+                1,
+                Instant.parse("2026-03-31T10:00:04Z"),
+                Map.of("source", "test"),
+                Instant.parse("2026-03-31T10:00:05Z"),
+                Instant.parse("2026-03-31T10:00:06Z"));
     }
 }

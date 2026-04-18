@@ -31,6 +31,7 @@ import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorgani
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
+import com.openmemind.ai.memory.core.extraction.thread.MemoryThreadLayer;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
@@ -42,6 +43,7 @@ import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.retrieval.graph.NoOpRetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
+import com.openmemind.ai.memory.core.retrieval.thread.NoOpMemoryThreadAssistant;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
@@ -50,8 +52,10 @@ import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.lang.reflect.Proxy;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -194,6 +198,72 @@ class MemoryAssemblersTest {
     }
 
     @Test
+    void retrievalAssemblerClampsMemoryThreadAssistMembersPerThread() {
+        var options =
+                MemoryBuildOptions.builder()
+                        .memoryThread(
+                                MemoryThreadOptions.defaults()
+                                        .withEnabled(true)
+                                        .withRule(
+                                                MemoryThreadRuleOptions.defaults()
+                                                        .withMaxRetrievalMembersPerThread(2)))
+                        .retrieval(
+                                new RetrievalOptions(
+                                        RetrievalCommonOptions.defaults(),
+                                        new SimpleRetrievalOptions(
+                                                Duration.ofSeconds(10),
+                                                5,
+                                                15,
+                                                5,
+                                                true,
+                                                SimpleRetrievalGraphOptions.defaults(),
+                                                new SimpleMemoryThreadAssistOptions(
+                                                        true, 2, 5, 2, Duration.ofMillis(150))),
+                                        new DeepRetrievalOptions(
+                                                Duration.ofSeconds(120),
+                                                5,
+                                                50,
+                                                false,
+                                                0,
+                                                QueryExpansionOptions.defaults(),
+                                                SufficiencyOptions.defaults(),
+                                                DeepRetrievalGraphOptions.defaults(),
+                                                new DeepMemoryThreadAssistOptions(
+                                                        true, 2, 5, 2, Duration.ofMillis(150))),
+                                        RetrievalAdvancedOptions.defaults()))
+                        .build();
+        var retriever = new MemoryRetrievalAssembler().assemble(context(options, null, null));
+
+        @SuppressWarnings("unchecked")
+        var strategies = readField(retriever, "strategies", Map.class);
+        var simple = strategies.get(RetrievalStrategies.SIMPLE);
+        var deep = strategies.get(RetrievalStrategies.DEEP_RETRIEVAL);
+
+        assertThat(readField(simple, "memoryThreadAssistant", Object.class))
+                .isNotInstanceOf(NoOpMemoryThreadAssistant.class);
+        assertThat(
+                        readField(
+                                        simple,
+                                        "defaultStrategyConfig",
+                                        com.openmemind.ai.memory.core.retrieval.strategy
+                                                .SimpleStrategyConfig.class)
+                                .memoryThreadAssist()
+                                .maxMembersPerThread())
+                .isEqualTo(2);
+        assertThat(readField(deep, "memoryThreadAssistant", Object.class))
+                .isNotInstanceOf(NoOpMemoryThreadAssistant.class);
+        assertThat(
+                        readField(
+                                        deep,
+                                        "defaultStrategyConfig",
+                                        com.openmemind.ai.memory.core.retrieval.strategy
+                                                .DeepStrategyConfig.class)
+                                .memoryThreadAssist()
+                                .maxMembersPerThread())
+                .isEqualTo(2);
+    }
+
+    @Test
     void extractionAssemblerFallsBackToDefaultResourceFetcherWhenMissing() {
         var assembly =
                 new MemoryExtractionAssembler()
@@ -201,6 +271,35 @@ class MemoryAssemblersTest {
         var extractor = (DefaultMemoryExtractor) assembly.pipeline();
 
         assertThat(readField(extractor, "resourceFetcher", ResourceFetcher.class)).isNotNull();
+    }
+
+    @Test
+    void extractionAssemblerWrapsMemoryItemStepWithMemoryThreadLayerWhenEnabled() {
+        var options =
+                MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults().withEnabled(true)),
+                                        InsightExtractionOptions.defaults()))
+                        .memoryThread(
+                                MemoryThreadOptions.defaults()
+                                        .withEnabled(true)
+                                        .withDerivation(
+                                                MemoryThreadDerivationOptions.defaults()
+                                                        .withEnabled(true)))
+                        .build();
+
+        var assembly = new MemoryExtractionAssembler().assemble(context(options, null, null));
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
+
+        assertThat(readField(extractor, "memoryItemStep", Object.class))
+                .isInstanceOf(MemoryThreadLayer.class);
+        assertThat(assembly.memoryThreadLayer()).isNotNull();
     }
 
     @Test
@@ -220,7 +319,8 @@ class MemoryAssemblersTest {
                         null,
                         List.of(),
                         customBubbleTracker,
-                        null);
+                        null,
+                        Optional.empty());
 
         var assembly = new MemoryExtractionAssembler().assemble(context);
         var scheduler =
@@ -354,7 +454,8 @@ class MemoryAssemblersTest {
                 resourceFetcher,
                 rawDataPlugins,
                 null,
-                null);
+                null,
+                Optional.empty());
     }
 
     @SuppressWarnings("unchecked")

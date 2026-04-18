@@ -24,11 +24,15 @@ import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
 import com.openmemind.ai.memory.core.data.MemoryResource;
+import com.openmemind.ai.memory.core.data.MemoryThread;
+import com.openmemind.ai.memory.core.data.MemoryThreadItem;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadRole;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadStatus;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import java.time.Instant;
 import java.util.List;
@@ -162,6 +166,22 @@ class InMemoryMemoryStoreTest {
         assertThat(store.graphOperations().listItemLinks(MEMORY_ID)).isEmpty();
     }
 
+    @Test
+    @DisplayName("threadOperations persists memory threads in the in-memory store")
+    void threadOperationsPersistsMemoryThreadsInTheInMemoryStore() {
+        var store = new InMemoryMemoryStore();
+
+        store.threadOperations().upsertThreads(MEMORY_ID, List.of(thread(101L)));
+        store.threadOperations().upsertThreadItems(MEMORY_ID, List.of(threadItem(201L, 101L, 1)));
+
+        assertThat(store.threadOperations().listThreads(MEMORY_ID))
+                .extracting(MemoryThread::threadKey)
+                .containsExactly("ep:101");
+        assertThat(store.threadOperations().listThreadItems(MEMORY_ID))
+                .extracting(MemoryThreadItem::itemId)
+                .containsExactly(101L);
+    }
+
     private static MemoryRawData rawData(
             String id, String caption, String contentId, Map<String, Object> metadata) {
         return new MemoryRawData(
@@ -232,5 +252,43 @@ class InMemoryMemoryStoreTest {
                 null,
                 List.of(),
                 1);
+    }
+
+    private static MemoryThread thread(Long id) {
+        return new MemoryThread(
+                id,
+                MEMORY_ID.toIdentifier(),
+                "ep:" + id,
+                "project",
+                "Phase 4 Delivery Line",
+                "From implementation start toward bounded delivery",
+                MemoryThreadStatus.OPEN,
+                0.92d,
+                BASE_TIME,
+                null,
+                BASE_TIME,
+                id,
+                id,
+                1,
+                Map.of("source", "test"),
+                BASE_TIME,
+                BASE_TIME,
+                false);
+    }
+
+    private static MemoryThreadItem threadItem(Long id, Long threadId, int sequenceHint) {
+        return new MemoryThreadItem(
+                id,
+                MEMORY_ID.toIdentifier(),
+                threadId,
+                101L,
+                0.95d,
+                MemoryThreadRole.CORE,
+                sequenceHint,
+                BASE_TIME,
+                Map.of("source", "test"),
+                BASE_TIME,
+                BASE_TIME,
+                false);
     }
 }

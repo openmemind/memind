@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -25,9 +26,13 @@ import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryInsightDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryItemDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryRawDataDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadItemDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryRawDataMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadItemMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMapper;
 import com.openmemind.ai.memory.server.domain.config.model.ServerRuntimeConfigDO;
 import com.openmemind.ai.memory.server.mapper.config.ServerRuntimeConfigMapper;
 import com.openmemind.ai.memory.server.service.config.MemoryOptionService;
@@ -90,6 +95,10 @@ class MemindServerIntegrationTest {
 
     @Autowired private MemoryInsightMapper insightMapper;
 
+    @Autowired private MemoryThreadMapper threadMapper;
+
+    @Autowired private MemoryThreadItemMapper threadItemMapper;
+
     @Autowired private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
@@ -97,6 +106,8 @@ class MemindServerIntegrationTest {
         this.mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
         jdbcTemplate.update("DELETE FROM memory_insight_buffer");
         jdbcTemplate.update("DELETE FROM memory_conversation_buffer");
+        jdbcTemplate.update("DELETE FROM memory_thread_item");
+        jdbcTemplate.update("DELETE FROM memory_thread");
         jdbcTemplate.update("DELETE FROM memory_insight");
         jdbcTemplate.update("DELETE FROM memory_item");
         jdbcTemplate.update("DELETE FROM memory_raw_data");
@@ -251,12 +262,63 @@ class MemindServerIntegrationTest {
                 .hasSize(1);
     }
 
+    @Test
+    void memoryThreadAdminEndpointsAreVisibleInRunningServer() throws Exception {
+        insertThread(thread(301L, "u1", "a1", "u1:a1", "mt:301"));
+        insertThreadItem(threadItem(401L, "u1", "a1", "u1:a1", 301L, 101L));
+
+        mockMvc.perform(get("/admin/v1/memory-threads"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.list[0].threadKey").value("mt:301"));
+
+        mockMvc.perform(get("/admin/v1/memory-threads/{threadId}", 301L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.data.threadKey").value("mt:301"));
+
+        mockMvc.perform(get("/admin/v1/memory-threads/{threadId}/items", 301L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.data[0].itemId").value(101));
+
+        mockMvc.perform(get("/admin/v1/items/{itemId}/memory-thread", 101L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.data.threadId").value(301))
+                .andExpect(jsonPath("$.data.threadKey").value("mt:301"));
+
+        mockMvc.perform(get("/admin/v1/memory-threads/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.data.memoryThreadEnabled").value(false));
+
+        mockMvc.perform(post("/admin/v1/memory-threads/rebuild/{memoryId}", "u1:a1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.data").value(1));
+
+        mockMvc.perform(post("/admin/v1/memory-threads/rebuild"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.data").value(1));
+    }
+
     private void insertRawData(MemoryRawDataDO rawData) {
         rawDataMapper.insert(rawData);
     }
 
     private void insertItem(MemoryItemDO item) {
         itemMapper.insert(item);
+    }
+
+    private void insertThread(MemoryThreadDO thread) {
+        threadMapper.insert(thread);
+    }
+
+    private void insertThreadItem(MemoryThreadItemDO threadItem) {
+        threadItemMapper.insert(threadItem);
     }
 
     private void insertInsight(MemoryInsightDO insight) {
@@ -285,6 +347,57 @@ class MemindServerIntegrationTest {
         dataObject.setEndTime(startTime.plusSeconds(30));
         dataObject.setCreatedAt(startTime.plusSeconds(60));
         dataObject.setUpdatedAt(startTime.plusSeconds(90));
+        dataObject.setDeleted(Boolean.FALSE);
+        return dataObject;
+    }
+
+    private static MemoryThreadDO thread(
+            long bizId, String userId, String agentId, String memoryId, String threadKey) {
+        MemoryThreadDO dataObject = new MemoryThreadDO();
+        dataObject.setBizId(bizId);
+        dataObject.setUserId(userId);
+        dataObject.setAgentId(agentId);
+        dataObject.setMemoryId(memoryId);
+        dataObject.setThreadKey(threadKey);
+        dataObject.setEpisodeType("conversation");
+        dataObject.setTitle("Travel planning");
+        dataObject.setSummarySnapshot("Discussed a summer trip.");
+        dataObject.setStatus("OPEN");
+        dataObject.setConfidence(0.88d);
+        dataObject.setStartAt(Instant.parse("2026-03-31T09:00:00Z"));
+        dataObject.setEndAt(Instant.parse("2026-03-31T10:00:00Z"));
+        dataObject.setLastActivityAt(Instant.parse("2026-03-31T10:00:00Z"));
+        dataObject.setOriginItemId(101L);
+        dataObject.setAnchorItemId(101L);
+        dataObject.setDisplayOrderHint(1);
+        dataObject.setMetadata(Map.of("source", "integration-test"));
+        dataObject.setCreatedAt(Instant.parse("2026-03-31T10:00:01Z"));
+        dataObject.setUpdatedAt(Instant.parse("2026-03-31T10:00:02Z"));
+        dataObject.setDeleted(Boolean.FALSE);
+        return dataObject;
+    }
+
+    private static MemoryThreadItemDO threadItem(
+            long bizId,
+            String userId,
+            String agentId,
+            String memoryId,
+            long threadId,
+            long itemId) {
+        MemoryThreadItemDO dataObject = new MemoryThreadItemDO();
+        dataObject.setBizId(bizId);
+        dataObject.setUserId(userId);
+        dataObject.setAgentId(agentId);
+        dataObject.setMemoryId(memoryId);
+        dataObject.setThreadId(threadId);
+        dataObject.setItemId(itemId);
+        dataObject.setMembershipWeight(0.92d);
+        dataObject.setRole("CORE");
+        dataObject.setSequenceHint(1);
+        dataObject.setJoinedAt(Instant.parse("2026-03-31T10:00:03Z"));
+        dataObject.setMetadata(Map.of("source", "integration-test"));
+        dataObject.setCreatedAt(Instant.parse("2026-03-31T10:00:04Z"));
+        dataObject.setUpdatedAt(Instant.parse("2026-03-31T10:00:05Z"));
         dataObject.setDeleted(Boolean.FALSE);
         return dataObject;
     }

@@ -34,6 +34,8 @@ import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.sufficiency.SufficiencyGate;
 import com.openmemind.ai.memory.core.retrieval.sufficiency.SufficiencyResult;
+import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistResult;
+import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistant;
 import com.openmemind.ai.memory.core.retrieval.tier.InsightTierRetriever;
 import com.openmemind.ai.memory.core.retrieval.tier.ItemTierRetriever;
 import com.openmemind.ai.memory.core.retrieval.tier.TierResult;
@@ -68,6 +70,7 @@ class DeepRetrievalStrategyTest {
     @Mock private MemoryStore memoryStore;
     @Mock private ItemOperations itemOperations;
     @Mock private RetrievalGraphAssistant graphAssistant;
+    @Mock private MemoryThreadAssistant memoryThreadAssistant;
 
     private DeepRetrievalStrategy strategy;
     private QueryContext context;
@@ -106,7 +109,8 @@ class DeepRetrievalStrategyTest {
                         typedQueryExpander,
                         reranker,
                         memoryStore,
-                        graphAssistant);
+                        graphAssistant,
+                        memoryThreadAssistant);
         context =
                 new QueryContext(MEMORY_ID, "what changed", null, List.of(), Map.of(), null, null);
     }
@@ -290,6 +294,70 @@ class DeepRetrievalStrategyTest {
 
         StepVerifier.create(strategy.retrieve(context, config))
                 .assertNext(result -> assertThat(result.items()).hasSize(2))
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("memory thread assist keeps rerank input bounded to direct window size")
+    void memoryThreadAssistKeepsRerankInputBoundedToDirectWindowSize() {
+        var config =
+                RetrievalConfig.deep(
+                                new DeepStrategyConfig(
+                                        DeepStrategyConfig.defaults().queryExpansion(),
+                                        DeepStrategyConfig.defaults().sufficiency(),
+                                        50,
+                                        50,
+                                        0.3d,
+                                        DeepStrategyConfig.GraphAssistConfig.defaults()
+                                                .withEnabled(false),
+                                        new DeepStrategyConfig.MemoryThreadAssistConfig(
+                                                true, 1, 3, 1, java.time.Duration.ofMillis(150))))
+                        .withTier2(new RetrievalConfig.TierConfig(true, 4, 0.2d, null));
+        when(insightRetriever.retrieve(any(), any())).thenReturn(Mono.just(TierResult.empty()));
+        when(itemRetriever.searchByVector(any(), any()))
+                .thenReturn(
+                        Mono.just(
+                                new TierResult(
+                                        List.of(
+                                                scored("101", 0.95d),
+                                                scored("102", 0.90d),
+                                                scored("103", 0.85d),
+                                                scored("104", 0.80d)),
+                                        List.of())));
+        when(textSearch.search(
+                        any(), anyString(), anyInt(), eq(MemoryTextSearch.SearchTarget.ITEM)))
+                .thenReturn(Mono.just(List.of()));
+        when(sufficiencyGate.check(any(), any()))
+                .thenReturn(
+                        Mono.just(
+                                new SufficiencyResult(
+                                        false,
+                                        "need more",
+                                        List.of(),
+                                        List.of("timeline"),
+                                        List.of("project rollout"))));
+        when(typedQueryExpander.expand(anyString(), any(), any(), any(), anyInt()))
+                .thenReturn(Mono.just(List.of()));
+        when(memoryThreadAssistant.assist(any(), any(), any(), any()))
+                .thenReturn(
+                        Mono.just(
+                                new MemoryThreadAssistResult(
+                                        List.of(
+                                                scored("101", 0.95d),
+                                                scored("201", 0.91d),
+                                                scored("202", 0.90d),
+                                                scored("203", 0.89d),
+                                                scored("204", 0.88d)),
+                                        MemoryThreadAssistResult.Stats.success(1, 4, 4, true))));
+        when(reranker.rerank(anyString(), any(), anyInt()))
+                .thenAnswer(
+                        invocation -> {
+                            assertThat(invocation.<List<ScoredResult>>getArgument(1)).hasSize(4);
+                            return Mono.just(invocation.getArgument(1));
+                        });
+
+        StepVerifier.create(strategy.retrieve(context, config))
+                .assertNext(result -> assertThat(result.items()).hasSize(4))
                 .verifyComplete();
     }
 

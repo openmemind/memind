@@ -19,8 +19,10 @@ import com.openmemind.ai.memory.server.domain.common.PageResult;
 import com.openmemind.ai.memory.server.domain.item.query.ItemPageQuery;
 import com.openmemind.ai.memory.server.domain.item.request.ItemDeleteRequest;
 import com.openmemind.ai.memory.server.domain.item.view.AdminItemView;
+import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadItemView;
 import com.openmemind.ai.memory.server.service.item.ItemDeleteService;
 import com.openmemind.ai.memory.server.service.item.ItemQueryService;
+import com.openmemind.ai.memory.server.service.memorythread.MemoryThreadQueryService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -40,10 +42,15 @@ public class AdminItemController {
 
     private final ItemQueryService queryService;
     private final ItemDeleteService deleteService;
+    private final MemoryThreadQueryService memoryThreadQueryService;
 
-    public AdminItemController(ItemQueryService queryService, ItemDeleteService deleteService) {
+    public AdminItemController(
+            ItemQueryService queryService,
+            ItemDeleteService deleteService,
+            MemoryThreadQueryService memoryThreadQueryService) {
         this.queryService = queryService;
         this.deleteService = deleteService;
+        this.memoryThreadQueryService = memoryThreadQueryService;
     }
 
     @GetMapping
@@ -67,6 +74,11 @@ public class AdminItemController {
     @GetMapping("/{itemId}")
     public ApiResult<AdminItemView> detail(@PathVariable Long itemId) {
         return ApiResult.success(queryService.getItem(itemId));
+    }
+
+    @GetMapping("/{itemId}/memory-thread")
+    public ApiResult<AdminMemoryThreadItemView> memoryThread(@PathVariable Long itemId) {
+        return ApiResult.success(memoryThreadQueryService.getThreadByItemId(itemId));
     }
 
     @DeleteMapping

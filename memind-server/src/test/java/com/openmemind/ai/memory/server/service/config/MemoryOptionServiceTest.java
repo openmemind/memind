@@ -18,9 +18,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.builder.MemoryBuildOptionsSanitizer;
+import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.server.domain.config.model.ServerRuntimeConfigDO;
 import com.openmemind.ai.memory.server.domain.config.response.MemoryOptionsSnapshot;
 import com.openmemind.ai.memory.server.domain.config.view.MemoryOptionItemView;
+import com.openmemind.ai.memory.server.runtime.MemoryRuntimeFactory;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeManager;
 import com.openmemind.ai.memory.server.runtime.RuntimeHandle;
 import com.openmemind.ai.memory.server.support.TestMemory;
@@ -49,7 +52,8 @@ class MemoryOptionServiceTest {
                         projectionMapper,
                         codec,
                         runtimeManager,
-                        options -> new TestMemory());
+                        options ->
+                                new MemoryRuntimeFactory.CreationResult(new TestMemory(), options));
 
         MemoryOptionsSnapshot snapshot = service.getCurrent();
 
@@ -99,7 +103,11 @@ class MemoryOptionServiceTest {
                         new RuntimeHandle(initialMemory, MemoryBuildOptions.defaults(), 1));
         MemoryOptionService service =
                 new MemoryOptionService(
-                        repository, projectionMapper, codec, runtimeManager, options -> nextMemory);
+                        repository,
+                        projectionMapper,
+                        codec,
+                        runtimeManager,
+                        options -> new MemoryRuntimeFactory.CreationResult(nextMemory, options));
 
         MemoryOptionsSnapshot snapshot = service.update(1, projectionConfig(projectionMapper));
 
@@ -127,12 +135,59 @@ class MemoryOptionServiceTest {
                         projectionMapper,
                         codec,
                         runtimeManager,
-                        options -> closeTrackingMemory(closeCount));
+                        options ->
+                                new MemoryRuntimeFactory.CreationResult(
+                                        closeTrackingMemory(closeCount), options));
 
         assertThatThrownBy(() -> service.update(1, projectionConfig(projectionMapper)))
                 .isInstanceOf(org.springframework.dao.OptimisticLockingFailureException.class);
         assertThat(closeCount).hasValue(1);
         assertThat(runtimeManager.currentVersion()).isEqualTo(1);
+    }
+
+    @Test
+    void updatePersistsSanitizedMemoryThreadOptions() {
+        InMemoryServerRuntimeConfigRepository repository =
+                new InMemoryServerRuntimeConfigRepository();
+        repository.insertInitial(
+                MemoryOptionService.CONFIG_KEY, 1, codec.write(MemoryBuildOptions.defaults()));
+        MemoryRuntimeManager runtimeManager =
+                new MemoryRuntimeManager(
+                        new RuntimeHandle(new TestMemory(), MemoryBuildOptions.defaults(), 1));
+        MemoryOptionService service =
+                new MemoryOptionService(
+                        repository,
+                        projectionMapper,
+                        codec,
+                        runtimeManager,
+                        options ->
+                                new MemoryRuntimeFactory.CreationResult(
+                                        new TestMemory(),
+                                        new MemoryBuildOptionsSanitizer()
+                                                .sanitize(options, new InMemoryMemoryStore())
+                                                .options()));
+
+        var projection = projectionMapper.toProjection(MemoryBuildOptions.defaults());
+        updateValue(projection, "memoryThread.enabled", true);
+        updateValue(projection, "memoryThread.derivation.enabled", true);
+        updateValue(projection, "extraction.item.graph.enabled", false);
+
+        MemoryOptionsSnapshot snapshot = service.update(1, projection);
+
+        assertThat(findValue(snapshot.config(), "memoryThread.derivation.enabled"))
+                .isEqualTo(false);
+        assertThat(
+                        codec.read(
+                                        repository
+                                                .findActive(MemoryOptionService.CONFIG_KEY)
+                                                .orElseThrow()
+                                                .getConfigJson())
+                                .memoryThread()
+                                .derivation()
+                                .enabled())
+                .isFalse();
+        assertThat(runtimeManager.currentHandle().options().memoryThread().derivation().enabled())
+                .isFalse();
     }
 
     private static Map<String, java.util.List<MemoryOptionItemView>> projectionConfig(
@@ -158,6 +213,41 @@ class MemoryOptionServiceTest {
                             }
                         });
         return projection;
+    }
+
+    private static void updateValue(
+            Map<String, java.util.List<MemoryOptionItemView>> projection,
+            String key,
+            Object value) {
+        projection
+                .values()
+                .forEach(
+                        items -> {
+                            for (int i = 0; i < items.size(); i++) {
+                                MemoryOptionItemView item = items.get(i);
+                                if (item.key().equals(key)) {
+                                    items.set(
+                                            i,
+                                            new MemoryOptionItemView(
+                                                    item.key(),
+                                                    value,
+                                                    item.description(),
+                                                    item.type(),
+                                                    item.defaultValue(),
+                                                    item.constraints()));
+                                }
+                            }
+                        });
+    }
+
+    private static Object findValue(
+            Map<String, java.util.List<MemoryOptionItemView>> projection, String key) {
+        return projection.values().stream()
+                .flatMap(java.util.Collection::stream)
+                .filter(item -> item.key().equals(key))
+                .findFirst()
+                .orElseThrow()
+                .value();
     }
 
     private static Memory closeTrackingMemory(AtomicInteger closeCount) {

@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core;
 import com.openmemind.ai.memory.core.builder.DefaultMemoryBuilder;
 import com.openmemind.ai.memory.core.builder.MemoryBuilder;
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.data.MemoryThreadRuntimeStatus;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
@@ -281,6 +282,31 @@ public interface Memory extends AutoCloseable {
      * @param language the language for insight generation, or {@code null} for the default
      */
     default void flushInsights(MemoryId memoryId, String language) {}
+
+    /**
+     * Forces a flush of any queued memory-thread derivation work for the given memory.
+     *
+     * <p>The default implementation is a no-op when memory-thread support is disabled.
+     *
+     * @param memoryId identifies whose memory-thread work to flush
+     */
+    default void flushMemoryThreads(MemoryId memoryId) {}
+
+    /**
+     * Rebuilds memory-thread state from persisted items for the given memory.
+     *
+     * <p>The default implementation is a no-op when memory-thread support is disabled.
+     *
+     * @param memoryId identifies whose memory-thread state to rebuild
+     */
+    default void rebuildMemoryThreads(MemoryId memoryId) {}
+
+    /**
+     * Returns the current runtime status of memory-thread derivation.
+     */
+    default MemoryThreadRuntimeStatus memoryThreadStatus() {
+        return MemoryThreadRuntimeStatus.disabled("memoryThread disabled");
+    }
 
     /**
      * Releases runtime-owned resources created for this memory instance.

@@ -61,6 +61,8 @@ public final class MemorySpanNames {
     public static final String RETRIEVAL_VECTOR_SEARCH = "memind.retrieval.vector_search";
     public static final String RETRIEVAL_RERANK = "memind.retrieval.rerank";
     public static final String RETRIEVAL_KEYWORD_SEARCH = "memind.retrieval.keyword_search";
+    public static final String RETRIEVAL_MEMORY_THREAD_ASSIST =
+            "memind.retrieval.memory_thread.assist";
     public static final String RETRIEVAL_GRAPH_ASSIST = "memind.retrieval.graph.assist";
     public static final String RETRIEVAL_INSIGHT_TYPE_ROUTING =
             "memind.retrieval.insight_type_routing";

@@ -31,6 +31,7 @@ import com.openmemind.ai.memory.core.tracing.NoopMemoryObserver;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 record MemoryAssemblyContext(
         ChatClientRegistry chatClientRegistry,
@@ -45,7 +46,8 @@ record MemoryAssemblyContext(
         ResourceFetcher resourceFetcher,
         List<RawDataPlugin> rawDataPlugins,
         BubbleTrackerStore bubbleTrackerStore,
-        MemoryObserver memoryObserver) {
+        MemoryObserver memoryObserver,
+        Optional<String> memoryThreadForcedDisableReason) {
 
     MemoryAssemblyContext {
         Objects.requireNonNull(chatClientRegistry, "chatClientRegistry");
@@ -66,6 +68,10 @@ record MemoryAssemblyContext(
         Objects.requireNonNull(options, "options");
         rawDataPlugins = List.copyOf(Objects.requireNonNull(rawDataPlugins, "rawDataPlugins"));
         memoryObserver = memoryObserver != null ? memoryObserver : new NoopMemoryObserver();
+        memoryThreadForcedDisableReason =
+                memoryThreadForcedDisableReason != null
+                        ? memoryThreadForcedDisableReason
+                        : Optional.empty();
     }
 
     InsightBuffer insightBuffer() {

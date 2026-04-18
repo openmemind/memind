@@ -31,6 +31,9 @@ import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
 import com.openmemind.ai.memory.core.builder.ItemGraphOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuilder;
+import com.openmemind.ai.memory.core.builder.MemoryThreadDerivationOptions;
+import com.openmemind.ai.memory.core.builder.MemoryThreadOptions;
+import com.openmemind.ai.memory.core.builder.PromptBudgetOptions;
 import com.openmemind.ai.memory.core.builder.QueryExpansionOptions;
 import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalAdvancedOptions;
@@ -161,6 +164,45 @@ class DefaultMemoryBuilderTest {
 
         assertThat(readField(memory, "buildOptions", MemoryBuildOptions.class))
                 .isEqualTo(configured);
+    }
+
+    @Test
+    void builderStoresSanitizedBuildOptionsOnDefaultMemory() {
+        var configured =
+                MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults().withEnabled(true)),
+                                        InsightExtractionOptions.defaults()))
+                        .memoryThread(
+                                MemoryThreadOptions.defaults()
+                                        .withEnabled(true)
+                                        .withDerivation(
+                                                MemoryThreadDerivationOptions.defaults()
+                                                        .withEnabled(true)))
+                        .build();
+
+        var memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(CHAT_CLIENT)
+                                .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .options(configured)
+                                .build();
+
+        assertThat(
+                        readField(memory, "buildOptions", MemoryBuildOptions.class)
+                                .memoryThread()
+                                .derivation()
+                                .enabled())
+                .isFalse();
     }
 
     @Test

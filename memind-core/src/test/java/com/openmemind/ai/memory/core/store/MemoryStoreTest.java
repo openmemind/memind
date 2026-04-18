@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
+import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
 import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
@@ -32,6 +33,8 @@ import org.junit.jupiter.api.Test;
 
 class MemoryStoreTest {
 
+    private static final MemoryId MEMORY_ID = DefaultMemoryId.of("user-1", "agent-1");
+
     @Test
     void legacyFactoryShouldFailFastForResourceOperations() {
         var store =
@@ -43,6 +46,22 @@ class MemoryStoreTest {
         assertThatThrownBy(store::resourceOperations)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("ResourceOperations is required");
+    }
+
+    @Test
+    void legacyFactoryShouldExposeNoOpThreadOperations() {
+        var store =
+                MemoryStore.of(
+                        new InMemoryRawDataOperations(),
+                        new InMemoryItemOperations(),
+                        new InMemoryInsightOperations());
+
+        store.threadOperations().upsertThreads(MEMORY_ID, List.of());
+        store.threadOperations().upsertThreadItems(MEMORY_ID, List.of());
+        store.threadOperations().deleteMembershipsByItemIds(MEMORY_ID, List.of(1L));
+
+        assertThat(store.threadOperations().listThreads(MEMORY_ID)).isEmpty();
+        assertThat(store.threadOperations().listThreadItems(MEMORY_ID)).isEmpty();
     }
 
     @Test
@@ -72,11 +91,10 @@ class MemoryStoreTest {
                         new InMemoryInsightOperations(),
                         resourceOperations,
                         null);
-        var memoryId = DefaultMemoryId.of("user-1", "agent-1");
         var resource =
                 new MemoryResource(
                         "res-1",
-                        memoryId.toIdentifier(),
+                        MEMORY_ID.toIdentifier(),
                         "file:///tmp/report.pdf",
                         null,
                         "report.pdf",
@@ -88,7 +106,7 @@ class MemoryStoreTest {
         var rawData =
                 new MemoryRawData(
                         "raw-1",
-                        memoryId.toIdentifier(),
+                        MEMORY_ID.toIdentifier(),
                         "DOCUMENT",
                         "content-1",
                         Segment.single("hello"),
@@ -101,10 +119,10 @@ class MemoryStoreTest {
                         Instant.parse("2026-04-09T00:00:00Z"),
                         Instant.parse("2026-04-09T00:00:01Z"));
 
-        store.upsertRawDataWithResources(memoryId, List.of(resource), List.of(rawData));
+        store.upsertRawDataWithResources(MEMORY_ID, List.of(resource), List.of(rawData));
 
-        assertThat(store.resourceOperations().getResource(memoryId, "res-1")).contains(resource);
-        assertThat(store.rawDataOperations().getRawData(memoryId, "raw-1")).contains(rawData);
+        assertThat(store.resourceOperations().getResource(MEMORY_ID, "res-1")).contains(resource);
+        assertThat(store.rawDataOperations().getRawData(MEMORY_ID, "raw-1")).contains(rawData);
     }
 
     private static final class InMemoryResourceStoreStub implements ResourceStore {

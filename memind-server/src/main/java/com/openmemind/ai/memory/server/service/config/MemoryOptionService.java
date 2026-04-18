@@ -58,15 +58,18 @@ public class MemoryOptionService {
         if (current.version() != expectedVersion) {
             throw versionConflict(expectedVersion, current.version());
         }
-        MemoryBuildOptions nextOptions = projectionMapper.toOptions(config);
-        Memory nextMemory = requireRuntimeFactory().create(nextOptions);
+        MemoryBuildOptions requestedOptions = projectionMapper.toOptions(config);
+        MemoryRuntimeFactory.CreationResult created =
+                requireRuntimeFactory().create(requestedOptions);
+        Memory nextMemory = created.memory();
+        MemoryBuildOptions effectiveOptions = created.effectiveOptions();
         try {
-            if (!repository.update(CONFIG_KEY, expectedVersion, codec.write(nextOptions))) {
+            if (!repository.update(CONFIG_KEY, expectedVersion, codec.write(effectiveOptions))) {
                 closeQuietly(nextMemory);
                 throw versionConflict(expectedVersion, runtimeManager.currentVersion());
             }
-            runtimeManager.swap(nextMemory, nextOptions, expectedVersion + 1);
-            return snapshot(expectedVersion + 1, nextOptions);
+            runtimeManager.swap(nextMemory, effectiveOptions, expectedVersion + 1);
+            return snapshot(expectedVersion + 1, effectiveOptions);
         } catch (RuntimeException e) {
             if (!(e instanceof OptimisticLockingFailureException)) {
                 // Build/runtime exceptions should leave the current runtime untouched.

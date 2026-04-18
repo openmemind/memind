@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.server.service.config;
 
 import com.openmemind.ai.memory.core.builder.ExtractionOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.builder.MemoryThreadOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalOptions;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.server.domain.config.view.MemoryOptionItemView;
@@ -186,6 +187,22 @@ public class MemoryOptionsProjectionMapper {
                             "Maximum time budget reserved for graph-assisted expansion during a"
                                     + " simple retrieval request."),
                     Map.entry(
+                            "retrieval.simple.memoryThreadAssist.enabled",
+                            "Whether simple retrieval may narrow the unpinned direct tail toward"
+                                    + " memory-thread members before graph assist."),
+                    Map.entry(
+                            "retrieval.simple.memoryThreadAssist.maxMembersPerThread",
+                            "Maximum number of members simple retrieval may consume from a single"
+                                    + " memory thread before the global clamp is applied."),
+                    Map.entry(
+                            "retrieval.simple.memoryThreadAssist.protectDirectTopK",
+                            "Number of top direct hits pinned ahead of any memory-thread-assisted"
+                                    + " candidates in simple retrieval."),
+                    Map.entry(
+                            "retrieval.simple.memoryThreadAssist.timeout",
+                            "Maximum time budget reserved for memory-thread assistance during"
+                                    + " simple retrieval."),
+                    Map.entry(
                             "retrieval.deep.timeout",
                             "Maximum time allowed for a deep retrieval request."),
                     Map.entry(
@@ -260,6 +277,49 @@ public class MemoryOptionsProjectionMapper {
                             "retrieval.deep.graphAssist.timeout",
                             "Maximum time budget reserved for graph-assisted expansion during"
                                     + " deep retrieval's insufficient slow path."),
+                    Map.entry(
+                            "retrieval.deep.memoryThreadAssist.enabled",
+                            "Whether deep retrieval slow-path candidates may be narrowed toward"
+                                    + " memory-thread members before graph assist and rerank."),
+                    Map.entry(
+                            "retrieval.deep.memoryThreadAssist.maxMembersPerThread",
+                            "Maximum number of members deep retrieval may consume from a single"
+                                    + " memory thread before the global clamp is applied."),
+                    Map.entry(
+                            "retrieval.deep.memoryThreadAssist.protectDirectTopK",
+                            "Number of top slow-path direct hits pinned ahead of any"
+                                    + " memory-thread-assisted candidates in deep retrieval."),
+                    Map.entry(
+                            "retrieval.deep.memoryThreadAssist.timeout",
+                            "Maximum time budget reserved for memory-thread assistance during"
+                                    + " deep retrieval."),
+                    Map.entry(
+                            "memoryThread.enabled",
+                            "Whether the derived memory-thread layer is enabled at runtime."),
+                    Map.entry(
+                            "memoryThread.derivation.enabled",
+                            "Whether post-item-commit rule-based memory-thread derivation is"
+                                    + " enabled."),
+                    Map.entry(
+                            "memoryThread.derivation.async",
+                            "Whether memory-thread derivation should run asynchronously after item"
+                                    + " writes."),
+                    Map.entry(
+                            "memoryThread.rule.maxCandidateThreads",
+                            "Maximum number of existing memory-thread candidates inspected during"
+                                    + " derivation."),
+                    Map.entry(
+                            "memoryThread.rule.maxRetrievalMembersPerThread",
+                            "Global upper bound for retrieval-time members consumed from one"
+                                    + " memory thread before strategy-local clamping."),
+                    Map.entry(
+                            "memoryThread.lifecycle.dormantAfter",
+                            "How long a memory thread may stay inactive before entering dormant"
+                                    + " status."),
+                    Map.entry(
+                            "memoryThread.lifecycle.closeAfter",
+                            "How long a memory thread may stay inactive before entering closed"
+                                    + " status."),
                     Map.entry(
                             "retrieval.advanced.rerank.mode",
                             "Reranking mode used when combining retrieval candidates."),
@@ -578,14 +638,25 @@ public class MemoryOptionsProjectionMapper {
             String key, String group, Class<?> type, List<String> pathSegments) {}
 
     private record PersistedMemoryOptions(
-            ExtractionOptions extraction, RetrievalOptions retrieval) {
+            ExtractionOptions extraction,
+            RetrievalOptions retrieval,
+            MemoryThreadOptions memoryThread) {
+
+        private PersistedMemoryOptions {
+            memoryThread = memoryThread != null ? memoryThread : MemoryThreadOptions.defaults();
+        }
 
         private static PersistedMemoryOptions from(MemoryBuildOptions options) {
-            return new PersistedMemoryOptions(options.extraction(), options.retrieval());
+            return new PersistedMemoryOptions(
+                    options.extraction(), options.retrieval(), options.memoryThread());
         }
 
         private MemoryBuildOptions toOptions() {
-            return MemoryBuildOptions.builder().extraction(extraction).retrieval(retrieval).build();
+            return MemoryBuildOptions.builder()
+                    .extraction(extraction)
+                    .retrieval(retrieval)
+                    .memoryThread(memoryThread)
+                    .build();
         }
     }
 }

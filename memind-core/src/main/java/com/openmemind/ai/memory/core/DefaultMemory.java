@@ -21,6 +21,7 @@ import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.RerankOptions;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
+import com.openmemind.ai.memory.core.data.MemoryThreadRuntimeStatus;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
@@ -31,13 +32,17 @@ import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import com.openmemind.ai.memory.core.extraction.thread.MemoryThreadLayer;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
+import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistConfigMapper;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.thread.MemoryThreadOperations;
+import com.openmemind.ai.memory.core.store.thread.NoOpMemoryThreadOperations;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Duration;
@@ -72,6 +77,7 @@ public class DefaultMemory implements Memory {
     private final InsightLayer insightLayer;
     private final AutoCloseable lifecycle;
     private final MemoryBuildOptions buildOptions;
+    private final MemoryThreadLayer memoryThreadLayer;
     private final AtomicBoolean closed = new AtomicBoolean();
 
     public DefaultMemory(
@@ -83,6 +89,28 @@ public class DefaultMemory implements Memory {
             InsightLayer insightLayer,
             AutoCloseable lifecycle,
             MemoryBuildOptions buildOptions) {
+        this(
+                extractor,
+                retriever,
+                memoryStore,
+                memoryBuffer,
+                vector,
+                insightLayer,
+                lifecycle,
+                buildOptions,
+                null);
+    }
+
+    public DefaultMemory(
+            MemoryExtractor extractor,
+            MemoryRetriever retriever,
+            MemoryStore memoryStore,
+            MemoryBuffer memoryBuffer,
+            MemoryVector vector,
+            InsightLayer insightLayer,
+            AutoCloseable lifecycle,
+            MemoryBuildOptions buildOptions,
+            MemoryThreadLayer memoryThreadLayer) {
         this.extractor = Objects.requireNonNull(extractor, "extractor must not be null");
         this.retriever = Objects.requireNonNull(retriever, "retriever must not be null");
         this.memoryStore = Objects.requireNonNull(memoryStore, "memoryStore must not be null");
@@ -91,6 +119,7 @@ public class DefaultMemory implements Memory {
         this.insightLayer = insightLayer;
         this.lifecycle = lifecycle;
         this.buildOptions = Objects.requireNonNull(buildOptions, "buildOptions must not be null");
+        this.memoryThreadLayer = memoryThreadLayer;
     }
 
     // ===== Generic extraction =====
@@ -295,7 +324,9 @@ public class DefaultMemory implements Memory {
                                                 graph.minLinkStrength(),
                                                 graph.minMentionConfidence(),
                                                 graph.protectDirectTopK(),
-                                                graph.timeout())));
+                                                graph.timeout()),
+                                        MemoryThreadAssistConfigMapper.toSimpleConfig(
+                                                buildOptions)));
                 yield applyCache(
                         base.withTier1(copyTier(base.tier1(), retrieval.simple().insightTopK()))
                                 .withTier2(copyTier(base.tier2(), retrieval.simple().itemTopK()))
@@ -330,7 +361,8 @@ public class DefaultMemory implements Memory {
                                         graph.minLinkStrength(),
                                         graph.minMentionConfidence(),
                                         graph.protectDirectTopK(),
-                                        graph.timeout()));
+                                        graph.timeout()),
+                                MemoryThreadAssistConfigMapper.toDeepConfig(buildOptions));
                 var tier3 =
                         retrieval.deep().rawDataEnabled()
                                 ? new RetrievalConfig.TierConfig(
@@ -382,6 +414,7 @@ public class DefaultMemory implements Memory {
         if (requestedIds.isEmpty()) {
             return Mono.<Void>empty();
         }
+        MemoryThreadOperations threadOperations = resolveThreadOperations();
 
         return Mono.fromCallable(
                         () -> memoryStore.itemOperations().getItemsByIds(memoryId, requestedIds))
@@ -397,6 +430,11 @@ public class DefaultMemory implements Memory {
                                 vectorIds.isEmpty()
                                         ? Mono.<Void>empty()
                                         : vector.deleteBatch(memoryId, vectorIds))
+                .then(
+                        Mono.<Void>fromRunnable(
+                                () ->
+                                        threadOperations.deleteMembershipsByItemIds(
+                                                memoryId, requestedIds)))
                 .then(
                         Mono.<Void>fromRunnable(
                                 () ->
@@ -440,6 +478,43 @@ public class DefaultMemory implements Memory {
     }
 
     @Override
+    public void flushMemoryThreads(MemoryId memoryId) {
+        Objects.requireNonNull(memoryId, "memoryId");
+        if (memoryThreadLayer == null) {
+            return;
+        }
+        memoryThreadLayer.flush(memoryId);
+    }
+
+    @Override
+    public void rebuildMemoryThreads(MemoryId memoryId) {
+        Objects.requireNonNull(memoryId, "memoryId");
+        if (memoryThreadLayer == null) {
+            return;
+        }
+        memoryThreadLayer.rebuild(memoryId);
+    }
+
+    @Override
+    public MemoryThreadRuntimeStatus memoryThreadStatus() {
+        if (memoryThreadLayer != null) {
+            return memoryThreadLayer.status();
+        }
+        if (!buildOptions.memoryThread().enabled()) {
+            return MemoryThreadRuntimeStatus.disabled("memoryThread disabled");
+        }
+        return new MemoryThreadRuntimeStatus(
+                true,
+                buildOptions.memoryThread().derivation().enabled(),
+                false,
+                "memoryThread layer unavailable",
+                0,
+                null,
+                null,
+                0L);
+    }
+
+    @Override
     public void close() {
         if (!closed.compareAndSet(false, true) || lifecycle == null) {
             return;
@@ -450,5 +525,10 @@ public class DefaultMemory implements Memory {
         } catch (Exception e) {
             log.warn("Failed to close memory lifecycle", e);
         }
+    }
+
+    private MemoryThreadOperations resolveThreadOperations() {
+        MemoryThreadOperations threadOperations = memoryStore.threadOperations();
+        return threadOperations != null ? threadOperations : NoOpMemoryThreadOperations.INSTANCE;
     }
 }

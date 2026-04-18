@@ -23,6 +23,9 @@ import com.openmemind.ai.memory.core.retrieval.scoring.RawDataAggregator;
 import com.openmemind.ai.memory.core.retrieval.scoring.ResultMerger;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.TimeDecay;
+import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistResult;
+import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistant;
+import com.openmemind.ai.memory.core.retrieval.thread.NoOpMemoryThreadAssistant;
 import com.openmemind.ai.memory.core.retrieval.tier.InsightTierRetriever;
 import com.openmemind.ai.memory.core.retrieval.tier.InsightTreeExpander;
 import com.openmemind.ai.memory.core.retrieval.tier.ItemTierRetriever;
@@ -60,7 +63,52 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
     private final ItemTierRetriever itemRetriever;
     private final MemoryTextSearch textSearch; // nullable
     private final MemoryStore memoryStore; // nullable
+    private final SimpleStrategyConfig defaultStrategyConfig;
     private final RetrievalGraphAssistant graphAssistant;
+    private final MemoryThreadAssistant memoryThreadAssistant;
+
+    public SimpleRetrievalStrategy(
+            InsightTierRetriever insightRetriever,
+            ItemTierRetriever itemRetriever,
+            MemoryTextSearch textSearch,
+            MemoryStore memoryStore,
+            SimpleStrategyConfig defaultStrategyConfig,
+            RetrievalGraphAssistant graphAssistant,
+            MemoryThreadAssistant memoryThreadAssistant) {
+        this.insightRetriever =
+                Objects.requireNonNull(insightRetriever, "insightRetriever must not be null");
+        this.itemRetriever =
+                Objects.requireNonNull(itemRetriever, "itemRetriever must not be null");
+        this.textSearch = textSearch; // nullable
+        this.memoryStore = memoryStore; // nullable
+        this.defaultStrategyConfig =
+                defaultStrategyConfig != null
+                        ? defaultStrategyConfig
+                        : SimpleStrategyConfig.defaults();
+        this.graphAssistant =
+                graphAssistant != null ? graphAssistant : NoOpRetrievalGraphAssistant.INSTANCE;
+        this.memoryThreadAssistant =
+                memoryThreadAssistant != null
+                        ? memoryThreadAssistant
+                        : NoOpMemoryThreadAssistant.INSTANCE;
+    }
+
+    public SimpleRetrievalStrategy(
+            InsightTierRetriever insightRetriever,
+            ItemTierRetriever itemRetriever,
+            MemoryTextSearch textSearch,
+            MemoryStore memoryStore,
+            RetrievalGraphAssistant graphAssistant,
+            MemoryThreadAssistant memoryThreadAssistant) {
+        this(
+                insightRetriever,
+                itemRetriever,
+                textSearch,
+                memoryStore,
+                SimpleStrategyConfig.defaults(),
+                graphAssistant,
+                memoryThreadAssistant);
+    }
 
     public SimpleRetrievalStrategy(
             InsightTierRetriever insightRetriever,
@@ -68,14 +116,14 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
             MemoryTextSearch textSearch,
             MemoryStore memoryStore,
             RetrievalGraphAssistant graphAssistant) {
-        this.insightRetriever =
-                Objects.requireNonNull(insightRetriever, "insightRetriever must not be null");
-        this.itemRetriever =
-                Objects.requireNonNull(itemRetriever, "itemRetriever must not be null");
-        this.textSearch = textSearch; // nullable
-        this.memoryStore = memoryStore; // nullable
-        this.graphAssistant =
-                graphAssistant != null ? graphAssistant : NoOpRetrievalGraphAssistant.INSTANCE;
+        this(
+                insightRetriever,
+                itemRetriever,
+                textSearch,
+                memoryStore,
+                SimpleStrategyConfig.defaults(),
+                graphAssistant,
+                NoOpMemoryThreadAssistant.INSTANCE);
     }
 
     public SimpleRetrievalStrategy(
@@ -88,7 +136,9 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
                 itemRetriever,
                 textSearch,
                 memoryStore,
-                NoOpRetrievalGraphAssistant.INSTANCE);
+                SimpleStrategyConfig.defaults(),
+                NoOpRetrievalGraphAssistant.INSTANCE,
+                NoOpMemoryThreadAssistant.INSTANCE);
     }
 
     @Override
@@ -104,10 +154,7 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
     }
 
     private Mono<RetrievalResult> executePipeline(QueryContext context, RetrievalConfig config) {
-        var simpleConfig =
-                config.strategyConfig() instanceof SimpleStrategyConfig simple
-                        ? simple
-                        : SimpleStrategyConfig.defaults();
+        var simpleConfig = resolveStrategyConfig(config);
 
         // Channel 1: Insight vector search
         Mono<TierResult> insightMono =
@@ -163,28 +210,101 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
                                             .toList();
 
                             var directItems = mergedItems;
-                            return graphAssistant
-                                    .assist(
-                                            context,
-                                            config,
-                                            simpleConfig.graphAssist(),
-                                            directItems)
-                                    .onErrorResume(
-                                            error -> {
-                                                log.warn("Simple: Graph assist failed", error);
-                                                return Mono.just(
-                                                        RetrievalGraphAssistResult.directOnly(
-                                                                directItems,
-                                                                simpleConfig
-                                                                        .graphAssist()
-                                                                        .enabled()));
-                                            })
-                                    .map(
-                                            result ->
-                                                    new PipelineInputs(
-                                                            insightResult, result.items()));
+                            return applyMemoryThreadAssist(
+                                            context, config, simpleConfig, directItems)
+                                    .flatMap(
+                                            candidatePool ->
+                                                    graphAssistant
+                                                            .assist(
+                                                                    context,
+                                                                    config,
+                                                                    simpleConfig.graphAssist(),
+                                                                    candidatePool)
+                                                            .onErrorResume(
+                                                                    error -> {
+                                                                        log.warn(
+                                                                                "Simple: Graph"
+                                                                                        + " assist"
+                                                                                        + " failed",
+                                                                                error);
+                                                                        return Mono.just(
+                                                                                RetrievalGraphAssistResult
+                                                                                        .directOnly(
+                                                                                                candidatePool,
+                                                                                                simpleConfig
+                                                                                                        .graphAssist()
+                                                                                                        .enabled()));
+                                                                    })
+                                                            .map(
+                                                                    result ->
+                                                                            new PipelineInputs(
+                                                                                    insightResult,
+                                                                                    result
+                                                                                            .items())));
                         })
                 .map(inputs -> finalizeResult(context, config, inputs));
+    }
+
+    private SimpleStrategyConfig resolveStrategyConfig(RetrievalConfig config) {
+        return config.strategyConfig() instanceof SimpleStrategyConfig simple
+                ? simple
+                : defaultStrategyConfig;
+    }
+
+    private Mono<List<ScoredResult>> applyMemoryThreadAssist(
+            QueryContext context,
+            RetrievalConfig config,
+            SimpleStrategyConfig simpleConfig,
+            List<ScoredResult> directWindow) {
+        var settings = simpleConfig.memoryThreadAssist();
+        if (directWindow.isEmpty() || !settings.enabled()) {
+            return Mono.just(directWindow);
+        }
+
+        return memoryThreadAssistant
+                .assist(context, config, settings, directWindow)
+                .onErrorResume(
+                        error -> {
+                            log.warn("Simple: Memory thread assist failed", error);
+                            return Mono.just(
+                                    MemoryThreadAssistResult.directOnly(directWindow, true));
+                        })
+                .map(result -> normalizeAssistWindow(directWindow, result.items(), settings));
+    }
+
+    private List<ScoredResult> normalizeAssistWindow(
+            List<ScoredResult> directWindow,
+            List<ScoredResult> assistedItems,
+            SimpleStrategyConfig.MemoryThreadAssistConfig settings) {
+        int pinned = Math.min(settings.protectDirectTopK(), directWindow.size());
+        List<ScoredResult> normalized = new ArrayList<>(directWindow.size());
+        normalized.addAll(directWindow.subList(0, pinned));
+
+        var usedIds =
+                normalized.stream()
+                        .map(ScoredResult::sourceId)
+                        .collect(
+                                java.util.stream.Collectors.toCollection(
+                                        java.util.LinkedHashSet::new));
+        if (assistedItems != null && pinned < assistedItems.size()) {
+            for (ScoredResult candidate : assistedItems.subList(pinned, assistedItems.size())) {
+                if (normalized.size() >= directWindow.size()) {
+                    break;
+                }
+                if (usedIds.add(candidate.sourceId())) {
+                    normalized.add(candidate);
+                }
+            }
+        }
+        for (ScoredResult direct : directWindow.subList(pinned, directWindow.size())) {
+            if (normalized.size() >= directWindow.size()) {
+                break;
+            }
+            if (usedIds.add(direct.sourceId())) {
+                normalized.add(direct);
+            }
+        }
+        return normalized;
     }
 
     private RetrievalResult finalizeResult(

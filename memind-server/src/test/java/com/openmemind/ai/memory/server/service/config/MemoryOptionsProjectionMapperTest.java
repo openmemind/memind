@@ -143,6 +143,43 @@ class MemoryOptionsProjectionMapperTest {
     }
 
     @Test
+    void projectionExposesMemoryThreadKeysAndRoundTripsValues() {
+        var projection = mapper.toProjection(MemoryBuildOptions.defaults());
+
+        assertThat(projection).containsKey("memoryThread");
+        assertThat(projection.get("memoryThread"))
+                .extracting(MemoryOptionItemView::key)
+                .contains(
+                        "memoryThread.enabled",
+                        "memoryThread.derivation.enabled",
+                        "memoryThread.rule.maxCandidateThreads",
+                        "memoryThread.rule.maxRetrievalMembersPerThread",
+                        "memoryThread.lifecycle.dormantAfter");
+        assertThat(projection.get("retrieval"))
+                .extracting(MemoryOptionItemView::key)
+                .contains(
+                        "retrieval.simple.memoryThreadAssist.enabled",
+                        "retrieval.deep.memoryThreadAssist.enabled");
+
+        updateValue(projection, "memoryThread.enabled", true);
+        updateValue(projection, "memoryThread.derivation.enabled", true);
+        updateValue(projection, "memoryThread.rule.maxCandidateThreads", 5);
+        updateValue(projection, "memoryThread.rule.maxRetrievalMembersPerThread", 2);
+        updateValue(projection, "memoryThread.lifecycle.dormantAfter", "PT240H");
+        updateValue(projection, "retrieval.simple.memoryThreadAssist.enabled", true);
+
+        var rebuilt = mapper.toOptions(projection);
+
+        assertThat(rebuilt.memoryThread().enabled()).isTrue();
+        assertThat(rebuilt.memoryThread().derivation().enabled()).isTrue();
+        assertThat(rebuilt.memoryThread().rule().maxCandidateThreads()).isEqualTo(5);
+        assertThat(rebuilt.memoryThread().rule().maxRetrievalMembersPerThread()).isEqualTo(2);
+        assertThat(rebuilt.memoryThread().lifecycle().dormantAfter())
+                .isEqualTo(java.time.Duration.ofDays(10));
+        assertThat(rebuilt.retrieval().simple().memoryThreadAssist().enabled()).isTrue();
+    }
+
+    @Test
     void ignoresNullRuntimeOnlyFieldsFromProjectionDefinitions() {
         var projection = mapper.toProjection(MemoryBuildOptions.defaults());
 

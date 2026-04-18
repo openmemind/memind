@@ -105,7 +105,7 @@ class MemindServerRuntimeConfigurationTest {
                         provider(BubbleTrackerStore.class, customBubbleTracker),
                         emptyProvider(MemoryObserver.class));
 
-        Memory memory = factory.create(MemoryBuildOptions.defaults());
+        Memory memory = factory.create(MemoryBuildOptions.defaults()).memory();
         var extractor =
                 readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
         var insightLayer = readField(extractor, "insightStep", InsightLayer.class);
@@ -135,7 +135,7 @@ class MemindServerRuntimeConfigurationTest {
                         emptyProvider(BubbleTrackerStore.class),
                         provider(MemoryObserver.class, observer));
 
-        var memory = (DefaultMemory) factory.create(graphEnabledBuildOptions());
+        var memory = (DefaultMemory) factory.create(graphEnabledBuildOptions()).memory();
         var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
 
@@ -215,7 +215,7 @@ class MemindServerRuntimeConfigurationTest {
                         emptyProvider(BubbleTrackerStore.class),
                         emptyProvider(MemoryObserver.class));
 
-        Memory memory = factory.create(MemoryBuildOptions.defaults());
+        Memory memory = factory.create(MemoryBuildOptions.defaults()).memory();
         var extractor =
                 readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
         ContentParserRegistry registry =
@@ -280,7 +280,7 @@ class MemindServerRuntimeConfigurationTest {
                         emptyProvider(BubbleTrackerStore.class),
                         emptyProvider(MemoryObserver.class));
 
-        Memory memory = factory.create(MemoryBuildOptions.defaults());
+        Memory memory = factory.create(MemoryBuildOptions.defaults()).memory();
         var extractor =
                 readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
 
@@ -322,7 +322,7 @@ class MemindServerRuntimeConfigurationTest {
                         emptyProvider(BubbleTrackerStore.class),
                         emptyProvider(MemoryObserver.class));
 
-        Memory memory = factory.create(MemoryBuildOptions.defaults());
+        Memory memory = factory.create(MemoryBuildOptions.defaults()).memory();
         var extractor =
                 readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
         ContentParserRegistry registry =
@@ -337,6 +337,52 @@ class MemindServerRuntimeConfigurationTest {
                 .containsExactlyInAnyOrder(
                         tuple("image-vision", ImageContent.TYPE, "image.caption-ocr"),
                         tuple("audio-transcription", AudioContent.TYPE, "audio.transcript"));
+    }
+
+    @Test
+    void runtimeFactoryReturnsSanitizedEffectiveOptionsForInvalidMemoryThreadDerivation() {
+        var configuration = new MemindServerRuntimeConfiguration();
+        var requested =
+                MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults().withEnabled(false)),
+                                        InsightExtractionOptions.defaults()))
+                        .memoryThread(
+                                MemoryBuildOptions.defaults()
+                                        .memoryThread()
+                                        .withEnabled(true)
+                                        .withDerivation(
+                                                MemoryBuildOptions.defaults()
+                                                        .memoryThread()
+                                                        .derivation()
+                                                        .withEnabled(true)))
+                        .build();
+
+        MemoryRuntimeFactory factory =
+                configuration.memoryRuntimeFactory(
+                        provider(StructuredChatClient.class, proxy(StructuredChatClient.class)),
+                        provider(MemoryStore.class, memoryStore()),
+                        provider(MemoryBuffer.class, memoryBuffer()),
+                        provider(MemoryVector.class, proxy(MemoryVector.class)),
+                        emptyProvider(MemoryTextSearch.class),
+                        provider(Reranker.class, new NoopReranker()),
+                        emptyProvider(ContentParser.class),
+                        emptyProvider(RawDataPlugin.class),
+                        emptyProvider(ResourceFetcher.class),
+                        emptyProvider(BubbleTrackerStore.class),
+                        emptyProvider(MemoryObserver.class));
+
+        var created = factory.create(requested);
+
+        assertThat(created.memory()).isInstanceOf(DefaultMemory.class);
+        assertThat(created.effectiveOptions().memoryThread().enabled()).isTrue();
+        assertThat(created.effectiveOptions().memoryThread().derivation().enabled()).isFalse();
     }
 
     @SuppressWarnings("unchecked")
