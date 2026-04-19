@@ -168,6 +168,7 @@ The main gaps are architectural rather than conceptual:
 
 - `ItemLink` is too generic for long-term relation semantics.
 - linkers still both compute and persist.
+- source-of-truth graph writes still inherit the current post-item best-effort stage semantics.
 - cooccurrence rebuild is not sufficiently store-native in SQL-backed implementations.
 - graph retrieval degrades at the whole-assistant level more often than at the per-family level.
 - graph execution contracts are not yet strong enough to express bulk write quality and bounded read quality separately.
@@ -245,19 +246,49 @@ Properties:
 - source-of-truth graph remains valid even if this phase degrades
 - failures are visible in diagnostics, not silent
 
+### 7.3 System-Level Consistency Model
+
+This design explicitly upgrades source-of-truth graph writes from best-effort behavior to commit-critical behavior.
+
+The system-level consistency decision is:
+
+- persisted items and persisted source-of-truth graph facts form one logical extraction commit
+- source-of-truth graph facts are:
+  - entities
+  - mentions
+  - aliases
+  - typed item relations
+- derived graph artifacts are not part of that logical commit
+
+Required guarantees:
+
+- an extraction request is not considered successfully committed until both item records and source-of-truth graph facts are durable
+- source-of-truth graph writes are not optional and are not best-effort
+- if item persistence succeeds but source-of-truth graph persistence fails, the batch must remain in an explicit incomplete state and must be retried or repaired before it is exposed as fully committed
+- post-commit derived maintenance remains best-effort and may degrade independently
+
+This means the current "post-item-persistence best-effort graph materializer" semantics will be narrowed to derived-maintenance semantics only. Source-of-truth graph persistence becomes part of the commit-critical path.
+
 ## 8. Relation Model Evolution
 
 ### 8.1 Required model changes
 
-The current `ItemLink` model is insufficiently expressive because subtype semantics are hidden in `metadata`.
+The current single `ItemLink` model is insufficient for core domain logic because subtype semantics are hidden in `metadata` and invalid cross-family combinations remain constructible.
 
 The relation model will evolve as follows:
 
-- `ItemLinkType` continues to represent the top-level family: `SEMANTIC`, `TEMPORAL`, `CAUSAL`.
-- `ItemLink` gains explicit normalized fields:
+- the core planning model uses family-specific typed relations:
+  - `SemanticItemRelation`
+  - `TemporalItemRelation`
+  - `CausalItemRelation`
+- the persisted representation uses a flattened relation record with explicit normalized fields:
+  - `linkType`
   - `relationCode`
   - `evidenceSource`
-- `metadata` remains available, but only for non-core auxiliary attributes and diagnostics.
+  - `strength`
+  - `metadata`
+- `ItemLink` may remain as a store-facing flattened representation or be replaced by a dedicated persisted-link DTO, but it is no longer the canonical planning type
+- `metadata` remains available only for non-core auxiliary attributes and diagnostics
 
 ### 8.2 Standardized relation codes
 
@@ -285,23 +316,25 @@ The following normalized relation codes are required.
 
 Validation must enforce the following invariants:
 
-- `TEMPORAL` links require a temporal `relationCode`.
-- `CAUSAL` links require a causal `relationCode`.
-- `SEMANTIC` links may omit `relationCode`, but must carry a normalized `evidenceSource`.
+- `TEMPORAL` persisted relations require a temporal `relationCode` and must not carry a semantic-only `evidenceSource`
+- `CAUSAL` persisted relations require a causal `relationCode` and must not carry a semantic-only `evidenceSource`
+- `SEMANTIC` persisted relations may omit `relationCode`, but must carry a normalized `evidenceSource`
 - `strength` remains normalized to `[0.0, 1.0]`.
 - source and target item IDs must be distinct.
 
 ### 8.4 Typed construction path
 
-Core code should not construct relation codes as ad hoc strings.
+Core relation construction must prevent invalid states by construction, not merely reject them after generic objects have already been built.
 
-The recommended construction pattern is:
+The required construction pattern is:
 
+- a closed typed hierarchy such as a sealed interface plus family-specific relation records, or an equivalent compile-time-safe design
 - family-specific enums for temporal and causal subtype
-- factory methods or helper builders that convert those enums into persisted `relationCode` / `evidenceSource`
-- centralized validation during plan assembly and before persistence
+- family-specific constructors or factories that cannot create cross-family invalid combinations
+- a commit-layer mapper that flattens typed relations into persisted `relationCode` / `evidenceSource`
+- centralized validation during plan assembly and before persistence of the flattened representation
 
-This keeps the Java API typed while keeping store schema simple.
+A generic builder that accepts arbitrary combinations of `linkType`, `relationCode`, and `evidenceSource` is not sufficient for the core domain model.
 
 ## 9. Graph Write Plan
 
@@ -314,9 +347,13 @@ It must contain:
 - entities to upsert
 - mentions to upsert
 - aliases to upsert
-- item links to upsert
+- semantic relations to persist
+- temporal relations to persist
+- causal relations to persist
 - affected entity keys
 - per-family diagnostics and degradation markers
+
+The write plan is a domain object. It must carry typed relation collections, not only pre-flattened persistence records.
 
 ### 9.2 Required planner outputs
 
@@ -340,7 +377,7 @@ Does not:
 
 Produces:
 
-- normalized causal item links only
+- normalized typed causal relations only
 
 Does not:
 
@@ -351,7 +388,7 @@ Does not:
 
 Produces:
 
-- selected temporal links with normalized temporal relation codes
+- selected typed temporal relations with normalized temporal relation codes
 - per-source candidate stats
 - degradation markers if historical lookup partially fails
 
@@ -364,7 +401,7 @@ Does not:
 
 Produces:
 
-- selected semantic links with normalized evidence source
+- selected semantic relations with normalized evidence source
 - same-batch and historical/vector diagnostics
 - degradation markers if batch search or resolve fallback occurs
 
@@ -387,11 +424,11 @@ Planners must be:
 
 The graph store contract must explicitly distinguish between:
 
-- source-of-truth writes
+- source-of-truth write-plan application
 - derived cache maintenance
 - bounded query capabilities
 
-The current `GraphOperations` interface remains the correct home for graph persistence, but it needs stronger semantics.
+The current table-shaped `GraphOperations` interface is not strong enough to remain the long-term primary orchestration contract.
 
 ### 10.2 New contract expectations
 
@@ -399,13 +436,14 @@ The graph store contract must support these guarantees.
 
 #### Atomic source-of-truth apply
 
-Core graph persistence should be able to apply a full write plan in one logical operation, even if an implementation internally decomposes it.
+Core graph persistence must expose a primary `applyGraphWritePlan(...)` style contract for source-of-truth graph writes.
 
-Recommended direction:
+Required direction:
 
-- keep low-level batch methods
-- add a higher-level write-plan apply path in core persistence orchestration
-- allow store capabilities to indicate stronger native support later
+- write-plan application is the main core-facing persistence entrypoint
+- write-plan application is atomic from the caller perspective, even if an implementation internally decomposes it
+- write-plan application is idempotent for the same normalized inputs
+- low-level table-shaped batch methods, if retained, are demoted to adapter-internal SPI or helper interfaces and are not the main orchestration surface
 
 #### Store-native bounded reads
 
@@ -727,14 +765,18 @@ This design is considered successfully implemented when all of the following are
 
 - persisted item relations expose explicit normalized subtype or evidence fields
 - temporal and causal core semantics are no longer hidden only in metadata
+- planners and write plans operate on family-specific typed relation models instead of one generic core relation record
 
 ### 20.2 Pipeline quality
 
 - graph materialization has explicit precompute, commit, and post-commit boundaries
 - planners no longer perform source-of-truth persistence directly
+- source-of-truth graph persistence is no longer treated as a best-effort post-item stage
+- an extraction batch is not considered successfully committed until both item records and source-of-truth graph facts are durable
 
 ### 20.3 Store quality
 
+- the primary core-facing graph persistence entrypoint applies a full graph write plan
 - SQL-backed graph operations use bulk-oriented persistence in graph hot paths
 - SQL-backed cooccurrence rebuild is store-native
 
