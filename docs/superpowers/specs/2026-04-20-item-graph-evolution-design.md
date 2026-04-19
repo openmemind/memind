@@ -456,6 +456,31 @@ Planners must be:
 - deterministic under the same inputs
 - individually unit-testable
 
+### 9.4 Canonical source-fact identities
+
+Source-of-truth graph facts must have explicit canonical identities before persistence. This is required for cross-store parity, repair safety, and true idempotence under retry.
+
+Required identity rules:
+
+- entity identity is `entityKey`; a committed memory graph must not contain more than one entity fact for the same key
+- mention identity is `(itemId, entityKey)`; a committed memory graph must not contain more than one mention fact for the same pair
+- alias identity is `(entityKey, entityType, normalizedAlias)`; a committed memory graph must not contain more than one alias fact for the same identity
+- relation identity is ordered `(sourceItemId, targetItemId, linkType)`; `relationCode` and `evidenceSource` are attributes of that relation fact, not additional identity dimensions
+
+Required cardinality and collapse rules:
+
+- write plans must collapse same-plan duplicates to canonical source facts before persistence
+- mention duplicates for the same identity must collapse to one fact with deterministic non-key fields; admitted confidence uses the maximum admitted confidence for that identity
+- alias duplicates for the same identity must collapse before persistence and must not create multiple committed rows for the same alias fact
+- alias evidence accumulation must be idempotent per `extractionBatchId`; retrying or repairing the same batch must not increase committed alias evidence twice
+- relation duplicates for the same ordered pair and family must collapse to one canonical persisted relation before commit
+
+Required conflict handling:
+
+- if the same relation identity receives conflicting temporal or causal `relationCode` values, validation must fail rather than persist competing facts
+- if the same semantic relation identity receives multiple evidence channels, the planner must choose one canonical `evidenceSource` by a documented deterministic precedence rule; non-canonical evidence may remain only in diagnostics or auxiliary metadata
+- stores must not invent store-specific merge semantics for canonical source facts; merge behavior is defined by the planner and commit contract
+
 ## 10. Persistence Contract Evolution
 
 ### 10.1 Core contract direction
@@ -481,6 +506,7 @@ Required direction:
 - write-plan application is the main core-facing persistence entrypoint
 - write-plan application is atomic from the caller perspective, even if an implementation internally decomposes it
 - write-plan application is idempotent for the same normalized inputs
+- idempotence is defined against canonical source-fact identities and their deterministic merge rules, not against raw row order or store-local batching details
 - low-level table-shaped batch methods, if retained, are demoted to adapter-internal SPI or helper interfaces and are not the main orchestration surface
 
 #### Logical extraction commit coordination
@@ -628,6 +654,14 @@ Required rules:
 - if one family is skipped, degraded, or times out, that family contributes zero and must not penalize direct-channel scores
 - identical inputs must produce identical fusion results, including tie-breaking behavior
 
+Required comparator order:
+
+1. higher fused score
+2. direct-channel candidate before graph-only candidate
+3. lower original direct rank for candidates that exist in the direct channel
+4. higher normalized graph-channel score
+5. lower stable `itemId`
+
 ## 13. Vector Capability Evolution
 
 ### 13.1 Motivation
@@ -711,6 +745,8 @@ Required coverage:
 Persistence tests must verify:
 
 - idempotent upsert behavior
+- canonical source-fact identity collapsing for entities, mentions, aliases, and relations
+- alias evidence accumulation remains idempotent when the same committed batch is retried
 - explicit relation subtype persistence
 - extraction batch visibility behavior for `PENDING`, `COMMITTED`, and `REPAIR_REQUIRED`
 - partially written source-of-truth batches are not externally visible
@@ -729,6 +765,7 @@ Retrieval graph tests must verify:
 - direct and graph overlap deduplication
 - direct top-K protection behavior
 - deterministic tie-breaking under identical inputs
+- comparator precedence across fused score, direct presence, direct rank, graph score, and stable item ID
 
 ### 16.4 Cross-store parity
 
@@ -860,6 +897,7 @@ This design is considered successfully implemented when all of the following are
 ### 20.3 Store quality
 
 - the primary core-facing graph persistence entrypoint applies a full graph write plan
+- source-of-truth facts use explicit canonical identities and deterministic merge rules across stores
 - SQL-backed graph operations use bulk-oriented persistence in graph hot paths
 - SQL-backed cooccurrence rebuild is store-native
 
