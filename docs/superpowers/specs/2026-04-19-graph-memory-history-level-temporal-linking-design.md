@@ -333,6 +333,13 @@ not as:
 
 - the maximum canonical temporal out-degree of every graph node across history
 
+Compatibility note:
+
+- this is an intentional behavior change relative to the current batch-local implementation in `GraphHintNormalizer.buildTemporalLinks(...)`, which caps temporal emission by canonical graph `source`
+- after this phase, both same-batch pairings and historical pairings obey the same per-incoming-item pairing cap
+- this compatibility change is deliberate because preserving the old same-batch source-cap while introducing a different historical pairing-cap would create two temporal quota regimes inside one stage
+- the phase prefers one explicit quota contract over partial backward-compatibility with split semantics
+
 ## Historical Lookup Contract
 
 ### 1. `ItemOperations` Gains A Bounded Temporal Lookup API
@@ -346,7 +353,8 @@ default List<TemporalCandidateMatch> listTemporalCandidateMatches(
         MemoryId memoryId,
         List<TemporalCandidateRequest> requests,
         Collection<Long> excludeItemIds) {
-    return List.of();
+    return TemporalCandidateLookupSupport.correctnessFirstLookup(
+            this, memoryId, requests, excludeItemIds);
 }
 ```
 
@@ -384,12 +392,21 @@ Required contract:
 
 ### 2. Core Default Behavior Versus Official Plugin Requirements
 
-The core interface may provide a default fallback implementation for correctness, but the required official store deliverable is stronger:
+The core interface must provide a default correctness-first fallback implementation.
 
-- custom third-party stores may temporarily rely on a correctness-first fallback
+Required behavior for the inherited default path:
+
+- it must return correct bounded history-level temporal candidates even when the store does not override the method
+- it may use `listItems(memoryId)` plus in-memory filtering, overlap detection, ranking, deduplication, and limit enforcement
+- it is allowed to be slower than native implementations
+- it must still obey the same candidate-scope, overlap-aware, deduplication, and probe-limit contracts defined by this document
+
+The required official store deliverable is stronger:
+
+- third-party stores inherit correctness even if they do not override the method
 - official maintained stores must override with bounded store-native lookup
 
-This avoids breaking compatibility while still keeping maintained backends operationally sound.
+This avoids silent feature loss in custom stores while still keeping maintained backends operationally sound.
 
 ### 3. Internal Query Batching
 
@@ -769,6 +786,10 @@ It immediately improves:
 - thread-derivation bridge coverage
 - graph expansion availability for temporal neighbors
 
+It also intentionally changes:
+
+- same-batch temporal quota semantics from canonical-source-cap behavior to the unified per-incoming-item pairing-cap behavior defined above
+
 It does not yet deliver:
 
 - retrieval-time weighting differences between `before`, `overlap`, and `nearby`
@@ -785,8 +806,10 @@ Those belong to a later retrieval-focused phase.
 - historical candidate lookup remains overlap-aware rather than anchor-only, so long-running overlapping events are eligible historical candidates
 - canonical temporal edge direction is explicitly defined and deterministic
 - `maxTemporalLinksPerItem` is defined as a per-incoming-item pairing cap, not as a global canonical out-degree cap
+- the same per-incoming-item pairing cap intentionally applies to same-batch temporal construction as well as historical temporal construction, replacing the old canonical-source-cap batch behavior
 - historical temporal lookup is provided through an explicit store contract
 - official implementations derive `overlapLimit`, `beforeLimit`, and `afterLimit` from one shared internal contract rather than backend-specific heuristics
+- the inherited `ItemOperations` default implementation remains correctness-preserving even for stores that do not override the temporal lookup method
 - official maintained stores implement bounded native lookup and do not rely on `listItems(memoryId)` full scans for the required path
 - official maintained stores persist and index the internal temporal query columns needed for both bounded lookup and overlap-aware lookup
 - historical lookup failure degrades to same-batch-only temporal linking for the affected subset instead of dropping the entire temporal stage
