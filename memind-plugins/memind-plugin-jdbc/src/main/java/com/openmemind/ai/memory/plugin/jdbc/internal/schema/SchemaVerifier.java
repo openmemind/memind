@@ -57,6 +57,21 @@ public final class SchemaVerifier {
         }
     }
 
+    public static boolean hasSqliteIndex(DataSource dataSource, String indexName) {
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement =
+                        connection.prepareStatement(
+                                "SELECT name FROM sqlite_master WHERE type='index' AND name = ?")) {
+            statement.setString(1, indexName);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next();
+            }
+        } catch (Exception e) {
+            throw new JdbcPluginException(
+                    "Failed to verify SQLite index existence: " + indexName, e);
+        }
+    }
+
     public static boolean hasMysqlTable(DataSource dataSource, String tableName) {
         try (Connection connection = dataSource.getConnection();
                 PreparedStatement statement =

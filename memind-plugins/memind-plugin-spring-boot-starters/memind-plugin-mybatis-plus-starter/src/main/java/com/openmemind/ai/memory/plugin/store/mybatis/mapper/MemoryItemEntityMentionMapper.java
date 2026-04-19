@@ -21,18 +21,21 @@ import java.util.Collection;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.ResultMap;
 import org.apache.ibatis.annotations.SelectProvider;
 
 @Mapper
 public interface MemoryItemEntityMentionMapper extends BaseMapper<MemoryItemEntityMentionDO> {
 
     @SelectProvider(type = GraphQuerySqlProvider.class, method = "selectMentionsByItemIds")
+    @ResultMap("mybatis-plus_MemoryItemEntityMentionDO")
     List<MemoryItemEntityMentionDO> selectByItemIds(
             @Param("memoryId") String memoryId, @Param("itemIds") Collection<Long> itemIds);
 
     @SelectProvider(
             type = GraphQuerySqlProvider.class,
             method = "selectMentionsByEntityKeysLimited")
+    @ResultMap("mybatis-plus_MemoryItemEntityMentionDO")
     List<MemoryItemEntityMentionDO> selectByEntityKeysLimited(
             @Param("memoryId") String memoryId,
             @Param("entityKeys") Collection<String> entityKeys,

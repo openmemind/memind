@@ -27,6 +27,8 @@ public final class StoreSchemaBootstrap {
             "db/jdbc/sqlite/store/V3__bubble_state.sql";
     private static final String SQLITE_ITEM_TEMPORAL_RESOURCE =
             "db/jdbc/sqlite/store/V4__item_temporal_fields.sql";
+    private static final String SQLITE_ITEM_TEMPORAL_LOOKUP_RESOURCE =
+            "db/jdbc/sqlite/store/V5__item_temporal_lookup.sql";
     private static final String MYSQL_STORE_RESOURCE = "db/jdbc/mysql/store/V1__init.sql";
     private static final String MYSQL_MULTIMODAL_RESOURCE =
             "db/jdbc/mysql/store/V2__multimodal.sql";
@@ -34,6 +36,8 @@ public final class StoreSchemaBootstrap {
             "db/jdbc/mysql/store/V3__bubble_state.sql";
     private static final String MYSQL_ITEM_TEMPORAL_RESOURCE =
             "db/jdbc/mysql/store/V4__item_temporal_fields.sql";
+    private static final String MYSQL_ITEM_TEMPORAL_LOOKUP_RESOURCE =
+            "db/jdbc/mysql/store/V5__item_temporal_lookup.sql";
     private static final String POSTGRESQL_STORE_RESOURCE = "db/jdbc/postgresql/store/V1__init.sql";
     private static final String POSTGRESQL_MULTIMODAL_RESOURCE =
             "db/jdbc/postgresql/store/V2__multimodal.sql";
@@ -41,6 +45,8 @@ public final class StoreSchemaBootstrap {
             "db/jdbc/postgresql/store/V3__bubble_state.sql";
     private static final String POSTGRESQL_ITEM_TEMPORAL_RESOURCE =
             "db/jdbc/postgresql/store/V4__item_temporal_fields.sql";
+    private static final String POSTGRESQL_ITEM_TEMPORAL_LOOKUP_RESOURCE =
+            "db/jdbc/postgresql/store/V5__item_temporal_lookup.sql";
 
     private StoreSchemaBootstrap() {}
 
@@ -67,6 +73,7 @@ public final class StoreSchemaBootstrap {
         }
         ensureSqliteBubbleStateSchema(dataSource, createIfNotExist);
         ensureSqliteItemTemporalSchema(dataSource, createIfNotExist);
+        ensureSqliteItemTemporalLookupSchema(dataSource, createIfNotExist);
         ensureSqliteInsightConfidenceRemoved(dataSource, createIfNotExist);
         boolean hasInsightTypeTable =
                 SchemaVerifier.hasSqliteTable(dataSource, "memory_insight_type");
@@ -96,6 +103,7 @@ public final class StoreSchemaBootstrap {
         }
         ensureMysqlBubbleStateSchema(dataSource, createIfNotExist);
         ensureMysqlItemTemporalSchema(dataSource, createIfNotExist);
+        ensureMysqlItemTemporalLookupSchema(dataSource, createIfNotExist);
         ensureMysqlInsightConfidenceRemoved(dataSource, createIfNotExist);
         boolean hasInsightTypeTable =
                 SchemaVerifier.hasMysqlTable(dataSource, "memory_insight_type");
@@ -125,6 +133,7 @@ public final class StoreSchemaBootstrap {
         }
         ensurePostgresqlBubbleStateSchema(dataSource, createIfNotExist);
         ensurePostgresqlItemTemporalSchema(dataSource, createIfNotExist);
+        ensurePostgresqlItemTemporalLookupSchema(dataSource, createIfNotExist);
         ensurePostgresqlInsightConfidenceRemoved(dataSource, createIfNotExist);
         boolean hasInsightTypeTable =
                 SchemaVerifier.hasPostgresqlTable(dataSource, "memory_insight_type");
@@ -303,6 +312,138 @@ public final class StoreSchemaBootstrap {
         JdbcExecutor.execute(dataSource, "ALTER TABLE memory_insight DROP COLUMN confidence");
     }
 
+    private static void ensureSqliteItemTemporalLookupSchema(
+            DataSource dataSource, boolean createIfNotExist) {
+        if (!hasRequiredSqliteItemTemporalLookupSchema(dataSource)) {
+            if (!createIfNotExist) {
+                throw new JdbcPluginException(
+                        "Missing required SQLite item temporal lookup schema: temporal_start");
+            }
+            if (!hasAnySqliteItemTemporalLookupColumn(dataSource)) {
+                SqlScriptRunner.execute(dataSource, SQLITE_ITEM_TEMPORAL_LOOKUP_RESOURCE);
+            }
+            ensureSqliteItemTemporalLookupColumn(
+                    dataSource,
+                    "temporal_start",
+                    "ALTER TABLE memory_item ADD COLUMN temporal_start TEXT");
+            ensureSqliteItemTemporalLookupColumn(
+                    dataSource,
+                    "temporal_end_or_anchor",
+                    "ALTER TABLE memory_item ADD COLUMN temporal_end_or_anchor TEXT");
+            ensureSqliteItemTemporalLookupColumn(
+                    dataSource,
+                    "temporal_anchor",
+                    "ALTER TABLE memory_item ADD COLUMN temporal_anchor TEXT");
+        }
+        backfillTemporalLookupColumns(dataSource);
+        ensureSqliteIndex(
+                dataSource,
+                "idx_item_temporal_anchor_scope",
+                "CREATE INDEX IF NOT EXISTS idx_item_temporal_anchor_scope ON"
+                        + " memory_item(memory_id, type, category, temporal_anchor, biz_id)");
+        ensureSqliteIndex(
+                dataSource,
+                "idx_item_temporal_start_scope",
+                "CREATE INDEX IF NOT EXISTS idx_item_temporal_start_scope ON"
+                        + " memory_item(memory_id, type, category, temporal_start, biz_id)");
+        ensureSqliteIndex(
+                dataSource,
+                "idx_item_temporal_end_scope",
+                "CREATE INDEX IF NOT EXISTS idx_item_temporal_end_scope ON"
+                        + " memory_item(memory_id, type, category, temporal_end_or_anchor,"
+                        + " biz_id)");
+    }
+
+    private static void ensureMysqlItemTemporalLookupSchema(
+            DataSource dataSource, boolean createIfNotExist) {
+        if (!hasRequiredMysqlItemTemporalLookupSchema(dataSource)) {
+            if (!createIfNotExist) {
+                throw new JdbcPluginException(
+                        "Missing required MySQL item temporal lookup schema: temporal_start");
+            }
+            if (!hasAnyMysqlItemTemporalLookupColumn(dataSource)) {
+                SqlScriptRunner.execute(dataSource, MYSQL_ITEM_TEMPORAL_LOOKUP_RESOURCE);
+            }
+            ensureMysqlItemTemporalLookupColumn(
+                    dataSource,
+                    "temporal_start",
+                    "ALTER TABLE memory_item ADD COLUMN temporal_start DATETIME(3) NULL");
+            ensureMysqlItemTemporalLookupColumn(
+                    dataSource,
+                    "temporal_end_or_anchor",
+                    "ALTER TABLE memory_item ADD COLUMN temporal_end_or_anchor DATETIME(3) NULL");
+            ensureMysqlItemTemporalLookupColumn(
+                    dataSource,
+                    "temporal_anchor",
+                    "ALTER TABLE memory_item ADD COLUMN temporal_anchor DATETIME(3) NULL");
+        }
+        backfillTemporalLookupColumns(dataSource);
+        ensureMysqlIndex(
+                dataSource,
+                "memory_item",
+                "idx_item_temporal_anchor_scope",
+                "CREATE INDEX idx_item_temporal_anchor_scope ON"
+                        + " memory_item(memory_id, type, category, temporal_anchor, biz_id)");
+        ensureMysqlIndex(
+                dataSource,
+                "memory_item",
+                "idx_item_temporal_start_scope",
+                "CREATE INDEX idx_item_temporal_start_scope ON"
+                        + " memory_item(memory_id, type, category, temporal_start, biz_id)");
+        ensureMysqlIndex(
+                dataSource,
+                "memory_item",
+                "idx_item_temporal_end_scope",
+                "CREATE INDEX idx_item_temporal_end_scope ON"
+                        + " memory_item(memory_id, type, category, temporal_end_or_anchor,"
+                        + " biz_id)");
+    }
+
+    private static void ensurePostgresqlItemTemporalLookupSchema(
+            DataSource dataSource, boolean createIfNotExist) {
+        if (!hasRequiredPostgresqlItemTemporalLookupSchema(dataSource)) {
+            if (!createIfNotExist) {
+                throw new JdbcPluginException(
+                        "Missing required PostgreSQL item temporal lookup schema: temporal_start");
+            }
+            if (!hasAnyPostgresqlItemTemporalLookupColumn(dataSource)) {
+                SqlScriptRunner.execute(dataSource, POSTGRESQL_ITEM_TEMPORAL_LOOKUP_RESOURCE);
+            }
+            ensurePostgresqlItemTemporalLookupColumn(
+                    dataSource,
+                    "temporal_start",
+                    "ALTER TABLE memory_item ADD COLUMN temporal_start TIMESTAMPTZ");
+            ensurePostgresqlItemTemporalLookupColumn(
+                    dataSource,
+                    "temporal_end_or_anchor",
+                    "ALTER TABLE memory_item ADD COLUMN temporal_end_or_anchor TIMESTAMPTZ");
+            ensurePostgresqlItemTemporalLookupColumn(
+                    dataSource,
+                    "temporal_anchor",
+                    "ALTER TABLE memory_item ADD COLUMN temporal_anchor TIMESTAMPTZ");
+        }
+        backfillTemporalLookupColumns(dataSource);
+        ensurePostgresqlIndex(
+                dataSource,
+                "memory_item",
+                "idx_item_temporal_anchor_scope",
+                "CREATE INDEX idx_item_temporal_anchor_scope ON"
+                        + " memory_item(memory_id, type, category, temporal_anchor, biz_id)");
+        ensurePostgresqlIndex(
+                dataSource,
+                "memory_item",
+                "idx_item_temporal_start_scope",
+                "CREATE INDEX idx_item_temporal_start_scope ON"
+                        + " memory_item(memory_id, type, category, temporal_start, biz_id)");
+        ensurePostgresqlIndex(
+                dataSource,
+                "memory_item",
+                "idx_item_temporal_end_scope",
+                "CREATE INDEX idx_item_temporal_end_scope ON"
+                        + " memory_item(memory_id, type, category, temporal_end_or_anchor,"
+                        + " biz_id)");
+    }
+
     private static void ensureMysqlInsightConfidenceRemoved(
             DataSource dataSource, boolean createIfNotExist) {
         if (!SchemaVerifier.hasMysqlColumn(dataSource, "memory_insight", "confidence")) {
@@ -347,6 +488,35 @@ public final class StoreSchemaBootstrap {
         JdbcExecutor.execute(dataSource, sql);
     }
 
+    private static boolean hasRequiredSqliteItemTemporalLookupSchema(DataSource dataSource) {
+        return SchemaVerifier.hasSqliteColumn(dataSource, "memory_item", "temporal_start")
+                && SchemaVerifier.hasSqliteColumn(
+                        dataSource, "memory_item", "temporal_end_or_anchor")
+                && SchemaVerifier.hasSqliteColumn(dataSource, "memory_item", "temporal_anchor");
+    }
+
+    private static boolean hasAnySqliteItemTemporalLookupColumn(DataSource dataSource) {
+        return SchemaVerifier.hasSqliteColumn(dataSource, "memory_item", "temporal_start")
+                || SchemaVerifier.hasSqliteColumn(
+                        dataSource, "memory_item", "temporal_end_or_anchor")
+                || SchemaVerifier.hasSqliteColumn(dataSource, "memory_item", "temporal_anchor");
+    }
+
+    private static void ensureSqliteItemTemporalLookupColumn(
+            DataSource dataSource, String columnName, String sql) {
+        if (SchemaVerifier.hasSqliteColumn(dataSource, "memory_item", columnName)) {
+            return;
+        }
+        JdbcExecutor.execute(dataSource, sql);
+    }
+
+    private static void ensureSqliteIndex(DataSource dataSource, String indexName, String sql) {
+        if (SchemaVerifier.hasSqliteIndex(dataSource, indexName)) {
+            return;
+        }
+        JdbcExecutor.execute(dataSource, sql);
+    }
+
     private static boolean hasRequiredMysqlItemTemporalSchema(DataSource dataSource) {
         return SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", "occurred_start")
                 && SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", "occurred_end")
@@ -362,6 +532,36 @@ public final class StoreSchemaBootstrap {
     private static void ensureMysqlItemTemporalColumn(
             DataSource dataSource, String columnName, String sql) {
         if (SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", columnName)) {
+            return;
+        }
+        JdbcExecutor.execute(dataSource, sql);
+    }
+
+    private static boolean hasRequiredMysqlItemTemporalLookupSchema(DataSource dataSource) {
+        return SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", "temporal_start")
+                && SchemaVerifier.hasMysqlColumn(
+                        dataSource, "memory_item", "temporal_end_or_anchor")
+                && SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", "temporal_anchor");
+    }
+
+    private static boolean hasAnyMysqlItemTemporalLookupColumn(DataSource dataSource) {
+        return SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", "temporal_start")
+                || SchemaVerifier.hasMysqlColumn(
+                        dataSource, "memory_item", "temporal_end_or_anchor")
+                || SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", "temporal_anchor");
+    }
+
+    private static void ensureMysqlItemTemporalLookupColumn(
+            DataSource dataSource, String columnName, String sql) {
+        if (SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", columnName)) {
+            return;
+        }
+        JdbcExecutor.execute(dataSource, sql);
+    }
+
+    private static void ensureMysqlIndex(
+            DataSource dataSource, String tableName, String indexName, String sql) {
+        if (SchemaVerifier.hasMysqlIndex(dataSource, tableName, indexName)) {
             return;
         }
         JdbcExecutor.execute(dataSource, sql);
@@ -387,5 +587,57 @@ public final class StoreSchemaBootstrap {
             return;
         }
         JdbcExecutor.execute(dataSource, sql);
+    }
+
+    private static boolean hasRequiredPostgresqlItemTemporalLookupSchema(DataSource dataSource) {
+        return SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_item", "temporal_start")
+                && SchemaVerifier.hasPostgresqlColumn(
+                        dataSource, "memory_item", "temporal_end_or_anchor")
+                && SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_item", "temporal_anchor");
+    }
+
+    private static boolean hasAnyPostgresqlItemTemporalLookupColumn(DataSource dataSource) {
+        return SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_item", "temporal_start")
+                || SchemaVerifier.hasPostgresqlColumn(
+                        dataSource, "memory_item", "temporal_end_or_anchor")
+                || SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_item", "temporal_anchor");
+    }
+
+    private static void ensurePostgresqlItemTemporalLookupColumn(
+            DataSource dataSource, String columnName, String sql) {
+        if (SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_item", columnName)) {
+            return;
+        }
+        JdbcExecutor.execute(dataSource, sql);
+    }
+
+    private static void ensurePostgresqlIndex(
+            DataSource dataSource, String tableName, String indexName, String sql) {
+        if (SchemaVerifier.hasPostgresqlIndex(dataSource, tableName, indexName)) {
+            return;
+        }
+        JdbcExecutor.execute(dataSource, sql);
+    }
+
+    private static void backfillTemporalLookupColumns(DataSource dataSource) {
+        JdbcExecutor.execute(
+                dataSource,
+                """
+                UPDATE memory_item
+                SET temporal_start = COALESCE(temporal_start, occurred_start, occurred_at, observed_at),
+                    temporal_end_or_anchor = COALESCE(
+                            temporal_end_or_anchor,
+                            occurred_end,
+                            occurred_start,
+                            occurred_at,
+                            observed_at),
+                    temporal_anchor = COALESCE(temporal_anchor, occurred_start, occurred_at, observed_at)
+                WHERE COALESCE(occurred_start, occurred_at, observed_at) IS NOT NULL
+                  AND (
+                          temporal_start IS NULL
+                          OR temporal_end_or_anchor IS NULL
+                          OR temporal_anchor IS NULL
+                      )
+                """);
     }
 }

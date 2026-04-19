@@ -22,6 +22,7 @@ import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.graph.GraphEntity;
+import com.openmemind.ai.memory.core.store.graph.GraphEntityAlias;
 import com.openmemind.ai.memory.core.store.graph.GraphEntityType;
 import com.openmemind.ai.memory.core.store.graph.GraphOperations;
 import com.openmemind.ai.memory.core.store.graph.InMemoryGraphOperations;
@@ -50,6 +51,7 @@ import org.sqlite.SQLiteDataSource;
 class MybatisGraphReadParityTest {
 
     private static final MemoryId MEMORY_ID = DefaultMemoryId.of("user-1", "agent-1");
+    private static final Instant NOW = Instant.parse("2026-04-19T00:00:00Z");
 
     @Test
     void mybatisAndInMemoryGraphReadsProduceEquivalentAdjacencyAndReverseMentionResults(
@@ -89,6 +91,158 @@ class MybatisGraphReadParityTest {
                         });
     }
 
+    @Test
+    void mybatisAndInMemoryGraphReadsProduceEquivalentEntityKeyLookups(@TempDir Path tempDir) {
+        GraphFixture fixture = GraphFixture.sample();
+        var inMemory = new InMemoryGraphOperations();
+        fixture.seed(inMemory);
+
+        newContextRunner(tempDir.resolve("graph-entity-lookup-parity.db"))
+                .run(
+                        context -> {
+                            GraphOperations mybatis =
+                                    context.getBean(MemoryStore.class).graphOperations();
+                            fixture.seed(mybatis);
+
+                            assertThat(
+                                            mybatis.listEntitiesByEntityKeys(
+                                                    MEMORY_ID,
+                                                    List.of(
+                                                            "person:sam_altman",
+                                                            "organization:openai",
+                                                            "person:sam_altman",
+                                                            "missing:key")))
+                                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(
+                                            "createdAt", "updatedAt")
+                                    .isEqualTo(
+                                            inMemory.listEntitiesByEntityKeys(
+                                                    MEMORY_ID,
+                                                    List.of(
+                                                            "person:sam_altman",
+                                                            "organization:openai",
+                                                            "person:sam_altman",
+                                                            "missing:key")));
+                        });
+    }
+
+    @Test
+    void mybatisAndInMemoryGraphReadsPreserveEquivalentStage2MetadataSemantics(
+            @TempDir Path tempDir) {
+        var entity =
+                new GraphEntity(
+                        "organization:openai",
+                        MEMORY_ID.toIdentifier(),
+                        "OpenAI",
+                        GraphEntityType.ORGANIZATION,
+                        Map.of(
+                                "topAliases",
+                                List.of("开放人工智能"),
+                                "aliasEvidenceCount",
+                                1,
+                                "aliasClasses",
+                                List.of("explicit_parenthetical")),
+                        Instant.parse("2026-04-16T00:00:00Z"),
+                        Instant.parse("2026-04-16T00:00:00Z"));
+        var mention =
+                new ItemEntityMention(
+                        MEMORY_ID.toIdentifier(),
+                        101L,
+                        "organization:openai",
+                        0.95f,
+                        Map.of(
+                                "resolutionMode",
+                                "conservative",
+                                "resolutionSource",
+                                "explicit_alias_evidence_hit",
+                                "resolvedViaAliasClass",
+                                "explicit_parenthetical"),
+                        Instant.parse("2026-04-16T00:00:00Z"));
+        var inMemory = new InMemoryGraphOperations();
+        inMemory.upsertEntities(MEMORY_ID, List.of(entity));
+        inMemory.upsertItemEntityMentions(MEMORY_ID, List.of(mention));
+
+        newContextRunner(tempDir.resolve("graph-stage2-parity.db"))
+                .run(
+                        context -> {
+                            GraphOperations mybatis =
+                                    context.getBean(MemoryStore.class).graphOperations();
+                            mybatis.upsertEntities(MEMORY_ID, List.of(entity));
+                            mybatis.upsertItemEntityMentions(MEMORY_ID, List.of(mention));
+
+                            var inMemoryEntity = inMemory.listEntities(MEMORY_ID).getFirst();
+                            var mybatisEntity = mybatis.listEntities(MEMORY_ID).getFirst();
+                            assertThat(
+                                            ((Number)
+                                                            mybatisEntity
+                                                                    .metadata()
+                                                                    .get("aliasEvidenceCount"))
+                                                    .intValue())
+                                    .isEqualTo(
+                                            ((Number)
+                                                            inMemoryEntity
+                                                                    .metadata()
+                                                                    .get("aliasEvidenceCount"))
+                                                    .intValue());
+                            assertThat(mybatisEntity.metadata().get("aliasClasses"))
+                                    .isEqualTo(inMemoryEntity.metadata().get("aliasClasses"));
+                            assertThat(mybatisEntity.metadata().get("topAliases"))
+                                    .isEqualTo(inMemoryEntity.metadata().get("topAliases"));
+
+                            var inMemoryMention =
+                                    inMemory.listItemEntityMentions(MEMORY_ID).getFirst();
+                            var mybatisMention =
+                                    mybatis.listItemEntityMentions(MEMORY_ID).getFirst();
+                            assertThat(mybatisMention.metadata().get("resolutionMode"))
+                                    .isEqualTo(inMemoryMention.metadata().get("resolutionMode"));
+                            assertThat(mybatisMention.metadata().get("resolutionSource"))
+                                    .isEqualTo(inMemoryMention.metadata().get("resolutionSource"));
+                            assertThat(mybatisMention.metadata().get("resolvedViaAliasClass"))
+                                    .isEqualTo(
+                                            inMemoryMention
+                                                    .metadata()
+                                                    .get("resolvedViaAliasClass"));
+                        });
+    }
+
+    @Test
+    void mybatisAndInMemoryHistoricalAliasLookupProduceEquivalentResults(@TempDir Path tempDir) {
+        var inMemory = new InMemoryGraphOperations();
+        inMemory.upsertEntityAliases(
+                MEMORY_ID,
+                List.of(
+                        alias("organization:google", GraphEntityType.ORGANIZATION, "谷歌", 2),
+                        alias("organization:google_hk", GraphEntityType.ORGANIZATION, "谷歌", 1)));
+
+        newContextRunner(tempDir.resolve("graph-historical-alias-parity.db"))
+                .run(
+                        context -> {
+                            GraphOperations mybatis =
+                                    context.getBean(MemoryStore.class).graphOperations();
+                            mybatis.upsertEntityAliases(
+                                    MEMORY_ID,
+                                    List.of(
+                                            alias(
+                                                    "organization:google",
+                                                    GraphEntityType.ORGANIZATION,
+                                                    "谷歌",
+                                                    2),
+                                            alias(
+                                                    "organization:google_hk",
+                                                    GraphEntityType.ORGANIZATION,
+                                                    "谷歌",
+                                                    1)));
+
+                            assertThat(
+                                            mybatis.listEntityAliasesByNormalizedAlias(
+                                                    MEMORY_ID, GraphEntityType.ORGANIZATION, "谷歌"))
+                                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(
+                                            "createdAt", "updatedAt")
+                                    .isEqualTo(
+                                            inMemory.listEntityAliasesByNormalizedAlias(
+                                                    MEMORY_ID, GraphEntityType.ORGANIZATION, "谷歌"));
+                        });
+    }
+
     private ApplicationContextRunner newContextRunner(Path dbPath) {
         return new ApplicationContextRunner()
                 .withConfiguration(
@@ -101,6 +255,22 @@ class MybatisGraphReadParityTest {
                         "test.sqlite.path=" + dbPath,
                         "memind.store.init-schema=true",
                         "spring.main.web-application-type=none");
+    }
+
+    private static GraphEntityAlias alias(
+            String entityKey,
+            GraphEntityType entityType,
+            String normalizedAlias,
+            int evidenceCount) {
+        return new GraphEntityAlias(
+                MEMORY_ID.toIdentifier(),
+                entityKey,
+                entityType,
+                normalizedAlias,
+                evidenceCount,
+                Map.of("source", "item_extraction"),
+                NOW,
+                NOW);
     }
 
     private record GraphFixture(

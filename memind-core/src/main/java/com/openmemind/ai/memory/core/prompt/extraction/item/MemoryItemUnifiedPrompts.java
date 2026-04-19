@@ -545,8 +545,12 @@ public final class MemoryItemUnifiedPrompts {
 
         ## Graph Hints
         - Include `"entities"` only for concrete, high-value named entities; keep at most %d per item.
+        - Allowed `"entityType"` values are `person`, `organization`, `place`, `object`, `concept`, and `special`.
+        - Use "special" only for conversational role anchors such as self, user, or assistant; do not label arbitrary nouns as special.
         - Include `"causalRelations"` only for strong backward-looking links; keep at most %d per item.
-        - `"entities"` uses objects with `"name"`, `"entityType"`, and optional `"salience"`.
+        - `"entities"` uses objects with `"name"`, `"entityType"`, optional `"salience"`, and optional `"aliasObservations"`.
+        - Each `"aliasObservations"` entry uses `"aliasSurface"`, `"aliasClass"`, optional `"evidenceSource"`, and optional `"confidence"`.
+        - Allowed `"aliasClass"` values are `case_only`, `punctuation`, `spacing`, `org_suffix`, `explicit_parenthetical`, `explicit_slash_apposition`, and `user_dictionary`.
         - `"causalRelations"` uses objects with `"targetIndex"`, `"relationType"`, and optional `"strength"`.
         - targetIndex must reference an earlier item in the same response.
         - Prefer omission to hallucinated graph structure.
@@ -564,7 +568,15 @@ public final class MemoryItemUnifiedPrompts {
                 + "        {\n"
                 + "          \"name\": \"OpenAI\",\n"
                 + "          \"entityType\": \"organization\",\n"
-                + "          \"salience\": 0.91\n"
+                + "          \"salience\": 0.91,\n"
+                + "          \"aliasObservations\": [\n"
+                + "            {\n"
+                + "              \"aliasSurface\": \"开放人工智能\",\n"
+                + "              \"aliasClass\": \"explicit_parenthetical\",\n"
+                + "              \"evidenceSource\": \"entity_inline\",\n"
+                + "              \"confidence\": 0.93\n"
+                + "            }\n"
+                + "          ]\n"
                 + "        }\n"
                 + "      ],\n"
                 + "      \"causalRelations\": [\n"

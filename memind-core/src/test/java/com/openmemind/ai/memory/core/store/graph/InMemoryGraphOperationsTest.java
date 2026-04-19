@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.tuple;
 
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.normalize.EntityNormalizationVersions;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +44,77 @@ class InMemoryGraphOperationsTest {
     }
 
     @Test
+    void inMemoryGraphOperationsShouldAccumulateEvidenceForSameAliasIdentityAndPreserveAmbiguity() {
+        var ops = new InMemoryGraphOperations();
+
+        ops.upsertEntityAliases(
+                MEMORY_ID,
+                List.of(
+                        alias(
+                                "organization:google",
+                                GraphEntityType.ORGANIZATION,
+                                "谷歌",
+                                1,
+                                NOW,
+                                NOW)));
+        ops.upsertEntityAliases(
+                MEMORY_ID,
+                List.of(
+                        alias(
+                                "organization:google",
+                                GraphEntityType.ORGANIZATION,
+                                "谷歌",
+                                2,
+                                NOW.plusSeconds(10),
+                                NOW.plusSeconds(10)),
+                        alias(
+                                "organization:google_hk",
+                                GraphEntityType.ORGANIZATION,
+                                "谷歌",
+                                1,
+                                NOW.plusSeconds(20),
+                                NOW.plusSeconds(20))));
+
+        assertThat(
+                        ops.listEntityAliasesByNormalizedAlias(
+                                MEMORY_ID, GraphEntityType.ORGANIZATION, "谷歌"))
+                .extracting(
+                        GraphEntityAlias::entityKey,
+                        GraphEntityAlias::evidenceCount,
+                        GraphEntityAlias::createdAt,
+                        GraphEntityAlias::updatedAt)
+                .containsExactly(
+                        tuple("organization:google", 3, NOW, NOW.plusSeconds(10)),
+                        tuple(
+                                "organization:google_hk",
+                                1,
+                                NOW.plusSeconds(20),
+                                NOW.plusSeconds(20)));
+    }
+
+    @Test
+    void noOpGraphOperationsShouldExposeEmptyHistoricalAliasViews() {
+        GraphOperations ops = NoOpGraphOperations.INSTANCE;
+
+        ops.upsertEntityAliases(
+                MEMORY_ID,
+                List.of(
+                        alias(
+                                "organization:google",
+                                GraphEntityType.ORGANIZATION,
+                                "谷歌",
+                                1,
+                                NOW,
+                                NOW)));
+
+        assertThat(ops.listEntityAliases(MEMORY_ID)).isEmpty();
+        assertThat(
+                        ops.listEntityAliasesByNormalizedAlias(
+                                MEMORY_ID, GraphEntityType.ORGANIZATION, "谷歌"))
+                .isEmpty();
+    }
+
+    @Test
     void inMemoryGraphOperationsUpsertEntitiesMentionsAndLinksIdempotently() {
         var ops = new InMemoryGraphOperations();
 
@@ -56,6 +128,34 @@ class InMemoryGraphOperationsTest {
         assertThat(ops.listEntities(MEMORY_ID)).hasSize(1);
         assertThat(ops.listItemEntityMentions(MEMORY_ID)).hasSize(1);
         assertThat(ops.listItemLinks(MEMORY_ID)).hasSize(1);
+    }
+
+    @Test
+    void inMemoryGraphOperationsShouldLookupEntitiesByRequestedKeysWithoutDuplicates() {
+        var ops = new InMemoryGraphOperations();
+        ops.upsertEntities(
+                MEMORY_ID,
+                List.of(
+                        entity("organization:openai", "OpenAI"),
+                        new GraphEntity(
+                                "person:sam_altman",
+                                MEMORY_ID.toIdentifier(),
+                                "Sam Altman",
+                                GraphEntityType.PERSON,
+                                Map.of("source", "test"),
+                                NOW,
+                                NOW)));
+
+        assertThat(
+                        ops.listEntitiesByEntityKeys(
+                                MEMORY_ID,
+                                List.of(
+                                        "person:sam_altman",
+                                        "organization:openai",
+                                        "person:sam_altman",
+                                        "missing:key")))
+                .extracting(GraphEntity::entityKey)
+                .containsExactlyInAnyOrder("organization:openai", "person:sam_altman");
     }
 
     @Test
@@ -152,6 +252,105 @@ class InMemoryGraphOperationsTest {
                         tuple("person:sam_altman", 102L));
     }
 
+    @Test
+    void inMemoryGraphOperationsShouldRoundTripStage1EntityMetadata() {
+        var ops = new InMemoryGraphOperations();
+        var entity =
+                new GraphEntity(
+                        "person:张三",
+                        MEMORY_ID.toIdentifier(),
+                        "张三",
+                        GraphEntityType.PERSON,
+                        Map.of(
+                                "source",
+                                "item_extraction",
+                                "normalizationVersion",
+                                EntityNormalizationVersions.STAGE1A_V1),
+                        NOW,
+                        NOW);
+        var mention =
+                new ItemEntityMention(
+                        MEMORY_ID.toIdentifier(),
+                        101L,
+                        "person:张三",
+                        0.95f,
+                        Map.of(
+                                "rawName",
+                                "张三",
+                                "rawTypeLabel",
+                                "人物",
+                                "normalizedName",
+                                "张三",
+                                "normalizationVersion",
+                                EntityNormalizationVersions.STAGE1A_V1),
+                        NOW);
+
+        ops.upsertEntities(MEMORY_ID, List.of(entity));
+        ops.upsertItemEntityMentions(MEMORY_ID, List.of(mention));
+
+        assertThat(ops.listEntities(MEMORY_ID).getFirst().metadata())
+                .containsEntry("normalizationVersion", EntityNormalizationVersions.STAGE1A_V1);
+        assertThat(ops.listItemEntityMentions(MEMORY_ID).getFirst().metadata())
+                .containsEntry("rawName", "张三")
+                .containsEntry("rawTypeLabel", "人物")
+                .containsEntry("normalizedName", "张三");
+    }
+
+    @Test
+    void inMemoryGraphOperationsShouldRoundTripStage2ResolutionMetadata() {
+        var ops = new InMemoryGraphOperations();
+        var entity =
+                new GraphEntity(
+                        "organization:openai",
+                        MEMORY_ID.toIdentifier(),
+                        "OpenAI",
+                        GraphEntityType.ORGANIZATION,
+                        Map.of(
+                                "source",
+                                "item_extraction",
+                                "topAliases",
+                                List.of("开放人工智能"),
+                                "aliasEvidenceCount",
+                                1,
+                                "aliasClasses",
+                                List.of("explicit_parenthetical")),
+                        NOW,
+                        NOW);
+        var mention =
+                new ItemEntityMention(
+                        MEMORY_ID.toIdentifier(),
+                        101L,
+                        "organization:openai",
+                        0.95f,
+                        Map.of(
+                                "source",
+                                "item_extraction",
+                                "resolutionMode",
+                                "conservative",
+                                "resolutionSource",
+                                "explicit_alias_evidence_hit",
+                                "resolvedViaAliasClass",
+                                "explicit_parenthetical"),
+                        NOW);
+
+        ops.upsertEntities(MEMORY_ID, List.of(entity));
+        ops.upsertItemEntityMentions(MEMORY_ID, List.of(mention));
+
+        assertThat(
+                        ((Number)
+                                        ops.listEntities(MEMORY_ID)
+                                                .getFirst()
+                                                .metadata()
+                                                .get("aliasEvidenceCount"))
+                                .intValue())
+                .isEqualTo(1);
+        assertThat(ops.listEntities(MEMORY_ID).getFirst().metadata())
+                .containsEntry("aliasClasses", List.of("explicit_parenthetical"));
+        assertThat(ops.listItemEntityMentions(MEMORY_ID).getFirst().metadata())
+                .containsEntry("resolutionMode", "conservative")
+                .containsEntry("resolvedViaAliasClass", "explicit_parenthetical");
+    }
+
     private static InMemoryGraphOperations seededGraph() {
         var ops = new InMemoryGraphOperations();
         ops.upsertItemLinks(
@@ -172,6 +371,24 @@ class InMemoryGraphOperationsTest {
                 Map.of("source", "test"),
                 NOW,
                 NOW);
+    }
+
+    private static GraphEntityAlias alias(
+            String entityKey,
+            GraphEntityType entityType,
+            String normalizedAlias,
+            int evidenceCount,
+            Instant createdAt,
+            Instant updatedAt) {
+        return new GraphEntityAlias(
+                MEMORY_ID.toIdentifier(),
+                entityKey,
+                entityType,
+                normalizedAlias,
+                evidenceCount,
+                Map.of("source", "item_extraction"),
+                createdAt,
+                updatedAt);
     }
 
     private static ItemEntityMention mention(long itemId, String entityKey) {

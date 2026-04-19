@@ -52,6 +52,9 @@ import com.openmemind.ai.memory.core.extraction.item.MemoryItemLayer;
 import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItemExtractor;
 import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.item.graph.NoOpItemGraphMaterializer;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.EntityResolutionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.ExactCanonicalEntityResolutionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.graph.pipeline.DefaultItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.item.strategy.LlmItemExtractionStrategy;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
@@ -205,6 +208,14 @@ class DefaultMemoryBuilderTest {
                                 .derivation()
                                 .enabled())
                 .isFalse();
+    }
+
+    @Test
+    void defaultBuilderShouldKeepStage1aGraphHardeningEnabledOnlyThroughBuiltInDefaults() {
+        var graph = MemoryBuildOptions.defaults().extraction().item().graph();
+
+        assertThat(graph.enabled()).isFalse();
+        assertThat(graph.maxEntitiesPerItem()).isEqualTo(8);
     }
 
     @Test
@@ -465,6 +476,27 @@ class DefaultMemoryBuilderTest {
 
         assertThat(readField(itemLayer, "graphMaterializer", ItemGraphMaterializer.class))
                 .isInstanceOf(TracingItemGraphMaterializer.class);
+    }
+
+    @Test
+    void builderManagedRuntimeShouldWireExactResolutionByDefault() {
+        var memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(CHAT_CLIENT)
+                                .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .options(graphEnabledBuildOptions())
+                                .build();
+
+        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
+        var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+        var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
+        var delegate = readField(tracing, "delegate", DefaultItemGraphMaterializer.class);
+
+        assertThat(readField(delegate, "resolutionStrategy", EntityResolutionStrategy.class))
+                .isInstanceOf(ExactCanonicalEntityResolutionStrategy.class);
     }
 
     @Test

@@ -18,6 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
+import com.openmemind.ai.memory.core.extraction.item.graph.EntityAliasClass;
+import com.openmemind.ai.memory.core.extraction.item.graph.EntityAliasObservation;
+import com.openmemind.ai.memory.core.extraction.item.support.ExtractedGraphHints;
 import com.openmemind.ai.memory.core.extraction.item.support.ForesightExtractionResponse;
 import com.openmemind.ai.memory.core.extraction.item.support.MemoryItemExtractionResponse;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
@@ -77,6 +80,75 @@ class LlmItemExtractionStrategyTest {
                             assertThat(entry.graphHints().entities()).hasSize(1);
                             assertThat(entry.graphHints().causalRelations()).hasSize(1);
                         });
+    }
+
+    @Test
+    @DisplayName("toFactEntries should preserve raw entity type labels")
+    void toFactEntriesShouldPreserveRawEntityTypeLabels() {
+        var response =
+                new MemoryItemExtractionResponse(
+                        List.of(
+                                new MemoryItemExtractionResponse.ExtractedItem(
+                                        "用户让我联系张三",
+                                        0.95f,
+                                        null,
+                                        null,
+                                        List.of("event"),
+                                        Map.of(),
+                                        "event",
+                                        List.of(
+                                                new MemoryItemExtractionResponse.ExtractedEntity(
+                                                        "张三", "人物", 0.95f),
+                                                new MemoryItemExtractionResponse.ExtractedEntity(
+                                                        "用户", "special", 0.90f)),
+                                        List.of())));
+
+        var entries =
+                LlmItemExtractionStrategy.toFactEntries(
+                        response, sampleSegment(), Instant.parse("2026-04-18T00:00:00Z"));
+
+        assertThat(entries.getFirst().graphHints().entities())
+                .extracting(ExtractedGraphHints.ExtractedEntityHint::entityType)
+                .containsExactly("人物", "special");
+    }
+
+    @Test
+    @DisplayName("toFactEntries should parse alias observations into graph hints")
+    void toFactEntriesShouldParseAliasObservationsIntoGraphHints() {
+        var response =
+                new MemoryItemExtractionResponse(
+                        List.of(
+                                new MemoryItemExtractionResponse.ExtractedItem(
+                                        "我在 OpenAI（开放人工智能）团队工作",
+                                        0.95f,
+                                        null,
+                                        null,
+                                        List.of("event"),
+                                        Map.of(),
+                                        "event",
+                                        List.of(
+                                                new MemoryItemExtractionResponse.ExtractedEntity(
+                                                        "OpenAI",
+                                                        "organization",
+                                                        0.95f,
+                                                        List.of(
+                                                                new MemoryItemExtractionResponse
+                                                                        .ExtractedAliasObservation(
+                                                                        "开放人工智能",
+                                                                        "explicit_parenthetical",
+                                                                        "entity_inline",
+                                                                        0.93f)))),
+                                        List.of())));
+
+        var entries =
+                LlmItemExtractionStrategy.toFactEntries(
+                        response, sampleSegment(), Instant.parse("2026-04-18T00:00:00Z"));
+
+        assertThat(entries.getFirst().graphHints().entities().getFirst().aliasObservations())
+                .singleElement()
+                .extracting(
+                        EntityAliasObservation::aliasSurface, EntityAliasObservation::aliasClass)
+                .containsExactly("开放人工智能", EntityAliasClass.EXPLICIT_PARENTHETICAL);
     }
 
     @Test

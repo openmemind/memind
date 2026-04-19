@@ -144,6 +144,49 @@ class MemindServerRuntimeConfigurationTest {
     }
 
     @Test
+    void runtimeFactoryPreservesSemanticSourceWindowSizeInEffectiveOptions() {
+        var configuration = new MemindServerRuntimeConfiguration();
+
+        MemoryRuntimeFactory factory =
+                configuration.memoryRuntimeFactory(
+                        provider(StructuredChatClient.class, proxy(StructuredChatClient.class)),
+                        provider(MemoryStore.class, memoryStore()),
+                        provider(MemoryBuffer.class, memoryBuffer()),
+                        provider(MemoryVector.class, proxy(MemoryVector.class)),
+                        emptyProvider(MemoryTextSearch.class),
+                        provider(Reranker.class, new NoopReranker()),
+                        emptyProvider(ContentParser.class),
+                        emptyProvider(RawDataPlugin.class),
+                        emptyProvider(ResourceFetcher.class),
+                        emptyProvider(BubbleTrackerStore.class),
+                        emptyProvider(MemoryObserver.class));
+
+        var created =
+                factory.create(
+                        MemoryBuildOptions.builder()
+                                .extraction(
+                                        new ExtractionOptions(
+                                                ExtractionCommonOptions.defaults(),
+                                                RawDataExtractionOptions.defaults(),
+                                                new ItemExtractionOptions(
+                                                        false,
+                                                        PromptBudgetOptions.defaults(),
+                                                        ItemGraphOptions.defaults()
+                                                                .withEnabled(true)
+                                                                .withSemanticSourceWindowSize(64)),
+                                                InsightExtractionOptions.defaults()))
+                                .build());
+
+        assertThat(
+                        created.effectiveOptions()
+                                .extraction()
+                                .item()
+                                .graph()
+                                .semanticSourceWindowSize())
+                .isEqualTo(64);
+    }
+
+    @Test
     void runtimeFactoryUsesProvidedContentParsersWithoutInjectingImplicitDocumentParser() {
         var parser =
                 new ContentParser() {

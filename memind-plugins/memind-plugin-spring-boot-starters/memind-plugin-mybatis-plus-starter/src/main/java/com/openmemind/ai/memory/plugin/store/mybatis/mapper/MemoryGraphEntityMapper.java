@@ -15,7 +15,19 @@ package com.openmemind.ai.memory.plugin.store.mybatis.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryGraphEntityDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.sql.GraphQuerySqlProvider;
+import java.util.Collection;
+import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.ResultMap;
+import org.apache.ibatis.annotations.SelectProvider;
 
 @Mapper
-public interface MemoryGraphEntityMapper extends BaseMapper<MemoryGraphEntityDO> {}
+public interface MemoryGraphEntityMapper extends BaseMapper<MemoryGraphEntityDO> {
+
+    @SelectProvider(type = GraphQuerySqlProvider.class, method = "selectEntitiesByKeys")
+    @ResultMap("mybatis-plus_MemoryGraphEntityDO")
+    List<MemoryGraphEntityDO> selectByEntityKeys(
+            @Param("memoryId") String memoryId, @Param("entityKeys") Collection<String> entityKeys);
+}

@@ -13,3 +13,4 @@
 --
 
 -- Temporal item columns are ensured by MemoryStoreDdl for dialect-safe upgrades.
+SELECT 1;

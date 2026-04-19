@@ -77,4 +77,21 @@ class GraphQuerySqlProviderTest {
                                         DatabaseDialect.POSTGRESQL)))
                 .contains("ROW_NUMBER() OVER");
     }
+
+    @Test
+    @DisplayName("graph query sql provider renders bounded entity key lookup sql")
+    void graphQuerySqlProviderShouldRenderBoundedEntityKeyLookupSql() {
+        String sql =
+                new GraphQuerySqlProvider()
+                        .selectEntitiesByKeys(
+                                Map.of(
+                                        "memoryId",
+                                        DefaultMemoryId.of("user-1", "agent-1").toIdentifier(),
+                                        "entityKeys",
+                                        List.of("organization:openai", "person:sam_altman")));
+
+        assertThat(sql).contains("FROM memory_graph_entity");
+        assertThat(sql).contains("memory_id = #{memoryId}");
+        assertThat(sql).contains("entity_key IN");
+    }
 }

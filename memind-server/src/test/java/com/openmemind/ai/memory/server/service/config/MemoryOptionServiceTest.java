@@ -121,6 +121,54 @@ class MemoryOptionServiceTest {
     }
 
     @Test
+    void successfulUpdatePersistsSemanticSourceWindowSizeAcrossRepositoryAndRuntime() {
+        InMemoryServerRuntimeConfigRepository repository =
+                new InMemoryServerRuntimeConfigRepository();
+        repository.insertInitial(
+                MemoryOptionService.CONFIG_KEY, 1, codec.write(MemoryBuildOptions.defaults()));
+        MemoryRuntimeManager runtimeManager =
+                new MemoryRuntimeManager(
+                        new RuntimeHandle(new TestMemory(), MemoryBuildOptions.defaults(), 1));
+        MemoryOptionService service =
+                new MemoryOptionService(
+                        repository,
+                        projectionMapper,
+                        codec,
+                        runtimeManager,
+                        options ->
+                                new MemoryRuntimeFactory.CreationResult(new TestMemory(), options));
+
+        var projection = projectionMapper.toProjection(MemoryBuildOptions.defaults());
+        updateValue(projection, "extraction.item.graph.enabled", true);
+        updateValue(projection, "extraction.item.graph.semanticSourceWindowSize", 64);
+
+        MemoryOptionsSnapshot snapshot = service.update(1, projection);
+
+        assertThat(findValue(snapshot.config(), "extraction.item.graph.semanticSourceWindowSize"))
+                .isEqualTo(64);
+        assertThat(
+                        codec.read(
+                                        repository
+                                                .findActive(MemoryOptionService.CONFIG_KEY)
+                                                .orElseThrow()
+                                                .getConfigJson())
+                                .extraction()
+                                .item()
+                                .graph()
+                                .semanticSourceWindowSize())
+                .isEqualTo(64);
+        assertThat(
+                        runtimeManager
+                                .currentHandle()
+                                .options()
+                                .extraction()
+                                .item()
+                                .graph()
+                                .semanticSourceWindowSize())
+                .isEqualTo(64);
+    }
+
+    @Test
     void failedOptimisticUpdateClosesUnusedRuntime() {
         AtomicInteger closeCount = new AtomicInteger();
         FailingUpdateRepository repository = new FailingUpdateRepository();

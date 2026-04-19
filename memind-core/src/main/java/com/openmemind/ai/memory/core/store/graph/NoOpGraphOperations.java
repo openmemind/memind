@@ -39,7 +39,21 @@ public final class NoOpGraphOperations implements GraphOperations {
     public void upsertItemLinks(MemoryId memoryId, List<ItemLink> links) {}
 
     @Override
+    public void upsertEntityAliases(MemoryId memoryId, List<GraphEntityAlias> aliases) {}
+
+    @Override
     public List<GraphEntity> listEntities(MemoryId memoryId) {
+        return List.of();
+    }
+
+    @Override
+    public List<GraphEntityAlias> listEntityAliases(MemoryId memoryId) {
+        return List.of();
+    }
+
+    @Override
+    public List<GraphEntity> listEntitiesByEntityKeys(
+            MemoryId memoryId, Collection<String> entityKeys) {
         return List.of();
     }
 

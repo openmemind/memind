@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.store;
 
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.store.graph.GraphOperations;
+import com.openmemind.ai.memory.core.store.graph.GraphOperationsCapabilities;
 import com.openmemind.ai.memory.core.store.graph.InMemoryGraphOperations;
 import com.openmemind.ai.memory.core.store.insight.InMemoryInsightOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
@@ -61,6 +62,21 @@ public class InMemoryMemoryStore implements MemoryStore {
     @Override
     public GraphOperations graphOperations() {
         return graphOperations;
+    }
+
+    @Override
+    public GraphOperationsCapabilities graphOperationsCapabilities() {
+        return new GraphOperationsCapabilities() {
+            @Override
+            public boolean supportsBoundedEntityKeyLookup() {
+                return true;
+            }
+
+            @Override
+            public boolean supportsHistoricalAliasLookup() {
+                return true;
+            }
+        };
     }
 
     @Override

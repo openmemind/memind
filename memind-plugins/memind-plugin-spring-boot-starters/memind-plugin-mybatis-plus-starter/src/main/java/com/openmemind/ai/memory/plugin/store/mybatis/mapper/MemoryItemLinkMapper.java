@@ -20,18 +20,21 @@ import java.util.Collection;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.ResultMap;
 import org.apache.ibatis.annotations.SelectProvider;
 
 @Mapper
 public interface MemoryItemLinkMapper extends BaseMapper<MemoryItemLinkDO> {
 
     @SelectProvider(type = GraphQuerySqlProvider.class, method = "selectLocalSubgraphLinks")
+    @ResultMap("mybatis-plus_MemoryItemLinkDO")
     List<MemoryItemLinkDO> selectLocalSubgraphLinks(
             @Param("memoryId") String memoryId,
             @Param("itemIds") Collection<Long> itemIds,
             @Param("linkTypes") Collection<String> linkTypes);
 
     @SelectProvider(type = GraphQuerySqlProvider.class, method = "selectAdjacentLinks")
+    @ResultMap("mybatis-plus_MemoryItemLinkDO")
     List<MemoryItemLinkDO> selectAdjacentLinks(
             @Param("memoryId") String memoryId,
             @Param("seedItemIds") Collection<Long> seedItemIds,

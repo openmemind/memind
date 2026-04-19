@@ -13,8 +13,7 @@
  */
 package com.openmemind.ai.memory.plugin.store.mybatis;
 
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.store.graph.GraphQueryBudgetContext;
 import java.lang.reflect.Method;
@@ -22,6 +21,7 @@ import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.ibatis.executor.statement.StatementHandler;
 import org.apache.ibatis.plugin.Invocation;
 import org.junit.jupiter.api.DisplayName;
@@ -34,14 +34,15 @@ class GraphStatementTimeoutInterceptorTest {
     @DisplayName("graph statement timeout interceptor applies current graph query budget")
     void graphStatementTimeoutInterceptorAppliesCurrentBudget() throws Throwable {
         var interceptor = new GraphStatementTimeoutInterceptor();
-        var statement = mock(Statement.class);
+        var timeoutSeconds = new AtomicInteger();
+        var statement = trackingStatement(timeoutSeconds);
         var invocation = statementPrepareInvocation(statement);
 
         try (var ignored = GraphQueryBudgetContext.open(Duration.ofMillis(250))) {
             interceptor.intercept(invocation);
         }
 
-        verify(statement).setQueryTimeout(1);
+        assertThat(timeoutSeconds.get()).isEqualTo(1);
     }
 
     private static Invocation statementPrepareInvocation(Statement statement)
@@ -60,6 +61,20 @@ class GraphStatementTimeoutInterceptorTest {
         Method prepareMethod =
                 StatementHandler.class.getMethod("prepare", Connection.class, Integer.class);
         return new Invocation(handler, prepareMethod, new Object[] {null, null});
+    }
+
+    private static Statement trackingStatement(AtomicInteger timeoutSeconds) {
+        return (Statement)
+                Proxy.newProxyInstance(
+                        Statement.class.getClassLoader(),
+                        new Class<?>[] {Statement.class},
+                        (proxy, method, args) -> {
+                            if ("setQueryTimeout".equals(method.getName())) {
+                                timeoutSeconds.set((Integer) args[0]);
+                                return null;
+                            }
+                            return defaultValue(method.getReturnType());
+                        });
     }
 
     private static Object defaultValue(Class<?> returnType) {

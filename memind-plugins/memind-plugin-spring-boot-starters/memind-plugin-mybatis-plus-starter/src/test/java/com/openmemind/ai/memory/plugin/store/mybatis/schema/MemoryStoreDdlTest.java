@@ -57,8 +57,8 @@ class MemoryStoreDdlTest {
     }
 
     @Test
-    @DisplayName("Load SQLite store and text search scripts")
-    void loadsSqliteScripts() {
+    @DisplayName("Load SQLite store scripts through V9 temporal lookup migration")
+    void loadsSqliteScriptsThroughTemporalLookupMigration() {
         assertThat(
                         new MemoryStoreDdl(dataSource("SQLite", "jdbc:sqlite::memory:"), detector)
                                 .getSqlFiles())
@@ -69,12 +69,14 @@ class MemoryStoreDdlTest {
                         "db/migration/sqlite/V4__bubble_state.sql",
                         "db/migration/sqlite/V5__item_temporal_fields.sql",
                         "db/migration/sqlite/V6__graph_store.sql",
-                        "db/migration/sqlite/V7__memory_thread.sql");
+                        "db/migration/sqlite/V7__memory_thread.sql",
+                        "db/migration/sqlite/V8__graph_entity_alias_store.sql",
+                        "db/migration/sqlite/V9__item_temporal_lookup.sql");
     }
 
     @Test
-    @DisplayName("Load MySQL store and text search scripts")
-    void loadsMysqlScripts() {
+    @DisplayName("Load MySQL store scripts through V9 temporal lookup migration")
+    void loadsMysqlScriptsThroughTemporalLookupMigration() {
         assertThat(
                         new MemoryStoreDdl(
                                         dataSource("MySQL", "jdbc:mysql://localhost:3306/memind"),
@@ -87,12 +89,14 @@ class MemoryStoreDdlTest {
                         "db/migration/mysql/V4__bubble_state.sql",
                         "db/migration/mysql/V5__item_temporal_fields.sql",
                         "db/migration/mysql/V6__graph_store.sql",
-                        "db/migration/mysql/V7__memory_thread.sql");
+                        "db/migration/mysql/V7__memory_thread.sql",
+                        "db/migration/mysql/V8__graph_entity_alias_store.sql",
+                        "db/migration/mysql/V9__item_temporal_lookup.sql");
     }
 
     @Test
-    @DisplayName("Load PostgreSQL store and text search scripts")
-    void loadsPostgresqlScripts() {
+    @DisplayName("Load PostgreSQL store scripts through V9 temporal lookup migration")
+    void loadsPostgresqlScriptsThroughTemporalLookupMigration() {
         assertThat(
                         new MemoryStoreDdl(
                                         dataSource(
@@ -107,7 +111,9 @@ class MemoryStoreDdlTest {
                         "db/migration/postgresql/V4__bubble_state.sql",
                         "db/migration/postgresql/V5__item_temporal_fields.sql",
                         "db/migration/postgresql/V6__graph_store.sql",
-                        "db/migration/postgresql/V7__memory_thread.sql");
+                        "db/migration/postgresql/V7__memory_thread.sql",
+                        "db/migration/postgresql/V8__graph_entity_alias_store.sql",
+                        "db/migration/postgresql/V9__item_temporal_lookup.sql");
     }
 
     @Test
@@ -156,6 +162,70 @@ class MemoryStoreDdlTest {
         assertThat(tableExists(dataSource, "memory_thread_item")).isTrue();
         assertThat(indexExists(dataSource, "uk_memory_thread_key")).isTrue();
         assertThat(indexExists(dataSource, "idx_memory_thread_item_thread_sequence")).isTrue();
+    }
+
+    @Test
+    @DisplayName("SQLite DDL upgrade repairs partial temporal lookup backfill and creates indexes")
+    void sqliteDdlUpgradeRepairsPartialTemporalLookupColumnsAndIndexes(@TempDir Path tempDir) {
+        SQLiteDataSource dataSource = new SQLiteDataSource();
+        dataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("temporal-upgrade.db"));
+        ResourceDatabasePopulator populator =
+                new ResourceDatabasePopulator(
+                        new ClassPathResource("db/migration/sqlite/V1__init_store.sql"),
+                        new ClassPathResource("db/migration/sqlite/V5__item_temporal_fields.sql"));
+        populator.execute(dataSource);
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate.execute("ALTER TABLE memory_item ADD COLUMN temporal_start TEXT");
+        jdbcTemplate.execute("ALTER TABLE memory_item ADD COLUMN temporal_end_or_anchor TEXT");
+        jdbcTemplate.execute("ALTER TABLE memory_item ADD COLUMN temporal_anchor TEXT");
+        jdbcTemplate.update(
+                """
+                INSERT INTO memory_item
+                    (biz_id, user_id, agent_id, memory_id, content, scope, category, occurred_at,
+                     observed_at, type, raw_data_type, created_at, updated_at, deleted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                """,
+                12L,
+                "user-1",
+                "agent-1",
+                "user-1:agent-1",
+                "legacy temporal item",
+                "LONG_TERM",
+                "EVENT",
+                "2026-03-19T23:30:00Z",
+                "2026-03-19T23:30:00Z",
+                "FACT",
+                "CONVERSATION",
+                "2026-03-19T23:30:00Z",
+                "2026-03-19T23:30:00Z");
+        jdbcTemplate.update(
+                """
+                UPDATE memory_item
+                SET temporal_start = NULL,
+                    temporal_end_or_anchor = NULL,
+                    temporal_anchor = ?
+                WHERE biz_id = ?
+                """,
+                "2026-03-19T23:30:00Z",
+                12L);
+
+        MemoryStoreDdl ddl = new MemoryStoreDdl(dataSource, detector);
+        ddl.runScript(ignored -> {});
+
+        assertThat(columnExists(dataSource, "memory_item", "temporal_start")).isTrue();
+        assertThat(columnExists(dataSource, "memory_item", "temporal_end_or_anchor")).isTrue();
+        assertThat(columnExists(dataSource, "memory_item", "temporal_anchor")).isTrue();
+        assertThat(indexExists(dataSource, "idx_item_temporal_anchor_scope")).isTrue();
+        assertThat(indexExists(dataSource, "idx_item_temporal_start_scope")).isTrue();
+        assertThat(indexExists(dataSource, "idx_item_temporal_end_scope")).isTrue();
+        var row =
+                jdbcTemplate.queryForMap(
+                        "SELECT temporal_start, temporal_end_or_anchor, temporal_anchor FROM"
+                                + " memory_item WHERE biz_id = ?",
+                        12L);
+        assertThat(row.get("temporal_start").toString()).contains("2026-03-19T23:30:00Z");
+        assertThat(row.get("temporal_end_or_anchor").toString()).contains("2026-03-19T23:30:00Z");
+        assertThat(row.get("temporal_anchor").toString()).contains("2026-03-19T23:30:00Z");
     }
 
     @Test

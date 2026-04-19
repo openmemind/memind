@@ -18,6 +18,36 @@ import java.util.Map;
 
 public final class GraphQuerySqlProvider {
 
+    public String selectEntitiesByKeys(Map<String, Object> params) {
+        return """
+        <script>
+        SELECT *
+        FROM memory_graph_entity
+        WHERE deleted = 0
+          AND memory_id = #{memoryId}
+          AND entity_key IN
+          <foreach collection="entityKeys" item="entityKey" open="(" separator="," close=")">
+            #{entityKey}
+          </foreach>
+        ORDER BY entity_key ASC
+        </script>
+        """;
+    }
+
+    public String selectEntityAliasesByNormalizedAlias(Map<String, Object> params) {
+        return """
+        <script>
+        SELECT *
+        FROM memory_graph_entity_alias
+        WHERE deleted = 0
+          AND memory_id = #{memoryId}
+          AND entity_type = #{entityType}
+          AND normalized_alias = #{normalizedAlias}
+        ORDER BY entity_key ASC
+        </script>
+        """;
+    }
+
     public String selectLocalSubgraphLinks(Map<String, Object> params) {
         return """
         <script>

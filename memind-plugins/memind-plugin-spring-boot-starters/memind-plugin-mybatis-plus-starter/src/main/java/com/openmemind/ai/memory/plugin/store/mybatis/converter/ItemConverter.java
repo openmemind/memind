@@ -45,12 +45,28 @@ public final class ItemConverter {
         dataObject.setOccurredEnd(record.occurredEnd());
         dataObject.setTimeGranularity(record.timeGranularity());
         dataObject.setObservedAt(record.observedAt());
+        applyDerivedTemporalLookupColumns(dataObject, record);
         dataObject.setMetadata(record.metadata());
         dataObject.setCreatedAt(record.createdAt() != null ? record.createdAt() : Instant.now());
         dataObject.setUpdatedAt(Instant.now());
         dataObject.setType(
                 record.type() != null ? record.type().name() : MemoryItemType.FACT.name());
         return dataObject;
+    }
+
+    static void applyDerivedTemporalLookupColumns(MemoryItemDO dataObject, MemoryItem record) {
+        Instant temporalStart =
+                firstNonNull(record.occurredStart(), record.occurredAt(), record.observedAt());
+        Instant temporalAnchor = temporalStart;
+        Instant temporalEndOrAnchor =
+                firstNonNull(
+                        record.occurredEnd(),
+                        record.occurredStart(),
+                        record.occurredAt(),
+                        record.observedAt());
+        dataObject.setTemporalStart(temporalStart);
+        dataObject.setTemporalEndOrAnchor(temporalEndOrAnchor);
+        dataObject.setTemporalAnchor(temporalAnchor);
     }
 
     public static MemoryItem toRecord(MemoryItemDO dataObject) {
@@ -101,5 +117,15 @@ public final class ItemConverter {
         } catch (IllegalArgumentException e) {
             return MemoryCategory.byName(value).orElse(null);
         }
+    }
+
+    @SafeVarargs
+    private static <T> T firstNonNull(T... values) {
+        for (T value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
     }
 }

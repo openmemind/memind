@@ -21,9 +21,11 @@ import com.baomidou.mybatisplus.autoconfigure.DdlApplicationRunner;
 import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.normalize.EntityNormalizationVersions;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.graph.EntityCooccurrence;
 import com.openmemind.ai.memory.core.store.graph.GraphEntity;
+import com.openmemind.ai.memory.core.store.graph.GraphEntityAlias;
 import com.openmemind.ai.memory.core.store.graph.GraphEntityType;
 import com.openmemind.ai.memory.core.store.graph.GraphOperations;
 import com.openmemind.ai.memory.core.store.graph.ItemEntityMention;
@@ -54,7 +56,7 @@ import org.sqlite.SQLiteDataSource;
 class MybatisGraphOperationsTest {
 
     private static final MemoryId MEMORY_ID = DefaultMemoryId.of("user-1", "agent-1");
-    private static final Instant NOW = Instant.parse("2026-04-16T00:00:00Z");
+    private static final Instant NOW = Instant.parse("2026-04-19T00:00:00Z");
 
     @Test
     @DisplayName("memory store exposes real graph operations once graph backend is wired")
@@ -66,6 +68,48 @@ class MybatisGraphOperationsTest {
 
                             assertThat(store.graphOperations())
                                     .isNotSameAs(NoOpGraphOperations.INSTANCE);
+                        });
+    }
+
+    @Test
+    @DisplayName(
+            "graph backend advertises historical alias lookup capability once alias store is wired")
+    void graphBackendAdvertisesHistoricalAliasLookupCapability(@TempDir Path tempDir) {
+        newContextRunner(tempDir.resolve("graph-alias-capability.db"))
+                .run(
+                        context -> {
+                            MemoryStore store = context.getBean(MemoryStore.class);
+
+                            assertThat(
+                                            store.graphOperationsCapabilities()
+                                                    .supportsBoundedEntityKeyLookup())
+                                    .isTrue();
+                            assertThat(
+                                            store.graphOperationsCapabilities()
+                                                    .supportsHistoricalAliasLookup())
+                                    .isTrue();
+                        });
+    }
+
+    @Test
+    @DisplayName("custom graph operations without explicit capability bean fail closed")
+    void customGraphOperationsWithoutCapabilityBeanFailClosed(@TempDir Path tempDir) {
+        newContextRunner(tempDir.resolve("graph-custom-capability.db"))
+                .withBean(GraphOperations.class, () -> NoOpGraphOperations.INSTANCE)
+                .run(
+                        context -> {
+                            MemoryStore store = context.getBean(MemoryStore.class);
+
+                            assertThat(store.graphOperations())
+                                    .isSameAs(NoOpGraphOperations.INSTANCE);
+                            assertThat(
+                                            store.graphOperationsCapabilities()
+                                                    .supportsBoundedEntityKeyLookup())
+                                    .isFalse();
+                            assertThat(
+                                            store.graphOperationsCapabilities()
+                                                    .supportsHistoricalAliasLookup())
+                                    .isFalse();
                         });
     }
 
@@ -84,6 +128,29 @@ class MybatisGraphOperationsTest {
                             assertThat(ops.listEntities(MEMORY_ID)).hasSize(2);
                             assertThat(ops.listItemEntityMentions(MEMORY_ID)).hasSize(2);
                             assertThat(ops.listItemLinks(MEMORY_ID)).hasSize(3);
+                        });
+    }
+
+    @Test
+    @DisplayName("bounded entity-key lookup returns requested entities without duplicates")
+    void boundedEntityKeyLookupReturnsRequestedEntitiesWithoutDuplicates(@TempDir Path tempDir) {
+        newContextRunner(tempDir.resolve("graph-entity-lookup.db"))
+                .run(
+                        context -> {
+                            GraphOperations ops =
+                                    context.getBean(MemoryStore.class).graphOperations();
+                            seedGraph(ops);
+
+                            assertThat(
+                                            ops.listEntitiesByEntityKeys(
+                                                    MEMORY_ID,
+                                                    List.of(
+                                                            "person:sam_altman",
+                                                            "organization:openai",
+                                                            "person:sam_altman",
+                                                            "missing:key")))
+                                    .extracting(GraphEntity::entityKey)
+                                    .containsExactly("organization:openai", "person:sam_altman");
                         });
     }
 
@@ -217,6 +284,158 @@ class MybatisGraphOperationsTest {
                         });
     }
 
+    @Test
+    @DisplayName("typed historical alias lookup returns all matching rows in deterministic order")
+    void typedHistoricalAliasLookupReturnsAllMatchingRows(@TempDir Path tempDir) {
+        newContextRunner(tempDir.resolve("graph-historical-alias.db"))
+                .run(
+                        context -> {
+                            GraphOperations ops =
+                                    context.getBean(MemoryStore.class).graphOperations();
+
+                            ops.upsertEntityAliases(
+                                    MEMORY_ID,
+                                    List.of(
+                                            alias(
+                                                    "organization:google",
+                                                    GraphEntityType.ORGANIZATION,
+                                                    "谷歌",
+                                                    1),
+                                            alias(
+                                                    "organization:google_hk",
+                                                    GraphEntityType.ORGANIZATION,
+                                                    "谷歌",
+                                                    1),
+                                            alias(
+                                                    "concept:谷歌算法",
+                                                    GraphEntityType.CONCEPT,
+                                                    "谷歌",
+                                                    1)));
+
+                            assertThat(
+                                            ops.listEntityAliasesByNormalizedAlias(
+                                                    MEMORY_ID, GraphEntityType.ORGANIZATION, "谷歌"))
+                                    .extracting(GraphEntityAlias::entityKey)
+                                    .containsExactly(
+                                            "organization:google", "organization:google_hk");
+                        });
+    }
+
+    @Test
+    @DisplayName("graph persistence round trip preserves stage1 entity provenance metadata")
+    void graphPersistenceRoundTripPreservesStage1EntityProvenanceMetadata(@TempDir Path tempDir) {
+        newContextRunner(tempDir.resolve("graph-stage1-metadata.db"))
+                .run(
+                        context -> {
+                            GraphOperations ops =
+                                    context.getBean(MemoryStore.class).graphOperations();
+
+                            ops.upsertEntities(
+                                    MEMORY_ID,
+                                    List.of(
+                                            new GraphEntity(
+                                                    "person:张三",
+                                                    MEMORY_ID.toIdentifier(),
+                                                    "张三",
+                                                    GraphEntityType.PERSON,
+                                                    Map.of(
+                                                            "normalizationVersion",
+                                                            EntityNormalizationVersions.STAGE1A_V1),
+                                                    NOW,
+                                                    NOW)));
+                            ops.upsertItemEntityMentions(
+                                    MEMORY_ID,
+                                    List.of(
+                                            new ItemEntityMention(
+                                                    MEMORY_ID.toIdentifier(),
+                                                    101L,
+                                                    "person:张三",
+                                                    0.95f,
+                                                    Map.of(
+                                                            "rawTypeLabel",
+                                                            "人物",
+                                                            "normalizedName",
+                                                            "张三",
+                                                            "rawName",
+                                                            "张三"),
+                                                    NOW)));
+
+                            assertThat(ops.listEntities(MEMORY_ID).getFirst().metadata())
+                                    .containsEntry(
+                                            "normalizationVersion",
+                                            EntityNormalizationVersions.STAGE1A_V1);
+                            assertThat(ops.listItemEntityMentions(MEMORY_ID).getFirst().metadata())
+                                    .containsEntry("rawTypeLabel", "人物")
+                                    .containsEntry("normalizedName", "张三")
+                                    .containsEntry("rawName", "张三");
+                        });
+    }
+
+    @Test
+    @DisplayName("graph persistence round trip preserves stage2 alias aggregate metadata")
+    void graphPersistenceRoundTripPreservesStage2AliasAggregateMetadata(@TempDir Path tempDir) {
+        newContextRunner(tempDir.resolve("graph-stage2-metadata.db"))
+                .run(
+                        context -> {
+                            GraphOperations ops =
+                                    context.getBean(MemoryStore.class).graphOperations();
+
+                            ops.upsertEntities(
+                                    MEMORY_ID,
+                                    List.of(
+                                            new GraphEntity(
+                                                    "organization:openai",
+                                                    MEMORY_ID.toIdentifier(),
+                                                    "OpenAI",
+                                                    GraphEntityType.ORGANIZATION,
+                                                    Map.of(
+                                                            "source",
+                                                            "item_extraction",
+                                                            "topAliases",
+                                                            List.of("开放人工智能"),
+                                                            "aliasEvidenceCount",
+                                                            1,
+                                                            "aliasClasses",
+                                                            List.of("explicit_parenthetical")),
+                                                    NOW,
+                                                    NOW)));
+                            ops.upsertItemEntityMentions(
+                                    MEMORY_ID,
+                                    List.of(
+                                            new ItemEntityMention(
+                                                    MEMORY_ID.toIdentifier(),
+                                                    101L,
+                                                    "organization:openai",
+                                                    0.95f,
+                                                    Map.of(
+                                                            "source",
+                                                            "item_extraction",
+                                                            "resolutionMode",
+                                                            "conservative",
+                                                            "resolutionSource",
+                                                            "explicit_alias_evidence_hit",
+                                                            "resolvedViaAliasClass",
+                                                            "explicit_parenthetical"),
+                                                    NOW)));
+
+                            assertThat(
+                                            ((Number)
+                                                            ops.listEntities(MEMORY_ID)
+                                                                    .getFirst()
+                                                                    .metadata()
+                                                                    .get("aliasEvidenceCount"))
+                                                    .intValue())
+                                    .isEqualTo(1);
+                            assertThat(ops.listEntities(MEMORY_ID).getFirst().metadata())
+                                    .containsEntry(
+                                            "aliasClasses", List.of("explicit_parenthetical"));
+                            assertThat(ops.listItemEntityMentions(MEMORY_ID).getFirst().metadata())
+                                    .containsEntry("resolutionMode", "conservative")
+                                    .containsEntry(
+                                            "resolvedViaAliasClass", "explicit_parenthetical");
+                        });
+    }
+
     private ApplicationContextRunner newContextRunner(Path dbPath) {
         return new ApplicationContextRunner()
                 .withConfiguration(
@@ -275,6 +494,22 @@ class MybatisGraphOperationsTest {
                 linkType,
                 1.0d,
                 Map.of(),
+                NOW);
+    }
+
+    private static GraphEntityAlias alias(
+            String entityKey,
+            GraphEntityType entityType,
+            String normalizedAlias,
+            int evidenceCount) {
+        return new GraphEntityAlias(
+                MEMORY_ID.toIdentifier(),
+                entityKey,
+                entityType,
+                normalizedAlias,
+                evidenceCount,
+                Map.of("source", "item_extraction"),
+                NOW,
                 NOW);
     }
 

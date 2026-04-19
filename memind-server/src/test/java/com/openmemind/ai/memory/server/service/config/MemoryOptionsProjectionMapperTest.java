@@ -64,12 +64,26 @@ class MemoryOptionsProjectionMapperTest {
                         "extraction.item.graph.enabled",
                         "extraction.item.graph.semanticSearchHeadroom",
                         "extraction.item.graph.semanticLinkConcurrency",
+                        "extraction.item.graph.semanticSourceWindowSize",
                         "extraction.insight.graphAssist.enabled",
                         "extraction.insight.graphAssist.maxContextChars");
+
+        assertThat(
+                        projection.get("extraction").stream()
+                                .filter(
+                                        item ->
+                                                item.key()
+                                                        .equals(
+                                                                "extraction.item.graph.semanticSourceWindowSize"))
+                                .findFirst()
+                                .orElseThrow()
+                                .description())
+                .contains("effectively disable windowing");
 
         updateValue(projection, "extraction.item.graph.enabled", true);
         updateValue(projection, "extraction.item.graph.semanticSearchHeadroom", 6);
         updateValue(projection, "extraction.item.graph.semanticLinkConcurrency", 2);
+        updateValue(projection, "extraction.item.graph.semanticSourceWindowSize", 64);
         updateValue(projection, "extraction.insight.graphAssist.enabled", true);
         updateValue(projection, "extraction.insight.graphAssist.maxContextChars", 1600);
 
@@ -78,6 +92,7 @@ class MemoryOptionsProjectionMapperTest {
         assertThat(rebuilt.extraction().item().graph().enabled()).isTrue();
         assertThat(rebuilt.extraction().item().graph().semanticSearchHeadroom()).isEqualTo(6);
         assertThat(rebuilt.extraction().item().graph().semanticLinkConcurrency()).isEqualTo(2);
+        assertThat(rebuilt.extraction().item().graph().semanticSourceWindowSize()).isEqualTo(64);
         assertThat(rebuilt.extraction().insight().graphAssist().enabled()).isTrue();
         assertThat(rebuilt.extraction().insight().graphAssist().maxContextChars()).isEqualTo(1600);
     }
@@ -194,6 +209,48 @@ class MemoryOptionsProjectionMapperTest {
     }
 
     @Test
+    void projectionUsesJsonFriendlyShapesForStructuredItemGraphValues() {
+        var projection = mapper.toProjection(MemoryBuildOptions.defaults());
+
+        assertThat(findItem(projection, "extraction.item.graph.supportedLanguagePacks").type())
+                .isEqualTo("array");
+        assertThat(
+                        findItem(projection, "extraction.item.graph.supportedLanguagePacks")
+                                .defaultValue())
+                .isEqualTo(java.util.List.of("en", "zh"));
+        assertThat(
+                        findItem(
+                                        projection,
+                                        "extraction.item.graph.userAliasDictionary"
+                                                + ".normalizedMentionLookupKeyToEntityKey")
+                                .type())
+                .isEqualTo("object");
+
+        updateValue(
+                projection,
+                "extraction.item.graph.supportedLanguagePacks",
+                java.util.List.of("en", "ja"));
+        updateValue(projection, "extraction.item.graph.userAliasDictionary.enabled", true);
+        updateValue(
+                projection,
+                "extraction.item.graph.userAliasDictionary.normalizedMentionLookupKeyToEntityKey",
+                java.util.Map.of("person|alice", "entity://person/alice"));
+
+        var rebuilt = mapper.toOptions(projection);
+
+        assertThat(rebuilt.extraction().item().graph().supportedLanguagePacks())
+                .containsExactly("en", "ja");
+        assertThat(rebuilt.extraction().item().graph().userAliasDictionary().enabled()).isTrue();
+        assertThat(
+                        rebuilt.extraction()
+                                .item()
+                                .graph()
+                                .userAliasDictionary()
+                                .normalizedMentionLookupKeyToEntityKey())
+                .containsEntry("person|alice", "entity://person/alice");
+    }
+
+    @Test
     void ignoresNullRuntimeOnlyFieldsFromProjectionDefinitions() {
         var projection = mapper.toProjection(MemoryBuildOptions.defaults());
 
@@ -226,5 +283,14 @@ class MemoryOptionsProjectionMapperTest {
                                 }
                             }
                         });
+    }
+
+    private static MemoryOptionItemView findItem(
+            Map<String, java.util.List<MemoryOptionItemView>> projection, String key) {
+        return projection.values().stream()
+                .flatMap(java.util.Collection::stream)
+                .filter(item -> item.key().equals(key))
+                .findFirst()
+                .orElseThrow();
     }
 }

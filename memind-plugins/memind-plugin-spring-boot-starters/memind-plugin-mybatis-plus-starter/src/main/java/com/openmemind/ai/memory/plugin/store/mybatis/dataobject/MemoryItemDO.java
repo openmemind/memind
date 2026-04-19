@@ -52,6 +52,15 @@ public class MemoryItemDO extends BaseDO {
     @TableField(typeHandler = InstantTypeHandler.class)
     private Instant observedAt;
 
+    @TableField(typeHandler = InstantTypeHandler.class)
+    private Instant temporalStart;
+
+    @TableField(typeHandler = InstantTypeHandler.class)
+    private Instant temporalEndOrAnchor;
+
+    @TableField(typeHandler = InstantTypeHandler.class)
+    private Instant temporalAnchor;
+
     @TableField(typeHandler = Jackson3TypeHandler.class)
     private Map<String, Object> metadata;
 
@@ -185,6 +194,30 @@ public class MemoryItemDO extends BaseDO {
 
     public void setObservedAt(Instant observedAt) {
         this.observedAt = observedAt;
+    }
+
+    public Instant getTemporalStart() {
+        return temporalStart;
+    }
+
+    public void setTemporalStart(Instant temporalStart) {
+        this.temporalStart = temporalStart;
+    }
+
+    public Instant getTemporalEndOrAnchor() {
+        return temporalEndOrAnchor;
+    }
+
+    public void setTemporalEndOrAnchor(Instant temporalEndOrAnchor) {
+        this.temporalEndOrAnchor = temporalEndOrAnchor;
+    }
+
+    public Instant getTemporalAnchor() {
+        return temporalAnchor;
+    }
+
+    public void setTemporalAnchor(Instant temporalAnchor) {
+        this.temporalAnchor = temporalAnchor;
     }
 
     public Map<String, Object> getMetadata() {

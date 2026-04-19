@@ -27,9 +27,12 @@ import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.graph.GraphOperations;
+import com.openmemind.ai.memory.core.store.graph.GraphOperationsCapabilities;
 import com.openmemind.ai.memory.core.store.graph.NoOpGraphOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
+import com.openmemind.ai.memory.core.store.item.TemporalCandidateMatch;
+import com.openmemind.ai.memory.core.store.item.TemporalCandidateRequest;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.store.thread.MemoryThreadOperations;
@@ -54,11 +57,14 @@ import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryRawDataMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryResourceMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadItemMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.schema.DatabaseDialect;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -82,6 +88,8 @@ public class MybatisPlusMemoryStore
     private final MemoryResourceMapper resourceMapper;
     private final ResourceStore resourceStore;
     private final GraphOperations graphOperations;
+    private final GraphOperationsCapabilities graphOperationsCapabilities;
+    private final DatabaseDialect dialect;
     private final MemoryThreadMapper threadMapper;
     private final MemoryThreadItemMapper threadItemMapper;
 
@@ -95,6 +103,8 @@ public class MybatisPlusMemoryStore
                 itemMapper,
                 insightTypeMapper,
                 insightMapper,
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -118,6 +128,8 @@ public class MybatisPlusMemoryStore
                 resourceStore,
                 null,
                 null,
+                null,
+                null,
                 null);
     }
 
@@ -136,7 +148,9 @@ public class MybatisPlusMemoryStore
                 insightMapper,
                 resourceMapper,
                 resourceStore,
+                null,
                 graphOperations,
+                null,
                 null,
                 null);
     }
@@ -148,7 +162,9 @@ public class MybatisPlusMemoryStore
             MemoryInsightMapper insightMapper,
             MemoryResourceMapper resourceMapper,
             ResourceStore resourceStore,
+            DatabaseDialect dialect,
             GraphOperations graphOperations,
+            GraphOperationsCapabilities graphOperationsCapabilities,
             MemoryThreadMapper threadMapper,
             MemoryThreadItemMapper threadItemMapper) {
         this.rawDataMapper = rawDataMapper;
@@ -157,8 +173,13 @@ public class MybatisPlusMemoryStore
         this.insightMapper = insightMapper;
         this.resourceMapper = resourceMapper;
         this.resourceStore = resourceStore;
+        this.dialect = dialect;
         this.graphOperations =
                 graphOperations != null ? graphOperations : NoOpGraphOperations.INSTANCE;
+        this.graphOperationsCapabilities =
+                graphOperationsCapabilities != null
+                        ? graphOperationsCapabilities
+                        : GraphOperationsCapabilities.NONE;
         this.threadMapper = threadMapper;
         this.threadItemMapper = threadItemMapper;
     }
@@ -191,6 +212,11 @@ public class MybatisPlusMemoryStore
     @Override
     public GraphOperations graphOperations() {
         return graphOperations;
+    }
+
+    @Override
+    public GraphOperationsCapabilities graphOperationsCapabilities() {
+        return graphOperationsCapabilities;
     }
 
     @Override
@@ -455,6 +481,78 @@ public class MybatisPlusMemoryStore
             return;
         }
         itemMapper.delete(memoryQuery(id, MemoryItemDO.class).in("biz_id", itemIds));
+    }
+
+    @Override
+    public List<TemporalCandidateMatch> listTemporalCandidateMatches(
+            MemoryId id, List<TemporalCandidateRequest> requests, Collection<Long> excludeItemIds) {
+        if (dialect == null || requests == null || requests.isEmpty()) {
+            return ItemOperations.super.listTemporalCandidateMatches(id, requests, excludeItemIds);
+        }
+
+        Collection<Long> effectiveExcludeIds = excludeItemIds != null ? excludeItemIds : List.of();
+        var matches = new ArrayList<TemporalCandidateMatch>();
+        for (var request : requests) {
+            var seenCandidateIds = new LinkedHashSet<Long>();
+            String categoryName = request.category() != null ? request.category().name() : null;
+            appendNativeMatches(
+                    matches,
+                    seenCandidateIds,
+                    request,
+                    itemMapper.selectTemporalOverlapCandidates(
+                            dialect,
+                            id.toIdentifier(),
+                            request.itemType().name(),
+                            categoryName,
+                            effectiveExcludeIds,
+                            request.sourceStart(),
+                            request.sourceEndOrAnchor(),
+                            request.sourceAnchor(),
+                            request.overlapLimit()));
+            appendNativeMatches(
+                    matches,
+                    seenCandidateIds,
+                    request,
+                    itemMapper.selectTemporalBeforeCandidates(
+                            dialect,
+                            id.toIdentifier(),
+                            request.itemType().name(),
+                            categoryName,
+                            effectiveExcludeIds,
+                            request.sourceAnchor(),
+                            request.beforeLimit()));
+            appendNativeMatches(
+                    matches,
+                    seenCandidateIds,
+                    request,
+                    itemMapper.selectTemporalAfterCandidates(
+                            dialect,
+                            id.toIdentifier(),
+                            request.itemType().name(),
+                            categoryName,
+                            effectiveExcludeIds,
+                            request.sourceAnchor(),
+                            request.afterLimit()));
+        }
+        return List.copyOf(matches);
+    }
+
+    private static void appendNativeMatches(
+            List<TemporalCandidateMatch> matches,
+            LinkedHashSet<Long> seenCandidateIds,
+            TemporalCandidateRequest request,
+            List<MemoryItemDO> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return;
+        }
+        for (var candidate : candidates) {
+            if (!seenCandidateIds.add(candidate.getBizId())) {
+                continue;
+            }
+            matches.add(
+                    new TemporalCandidateMatch(
+                            request.sourceItemId(), ItemConverter.toRecord(candidate)));
+        }
     }
 
     // ===== MemoryThread =====

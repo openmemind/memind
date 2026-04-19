@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 /**
  * Optional graph storage domain for item graph primitives.
@@ -35,7 +37,42 @@ public interface GraphOperations {
 
     void upsertItemLinks(MemoryId memoryId, List<ItemLink> links);
 
+    void upsertEntityAliases(MemoryId memoryId, List<GraphEntityAlias> aliases);
+
     List<GraphEntity> listEntities(MemoryId memoryId);
+
+    default List<GraphEntityAlias> listEntityAliases(MemoryId memoryId) {
+        return List.of();
+    }
+
+    default List<GraphEntityAlias> listEntityAliasesByNormalizedAlias(
+            MemoryId memoryId, GraphEntityType entityType, String normalizedAlias) {
+        if (entityType == null || normalizedAlias == null || normalizedAlias.isBlank()) {
+            return List.of();
+        }
+        return listEntityAliases(memoryId).stream()
+                .filter(alias -> alias.entityType() == entityType)
+                .filter(alias -> normalizedAlias.equals(alias.normalizedAlias()))
+                .sorted(Comparator.comparing(GraphEntityAlias::entityKey))
+                .toList();
+    }
+
+    default List<GraphEntity> listEntitiesByEntityKeys(
+            MemoryId memoryId, Collection<String> entityKeys) {
+        if (entityKeys == null || entityKeys.isEmpty()) {
+            return List.of();
+        }
+        TreeSet<String> requested =
+                entityKeys.stream()
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toCollection(TreeSet::new));
+        if (requested.isEmpty()) {
+            return List.of();
+        }
+        return listEntities(memoryId).stream()
+                .filter(entity -> requested.contains(entity.entityKey()))
+                .toList();
+    }
 
     List<ItemEntityMention> listItemEntityMentions(MemoryId memoryId);
 

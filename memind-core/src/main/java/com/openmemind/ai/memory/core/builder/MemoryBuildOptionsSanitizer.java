@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.core.builder;
 
+import com.openmemind.ai.memory.core.extraction.item.graph.EntityResolutionMode;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.graph.NoOpGraphOperations;
 import java.util.ArrayList;
@@ -49,6 +50,27 @@ public final class MemoryBuildOptionsSanitizer {
             effective = disableThreadDerivation(options);
         }
 
+        if (effective.extraction().item().graph().resolutionMode()
+                        == EntityResolutionMode.CONSERVATIVE
+                && !store.graphOperationsCapabilities().supportsBoundedEntityKeyLookup()) {
+            warnings.add(
+                    "extraction.item.graph.resolutionMode=conservative requires bounded"
+                            + " entity-key lookup support; resolutionMode was force-disabled to"
+                            + " exact");
+            effective = disableConservativeResolution(effective);
+        }
+
+        if (effective.extraction().item().graph().resolutionMode()
+                        == EntityResolutionMode.CONSERVATIVE
+                && store.graphOperationsCapabilities().supportsBoundedEntityKeyLookup()
+                && !store.graphOperationsCapabilities().supportsHistoricalAliasLookup()) {
+            warnings.add(
+                    "extraction.item.graph.resolutionMode=conservative is running without"
+                            + " historical alias lookup support; Stage 3 historical alias"
+                            + " retrieval is disabled and only Stage 2 candidate sources will"
+                            + " be used");
+        }
+
         return new SanitizationResult(
                 effective, List.copyOf(warnings), Optional.ofNullable(forcedDisableReason));
     }
@@ -61,6 +83,25 @@ public final class MemoryBuildOptionsSanitizer {
                         options.memoryThread()
                                 .withDerivation(
                                         options.memoryThread().derivation().withEnabled(false)))
+                .build();
+    }
+
+    private static MemoryBuildOptions disableConservativeResolution(MemoryBuildOptions options) {
+        return MemoryBuildOptions.builder()
+                .extraction(
+                        new ExtractionOptions(
+                                options.extraction().common(),
+                                options.extraction().rawdata(),
+                                new ItemExtractionOptions(
+                                        options.extraction().item().foresightEnabled(),
+                                        options.extraction().item().promptBudget(),
+                                        options.extraction()
+                                                .item()
+                                                .graph()
+                                                .withResolutionMode(EntityResolutionMode.EXACT)),
+                                options.extraction().insight()))
+                .retrieval(options.retrieval())
+                .memoryThread(options.memoryThread())
                 .build();
     }
 

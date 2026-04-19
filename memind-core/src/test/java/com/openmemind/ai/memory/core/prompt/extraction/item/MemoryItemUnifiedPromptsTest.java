@@ -63,6 +63,71 @@ class MemoryItemUnifiedPromptsTest {
     }
 
     @Test
+    @DisplayName("Rendered prompt should describe allowed entity types and special anchors")
+    void renderedPromptShouldDescribeAllowedEntityTypesAndSpecialAnchors() {
+        var prompt =
+                MemoryItemUnifiedPrompts.build(
+                                List.of(),
+                                "user: 我今天告诉助手联系张三",
+                                Instant.parse("2026-04-18T00:00:00Z"),
+                                "Alice",
+                                Set.of(MemoryCategory.EVENT),
+                                ItemGraphOptions.defaults().withEnabled(true))
+                        .render("English");
+
+        assertThat(prompt.systemPrompt())
+                .contains("\"entityType\"")
+                .contains("person")
+                .contains("organization")
+                .contains("special")
+                .contains("Use \"special\" only for conversational role anchors");
+    }
+
+    @Test
+    @DisplayName("Rendered prompt should describe alias observation schema when graph is enabled")
+    void renderedPromptShouldDescribeAliasObservationSchemaWhenGraphIsEnabled() {
+        var prompt =
+                MemoryItemUnifiedPrompts.build(
+                                List.of(),
+                                "user: 我在 OpenAI（开放人工智能）团队工作",
+                                Instant.parse("2026-04-18T00:00:00Z"),
+                                null,
+                                Set.of(MemoryCategory.EVENT),
+                                ItemGraphOptions.defaults().withEnabled(true))
+                        .render("English");
+
+        assertThat(prompt.systemPrompt())
+                .contains("\"aliasObservations\"")
+                .contains("\"aliasSurface\"")
+                .contains("\"aliasClass\"")
+                .contains("explicit_parenthetical")
+                .contains("explicit_slash_apposition");
+    }
+
+    @Test
+    @DisplayName(
+            "Rendered prompt should describe alias observation schema when graph is enabled for"
+                    + " Chinese")
+    void renderedPromptShouldDescribeAliasObservationSchemaWhenGraphIsEnabledForChinese() {
+        var prompt =
+                MemoryItemUnifiedPrompts.build(
+                                List.of(),
+                                "user: 我在 OpenAI（开放人工智能）团队工作",
+                                Instant.parse("2026-04-18T00:00:00Z"),
+                                null,
+                                Set.of(MemoryCategory.EVENT),
+                                ItemGraphOptions.defaults().withEnabled(true))
+                        .render("Chinese");
+
+        assertThat(prompt.systemPrompt())
+                .contains("\"aliasObservations\"")
+                .contains("\"aliasSurface\"")
+                .contains("\"aliasClass\"")
+                .contains("explicit_parenthetical")
+                .contains("explicit_slash_apposition");
+    }
+
+    @Test
     @DisplayName("build default should keep runtime category placeholders raw")
     void buildDefaultKeepsDynamicCategoryPlaceholdersRaw() {
         String preview = MemoryItemUnifiedPrompts.buildDefault().previewSystemPrompt("English");

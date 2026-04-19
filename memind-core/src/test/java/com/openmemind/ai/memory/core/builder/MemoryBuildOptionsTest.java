@@ -19,9 +19,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
+import com.openmemind.ai.memory.core.extraction.item.graph.AliasEvidenceMode;
+import com.openmemind.ai.memory.core.extraction.item.graph.CrossScriptMergePolicy;
+import com.openmemind.ai.memory.core.extraction.item.graph.EntityResolutionMode;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoringConfig;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.graph.GraphOperationsCapabilities;
 import com.openmemind.ai.memory.core.store.insight.InMemoryInsightOperations;
 import com.openmemind.ai.memory.core.store.item.InMemoryItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.InMemoryRawDataOperations;
@@ -164,6 +168,108 @@ class MemoryBuildOptionsTest {
     }
 
     @Test
+    void sanitizerForceDisablesConservativeResolutionWhenBoundedLookupCapabilityIsMissing() {
+        var requested =
+                MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults()
+                                                        .withEnabled(true)
+                                                        .withResolutionMode(
+                                                                EntityResolutionMode.CONSERVATIVE)),
+                                        InsightExtractionOptions.defaults()))
+                        .build();
+
+        var result =
+                new MemoryBuildOptionsSanitizer()
+                        .sanitize(
+                                requested,
+                                MemoryStore.of(
+                                        new InMemoryRawDataOperations(),
+                                        new InMemoryItemOperations(),
+                                        new InMemoryInsightOperations()));
+
+        assertThat(result.options().extraction().item().graph().resolutionMode())
+                .isEqualTo(EntityResolutionMode.EXACT);
+        assertThat(result.warnings())
+                .containsExactly(
+                        "extraction.item.graph.resolutionMode=conservative requires bounded"
+                                + " entity-key lookup support; resolutionMode was force-disabled"
+                                + " to exact");
+    }
+
+    @Test
+    void sanitizerShouldWarnWhenHistoricalAliasLookupCapabilityIsMissingButKeepConservativeMode() {
+        var requested =
+                MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults()
+                                                        .withEnabled(true)
+                                                        .withResolutionMode(
+                                                                EntityResolutionMode.CONSERVATIVE)),
+                                        InsightExtractionOptions.defaults()))
+                        .build();
+
+        MemoryStore stageTwoOnlyStore =
+                new MemoryStore() {
+                    @Override
+                    public com.openmemind.ai.memory.core.store.rawdata.RawDataOperations
+                            rawDataOperations() {
+                        return new InMemoryRawDataOperations();
+                    }
+
+                    @Override
+                    public com.openmemind.ai.memory.core.store.item.ItemOperations
+                            itemOperations() {
+                        return new InMemoryItemOperations();
+                    }
+
+                    @Override
+                    public com.openmemind.ai.memory.core.store.insight.InsightOperations
+                            insightOperations() {
+                        return new InMemoryInsightOperations();
+                    }
+
+                    @Override
+                    public GraphOperationsCapabilities graphOperationsCapabilities() {
+                        return new GraphOperationsCapabilities() {
+                            @Override
+                            public boolean supportsBoundedEntityKeyLookup() {
+                                return true;
+                            }
+
+                            @Override
+                            public boolean supportsHistoricalAliasLookup() {
+                                return false;
+                            }
+                        };
+                    }
+                };
+
+        var result = new MemoryBuildOptionsSanitizer().sanitize(requested, stageTwoOnlyStore);
+
+        assertThat(result.options().extraction().item().graph().resolutionMode())
+                .isEqualTo(EntityResolutionMode.CONSERVATIVE);
+        assertThat(result.warnings())
+                .containsExactly(
+                        "extraction.item.graph.resolutionMode=conservative is running without"
+                                + " historical alias lookup support; Stage 3 historical alias"
+                                + " retrieval is disabled and only Stage 2 candidate sources will"
+                                + " be used");
+    }
+
+    @Test
     void itemDefaultsExposePromptBudget() {
         var defaults = ItemExtractionOptions.defaults();
 
@@ -183,6 +289,27 @@ class MemoryBuildOptionsTest {
         assertThat(options.semanticMinScore()).isEqualTo(0.82d);
         assertThat(options.semanticSearchHeadroom()).isEqualTo(4);
         assertThat(options.semanticLinkConcurrency()).isEqualTo(1);
+        assertThat(options.semanticSourceWindowSize()).isEqualTo(128);
+    }
+
+    @Test
+    void itemGraphOptionsDefaultsExposeStage2ResolutionControls() {
+        var options = ItemGraphOptions.defaults();
+
+        assertThat(options.resolutionMode()).isEqualTo(EntityResolutionMode.EXACT);
+        assertThat(options.maxResolutionCandidatesPerMention()).isEqualTo(8);
+        assertThat(options.resolutionMergeThreshold()).isEqualTo(0.85d);
+        assertThat(options.crossScriptMergePolicy()).isEqualTo(CrossScriptMergePolicy.OFF);
+        assertThat(options.aliasEvidenceMode()).isEqualTo(AliasEvidenceMode.METADATA);
+        assertThat(options.supportedLanguagePacks()).containsExactly("en", "zh");
+        assertThat(options.userAliasDictionary().enabled()).isFalse();
+    }
+
+    @Test
+    void itemGraphOptionsRejectNonPositiveSemanticSourceWindowSize() {
+        assertThatThrownBy(() -> new ItemGraphOptions(false, 8, 2, 10, 5, 0.82d, 4, 1, 0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("semanticSourceWindowSize");
     }
 
     @Test

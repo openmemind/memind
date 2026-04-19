@@ -17,19 +17,24 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.store.graph.EntityCooccurrence;
 import com.openmemind.ai.memory.core.store.graph.GraphEntity;
+import com.openmemind.ai.memory.core.store.graph.GraphEntityAlias;
+import com.openmemind.ai.memory.core.store.graph.GraphEntityType;
 import com.openmemind.ai.memory.core.store.graph.GraphOperations;
 import com.openmemind.ai.memory.core.store.graph.ItemEntityMention;
 import com.openmemind.ai.memory.core.store.graph.ItemLink;
 import com.openmemind.ai.memory.core.store.graph.ItemLinkType;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.EntityCooccurrenceConverter;
+import com.openmemind.ai.memory.plugin.store.mybatis.converter.GraphEntityAliasConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.GraphEntityConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.ItemEntityMentionConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.ItemLinkConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryEntityCooccurrenceDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryGraphEntityAliasDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryGraphEntityDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryItemEntityMentionDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryItemLinkDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryEntityCooccurrenceMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryGraphEntityAliasMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryGraphEntityMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemEntityMentionMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemLinkMapper;
@@ -51,6 +56,7 @@ public class MybatisGraphOperations implements GraphOperations {
     private final MemoryItemEntityMentionMapper itemEntityMentionMapper;
     private final MemoryItemLinkMapper itemLinkMapper;
     private final MemoryEntityCooccurrenceMapper entityCooccurrenceMapper;
+    private final MemoryGraphEntityAliasMapper entityAliasMapper;
     private final DatabaseDialect dialect;
 
     public MybatisGraphOperations(
@@ -58,6 +64,7 @@ public class MybatisGraphOperations implements GraphOperations {
             MemoryItemEntityMentionMapper itemEntityMentionMapper,
             MemoryItemLinkMapper itemLinkMapper,
             MemoryEntityCooccurrenceMapper entityCooccurrenceMapper,
+            MemoryGraphEntityAliasMapper entityAliasMapper,
             DatabaseDialect dialect) {
         this.graphEntityMapper = Objects.requireNonNull(graphEntityMapper, "graphEntityMapper");
         this.itemEntityMentionMapper =
@@ -65,6 +72,7 @@ public class MybatisGraphOperations implements GraphOperations {
         this.itemLinkMapper = Objects.requireNonNull(itemLinkMapper, "itemLinkMapper");
         this.entityCooccurrenceMapper =
                 Objects.requireNonNull(entityCooccurrenceMapper, "entityCooccurrenceMapper");
+        this.entityAliasMapper = Objects.requireNonNull(entityAliasMapper, "entityAliasMapper");
         this.dialect = Objects.requireNonNull(dialect, "dialect");
     }
 
@@ -232,12 +240,84 @@ public class MybatisGraphOperations implements GraphOperations {
     }
 
     @Override
+    public void upsertEntityAliases(MemoryId memoryId, List<GraphEntityAlias> aliases) {
+        if (aliases == null || aliases.isEmpty()) {
+            return;
+        }
+        List<GraphEntityAlias> mergedAliases = mergeAliasBatch(aliases);
+        Map<AliasIdentity, MemoryGraphEntityAliasDO> existingByIdentity =
+                loadExistingAliases(memoryId, mergedAliases);
+        mergedAliases.forEach(
+                alias -> {
+                    MemoryGraphEntityAliasDO dataObject =
+                            GraphEntityAliasConverter.toDO(memoryId, alias);
+                    MemoryGraphEntityAliasDO existing =
+                            existingByIdentity.get(
+                                    new AliasIdentity(
+                                            alias.entityType(),
+                                            alias.entityKey(),
+                                            alias.normalizedAlias()));
+                    if (existing != null) {
+                        dataObject.setId(existing.getId());
+                        dataObject.setEvidenceCount(
+                                existing.getEvidenceCount() + alias.evidenceCount());
+                        dataObject.setCreatedAt(
+                                earlierOf(existing.getCreatedAt(), alias.createdAt()));
+                        dataObject.setUpdatedAt(
+                                laterOf(existing.getUpdatedAt(), alias.updatedAt()));
+                        entityAliasMapper.updateById(dataObject);
+                    } else {
+                        entityAliasMapper.insert(dataObject);
+                    }
+                });
+    }
+
+    @Override
     public List<GraphEntity> listEntities(MemoryId memoryId) {
         return graphEntityMapper
                 .selectList(
                         memoryQuery(memoryId, MemoryGraphEntityDO.class).orderByAsc("entity_key"))
                 .stream()
                 .map(GraphEntityConverter::toRecord)
+                .toList();
+    }
+
+    @Override
+    public List<GraphEntityAlias> listEntityAliases(MemoryId memoryId) {
+        return entityAliasMapper
+                .selectList(
+                        memoryQuery(memoryId, MemoryGraphEntityAliasDO.class)
+                                .orderByAsc("entity_type", "normalized_alias", "entity_key"))
+                .stream()
+                .map(GraphEntityAliasConverter::toRecord)
+                .toList();
+    }
+
+    @Override
+    public List<GraphEntity> listEntitiesByEntityKeys(
+            MemoryId memoryId, Collection<String> entityKeys) {
+        Set<String> normalizedKeys = normalizeEntityKeys(entityKeys);
+        if (normalizedKeys.isEmpty()) {
+            return List.of();
+        }
+        return graphEntityMapper
+                .selectByEntityKeys(memoryId.toIdentifier(), normalizedKeys)
+                .stream()
+                .map(GraphEntityConverter::toRecord)
+                .toList();
+    }
+
+    @Override
+    public List<GraphEntityAlias> listEntityAliasesByNormalizedAlias(
+            MemoryId memoryId, GraphEntityType entityType, String normalizedAlias) {
+        if (entityType == null || normalizedAlias == null || normalizedAlias.isBlank()) {
+            return List.of();
+        }
+        return entityAliasMapper
+                .selectByNormalizedAlias(
+                        memoryId.toIdentifier(), entityType.name(), normalizedAlias)
+                .stream()
+                .map(GraphEntityAliasConverter::toRecord)
                 .toList();
     }
 
@@ -342,6 +422,47 @@ public class MybatisGraphOperations implements GraphOperations {
                 .eq("memory_id", memoryId.toIdentifier());
     }
 
+    private Map<AliasIdentity, MemoryGraphEntityAliasDO> loadExistingAliases(
+            MemoryId memoryId, List<GraphEntityAlias> aliases) {
+        Map<AliasIdentity, MemoryGraphEntityAliasDO> existingByIdentity = new HashMap<>();
+        aliases.stream()
+                .map(alias -> new AliasLookup(alias.entityType(), alias.normalizedAlias()))
+                .distinct()
+                .forEach(
+                        lookup ->
+                                entityAliasMapper
+                                        .selectByNormalizedAlias(
+                                                memoryId.toIdentifier(),
+                                                lookup.entityType().name(),
+                                                lookup.normalizedAlias())
+                                        .forEach(
+                                                dataObject ->
+                                                        existingByIdentity.put(
+                                                                new AliasIdentity(
+                                                                        GraphEntityType.valueOf(
+                                                                                dataObject
+                                                                                        .getEntityType()),
+                                                                        dataObject.getEntityKey(),
+                                                                        dataObject
+                                                                                .getNormalizedAlias()),
+                                                                dataObject)));
+        return existingByIdentity;
+    }
+
+    private static List<GraphEntityAlias> mergeAliasBatch(List<GraphEntityAlias> aliases) {
+        Map<AliasIdentity, GraphEntityAlias> merged = new HashMap<>();
+        aliases.forEach(
+                alias ->
+                        merged.merge(
+                                new AliasIdentity(
+                                        alias.entityType(),
+                                        alias.entityKey(),
+                                        alias.normalizedAlias()),
+                                alias,
+                                MybatisGraphOperations::mergeAlias));
+        return List.copyOf(merged.values());
+    }
+
     private static void accumulateCounts(
             Set<String> entitySet,
             Set<String> affectedEntityKeys,
@@ -382,9 +503,47 @@ public class MybatisGraphOperations implements GraphOperations {
         return linkTypes.stream().filter(Objects::nonNull).map(Enum::name).distinct().toList();
     }
 
+    private static GraphEntityAlias mergeAlias(
+            GraphEntityAlias existing, GraphEntityAlias incoming) {
+        return new GraphEntityAlias(
+                existing.memoryId(),
+                existing.entityKey(),
+                existing.entityType(),
+                existing.normalizedAlias(),
+                existing.evidenceCount() + incoming.evidenceCount(),
+                existing.metadata().isEmpty() ? incoming.metadata() : existing.metadata(),
+                earlierOf(existing.createdAt(), incoming.createdAt()),
+                laterOf(existing.updatedAt(), incoming.updatedAt()));
+    }
+
+    private static Instant earlierOf(Instant left, Instant right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null || left.isBefore(right)) {
+            return left;
+        }
+        return right;
+    }
+
+    private static Instant laterOf(Instant left, Instant right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null || left.isAfter(right)) {
+            return left;
+        }
+        return right;
+    }
+
     private record MentionIdentity(Long itemId, String entityKey) {}
 
     private record LinkIdentity(Long sourceItemId, Long targetItemId, String linkType) {}
 
     private record CooccurrenceIdentity(String leftEntityKey, String rightEntityKey) {}
+
+    private record AliasLookup(GraphEntityType entityType, String normalizedAlias) {}
+
+    private record AliasIdentity(
+            GraphEntityType entityType, String entityKey, String normalizedAlias) {}
 }

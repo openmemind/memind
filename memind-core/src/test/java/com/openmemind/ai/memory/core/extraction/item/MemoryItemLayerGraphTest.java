@@ -212,6 +212,77 @@ class MemoryItemLayerGraphTest {
     }
 
     @Test
+    void extractShouldIgnoreGraphDiagnosticsAndStillPersistItemsWhenGraphMaterializationSucceeds() {
+        MemoryItemExtractor extractor = mock(MemoryItemExtractor.class);
+        MemoryItemDeduplicator deduplicator = mock(MemoryItemDeduplicator.class);
+        MemoryStore memoryStore = mock(MemoryStore.class);
+        InsightOperations insightOperations = mock(InsightOperations.class);
+        ItemOperations itemOperations = mock(ItemOperations.class);
+        MemoryVector vector = mock(MemoryVector.class);
+        ItemGraphMaterializer graphMaterializer = mock(ItemGraphMaterializer.class);
+        var layer =
+                new MemoryItemLayer(
+                        extractor, deduplicator, memoryStore, vector, graphMaterializer);
+        var memoryId = DefaultMemoryId.of("user1", "agent1");
+
+        var segment =
+                new ParsedSegment(
+                        "user: remember OpenAI release note",
+                        "caption",
+                        0,
+                        1,
+                        "raw-1",
+                        Map.of(),
+                        new SegmentRuntimeContext(
+                                Instant.parse("2026-04-16T10:00:00Z"),
+                                Instant.parse("2026-04-16T10:00:00Z"),
+                                "User"));
+        var entry =
+                new ExtractedMemoryEntry(
+                        "Remember OpenAI release note",
+                        0.95f,
+                        Instant.parse("2026-04-16T10:00:00Z"),
+                        Instant.parse("2026-04-16T10:00:00Z"),
+                        "raw-1",
+                        "hash-1",
+                        List.of(),
+                        Map.of(),
+                        MemoryItemType.FACT,
+                        "event");
+        var config =
+                new ItemExtractionConfig(
+                        MemoryScope.USER,
+                        ConversationContent.TYPE,
+                        MemoryCategory.userCategories(),
+                        false,
+                        "English");
+
+        when(memoryStore.insightOperations()).thenReturn(insightOperations);
+        when(memoryStore.itemOperations()).thenReturn(itemOperations);
+        when(insightOperations.listInsightTypes()).thenReturn(DefaultInsightTypes.all());
+        when(extractor.extract(eq(List.of(segment)), anyList(), eq(config)))
+                .thenReturn(Mono.just(List.of(entry)));
+        when(deduplicator.deduplicate(eq(memoryId), anyList()))
+                .thenReturn(Mono.just(new DeduplicationResult(List.of(entry), List.of())));
+        when(deduplicator.spanName()).thenReturn("test");
+        when(vector.storeBatch(eq(memoryId), anyList(), anyList()))
+                .thenReturn(Mono.just(List.of("vec-1")));
+        when(graphMaterializer.materialize(eq(memoryId), anyList(), eq(List.of(entry))))
+                .thenReturn(
+                        Mono.just(
+                                new ItemGraphMaterializationResult(
+                                        stageOneStats(2, 2, 1, "未分类标签=1", 0, 1, 0, 1, 0, 1))));
+
+        StepVerifier.create(
+                        layer.extract(
+                                memoryId,
+                                new RawDataResult(List.of(), List.of(segment), false),
+                                config))
+                .assertNext(result -> assertThat(result.newItems()).hasSize(1))
+                .verifyComplete();
+    }
+
+    @Test
     void extractShouldPreserveWhenToUseForToolItemsOnly() {
         MemoryItemExtractor extractor = mock(MemoryItemExtractor.class);
         MemoryItemDeduplicator deduplicator = mock(MemoryItemDeduplicator.class);
@@ -298,5 +369,46 @@ class MemoryItemLayerGraphTest {
                                 memoryId.toIdentifier(),
                                 "whenToUse",
                                 "Use when searching documentation"));
+    }
+
+    private static ItemGraphMaterializationResult.Stats stageOneStats(
+            int entityCount,
+            int mentionCount,
+            int typeFallbackToOtherCount,
+            String topUnresolvedTypeLabelsSummary,
+            int droppedBlankCount,
+            int droppedPunctuationOnlyCount,
+            int droppedPronounLikeCount,
+            int droppedTemporalCount,
+            int droppedDateLikeCount,
+            int droppedReservedSpecialCollisionCount) {
+        return new ItemGraphMaterializationResult.Stats(
+                entityCount,
+                mentionCount,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0L,
+                0L,
+                0L,
+                false,
+                typeFallbackToOtherCount,
+                topUnresolvedTypeLabelsSummary,
+                droppedBlankCount,
+                droppedPunctuationOnlyCount,
+                droppedPronounLikeCount,
+                droppedTemporalCount,
+                droppedDateLikeCount,
+                droppedReservedSpecialCollisionCount);
     }
 }

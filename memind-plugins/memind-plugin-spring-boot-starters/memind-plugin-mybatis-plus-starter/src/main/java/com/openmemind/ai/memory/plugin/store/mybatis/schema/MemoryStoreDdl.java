@@ -49,6 +49,7 @@ public class MemoryStoreDdl implements IDdl, Ordered {
         consumer.accept(dataSource);
         dropInsightConfidenceIfPresent();
         ensureItemTemporalColumnsPresent();
+        ensureItemTemporalLookupSchemaPresent();
         if (!hadInsightTypeTable && tableExists("memory_insight_type")) {
             seedDefaultInsightTypes();
         }
@@ -97,6 +98,30 @@ public class MemoryStoreDdl implements IDdl, Ordered {
         }
     }
 
+    private boolean indexExists(String tableName, String indexName) {
+        try (Connection connection = dataSource.getConnection()) {
+            DatabaseMetaData metadata = connection.getMetaData();
+            return indexExists(metadata, tableName, indexName)
+                    || indexExists(metadata, tableName.toUpperCase(), indexName)
+                    || indexExists(metadata, tableName.toLowerCase(), indexName);
+        } catch (SQLException e) {
+            throw new IllegalStateException(
+                    "Failed to inspect index existence for " + tableName + "." + indexName, e);
+        }
+    }
+
+    private boolean indexExists(DatabaseMetaData metadata, String tableName, String indexName)
+            throws SQLException {
+        try (ResultSet resultSet = metadata.getIndexInfo(null, null, tableName, false, false)) {
+            while (resultSet.next()) {
+                if (indexName.equalsIgnoreCase(resultSet.getString("INDEX_NAME"))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
     private void dropInsightConfidenceIfPresent() {
         if (!tableExists("memory_insight") || !columnExists("memory_insight", "confidence")) {
             return;
@@ -128,6 +153,18 @@ public class MemoryStoreDdl implements IDdl, Ordered {
                         "memory_item",
                         "time_granularity",
                         "ALTER TABLE memory_item ADD COLUMN time_granularity TEXT");
+                ensureColumn(
+                        "memory_item",
+                        "temporal_start",
+                        "ALTER TABLE memory_item ADD COLUMN temporal_start TEXT");
+                ensureColumn(
+                        "memory_item",
+                        "temporal_end_or_anchor",
+                        "ALTER TABLE memory_item ADD COLUMN temporal_end_or_anchor TEXT");
+                ensureColumn(
+                        "memory_item",
+                        "temporal_anchor",
+                        "ALTER TABLE memory_item ADD COLUMN temporal_anchor TEXT");
             }
             case MYSQL -> {
                 ensureColumn(
@@ -142,6 +179,19 @@ public class MemoryStoreDdl implements IDdl, Ordered {
                         "memory_item",
                         "time_granularity",
                         "ALTER TABLE memory_item ADD COLUMN time_granularity VARCHAR(16) NULL");
+                ensureColumn(
+                        "memory_item",
+                        "temporal_start",
+                        "ALTER TABLE memory_item ADD COLUMN temporal_start DATETIME(3) NULL");
+                ensureColumn(
+                        "memory_item",
+                        "temporal_end_or_anchor",
+                        "ALTER TABLE memory_item ADD COLUMN temporal_end_or_anchor DATETIME(3)"
+                                + " NULL");
+                ensureColumn(
+                        "memory_item",
+                        "temporal_anchor",
+                        "ALTER TABLE memory_item ADD COLUMN temporal_anchor DATETIME(3) NULL");
             }
             case POSTGRESQL -> {
                 ensureColumn(
@@ -156,8 +206,43 @@ public class MemoryStoreDdl implements IDdl, Ordered {
                         "memory_item",
                         "time_granularity",
                         "ALTER TABLE memory_item ADD COLUMN time_granularity VARCHAR(16)");
+                ensureColumn(
+                        "memory_item",
+                        "temporal_start",
+                        "ALTER TABLE memory_item ADD COLUMN temporal_start TIMESTAMPTZ");
+                ensureColumn(
+                        "memory_item",
+                        "temporal_end_or_anchor",
+                        "ALTER TABLE memory_item ADD COLUMN temporal_end_or_anchor TIMESTAMPTZ");
+                ensureColumn(
+                        "memory_item",
+                        "temporal_anchor",
+                        "ALTER TABLE memory_item ADD COLUMN temporal_anchor TIMESTAMPTZ");
             }
         }
+    }
+
+    private void ensureItemTemporalLookupSchemaPresent() {
+        if (!tableExists("memory_item")) {
+            return;
+        }
+        backfillTemporalLookupColumns();
+        ensureIndex(
+                "memory_item",
+                "idx_item_temporal_anchor_scope",
+                "CREATE INDEX idx_item_temporal_anchor_scope ON"
+                        + " memory_item(memory_id, type, category, temporal_anchor, biz_id)");
+        ensureIndex(
+                "memory_item",
+                "idx_item_temporal_start_scope",
+                "CREATE INDEX idx_item_temporal_start_scope ON"
+                        + " memory_item(memory_id, type, category, temporal_start, biz_id)");
+        ensureIndex(
+                "memory_item",
+                "idx_item_temporal_end_scope",
+                "CREATE INDEX idx_item_temporal_end_scope ON"
+                        + " memory_item(memory_id, type, category, temporal_end_or_anchor,"
+                        + " biz_id)");
     }
 
     private void ensureColumn(String tableName, String columnName, String sql) {
@@ -165,6 +250,35 @@ public class MemoryStoreDdl implements IDdl, Ordered {
             return;
         }
         new JdbcTemplate(dataSource).execute(sql);
+    }
+
+    private void ensureIndex(String tableName, String indexName, String sql) {
+        if (indexExists(tableName, indexName)) {
+            return;
+        }
+        new JdbcTemplate(dataSource).execute(sql);
+    }
+
+    private void backfillTemporalLookupColumns() {
+        new JdbcTemplate(dataSource)
+                .update(
+                        """
+                        UPDATE memory_item
+                        SET temporal_start = COALESCE(temporal_start, occurred_start, occurred_at, observed_at),
+                            temporal_end_or_anchor = COALESCE(
+                                    temporal_end_or_anchor,
+                                    occurred_end,
+                                    occurred_start,
+                                    occurred_at,
+                                    observed_at),
+                            temporal_anchor = COALESCE(temporal_anchor, occurred_start, occurred_at, observed_at)
+                        WHERE COALESCE(occurred_start, occurred_at, observed_at) IS NOT NULL
+                          AND (
+                                  temporal_start IS NULL
+                                  OR temporal_end_or_anchor IS NULL
+                                  OR temporal_anchor IS NULL
+                              )
+                        """);
     }
 
     private void seedDefaultInsightTypes() {

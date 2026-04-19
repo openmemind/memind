@@ -40,11 +40,20 @@ import com.openmemind.ai.memory.core.extraction.item.dedup.HashBasedDeduplicator
 import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicator;
 import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItemExtractor;
 import com.openmemind.ai.memory.core.extraction.item.extractor.MemoryItemExtractor;
-import com.openmemind.ai.memory.core.extraction.item.graph.DefaultItemGraphMaterializer;
-import com.openmemind.ai.memory.core.extraction.item.graph.GraphHintNormalizer;
 import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.item.graph.NoOpItemGraphMaterializer;
-import com.openmemind.ai.memory.core.extraction.item.graph.SemanticItemLinker;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.alias.EntityAliasIndexPlanner;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.ConservativeHeuristicEntityResolutionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.DefaultEntityCandidateRetriever;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.EntityResolutionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.EntityVariantKeyGenerator;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.ExactCanonicalEntityResolutionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.graph.link.semantic.SemanticItemLinker;
+import com.openmemind.ai.memory.core.extraction.item.graph.link.temporal.TemporalItemLinker;
+import com.openmemind.ai.memory.core.extraction.item.graph.link.temporal.TemporalRelationClassifier;
+import com.openmemind.ai.memory.core.extraction.item.graph.pipeline.DefaultItemGraphMaterializer;
+import com.openmemind.ai.memory.core.extraction.item.graph.pipeline.GraphHintNormalizer;
+import com.openmemind.ai.memory.core.extraction.item.graph.pipeline.StructuredGraphPersister;
 import com.openmemind.ai.memory.core.extraction.item.strategy.LlmItemExtractionStrategy;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
@@ -258,10 +267,33 @@ final class MemoryExtractionAssembler {
             return NoOpItemGraphMaterializer.INSTANCE;
         }
 
+        EntityResolutionStrategy resolutionStrategy =
+                switch (context.options().extraction().item().graph().resolutionMode()) {
+                    case EXACT -> new ExactCanonicalEntityResolutionStrategy();
+                    case CONSERVATIVE -> {
+                        boolean historicalAliasLookupEnabled =
+                                context.memoryStore()
+                                        .graphOperationsCapabilities()
+                                        .supportsHistoricalAliasLookup();
+                        yield new ConservativeHeuristicEntityResolutionStrategy(
+                                context.memoryStore().graphOperations(),
+                                new DefaultEntityCandidateRetriever(
+                                        context.memoryStore().graphOperations(),
+                                        new EntityVariantKeyGenerator(),
+                                        historicalAliasLookupEnabled));
+                    }
+                };
         ItemGraphMaterializer graphMaterializer =
                 new DefaultItemGraphMaterializer(
-                        context.memoryStore().graphOperations(),
                         new GraphHintNormalizer(),
+                        resolutionStrategy,
+                        new EntityAliasIndexPlanner(),
+                        new StructuredGraphPersister(context.memoryStore().graphOperations()),
+                        new TemporalItemLinker(
+                                context.memoryStore().itemOperations(),
+                                context.memoryStore().graphOperations(),
+                                new TemporalRelationClassifier(),
+                                context.options().extraction().item().graph()),
                         new SemanticItemLinker(
                                 context.memoryStore().itemOperations(),
                                 context.memoryStore().graphOperations(),

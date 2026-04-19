@@ -33,6 +33,14 @@ public interface ItemOperations {
 
     List<MemoryItem> listItems(MemoryId id);
 
+    default List<TemporalCandidateMatch> listTemporalCandidateMatches(
+            MemoryId memoryId,
+            List<TemporalCandidateRequest> requests,
+            Collection<Long> excludeItemIds) {
+        return TemporalCandidateLookupSupport.correctnessFirstLookup(
+                this, memoryId, requests, excludeItemIds);
+    }
+
     boolean hasItems(MemoryId id);
 
     void deleteItems(MemoryId id, Collection<Long> itemIds);

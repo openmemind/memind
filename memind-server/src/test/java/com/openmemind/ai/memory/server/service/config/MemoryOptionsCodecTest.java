@@ -91,7 +91,8 @@ class MemoryOptionsCodecTest {
                                                 ItemGraphOptions.defaults()
                                                         .withEnabled(true)
                                                         .withSemanticSearchHeadroom(6)
-                                                        .withSemanticLinkConcurrency(2)),
+                                                        .withSemanticLinkConcurrency(2)
+                                                        .withSemanticSourceWindowSize(64)),
                                         InsightExtractionOptions.defaults()))
                         .build();
 

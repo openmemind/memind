@@ -40,7 +40,28 @@ public record MemoryItemExtractionResponse(List<ExtractedItem> items) {
      * Structured entity hint extracted from the same response as the item.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record ExtractedEntity(String name, String entityType, Float salience) {}
+    public record ExtractedAliasObservation(
+            String aliasSurface, String aliasClass, String evidenceSource, Float confidence) {}
+
+    /**
+     * Structured entity hint extracted from the same response as the item.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ExtractedEntity(
+            String name,
+            String entityType,
+            Float salience,
+            List<ExtractedAliasObservation> aliasObservations) {
+
+        public ExtractedEntity {
+            aliasObservations =
+                    aliasObservations == null ? List.of() : List.copyOf(aliasObservations);
+        }
+
+        public ExtractedEntity(String name, String entityType, Float salience) {
+            this(name, entityType, salience, List.of());
+        }
+    }
 
     /**
      * Structured causal hint referencing an earlier item in the same response.

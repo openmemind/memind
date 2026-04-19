@@ -25,6 +25,7 @@ import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.graph.GraphOperations;
+import com.openmemind.ai.memory.core.store.graph.GraphOperationsCapabilities;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
@@ -36,6 +37,7 @@ import com.openmemind.ai.memory.plugin.store.mybatis.initializer.MemoryStoreProp
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.ConversationBufferMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.InsightBufferMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryEntityCooccurrenceMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryGraphEntityAliasMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryGraphEntityMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightBubbleStateMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightMapper;
@@ -140,7 +142,9 @@ public class MemoryMybatisPlusAutoConfiguration {
             MemoryThreadMapper threadMapper,
             MemoryThreadItemMapper threadItemMapper,
             GraphOperations graphOperations,
-            ObjectProvider<ResourceStore> resourceStoreProvider) {
+            ObjectProvider<GraphOperationsCapabilities> graphOperationsCapabilitiesProvider,
+            ObjectProvider<ResourceStore> resourceStoreProvider,
+            DataSource dataSource) {
         return new MybatisPlusMemoryStore(
                 rawDataMapper,
                 itemMapper,
@@ -148,18 +152,22 @@ public class MemoryMybatisPlusAutoConfiguration {
                 insightMapper,
                 resourceMapper,
                 resourceStoreProvider.getIfAvailable(),
+                new DatabaseDialectDetector().detect(dataSource),
                 graphOperations,
+                graphOperationsCapabilitiesProvider.getIfAvailable(
+                        () -> GraphOperationsCapabilities.NONE),
                 threadMapper,
                 threadItemMapper);
     }
 
     @Bean
     @ConditionalOnMissingBean(GraphOperations.class)
-    public GraphOperations graphOperations(
+    public MybatisGraphOperations graphOperations(
             MemoryGraphEntityMapper graphEntityMapper,
             MemoryItemEntityMentionMapper itemEntityMentionMapper,
             MemoryItemLinkMapper itemLinkMapper,
             MemoryEntityCooccurrenceMapper entityCooccurrenceMapper,
+            MemoryGraphEntityAliasMapper entityAliasMapper,
             DataSource dataSource) {
         DatabaseDialect dialect = new DatabaseDialectDetector().detect(dataSource);
         return new MybatisGraphOperations(
@@ -167,7 +175,25 @@ public class MemoryMybatisPlusAutoConfiguration {
                 itemEntityMentionMapper,
                 itemLinkMapper,
                 entityCooccurrenceMapper,
+                entityAliasMapper,
                 dialect);
+    }
+
+    @Bean
+    @ConditionalOnBean(MybatisGraphOperations.class)
+    @ConditionalOnMissingBean(GraphOperationsCapabilities.class)
+    public GraphOperationsCapabilities graphOperationsCapabilities() {
+        return new GraphOperationsCapabilities() {
+            @Override
+            public boolean supportsBoundedEntityKeyLookup() {
+                return true;
+            }
+
+            @Override
+            public boolean supportsHistoricalAliasLookup() {
+                return true;
+            }
+        };
     }
 
     @Bean

@@ -14,6 +14,8 @@
 package com.openmemind.ai.memory.server.service.config;
 
 import com.openmemind.ai.memory.core.builder.ExtractionOptions;
+import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
+import com.openmemind.ai.memory.core.builder.ItemGraphOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.MemoryThreadOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalOptions;
@@ -98,6 +100,13 @@ public class MemoryOptionsProjectionMapper {
                             "extraction.item.graph.semanticLinkConcurrency",
                             "Maximum number of items whose semantic-link search may run"
                                     + " concurrently during graph materialization."),
+                    Map.entry(
+                            "extraction.item.graph.semanticSourceWindowSize",
+                            "Maximum number of source items grouped into one semantic-link"
+                                    + " window before batched candidate resolution and bulk"
+                                    + " semantic-link upsert. Values much larger than normal"
+                                    + " batch sizes effectively disable windowing and may"
+                                    + " reintroduce full-batch memory pressure."),
                     Map.entry(
                             "extraction.insight.enabled",
                             "Whether insight building is enabled during extraction."),
@@ -392,7 +401,10 @@ public class MemoryOptionsProjectionMapper {
                     objectMapper.valueToTree(parseValue(item.value(), definition.type())));
         }
         try {
-            return objectMapper.treeToValue(root, PersistedMemoryOptions.class).toOptions();
+            PersistedMemoryOptions persisted =
+                    objectMapper.treeToValue(root, PersistedMemoryOptions.class);
+            return persisted.toOptions(
+                    orderedTextSet(root, "extraction", "item", "graph", "supportedLanguagePacks"));
         } catch (JacksonException e) {
             throw new IllegalArgumentException("Invalid memory options payload", e);
         }
@@ -400,26 +412,24 @@ public class MemoryOptionsProjectionMapper {
 
     private static List<OptionDefinition> discoverDefinitions(Object value) {
         List<OptionDefinition> definitions = new ArrayList<>();
-        collectDefinitions(value, "", "", definitions);
+        collectDefinitions(value, value == null ? null : value.getClass(), "", "", definitions);
         return List.copyOf(definitions);
     }
 
     private static void collectDefinitions(
             Object value,
+            Class<?> declaredType,
             String currentPath,
             String currentGroup,
             List<OptionDefinition> definitions) {
         if (value == null) {
             return;
         }
-        Class<?> type = value.getClass();
+        Class<?> type = declaredType == null ? value.getClass() : declaredType;
         if (!type.isRecord()) {
             definitions.add(
                     new OptionDefinition(
-                            currentPath,
-                            currentGroup,
-                            value.getClass(),
-                            List.of(currentPath.split("\\."))));
+                            currentPath, currentGroup, type, List.of(currentPath.split("\\."))));
             return;
         }
         for (RecordComponent component : type.getRecordComponents()) {
@@ -429,7 +439,8 @@ public class MemoryOptionsProjectionMapper {
                             ? component.getName()
                             : currentPath + "." + component.getName();
             String nextGroup = currentPath.isBlank() ? component.getName() : currentGroup;
-            collectDefinitions(componentValue, nextPath, nextGroup, definitions);
+            collectDefinitions(
+                    componentValue, component.getType(), nextPath, nextGroup, definitions);
         }
     }
 
@@ -505,7 +516,23 @@ public class MemoryOptionsProjectionMapper {
         current.set(pathSegments.get(pathSegments.size() - 1), valueNode);
     }
 
-    private static Object parseValue(Object rawValue, Class<?> rawType) {
+    private static Set<String> orderedTextSet(ObjectNode root, String... pathSegments) {
+        JsonNode current = root;
+        for (String pathSegment : pathSegments) {
+            if (current == null) {
+                return null;
+            }
+            current = current.get(pathSegment);
+        }
+        if (current == null || !current.isArray()) {
+            return null;
+        }
+        LinkedHashSet<String> ordered = new LinkedHashSet<>();
+        current.forEach(node -> ordered.add(node.asText()));
+        return ordered;
+    }
+
+    private Object parseValue(Object rawValue, Class<?> rawType) {
         Class<?> type = boxedType(rawType);
         if (type == String.class) {
             return rawValue == null ? null : rawValue.toString();
@@ -546,6 +573,22 @@ public class MemoryOptionsProjectionMapper {
             }
             return Duration.parse(String.valueOf(rawValue));
         }
+        if (Collection.class.isAssignableFrom(type)) {
+            if (rawValue == null) {
+                return null;
+            }
+            List<?> values = objectMapper.convertValue(rawValue, List.class);
+            if (Set.class.isAssignableFrom(type)) {
+                return new LinkedHashSet<>(values);
+            }
+            return values;
+        }
+        if (Map.class.isAssignableFrom(type)) {
+            if (rawValue == null) {
+                return null;
+            }
+            return objectMapper.convertValue(rawValue, Map.class);
+        }
         if (Enum.class.isAssignableFrom(type)) {
             @SuppressWarnings({"unchecked", "rawtypes"})
             Class<? extends Enum> enumType = (Class<? extends Enum>) type.asSubclass(Enum.class);
@@ -562,6 +605,16 @@ public class MemoryOptionsProjectionMapper {
         if (value instanceof Enum<?> enumValue) {
             return enumValue.name();
         }
+        if (value instanceof Collection<?> collection) {
+            return collection.stream().map(MemoryOptionsProjectionMapper::toApiValue).toList();
+        }
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> normalized = new LinkedHashMap<>();
+            map.forEach(
+                    (key, nestedValue) ->
+                            normalized.put(String.valueOf(key), toApiValue(nestedValue)));
+            return normalized;
+        }
         return value;
     }
 
@@ -574,6 +627,12 @@ public class MemoryOptionsProjectionMapper {
         }
         if (type == Duration.class) {
             return Map.of("format", "iso-8601-duration");
+        }
+        if (Collection.class.isAssignableFrom(type)) {
+            return Map.of("format", "json-array");
+        }
+        if (Map.class.isAssignableFrom(type)) {
+            return Map.of("format", "json-object");
         }
         return Map.of();
     }
@@ -591,6 +650,12 @@ public class MemoryOptionsProjectionMapper {
         }
         if (type == Duration.class) {
             return "duration";
+        }
+        if (Collection.class.isAssignableFrom(type)) {
+            return "array";
+        }
+        if (Map.class.isAssignableFrom(type)) {
+            return "object";
         }
         if (Enum.class.isAssignableFrom(type)) {
             return "enum";
@@ -670,6 +735,45 @@ public class MemoryOptionsProjectionMapper {
         private MemoryBuildOptions toOptions() {
             return MemoryBuildOptions.builder()
                     .extraction(extraction)
+                    .retrieval(retrieval)
+                    .memoryThread(memoryThread)
+                    .build();
+        }
+
+        private MemoryBuildOptions toOptions(Set<String> orderedSupportedLanguagePacks) {
+            if (orderedSupportedLanguagePacks == null) {
+                return toOptions();
+            }
+            ItemGraphOptions graph = extraction.item().graph();
+            ItemGraphOptions normalizedGraph =
+                    new ItemGraphOptions(
+                            graph.enabled(),
+                            graph.maxEntitiesPerItem(),
+                            graph.maxCausalReferencesPerItem(),
+                            graph.maxTemporalLinksPerItem(),
+                            graph.maxSemanticLinksPerItem(),
+                            graph.semanticMinScore(),
+                            graph.semanticSearchHeadroom(),
+                            graph.semanticLinkConcurrency(),
+                            graph.semanticSourceWindowSize(),
+                            graph.resolutionMode(),
+                            graph.maxResolutionCandidatesPerMention(),
+                            graph.resolutionMergeThreshold(),
+                            orderedSupportedLanguagePacks,
+                            graph.crossScriptMergePolicy(),
+                            graph.aliasEvidenceMode(),
+                            graph.userAliasDictionary());
+            ExtractionOptions normalizedExtraction =
+                    new ExtractionOptions(
+                            extraction.common(),
+                            extraction.rawdata(),
+                            new ItemExtractionOptions(
+                                    extraction.item().foresightEnabled(),
+                                    extraction.item().promptBudget(),
+                                    normalizedGraph),
+                            extraction.insight());
+            return MemoryBuildOptions.builder()
+                    .extraction(normalizedExtraction)
                     .retrieval(retrieval)
                     .memoryThread(memoryThread)
                     .build();

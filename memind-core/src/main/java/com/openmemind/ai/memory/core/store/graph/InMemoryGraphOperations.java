@@ -34,6 +34,8 @@ public class InMemoryGraphOperations implements GraphOperations {
     private final Map<String, Map<MentionKey, ItemEntityMention>> mentions =
             new ConcurrentHashMap<>();
     private final Map<String, Map<LinkKey, ItemLink>> itemLinks = new ConcurrentHashMap<>();
+    private final Map<String, Map<AliasIdentity, GraphEntityAlias>> entityAliases =
+            new ConcurrentHashMap<>();
     private final Map<String, Map<CooccurrenceKey, EntityCooccurrence>> entityCooccurrences =
             new ConcurrentHashMap<>();
 
@@ -124,10 +126,50 @@ public class InMemoryGraphOperations implements GraphOperations {
     }
 
     @Override
+    public void upsertEntityAliases(MemoryId memoryId, List<GraphEntityAlias> records) {
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+        Map<AliasIdentity, GraphEntityAlias> scoped =
+                entityAliases.computeIfAbsent(
+                        memoryId.toIdentifier(), ignored -> new ConcurrentHashMap<>());
+        records.forEach(
+                alias ->
+                        scoped.merge(
+                                new AliasIdentity(
+                                        alias.entityKey(),
+                                        alias.entityType(),
+                                        alias.normalizedAlias()),
+                                alias,
+                                InMemoryGraphOperations::mergeAlias));
+    }
+
+    @Override
     public List<GraphEntity> listEntities(MemoryId memoryId) {
         return entities.getOrDefault(memoryId.toIdentifier(), Map.of()).values().stream()
                 .sorted(Comparator.comparing(GraphEntity::entityKey))
                 .toList();
+    }
+
+    @Override
+    public List<GraphEntityAlias> listEntityAliases(MemoryId memoryId) {
+        return entityAliases.getOrDefault(memoryId.toIdentifier(), Map.of()).values().stream()
+                .sorted(
+                        Comparator.comparing(GraphEntityAlias::entityType)
+                                .thenComparing(GraphEntityAlias::normalizedAlias)
+                                .thenComparing(GraphEntityAlias::entityKey))
+                .toList();
+    }
+
+    @Override
+    public List<GraphEntity> listEntitiesByEntityKeys(
+            MemoryId memoryId, Collection<String> entityKeys) {
+        List<String> normalizedKeys = normalizeEntityKeys(entityKeys).stream().sorted().toList();
+        if (normalizedKeys.isEmpty()) {
+            return List.of();
+        }
+        Map<String, GraphEntity> scoped = entities.getOrDefault(memoryId.toIdentifier(), Map.of());
+        return normalizedKeys.stream().map(scoped::get).filter(Objects::nonNull).toList();
     }
 
     @Override
@@ -254,6 +296,19 @@ public class InMemoryGraphOperations implements GraphOperations {
         }
     }
 
+    private static GraphEntityAlias mergeAlias(
+            GraphEntityAlias existing, GraphEntityAlias incoming) {
+        return new GraphEntityAlias(
+                existing.memoryId(),
+                existing.entityKey(),
+                existing.entityType(),
+                existing.normalizedAlias(),
+                existing.evidenceCount() + incoming.evidenceCount(),
+                existing.metadata().isEmpty() ? incoming.metadata() : existing.metadata(),
+                earlierOf(existing.createdAt(), incoming.createdAt()),
+                laterOf(existing.updatedAt(), incoming.updatedAt()));
+    }
+
     private static Set<String> normalizeEntityKeys(Collection<String> entityKeys) {
         if (entityKeys == null || entityKeys.isEmpty()) {
             return Set.of();
@@ -281,9 +336,32 @@ public class InMemoryGraphOperations implements GraphOperations {
         return normalized;
     }
 
+    private static Instant earlierOf(Instant left, Instant right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null || left.isBefore(right)) {
+            return left;
+        }
+        return right;
+    }
+
+    private static Instant laterOf(Instant left, Instant right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null || left.isAfter(right)) {
+            return left;
+        }
+        return right;
+    }
+
     private record MentionKey(Long itemId, String entityKey) {}
 
     private record LinkKey(Long sourceItemId, Long targetItemId, ItemLinkType linkType) {}
 
     private record CooccurrenceKey(String leftEntityKey, String rightEntityKey) {}
+
+    private record AliasIdentity(
+            String entityKey, GraphEntityType entityType, String normalizedAlias) {}
 }

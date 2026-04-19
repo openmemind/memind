@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.core.extraction.item.support;
 
+import com.openmemind.ai.memory.core.extraction.item.graph.EntityAliasObservation;
 import java.util.List;
 
 /**
@@ -33,7 +34,21 @@ public record ExtractedGraphHints(
     /**
      * Raw entity hint emitted by the extraction model.
      */
-    public record ExtractedEntityHint(String name, String entityType, Float salience) {}
+    public record ExtractedEntityHint(
+            String name,
+            String entityType,
+            Float salience,
+            List<EntityAliasObservation> aliasObservations) {
+
+        public ExtractedEntityHint {
+            aliasObservations =
+                    aliasObservations == null ? List.of() : List.copyOf(aliasObservations);
+        }
+
+        public ExtractedEntityHint(String name, String entityType, Float salience) {
+            this(name, entityType, salience, List.of());
+        }
+    }
 
     /**
      * Raw backward-looking causal hint emitted by the extraction model.

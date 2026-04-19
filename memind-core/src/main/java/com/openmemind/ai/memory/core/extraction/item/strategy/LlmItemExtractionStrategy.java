@@ -17,6 +17,8 @@ import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.graph.EntityAliasClass;
+import com.openmemind.ai.memory.core.extraction.item.graph.EntityAliasObservation;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedGraphHints;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedTemporal;
@@ -37,6 +39,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -305,7 +308,30 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
                                 new ExtractedGraphHints.ExtractedEntityHint(
                                         entity.name(),
                                         entity.entityType(),
-                                        clampNullable(entity.salience())))
+                                        clampNullable(entity.salience()),
+                                        toAliasObservations(entity.aliasObservations())))
+                .toList();
+    }
+
+    private static List<EntityAliasObservation> toAliasObservations(
+            List<MemoryItemExtractionResponse.ExtractedAliasObservation> observations) {
+        if (observations == null || observations.isEmpty()) {
+            return List.of();
+        }
+        return observations.stream()
+                .filter(Objects::nonNull)
+                .map(
+                        observation ->
+                                EntityAliasClass.fromWireValue(observation.aliasClass())
+                                        .map(
+                                                aliasClass ->
+                                                        new EntityAliasObservation(
+                                                                observation.aliasSurface(),
+                                                                aliasClass,
+                                                                observation.evidenceSource(),
+                                                                clampNullable(
+                                                                        observation.confidence()))))
+                .flatMap(Optional::stream)
                 .toList();
     }
 
