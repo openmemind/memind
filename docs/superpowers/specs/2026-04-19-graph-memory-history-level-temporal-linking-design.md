@@ -13,6 +13,7 @@ This document defines the next evolution of `memind` temporal item linking:
 - preserve the existing temporal relation semantics: `before`, `overlap`, and `nearby`
 - preserve the current graph model where temporal edges are directed item-to-item links
 - upgrade temporal candidate scope from same-batch only to history-level bounded lookup
+- make historical lookup overlap-aware rather than anchor-only
 - keep same-batch temporal linking as part of the same stage rather than splitting the logic
 - keep the public configuration surface unchanged
 - make the result immediately consumable by the existing graph retrieval and memory-thread derivation paths
@@ -116,11 +117,14 @@ The current item schema includes temporal fields such as:
 - `occurred_end`
 - `observed_at`
 
-but official store schema does not currently define an indexable single temporal-anchor lookup contract.
+but official store schema does not currently define an indexable temporal lookup contract for:
+
+- anchor-neighbor lookup
+- overlap-aware interval lookup
 
 Implication:
 
-- this phase must define how official stores support bounded temporal-neighbor lookup without degrading into full scans
+- this phase must define how official stores support both bounded temporal-neighbor lookup and bounded overlap-aware lookup without degrading into full scans
 
 ## Approach Comparison
 
@@ -351,9 +355,12 @@ Supporting records:
 ```java
 public record TemporalCandidateRequest(
         Long sourceItemId,
-        Instant anchor,
+        Instant sourceStart,
+        Instant sourceEndOrAnchor,
+        Instant sourceAnchor,
         MemoryItemType itemType,
         MemoryCategory category,
+        int overlapLimit,
         int beforeLimit,
         int afterLimit) {}
 
@@ -368,7 +375,12 @@ Required contract:
 - candidates must already satisfy the scope restrictions defined above
 - `excludeItemIds` must be respected
 - results may be empty for any request
-- returned candidates are ordered nearest-first within each direction before the linker performs final pair ranking
+- returned candidates may come from up to three bounded probe families:
+  - overlap-aware interval matches
+  - earlier anchor-neighbor matches
+  - later anchor-neighbor matches
+- a single candidate item must appear at most once per source request after store-side or linker-side deduplication
+- deterministic ordering is required, but final semantic priority remains the linker's responsibility rather than the store contract
 
 ### 2. Core Default Behavior Versus Official Plugin Requirements
 
@@ -389,33 +401,59 @@ Recommended initial internal constant:
 
 This is an internal constant, not a public knob.
 
+### 4. Internal Probe Limit Derivation
+
+This phase fixes the historical temporal probe policy as an internal contract so the maintained official stores do not drift in candidate volume or behavior.
+
+Recommended initial internal constants:
+
+- `TEMPORAL_OVERLAP_PROBE_MIN = 4`
+- `TEMPORAL_OVERLAP_PROBE_MAX = 16`
+- `TEMPORAL_NEIGHBOR_PROBE_MULTIPLIER = 2`
+- `TEMPORAL_NEIGHBOR_PROBE_MIN_PER_SIDE = 8`
+- `TEMPORAL_NEIGHBOR_PROBE_MAX_PER_SIDE = 32`
+
+Required derivation:
+
+- `overlapLimit = clamp(maxTemporalLinksPerItem, TEMPORAL_OVERLAP_PROBE_MIN, TEMPORAL_OVERLAP_PROBE_MAX)`
+- `beforeLimit = clamp(maxTemporalLinksPerItem * TEMPORAL_NEIGHBOR_PROBE_MULTIPLIER, TEMPORAL_NEIGHBOR_PROBE_MIN_PER_SIDE, TEMPORAL_NEIGHBOR_PROBE_MAX_PER_SIDE)`
+- `afterLimit = beforeLimit`
+
+This derivation is part of the required official implementation contract even though it does not surface as a public runtime option.
+
 ## Official Store Requirements
 
-### 1. Add An Internal Persisted Temporal Anchor Column
+### 1. Add Internal Persisted Temporal Query Columns
 
-To make nearest-neighbor temporal lookup portable and index-friendly across official stores, this phase introduces an internal persisted item-store column:
+To make both nearest-neighbor lookup and overlap-aware lookup portable and index-friendly across official stores, this phase introduces internal persisted item-store columns:
 
+- `temporal_start`
+- `temporal_end_or_anchor`
 - `temporal_anchor`
 
 Definition:
 
+- `temporal_start = firstNonNull(occurred_start, occurred_at, observed_at)`
+- `temporal_end_or_anchor = firstNonNull(occurred_end, occurred_start, occurred_at, observed_at)`
 - `temporal_anchor = firstNonNull(occurred_start, occurred_at, observed_at)`
 
 Properties:
 
-- nullable
+- nullable only for non-temporal items
 - internal storage concern only
 - not exposed as a new `MemoryItem` API field in this phase
 
 Rationale:
 
-- official stores need one stable, indexable lookup key for bounded temporal neighbor queries
+- official stores need stable, indexable fields for bounded temporal neighbor queries and overlap-aware interval queries
 - relying on per-dialect `COALESCE(...)` expression indexes would complicate portability and maintenance
+- `temporal_start` and `temporal_anchor` currently resolve to the same value under the preserved window contract, but they represent different logical roles and keep the query contract stable if anchor resolution evolves later
 
 ### 2. Official Store Query Shape
 
-Official stores should perform two bounded nearest-neighbor probes per source request:
+Official stores should perform up to three bounded probes per source request:
 
+- one overlap-aware interval probe
 - one backward probe for earlier anchors
 - one forward probe for later anchors
 
@@ -430,6 +468,23 @@ The query must:
 - exclude `excludeItemIds`
 - ignore rows with null `temporal_anchor`
 
+Required overlap-aware probe semantics:
+
+- return up to `overlapLimit` historical items whose stored temporal windows overlap the source window
+- overlap matching uses the persisted interval columns rather than anchor approximation alone
+- recommended overlap predicate:
+  - `candidate.temporal_start < source.sourceEndOrAnchor`
+  - `candidate.temporal_end_or_anchor > source.sourceStart`
+- overlap results are ordered by:
+  - `abs(candidate.temporal_anchor - source.sourceAnchor)` ascending
+  - `candidate item id` ascending
+
+Required anchor-neighbor probe semantics:
+
+- the backward probe returns up to `beforeLimit` earlier historical candidates ordered by anchor distance ascending
+- the forward probe returns up to `afterLimit` later historical candidates ordered by anchor distance ascending
+- candidates already returned by the overlap probe must not be emitted again as duplicate matches
+
 ### 3. Official Store Index Requirements
 
 Official maintained stores must add the indexes needed to support the bounded lookup path.
@@ -438,6 +493,7 @@ Required index intent:
 
 - scoped lookup by memory and temporal neighbor order
 - scoped lookup by memory, type, category, and temporal anchor
+- scoped overlap-aware lookup using `temporal_start` and `temporal_end_or_anchor`, or a dialect-equivalent interval strategy with the same bounded-behavior guarantee
 
 Exact index syntax may vary per dialect, but the maintained backend must not implement the required path as an unbounded scan over all items in the memory.
 
@@ -449,6 +505,12 @@ For each incoming temporal item, the linker should combine:
 
 - same-batch temporal candidates
 - historical temporal candidates returned by `listTemporalCandidateMatches(...)`
+
+Historical candidates are expected to come from:
+
+- overlap-aware historical probes
+- earlier anchor-neighbor probes
+- later anchor-neighbor probes
 
 Candidates are merged by candidate item id.
 
@@ -503,6 +565,28 @@ Rationale:
 
 - retrieval does not yet consume temporal subtype-specific scores
 - introducing pseudo-precise weight gradients now would add complexity without stable downstream use
+
+## Materialization Stats And Tracing Contract
+
+This phase changes the production boundary of temporal links, so it must also make the observability contract explicit.
+
+Current code reports:
+
+- `structuredItemLinkCount` in `ItemGraphMaterializationResult.Stats`
+- `EXTRACTION_GRAPH_STRUCTURED_LINK_COUNT` in tracing
+
+After temporal link construction moves out of `GraphHintNormalizer`, those fields must no longer silently carry historical temporal links.
+
+Required contract after this phase:
+
+- `structuredItemLinkCount` continues to mean links persisted during the structured graph stage only
+- after temporal extraction from `GraphHintNormalizer`, `structuredItemLinkCount` excludes temporal links and typically counts only non-temporal structured links such as causal links
+- `EXTRACTION_GRAPH_STRUCTURED_LINK_COUNT` follows the same non-temporal structured-stage meaning
+- temporal link production is reported exclusively through dedicated temporal-stage stats and tracing attributes
+
+This phase therefore requires `ItemGraphMaterializationResult.Stats` and `TracingItemGraphMaterializer` to add temporal counters that mirror the observability section below.
+
+This explicit split is necessary so operators do not interpret the post-change drop in `structuredItemLinkCount` as a regression.
 
 ## Pair Ranking And Quota
 
@@ -698,12 +782,15 @@ Those belong to a later retrieval-focused phase.
 - newly written temporal items can link to bounded relevant historical temporal items rather than only to same-batch items
 - same-batch temporal linking remains supported and is implemented through the same temporal linker stage
 - `before`, `overlap`, and `nearby` semantics are preserved
+- historical candidate lookup remains overlap-aware rather than anchor-only, so long-running overlapping events are eligible historical candidates
 - canonical temporal edge direction is explicitly defined and deterministic
 - `maxTemporalLinksPerItem` is defined as a per-incoming-item pairing cap, not as a global canonical out-degree cap
 - historical temporal lookup is provided through an explicit store contract
+- official implementations derive `overlapLimit`, `beforeLimit`, and `afterLimit` from one shared internal contract rather than backend-specific heuristics
 - official maintained stores implement bounded native lookup and do not rely on `listItems(memoryId)` full scans for the required path
-- official maintained stores persist and index an internal `temporal_anchor` needed for bounded lookup
+- official maintained stores persist and index the internal temporal query columns needed for both bounded lookup and overlap-aware lookup
 - historical lookup failure degrades to same-batch-only temporal linking for the affected subset instead of dropping the entire temporal stage
+- `structuredItemLinkCount` and tracing explicitly exclude temporal links after the phase boundary, and dedicated temporal-stage stats replace the old implicit accounting
 - the design adds temporal-stage observability sufficient to explain historical lookup cost, candidate volume, and degraded operation
 
 ## Final Recommendation
