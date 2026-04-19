@@ -269,6 +269,44 @@ Required guarantees:
 
 This means the current "post-item-persistence best-effort graph materializer" semantics will be narrowed to derived-maintenance semantics only. Source-of-truth graph persistence becomes part of the commit-critical path.
 
+### 7.4 Extraction Commit Protocol
+
+The logical extraction commit must be backed by an explicit protocol, not only by a high-level architectural statement.
+
+Required protocol model:
+
+- every extraction batch receives an `extractionBatchId`
+- source-of-truth item rows and source-of-truth graph facts are associated with that batch
+- the batch moves through an explicit visibility state machine:
+  - `PENDING`
+  - `COMMITTED`
+  - `REPAIR_REQUIRED`
+
+Required visibility rules:
+
+- retrieval, listing, graph assist, graph expansion, and downstream derivation must only read `COMMITTED` batches
+- `PENDING` batches are not externally visible
+- `REPAIR_REQUIRED` batches are not externally visible and must not be treated as durable success
+
+Required commit flow:
+
+1. allocate `extractionBatchId`
+2. write item source facts in `PENDING`
+3. write graph source facts in `PENDING`
+4. perform one final promote step to `COMMITTED`
+
+Required failure behavior:
+
+- if any source-of-truth write fails before promotion, the batch transitions to `REPAIR_REQUIRED`
+- repair logic may either complete the missing source-of-truth writes and promote the batch or remove the failed batch
+- callers must not report success until promotion to `COMMITTED` has completed
+
+Implementation rule:
+
+- stores that support one physical transaction across item and graph writes may implement this protocol as one transaction plus immediate promotion
+- stores that do not support one physical transaction must implement hidden `PENDING` visibility plus final promotion
+- a store that can do neither does not satisfy source-of-truth item graph requirements and must fail closed for this mode
+
 ## 8. Relation Model Evolution
 
 ### 8.1 Required model changes
@@ -445,6 +483,19 @@ Required direction:
 - write-plan application is idempotent for the same normalized inputs
 - low-level table-shaped batch methods, if retained, are demoted to adapter-internal SPI or helper interfaces and are not the main orchestration surface
 
+#### Logical extraction commit coordination
+
+`applyGraphWritePlan(...)` is necessary but not sufficient for the overall consistency model.
+
+The system also requires a higher-level extraction commit coordinator or equivalent orchestration contract that:
+
+- coordinates item source writes and graph source-of-truth writes under one `extractionBatchId`
+- enforces the `PENDING -> COMMITTED -> REPAIR_REQUIRED` visibility model
+- guarantees that partially written batches are not externally readable
+- exposes an explicit repair path for failed source-of-truth batches
+
+This coordination may live above `GraphOperations`, but it is part of the required design and not an implementation detail left unspecified.
+
 #### Store-native bounded reads
 
 Stores should support bounded graph reads for:
@@ -562,6 +613,21 @@ Required rule for this design:
 - causal family stays one retrieval family
 - persisted subtype is still available to scoring and diagnostics
 
+### 12.5 Fusion Contract
+
+Retrieval graph fusion must be deterministic and explicitly specified.
+
+Required rules:
+
+- candidate identity is item ID; the final result set must not contain duplicates
+- direct retrieval remains the primary base signal
+- if an item appears in both direct and graph channels, it is merged into one candidate and graph evidence contributes a bounded graph bonus rather than creating a second entry
+- in assist mode, configurable direct top-K protection is required and enabled by default
+- graph-only candidates may displace only the unprotected direct tail
+- graph family contributions are normalized inside the graph channel before the graph channel is fused with the direct channel
+- if one family is skipped, degraded, or times out, that family contributes zero and must not penalize direct-channel scores
+- identical inputs must produce identical fusion results, including tie-breaking behavior
+
 ## 13. Vector Capability Evolution
 
 ### 13.1 Motivation
@@ -646,6 +712,9 @@ Persistence tests must verify:
 
 - idempotent upsert behavior
 - explicit relation subtype persistence
+- extraction batch visibility behavior for `PENDING`, `COMMITTED`, and `REPAIR_REQUIRED`
+- partially written source-of-truth batches are not externally visible
+- repair-path behavior for failed source-of-truth batches
 - derived rebuild boundaries
 - store capability fail-closed behavior
 
@@ -657,6 +726,9 @@ Retrieval graph tests must verify:
 - expand mode bounded expansion
 - family-specific degradation
 - high-fanout entity guardrails
+- direct and graph overlap deduplication
+- direct top-K protection behavior
+- deterministic tie-breaking under identical inputs
 
 ### 16.4 Cross-store parity
 
@@ -675,6 +747,7 @@ There is no external compatibility requirement, but the implementation should st
 ### Phase B: Pipeline restructuring
 
 - split precompute, commit, post-commit responsibilities
+- introduce extraction commit coordination and batch visibility gating
 - move linkers from compute-and-write to compute-only planners
 
 ### Phase C: Store execution hardening
@@ -708,14 +781,22 @@ Mitigation:
 - only expose capabilities that materially change execution quality
 - keep baseline contract complete and fail-closed
 
-### 18.3 Risk: retrieval expansion complexity grows too quickly
+### 18.3 Risk: logical extraction commit becomes under-specified across stores
+
+Mitigation:
+
+- define one explicit batch visibility state machine
+- require either one physical transaction or hidden pending visibility plus promotion
+- fail closed on stores that cannot satisfy either mode
+
+### 18.4 Risk: retrieval expansion complexity grows too quickly
 
 Mitigation:
 
 - first release supports one-hop expansion only
 - keep per-family budgets and explicit fanout limits
 
-### 18.4 Risk: SQL optimization leaks into core
+### 18.5 Risk: SQL optimization leaks into core
 
 Mitigation:
 
@@ -773,6 +854,8 @@ This design is considered successfully implemented when all of the following are
 - planners no longer perform source-of-truth persistence directly
 - source-of-truth graph persistence is no longer treated as a best-effort post-item stage
 - an extraction batch is not considered successfully committed until both item records and source-of-truth graph facts are durable
+- non-committed extraction batches are not externally visible
+- failed source-of-truth batches transition into an explicit repairable state instead of remaining partially visible
 
 ### 20.3 Store quality
 
@@ -784,6 +867,7 @@ This design is considered successfully implemented when all of the following are
 
 - retrieval graph supports both assist and expand mode
 - graph family failures degrade independently where possible
+- fusion is deterministic, duplicate-free, and preserves direct-channel primacy with configurable top-K protection
 
 ### 20.5 Open-source maintainability
 
