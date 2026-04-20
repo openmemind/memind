@@ -331,7 +331,9 @@ Lifecycle rules:
 - new formal threads start as `ACTIVE`
 - lack of meaningful updates may transition `ACTIVE -> DORMANT`
 - resolution or explicit closure may transition `ACTIVE|DORMANT -> CLOSED`
-- a qualifying new update may transition `DORMANT|CLOSED -> ACTIVE` and append `REOPENED`
+- a qualifying new update may transition `DORMANT|CLOSED -> ACTIVE` and append `REOPENED` only if the thread was not closed by lineage-replacing repair
+- only threads closed with `closureReason = RESOLVED | EXPLICIT` may reopen in place
+- threads closed with `closureReason = MERGED | SPLIT` are lineage-terminal and must not be reopened in place
 - a superseded thread is never reopened in place; callers must follow lineage to the surviving or child thread set
 
 Canonical closure reasons:
@@ -383,6 +385,9 @@ Rules:
 - rebuild atomically advances `projectionGeneration` and `lastAppliedIntakeSeq`
 - `STALE_UNSAFE` means the last materialized snapshot is no longer safe to serve as current truth
 - when `projectionStatus = STALE_UNSAFE`, root-row lifecycle, object-state, and recency timestamps are last-known caches, not authoritative current state
+- `REBUILDING` means replacement projection work is in progress under rebuild control; default serving must follow degraded non-authoritative semantics until cutover completes
+- `FAILED` means the thread could not be materialized into a safe current projection and requires operator repair or successful rebuild before default current serving resumes
+- `lastAppliedIntakeSeq` on the root row is per-thread projection progress, not the memory-global exactly-once checkpoint
 
 ### 9.5 Timeline
 
@@ -553,6 +558,7 @@ Anchor quality is expected to improve over time. V1 must support the following f
 - one thread is determined to contain multiple durable objects
 - parent thread transitions to `CLOSED` with `closureReason = SPLIT`
 - child threads are created with `parentThreadId`
+- parent anchor bindings become `RETIRED`, not `REDIRECTED`, unless a later one-to-one repair proves that one retired anchor now has a single canonical successor
 - split is performed as a rebuild or explicit repair operation, not as opportunistic incremental mutation
 
 ### 11.6 Anchor binding history
@@ -565,16 +571,19 @@ Rules:
 - old anchors are retained as historical bindings after `ANCHOR_REKEY`
 - historical bindings may redirect to the current canonical thread
 - `resolveThreadByAnchor` must resolve both active bindings and redirected historical bindings
+- `REDIRECTED` is valid only for one-to-one canonical successor resolution such as rekey or merge
+- split-origin anchors that no longer map to one canonical child must remain `RETIRED`; `resolveThreadByAnchor` must not silently choose one child
 - `normalizedAliases[]` are display and match aliases, not a substitute for anchor binding history
 
 ## 12. Persistence Model
 
 V1 persists seven required thread-core objects.
 
-In addition, the design requires two non-core infrastructure objects:
+In addition, the design requires three non-core infrastructure objects:
 
 - `thread_intake_outbox`
 - `thread_intake_revisit`
+- `thread_materialization_state`
 
 These infrastructure objects are required for reliability and ambiguity management, but they are not part of the formal thread object model itself.
 
@@ -623,7 +632,7 @@ Invariants:
 - `anchor_kind` and `anchor_key` on the root row are cached copies of the current active canonical binding
 - `superseded_by_thread_id` threads are never canonical
 - `lifecycle_status`, `object_state`, `last_event_at`, `last_meaningful_update_at`, `closed_at`, and `closure_reason` on the root row are projection-derived cache fields
-- if `projection_status = STALE_UNSAFE`, projection-derived cache fields and cached anchor/display fields on the root row must not be served under their normal current-state names as authoritative truth
+- if `projection_status = STALE_UNSAFE | REBUILDING | FAILED`, projection-derived cache fields and cached anchor/display fields on the root row must not be served under their normal current-state names as authoritative truth
 
 ### 12.2 `memory_thread_anchor_binding`
 
@@ -659,6 +668,7 @@ Invariants:
 
 - unique active `(memory_id, anchor_kind, anchor_key)` where `binding_status = ACTIVE`
 - redirected bindings must point at the canonical destination thread through `redirect_thread_id`
+- retired bindings that do not have one canonical successor must leave `redirect_thread_id` null and rely on thread lineage for follow-up navigation
 
 ### 12.3 `memory_thread_membership`
 
@@ -828,6 +838,35 @@ Invariants:
 - snapshot version must match or trail the current thread reducer version
 - snapshot must identify which `projection_generation` it represents
 
+### 12.8 `thread_materialization_state`
+
+This stores memory-scoped materialization fencing and ordered-intake checkpoint state.
+
+Required responsibilities:
+
+- hold the canonical per-memory ordered-intake checkpoint
+- fence the active materializer lease
+- coordinate rebuild prefix cutover
+- allow `IGNORE`, `COMPLETED_DEFERRED`, and terminal-failure finalization even when no thread root row changes
+
+Recommended fields:
+
+- `memory_id`
+- `last_finalized_intake_seq`
+- `lease_token`
+- `lease_expires_at`
+- `active_rebuild_job_id`
+- `active_rebuild_cutover_seq`
+- `active_rebuild_started_at`
+- `updated_at`
+
+Invariants:
+
+- unique `memory_id`
+- `last_finalized_intake_seq` is monotonic per memory
+- only the active lease holder may advance `last_finalized_intake_seq` or finalize a rebuild cutover prefix
+- `memory_thread.last_applied_intake_seq` may trail or differ across threads and must never be used as the memory-global exactly-once fence
+
 ## 13. Objects Explicitly Deferred
 
 The following objects are intentionally deferred beyond v1:
@@ -885,6 +924,7 @@ Canonical outbox statuses:
 - `COMPLETED`
 - `COMPLETED_DEFERRED`
 - `FAILED_RETRYABLE`
+- `FAILED_TERMINAL`
 
 Outbox is required so thread work is retryable and rebuildable.
 
@@ -895,6 +935,7 @@ It is infrastructure, not thread domain state:
 - it must be safe to replay
 - it must not be treated as a formal thread object
 - it must not store semantically normalized thread hints as durable write-path truth
+- terminal finalization metadata must remain on the outbox row so operators can diagnose and replay safely
 
 When an intake is finalized as `COMPLETED_DEFERRED`, the system must also persist a `thread_intake_revisit` record containing at least:
 
@@ -913,7 +954,8 @@ When an intake is finalized as `COMPLETED_DEFERRED`, the system must also persis
 - it must be created or updated atomically with the same finalization transaction that marks the outbox entry `COMPLETED_DEFERRED`
 - later compatible evidence may schedule targeted reconsideration only by enqueuing a fresh derived `thread_intake_outbox` record with a new `intakeSeq`
 - `thread_intake_revisit` itself must never mutate thread-core state and must never act as a second unordered write path
-- full rebuild may consult revisit records as ambiguity memory and may discard them after the ambiguity is resolved
+- full rebuild must not depend on revisit records for correctness; rebuild decisions must be reproducible from authoritative items, graph facts, and versioned deterministic rules alone
+- rebuild or successful targeted reconsideration may discard revisit records after the ambiguity is resolved
 
 ### 14.3 Ordering and exclusivity model
 
@@ -922,13 +964,15 @@ V1 explicitly prioritizes correctness over maximum parallelism.
 Rules:
 
 - at most one active thread materializer lease may process one `memoryId` at a time
+- the active lease and ordered checkpoint are fenced through `thread_materialization_state`
 - outbox entries for one `memoryId` must be finalized in strictly increasing `intakeSeq`
 - rebuild work acquires the same memory-scoped lease as incremental work
 - rebuild establishes a cutover `intakeSeq`; newer entries are applied only after the rebuild job finalizes that ordered prefix
 - rebuild consistency is per-thread, not memory-wide snapshot consistent in v1
 - rebuild may atomically cut over one thread at a time under the memory-scoped lease; different threads in the same memory may temporarily sit at different rebuilt generations during one rebuild job
 - per-thread `event_seq` must be allocated monotonically inside the thread-core transaction using row lock or equivalent compare-and-swap protection
-- `COMPLETED_DEFERRED` is a terminal finalized status and advances the per-memory intake watermark
+- `COMPLETED`, `COMPLETED_DEFERRED`, and `FAILED_TERMINAL` are finalized statuses and advance `thread_materialization_state.last_finalized_intake_seq`
+- `FAILED_RETRYABLE` is not final, does not advance the ordered checkpoint, and blocks later intake finalization until it succeeds or is promoted to `FAILED_TERMINAL`
 - deferred entries are not retried in place; targeted reconsideration must re-enter the same ordered outbox path through a newly enqueued derived intake, or be handled by full rebuild
 
 ### 14.4 Asynchronous thread worker
@@ -946,7 +990,7 @@ Worker stages:
 7. upsert memberships
 8. append thread events and event-source links
 9. reduce and write snapshot
-10. update outbox status to `COMPLETED`, `COMPLETED_DEFERRED`, or `FAILED_RETRYABLE`
+10. update outbox status to `COMPLETED`, `COMPLETED_DEFERRED`, `FAILED_RETRYABLE`, or `FAILED_TERMINAL`
 
 ### 14.5 Thread-core transaction boundary
 
@@ -959,10 +1003,13 @@ Within the thread worker, the following writes must commit atomically:
 - `memory_thread_event`
 - `memory_thread_event_source`
 - `memory_thread_snapshot`
+- `thread_materialization_state`
 
 If snapshot reduction fails, the thread-core transaction fails and the outbox entry remains retryable.
 
-If finalization outcome is `COMPLETED_DEFERRED`, no thread-core rows are required to change. In that case the atomic finalization boundary consists of outbox finalization, `thread_intake_revisit`, and ordered-intake watermark advancement only.
+If finalization outcome is `COMPLETED_DEFERRED`, no thread-core rows are required to change. In that case the atomic finalization boundary consists of outbox finalization, `thread_intake_revisit`, and `thread_materialization_state.last_finalized_intake_seq` advancement only.
+
+If finalization outcome is `FAILED_TERMINAL`, no thread-core rows are required to change. In that case the atomic finalization boundary consists of terminal outbox finalization metadata and `thread_materialization_state.last_finalized_intake_seq` advancement only.
 
 The transaction must also advance:
 
@@ -970,13 +1017,15 @@ The transaction must also advance:
 - `lastAppliedIntakeSeq`
 - canonical `object_state`
 - the final outbox status for the processed `intakeSeq`, or an equivalent exactly-once fencing record
+- `thread_materialization_state.last_finalized_intake_seq`
 - the `thread_intake_revisit` record when finalizing `COMPLETED_DEFERRED`
 
 Exactly-once protocol rules:
 
-- success commit must atomically persist thread-core writes, final outbox status, and the new `lastAppliedIntakeSeq = intakeSeq`
-- deferred success commit must atomically persist the final outbox status, the new `lastAppliedIntakeSeq = intakeSeq`, and the corresponding `thread_intake_revisit` write
-- retry logic must treat `(memoryId, intakeSeq)` as already finalized if either the outbox row is final or the memory watermark has already advanced past that `intakeSeq`
+- success commit must atomically persist thread-core writes, final outbox status, the new `lastAppliedIntakeSeq = intakeSeq` on affected threads, and `thread_materialization_state.last_finalized_intake_seq = intakeSeq`
+- deferred success commit must atomically persist the final outbox status, `thread_materialization_state.last_finalized_intake_seq = intakeSeq`, and the corresponding `thread_intake_revisit` write
+- terminal failure commit must atomically persist the final outbox status, terminal failure metadata, and `thread_materialization_state.last_finalized_intake_seq = intakeSeq`
+- retry logic must treat `(memoryId, intakeSeq)` as already finalized only by consulting the final outbox status or `thread_materialization_state.last_finalized_intake_seq`, never by inferring from any thread root row alone
 - rebuild cutover must finalize only the ordered intake prefix it has fully incorporated
 - later retries of an already finalized `intakeSeq` must no-op rather than reapply thread changes
 
@@ -994,6 +1043,7 @@ Rebuild semantics:
 - atomically cut over each rebuilt thread independently: root row, active anchor binding cache, current membership projection, events, and snapshot for that thread move to the new `projectionGeneration` in one transaction
 - v1 does not guarantee one memory-wide snapshot-consistent rebuild epoch across all threads; the guarantee is atomic cutover per thread
 - threads not yet rebuilt during that job must remain suppressed from default current projection serving if they are `STALE_UNSAFE` or marked `REBUILDING`
+- rebuild must ignore `thread_intake_revisit` as a semantic input; revisit is operational ambiguity memory, not rebuild source-of-truth
 
 This replaces reliance on legacy thread rows for correctness.
 
@@ -1016,9 +1066,9 @@ Rules:
 - prior generation rows may be retained for audit or garbage-collected later, but correctness must not depend on retention
 - snapshot and membership correctness after invalidation always comes from rebuild, not ad hoc patching
 - `memory_thread_current_membership` rows for a `STALE_UNSAFE` thread must be treated as non-serveable by default until rebuild cutover
-- detail reads for `STALE_UNSAFE` threads must degrade to safe metadata only: immutable identity, lineage, projection head, explicit stale status, and optional `lastKnown*` cache fields
+- detail reads for `STALE_UNSAFE`, `REBUILDING`, and `FAILED` threads must degrade to safe metadata only: immutable identity, lineage, projection head, explicit projection status, and optional `lastKnown*` cache fields
 - stale default detail must not expose `lifecycleStatus`, `objectState`, `lastEventAt`, or `lastMeaningfulUpdateAt` as authoritative current-state fields
-- default member, event, and item-to-thread reads for a `STALE_UNSAFE` thread must return no current projection content
+- default member, event, and item-to-thread reads for a `STALE_UNSAFE`, `REBUILDING`, or `FAILED` thread must return no current projection content
 - serving the pre-rebuild snapshot or stale current members/events requires explicit audit or stale-read opt-in and must never be the default
 
 ## 15. Intake Signal and Decision Model
@@ -1081,10 +1131,12 @@ Definitions:
 The worker must apply the following logic.
 
 1. If a canonical existing thread is matched strongly enough, prefer `ATTACH_EXISTING`.
-2. If the chosen existing thread is `DORMANT` or `CLOSED` and the new signal restores continuity, prefer `REOPEN_EXISTING`.
+2. If the chosen existing thread is `DORMANT`, or is `CLOSED` with `closureReason = RESOLVED | EXPLICIT`, and the new signal restores continuity, prefer `REOPEN_EXISTING`.
 3. If multiple existing threads or object interpretations remain plausible and ambiguity stays above threshold, use `DEFER_AMBIGUOUS`.
 4. If no existing thread is strong enough, ambiguity is low, and `anchorability + continuity + statefulness` all exceed creation threshold, use `CREATE_NEW`.
 5. Otherwise use `IGNORE`.
+
+`REOPEN_EXISTING` must never target a thread closed by `MERGED` or `SPLIT`, or any thread that already points at `supersededByThreadId`.
 
 ### 15.6 No persisted latent candidate in v1
 
@@ -1097,6 +1149,7 @@ Instead:
 - `DEFER_AMBIGUOUS` remains an outbox finalization outcome, not a formal thread object
 - unresolved ambiguity is retained through `thread_intake_revisit`, not through `memory_thread_candidate`
 - targeted revisit may later reprocess the deferred source together with new evidence only by enqueuing a fresh derived outbox intake with a new `intakeSeq`
+- full rebuild does not read revisit state as semantic input; unresolved items are reconsidered from authoritative source facts only
 
 ## 16. Event Model
 
@@ -1265,6 +1318,12 @@ The thread query layer must support:
 
 `resolveThreadByAnchor` must consult `memory_thread_anchor_binding`, not only the cached root-row anchor.
 
+`resolveThreadByAnchor` must distinguish between:
+
+- active canonical resolution
+- one-to-one redirected canonical resolution
+- retired anchor with no direct canonical successor
+
 ### 19.2 Minimum list filters
 
 Thread lists should filter by:
@@ -1276,6 +1335,8 @@ Thread lists should filter by:
 - updated time range
 
 If `projectionStatus = STALE_UNSAFE`, default list filtering must not treat cached projection-derived fields as authoritative current state. Stale threads may be filtered by `projectionStatus`, identity, lineage, or explicit `lastKnown*` cache filters only if the API exposes them.
+
+If `projectionStatus = REBUILDING | FAILED`, default list filtering must apply the same non-authoritative rule as `STALE_UNSAFE`.
 
 ### 19.3 Return-shape requirement
 
@@ -1294,7 +1355,9 @@ Default summary counts must be computed from the same current-serving projection
 
 If a thread has been superseded by merge, the default detail query should either redirect to the canonical survivor or expose `supersededByThreadId` explicitly.
 
-If `projectionStatus = STALE_UNSAFE`, default detail response must omit:
+If `resolveThreadByAnchor` hits a retired split-origin anchor with no direct canonical successor, the default anchor-resolution response must not pick a child implicitly. It should return no canonical direct match together with lineage or last-owning-thread hints if available.
+
+If `projectionStatus = STALE_UNSAFE | REBUILDING | FAILED`, default detail response must omit:
 
 - `lifecycleStatus`
 - `objectState`
@@ -1304,12 +1367,12 @@ If `projectionStatus = STALE_UNSAFE`, default detail response must omit:
 - current event counts
 - current membership counts
 
-Instead, stale default detail may expose only:
+Instead, degraded default detail may expose only:
 
 - immutable identity fields
 - lineage metadata
 - projection head metadata
-- explicit stale marker or stale reason
+- explicit projection-status marker or reason
 - optional `lastKnownLifecycleStatus`
 - optional `lastKnownObjectState`
 - optional `lastKnownLastEventAt`
@@ -1326,10 +1389,10 @@ Rules:
 - `listThreadMembers` reads from `memory_thread_current_membership` and returns only rows where `visibility_status = ACTIVE` by default
 - `listThreadsByItem` resolves only `memory_thread_current_membership` rows where `visibility_status = ACTIVE` by default
 - `listThreadEvents` returns only the active `projectionGeneration` by default
-- `resolveThreadByAnchor` follows active bindings first and redirected bindings second by default
+- `resolveThreadByAnchor` follows active bindings first and redirected bindings second by default; retired non-redirected anchors must not be auto-resolved
 - historical generations, retired memberships, and stale pre-rebuild projections are available only through explicit audit or history opt-in
-- if `projectionStatus = STALE_UNSAFE`, default detail, member, event, and item-to-thread reads must suppress current projection content and expose explicit stale-state metadata instead
-- stale default detail must use `lastKnown*` cache field names or omission, never the normal current-state field names for projection-derived values
+- if `projectionStatus = STALE_UNSAFE | REBUILDING | FAILED`, default detail, member, event, and item-to-thread reads must suppress current projection content and expose explicit projection-status metadata instead
+- degraded default detail must use `lastKnown*` cache field names or omission, never the normal current-state field names for projection-derived values
 
 ## 20. Consistency, Failure Handling, and Operations
 
@@ -1341,10 +1404,17 @@ Item and graph commits remain the first durable fact layer. Thread materializati
 
 If thread materialization fails:
 
-- the outbox entry remains pending
+- retryable failures leave the outbox entry non-final as `PENDING` or `FAILED_RETRYABLE`
 - no partial thread-core transaction is committed
 - the worker may retry safely
-- `lastAppliedIntakeSeq` must not advance
+- `thread_materialization_state.last_finalized_intake_seq` must not advance
+
+If repeated failure crosses the terminal-failure policy or the error is classified as non-retryable:
+
+- the outbox entry transitions to `FAILED_TERMINAL`
+- terminal finalization advances `thread_materialization_state.last_finalized_intake_seq` so later intake is not permanently blocked
+- the source facts remain durable and available for later rebuild or explicit replay by enqueuing a new derived intake
+- terminal failure must be surfaced as an operator-visible condition, never as a silent drop
 
 ### 20.3 Idempotency requirement
 
@@ -1360,6 +1430,7 @@ Required techniques include:
 - projection-generation cutover instead of partial in-place repair
 - one ordered mutation path for both normal intake and revisit-driven reconsideration
 - per-thread atomic rebuild cutover under a memory-scoped rebuild lease
+- explicit memory-scoped checkpoint fencing through `thread_materialization_state`
 
 ### 20.4 Operational controls
 
@@ -1368,10 +1439,12 @@ The subsystem should expose at least:
 - outbox backlog size
 - oldest pending outbox age
 - revisit backlog size
+- terminal outbox failure count
+- per-memory checkpoint lag between newest enqueued `intakeSeq` and `last_finalized_intake_seq`
 - attach/reopen/create/defer/ignore counts
 - deferred ambiguous count
 - ambiguous decision rate
-- stale-unsafe and rebuilding thread counts
+- stale-unsafe, rebuilding, and failed thread counts
 - snapshot reduction failures
 - rebuild success and failure counts
 
@@ -1400,6 +1473,7 @@ Required store coverage:
 - primary membership constraint
 - append-only event semantics
 - snapshot replacement semantics
+- `thread_materialization_state` monotonic checkpoint behavior
 
 ### 21.3 Integration tests
 
@@ -1416,11 +1490,15 @@ Required integration coverage:
 - deferred entries do not block later ordered intake processing
 - `COMPLETED_DEFERRED` finalization atomically persists the revisit record
 - deferred revisit can later attach or create with new evidence only by re-entering `thread_intake_outbox` with a new `intakeSeq`
+- retryable poison intake blocks later finalization until success or promotion to `FAILED_TERMINAL`
+- `FAILED_TERMINAL` finalization advances the memory checkpoint without silently losing rebuildability of the source facts
 - concurrent outbox ordering and lease behavior
 - crash-and-retry does not duplicate an already finalized `intakeSeq`
 - anchor rekey, redirect resolution, merge, and split scenarios
+- split-origin anchors stay retired and do not auto-resolve to an arbitrary child
 - stale-unsafe thread detail suppression scenarios
 - stale-unsafe member and event suppression scenarios
+- `REBUILDING` and `FAILED` threads follow the same safe-serving suppression contract as `STALE_UNSAFE`
 - per-thread rebuild cutover is atomic while same-memory threads may temporarily be on different rebuilt generations
 
 ### 21.4 Behavioral fixtures
@@ -1469,7 +1547,7 @@ Migration should proceed as follows.
 1. Introduce the new thread-core schema and outbox path.
 2. Replace `memory_thread_item` with `memory_thread_membership`.
 3. Extend or recreate `memory_thread` with the new core fields.
-4. Add `memory_thread_event`, `memory_thread_event_source`, and `memory_thread_snapshot`.
+4. Add `memory_thread_event`, `memory_thread_event_source`, `memory_thread_snapshot`, and `thread_materialization_state`.
 5. Roll out incremental materialization for new item writes.
 6. Rebuild thread core from committed items and graph facts per memory.
 7. Remove legacy retrieval-thread assumptions from storage and admin views.
@@ -1489,6 +1567,7 @@ V1 is complete when all of the following are true:
 - source facts and outbox envelope share one atomic commit boundary
 - source invalidation and deletion trigger generation rebuild correctly
 - memory-scoped ordering and exclusivity semantics are enforced
+- memory-scoped materialization fencing and ordered checkpoint are implemented explicitly
 - anchor rekey, merge, and split are first-class repair operations
 - anchor binding history and redirect resolution are implemented
 - thread query contract is available
