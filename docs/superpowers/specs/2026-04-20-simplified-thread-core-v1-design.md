@@ -87,7 +87,7 @@ A thread is valid only if it has all three:
 
 ### 5.4 Rebuild is the recovery model
 
-If incremental thread materialization is incomplete, stale, or damaged, the system repairs it by rebuilding from authoritative `item + graph` facts.
+If incremental thread materialization is incomplete, stale, or damaged, the system repairs it by rebuilding from authoritative source facts.
 
 ### 5.5 Many-to-many membership is required
 
@@ -101,7 +101,7 @@ The differentiator is not outbox exactness. The differentiator is high-quality o
 
 Thread V1 is a `rebuildable semantic projection subsystem` with three responsibilities:
 
-1. Discover durable objects from committed `item + graph` facts
+1. Discover durable objects from committed source facts
 2. Materialize a structured thread-local evolution timeline
 3. Reduce that timeline into a current serveable snapshot
 
@@ -173,24 +173,23 @@ Expected semantics:
 
 ## 8. Core Persistence Model
 
-Thread V1 uses five tables:
+Thread V1 uses four tables:
 
 - `memory_thread`
 - `memory_thread_event`
 - `memory_thread_membership`
-- `memory_thread_anchor`
 - `thread_intake_outbox`
 
 No other thread-core table is required in V1.
 
 ### 8.1 `memory_thread`
 
-This is the current thread root row and cache.
+This is the current thread root row and the authoritative current anchor holder.
 
 Required responsibilities:
 
 - stable identity
-- current canonical anchor cache
+- authoritative canonical anchor
 - thread type
 - lifecycle
 - current object state
@@ -219,7 +218,14 @@ Recommended fields:
 - `updated_at`
 - `deleted`
 
+Required uniqueness rules:
+
+- `UNIQUE(memory_id, thread_key)`
+- `UNIQUE(memory_id, anchor_kind, anchor_key)`
+
 `memory_thread` stores only the current serveable projection. It does not store projection generations, repair state, redirected identity metadata, or historical lineage.
+
+Canonical anchor fields on `memory_thread` are the only current anchor source of truth in V1. There is no separate current-anchor table.
 
 ### 8.2 `memory_thread_event`
 
@@ -258,7 +264,7 @@ This is the many-to-many item-to-thread association table.
 
 Required responsibilities:
 
-- associate one item to one or more threads
+- associate one source item to one or more threads
 - preserve role and relevance inside a thread
 - support current thread queries and reducer context
 
@@ -281,58 +287,24 @@ The unique constraint must be:
 
 The previous global single-thread-per-item invariant is explicitly removed.
 
-### 8.4 `memory_thread_anchor`
+### 8.4 `thread_intake_outbox`
 
-This table stores active canonical anchor bindings.
-
-Required responsibilities:
-
-- resolve the current canonical anchor for a thread
-- prevent duplicate ownership of the same exact anchor
-
-Recommended fields:
-
-- `id`
-- `memory_id`
-- `thread_id`
-- `anchor_kind`
-- `anchor_key`
-- `bound_at`
-- `created_at`
-
-V1 anchor rows are current-projection rows only.
-
-V1 does not support:
-
-- in-place anchor replacement
-- redirected bindings
-- successor resolution
-- retained historical anchor chains
-
-Required uniqueness rule:
-
-- `UNIQUE(memory_id, anchor_kind, anchor_key)`
-
-The canonical anchor of a V1 thread is immutable. If rebuild discovers that a different canonical anchor should own the object, the correct V1 result is a different thread identity in the replacement projection, not in-place anchor mutation.
-
-### 8.5 `thread_intake_outbox`
-
-This table stores pending and finalized asynchronous intake work.
+This table stores pending and finalized projection work keyed by authoritative source order.
 
 Required responsibilities:
 
-- represent outstanding thread intake work
-- provide one canonical intake row per committed item
+- provide one canonical work row per committed source row
+- preserve authoritative source ordering for publication
 - support retryable asynchronous processing
 - support multi-instance worker claim safety
-- support published-prefix consistency reporting
+- support publication-boundary reporting
 - support operational diagnosis
 
 Recommended fields:
 
 - `id`
 - `memory_id`
-- `intake_seq`
+- `source_seq`
 - `trigger_item_id`
 - `status`
 - `completion_mode`
@@ -343,12 +315,17 @@ Recommended fields:
 - `finalized_at`
 - `failure_reason`
 
+`source_seq` is the stable append-only order of committed source rows for one `memoryId`.
+
+In the current `memind` item store, `source_seq` is `item_id`.
+
 V1 outbox statuses:
 
 - `PENDING`
 - `PROCESSING`
 - `COMPLETED`
 - `FAILED`
+- `RETRACTED`
 
 V1 completion modes for `COMPLETED` rows:
 
@@ -357,10 +334,12 @@ V1 completion modes for `COMPLETED` rows:
 
 Required uniqueness rules:
 
-- `UNIQUE(memory_id, intake_seq)`
+- `UNIQUE(memory_id, source_seq)`
 - `UNIQUE(memory_id, trigger_item_id)`
 
-`COMPLETED` means the source item is already reflected in the visible published thread projection, either by direct incremental application or by successful rebuild coverage.
+`COMPLETED` means the authoritative source row has been fully accounted for in the visible published thread projection, whether it produced thread artifacts or a no-op decision such as `IGNORE`.
+
+`RETRACTED` means the source row no longer belongs to the authoritative thread source set and contributes no visible thread state.
 
 This table is infrastructure, not thread-domain state.
 
@@ -369,76 +348,92 @@ This table is infrastructure, not thread-domain state.
 The authoritative write path remains:
 
 - raw input
-- extracted `item`
-- derived `graph`
+- extracted source row
+- derived graph primitives attributable to that source row
 
 Thread V1 does not participate in that correctness boundary.
 
 Rules:
 
-- `item + graph` commit first
+- source facts commit first
 - thread work starts only after those source facts are committed
 - failure to enqueue thread intake must never roll back committed source facts
 
 This is a deliberate design choice. Thread is downstream semantic projection work, not source-fact durability work.
 
+### 9.1 Authoritative source row model
+
 For thread correctness, the authoritative source set is:
 
-- non-deleted committed items
-- cutoff-consistent graph facts attributable to those items
+- committed immutable source rows
+- cutoff-consistent graph primitives attributable to those rows
 - thread semantic markers persisted inside the same source-fact boundary
 
-### 9.1 Source retraction rule
+V1 thread correctness requires append-only source revisions.
 
-V1 distinguishes between additive source changes and retractions.
+Rules:
+
+- each committed source row gets one monotonic `source_seq`
+- for correctness purposes, thread-relevant facts of a committed source row are immutable
+- any correction to previously committed thread-relevant facts must be modeled as:
+  - retraction or invalidation of the old source row
+  - insertion of a new source row with a new `source_seq`
+
+This matches the current `memind` item store direction better than introducing mutable in-place source updates.
+
+### 9.2 Source retraction rule
+
+V1 distinguishes between additive source changes and source retractions.
 
 Additive source changes:
 
-- newly committed items
-- newly committed graph facts for those items
+- newly committed source rows
+- newly committed graph primitives attributable to those rows
 
 Source retractions:
 
-- item deletion
-- item invalidation
-- removal or correction of previously committed thread-relevant semantic markers
-- graph fact retraction that can change existing thread identity, events, memberships, or snapshot state
+- source-row deletion
+- source-row invalidation
 
 V1 supports additive changes incrementally.
 
 V1 does not attempt fine-grained incremental repair for source retractions. Any source retraction affecting a `memoryId` must mark the thread projection as `REBUILD_REQUIRED` and must be repaired only by `rebuild(memoryId)`.
 
-### 9.2 Graph correctness boundary
+### 9.3 Graph correctness boundary
 
-Deterministic thread logic may depend only on graph evidence that is attributable to source items.
+Deterministic thread logic may depend only on graph evidence attributable to source rows.
 
-Global derived graph aggregates such as alias indexes or cooccurrence summaries may be used only if they are provably equivalent to recomputation from the same cutoff-bounded item set. Otherwise they are accelerators only and must not be part of the thread correctness path.
+Global derived graph aggregates such as alias indexes or cooccurrence summaries may be used only if they are provably equivalent to recomputation from the same cutoff-bounded source set. Otherwise they are accelerators only and must not be part of the thread correctness path.
 
 ## 10. Intake and Compensation Model
 
 ### 10.1 Enqueue after source commit
 
-After a successful `item + graph` commit, the system writes one or more `thread_intake_outbox` rows for newly committed items.
+After a successful source commit, the system writes one `thread_intake_outbox` row for the new source row.
 
-The outbox row does not need to be written in the same database transaction as `item + graph`.
+The outbox row does not need to be written in the same database transaction as source commit.
 
 ### 10.2 Missing outbox compensation
 
-Because outbox write is not part of the source-fact transaction boundary, V1 requires an explicit compensation mechanism.
+Because outbox write is not part of the source-fact transaction boundary, V1 requires explicit compensation.
 
 The system must provide:
 
 - `backfillMissingOutbox(memoryId)`
 
-This operation scans committed items and existing outbox rows and inserts missing intake rows.
+This operation scans committed source rows and existing outbox rows and inserts missing rows.
 
-`backfillMissingOutbox(memoryId)` must be idempotent and must respect `UNIQUE(memory_id, trigger_item_id)`.
+Rules:
+
+- `backfillMissingOutbox(memoryId)` must be idempotent
+- backfilled rows must preserve the canonical `source_seq` of the authoritative source row
+- late insertion time must not change source-order publication semantics
 
 ### 10.3 Rebuild covers the same gap
 
-`rebuild(memoryId)` must also repair the case where an item exists in authoritative storage but never entered the thread intake pipeline.
+`rebuild(memoryId)` must also repair the case where a committed source row exists but never entered the thread intake pipeline.
 
-If rebuild discovers authoritative items without outbox rows inside its cutoff, it must create the missing rows and finalize them as `COMPLETED` with `completion_mode = COVERED_BY_REBUILD`.
+If rebuild discovers authoritative source rows without outbox rows inside its cutoff, it must create the missing rows with their canonical `source_seq`.
 
 ### 10.4 Retractions bypass incremental repair
 
@@ -446,14 +441,15 @@ Source retractions do not emit negative thread deltas in V1.
 
 Rules:
 
-- additive changes enqueue `thread_intake_outbox` rows
+- additive source changes enqueue `thread_intake_outbox` rows
 - source retractions mark the projection `REBUILD_REQUIRED`
 - once `REBUILD_REQUIRED` is raised, no incremental worker may publish additional visible thread state for that `memoryId`
 - the only way to recover from `REBUILD_REQUIRED` is successful `rebuild(memoryId)`
+- only rebuild may finalize affected rows as `RETRACTED`
 
-## 11. Intake Ordering, Publication, and Projector Lease
+## 11. Source-Order Publication and Projector Lease
 
-V1 uses a minimal but strict claim model.
+V1 uses a minimal but strict publication model.
 
 ### 11.1 Memory-scoped projector lease
 
@@ -461,36 +457,34 @@ Exactly one projector lease per `memoryId` may mutate visible thread state.
 
 Rules:
 
-- incremental intake publication and rebuild cutover share the same memory-scoped projector lease
+- incremental publication and rebuild cutover share the same memory-scoped projector lease
 - at most one worker may hold the projector lease for one `memoryId` at a time
 - while rebuild holds the projector lease, no incremental row may finalize as `COMPLETED/APPLIED`
 - at most one worker may claim one `PENDING` outbox row at a time
 - `PROCESSING` rows are protected by `lease_token + leased_at`
 - stale leases may be reclaimed after timeout
-- intake rows are allocated with increasing `intake_seq` per `memoryId`
+- source rows are published in increasing `source_seq` order
 - the worker holding the projector lease must claim the lowest publishable pending row first
-- the worker holding the projector lease must publish rows in increasing `intake_seq` order
 - a `FAILED` row blocks further visible prefix advance until rebuild succeeds
 
 ### 11.2 Published-prefix model
 
-Incremental correctness is defined over the published prefix.
+Incremental correctness is defined over the published source prefix.
 
 Definitions:
 
-- `servable_through_intake_seq`: the greatest `intake_seq = N` whose source facts are fully reflected in the visible current projection for that `memoryId`
-- `projection gap`: either a missing canonical outbox row or a non-completed row at or below the next expected `intake_seq`
+- `terminal row`: an outbox row with `status = COMPLETED` or `status = RETRACTED`
+- `servable_through_source_seq`: the greatest `source_seq = N` whose authoritative source rows are fully reflected in the visible published projection for that `memoryId`
+- `projection gap`: either a missing canonical outbox row or a non-terminal row at or below the next expected `source_seq`
 - `published projection`: the thread projection visible to query APIs
 
 Rules:
 
-- successful incremental processing finalizes a row as `COMPLETED` with `completion_mode = APPLIED`
-- successful rebuild may finalize uncovered rows inside its cutoff as `COMPLETED` with `completion_mode = COVERED_BY_REBUILD`
-- the published projection must be exactly the reduction over source facts up to `servable_through_intake_seq`, or the equivalent rebuild cutoff
-- no row with `intake_seq > servable_through_intake_seq` may mutate visible projection state
-- authoritative items without canonical outbox rows count as projection gaps until backfilled or rebuild-covered
+- the published projection must be exactly the reduction over authoritative source rows up to `servable_through_source_seq`, or the equivalent rebuild cutoff
+- no row with `source_seq > servable_through_source_seq` may mutate visible projection state
+- authoritative source rows without canonical outbox rows count as projection gaps until backfilled
 - if a gap appears, visible projection stays pinned at the last published prefix
-- formal equivalence to rebuild is claimed only for the same published prefix or the same rebuild cutoff
+- formal equivalence to rebuild is claimed only for the same published source prefix or the same rebuild cutoff
 - `getThreadRuntimeStatus(memoryId)` must expose the publication boundary and whether publication is blocked
 
 Thread V1 provides:
@@ -508,17 +502,16 @@ Thread V1 does not provide:
 
 For each claimed outbox row, the worker runs the following stages:
 
-1. load the trigger item and committed graph neighborhood
+1. load the trigger source row and cutoff-consistent graph neighborhood
 2. extract `ThreadIntakeSignal`
 3. decide `ATTACH | CREATE | IGNORE`
 4. emit zero or more normalized thread events
 5. upsert memberships
-6. refresh anchors
-7. reduce the new current snapshot
-8. overwrite the current `memory_thread` root cache
-9. finalize the outbox row as `COMPLETED` with `completion_mode = APPLIED` only after its effects are included in the visible published prefix, or as `FAILED`
+6. reduce the new current snapshot
+7. overwrite the current `memory_thread` root cache
+8. finalize the outbox row as `COMPLETED` with `completion_mode = APPLIED` only after its effects are included in the visible published prefix, or as `FAILED`
 
-V1 does not persist deferred ambiguity state. Unqualified items are simply ignored until later stronger evidence arrives or rebuild recomputes a different result.
+V1 does not persist deferred ambiguity state. Unqualified source rows are simply ignored until later stronger evidence arrives or rebuild recomputes a different result.
 
 ## 13. `ThreadIntakeSignal`
 
@@ -529,6 +522,7 @@ Recommended structure:
 ```java
 record ThreadIntakeSignal(
     MemoryItem triggerItem,
+    long sourceSeq,
     List<String> candidateAnchors,
     double anchorability,
     double continuity,
@@ -541,7 +535,7 @@ record ThreadIntakeSignal(
 
 Required properties:
 
-- deterministic from committed `item + graph` facts
+- deterministic from committed source facts
 - no online LLM dependency
 - stable enough for rebuild equivalence
 
@@ -551,10 +545,10 @@ Current `item category + graph` data is not sufficient by itself to support the 
 
 Thread V1 therefore requires the extraction path to persist thread-relevant structured semantics in source facts. At minimum, V1 must have deterministic access to:
 
-- item semantic time
+- source-row semantic time
 - normalized actor and object mentions
 - typed item-to-item links relevant to continuity
-- thread semantic markers persisted on the item or equivalent structured payload for:
+- thread semantic markers persisted on the immutable source row or equivalent structured payload for:
   - state transition
   - blocker added or cleared
   - decision
@@ -567,7 +561,7 @@ These markers are part of the source-fact boundary for thread V1. Thread materia
 
 ### 13.2 Degradation rule
 
-If required markers are absent for a given item, normalization must degrade to generic `OBSERVATION` or `UPDATE` events rather than inventing stronger event semantics.
+If required markers are absent for a given source row, normalization must degrade to generic `OBSERVATION` or `UPDATE` events rather than inventing stronger event semantics.
 
 ## 14. Object Discovery and Creation Gate
 
@@ -590,17 +584,17 @@ Creation rules by type:
 - `RELATIONSHIP`: high `continuity` and stable dyadic actor evidence
 - `TOPIC`: high `continuity` and repeated cumulative evidence
 
-If an item does not satisfy the create gate and does not attach to an existing thread, the correct V1 decision is `IGNORE`.
+If a source row does not satisfy the create gate and does not attach to an existing thread, the correct V1 decision is `IGNORE`.
 
 V1 creates continuity threads, not repeated episode threads. If source facts do not identify one stable object identity, the system must prefer `IGNORE` over creating a weakly keyed thread.
 
 ## 15. Important V1 Rule: Create May Backfill Historical Members
 
-When the worker creates a new thread, it may include a bounded set of older relevant items as supporting memberships.
+When the worker creates a new thread, it may include a bounded set of older relevant source rows as supporting memberships.
 
 Allowed evidence sources:
 
-- graph neighborhood around the trigger item
+- graph neighborhood around the trigger source row
 - typed temporal or causal links
 - bounded reverse entity lookup
 - entity cooccurrence
@@ -609,15 +603,17 @@ Rules:
 
 - backfilled historical items become memberships in the new thread
 - backfilled historical items may be referenced in event payload sources
-- backfilled items do not require separate synthetic outbox rows
+- backfilled items do not require synthetic outbox rows because each authoritative source row already has or must receive one canonical outbox row
 - backfill is bounded and deterministic
-- backfilled membership upserts and event emission must respect the same idempotence keys as ordinary trigger-item processing
+- incremental backfill may use only source rows with `source_seq <= trigger source_seq`
+- rebuild backfill may use only source rows inside the rebuild cutoff
+- backfilled membership upserts and event emission must respect the same idempotence keys as ordinary trigger-row processing
 
 This rule is necessary so later stronger evidence can assemble a coherent `RELATIONSHIP` or `TOPIC` thread without extra accumulation infrastructure.
 
 ## 16. Anchor Canonicalization
 
-Thread identity is anchored by deterministic canonical anchors.
+Thread identity is anchored by deterministic canonical anchors stored on `memory_thread`.
 
 ### 16.1 `WORK` anchors
 
@@ -691,7 +687,7 @@ Canonical anchor generation must not depend on online LLM output.
 `thread_key` must be generated deterministically from:
 
 - `thread_type`
-- canonical active anchor
+- canonical anchor on `memory_thread`
 
 Rules:
 
@@ -709,7 +705,7 @@ Because V1 does not support anchor rekey, a changed canonical anchor is treated 
 
 ## 18. Event Normalization
 
-Thread events are not raw item copies. They are normalized thread-local semantic events.
+Thread events are not raw source-row copies. They are normalized thread-local semantic events.
 
 V1 event types:
 
@@ -743,7 +739,7 @@ Recommended event payload shape:
 
 Rules:
 
-- one item may yield zero, one, or many thread events
+- one source row may yield zero, one, or many thread events
 - event types more specific than `OBSERVATION` or `UPDATE` require corresponding persisted semantic markers
 - event normalization is thread-scoped semantic interpretation
 - event source references are embedded in payload
@@ -839,9 +835,9 @@ Required APIs:
 Query rules:
 
 - queries read published projection only
-- queries must never read unserved head work above `servable_through_intake_seq`
+- queries must never read unserved head work above `servable_through_source_seq`
 - queries do not read outbox rows as user-facing state
-- `resolveThreadByAnchor` resolves only the current canonical anchor rows in the published projection
+- `resolveThreadByAnchor` resolves the canonical anchor on `memory_thread`
 - V1 does not expose redirected or successor identity semantics
 
 If runtime state is `REBUILD_REQUIRED`, thread query APIs for that `memoryId` must fail closed rather than serve projection state known to be invalidated by source retraction.
@@ -871,12 +867,12 @@ The only supported repair mechanism is rebuild.
 `getThreadRuntimeStatus(memoryId)` must surface at least:
 
 - `projectionState`
-- `servableThroughIntakeSeq`
-- `highestEnqueuedIntakeSeq`
+- `servableThroughSourceSeq`
+- `highestKnownSourceSeq`
 - `publicationBlocked`
 - `failedRowCount`
 - `rebuildInProgress`
-- `latestRebuildCutoffItemId`
+- `latestRebuildCutoffSourceSeq`
 
 Recommended `projectionState` values:
 
@@ -891,36 +887,38 @@ Recommended `projectionState` values:
 
 Rules:
 
-- rebuild reads only authoritative `item + graph`
+- rebuild reads only authoritative source rows and cutoff-consistent graph primitives
 - rebuild captures a deterministic source cutoff at start:
-  `latest_rebuild_cutoff_item_id = MAX(item_id)` visible for that `memoryId`
-- rebuild reads only items with `item_id <= latest_rebuild_cutoff_item_id`
-- rebuild reads only graph evidence attributable to items inside that same cutoff
+  `latest_rebuild_cutoff_source_seq = MAX(source_seq)` visible for that `memoryId`
+- rebuild reads only source rows with `source_seq <= latest_rebuild_cutoff_source_seq`
+- rebuild reads only graph evidence attributable to source rows inside that same cutoff
 - if the store cannot expose a cutoff-filtered graph view directly, rebuild must derive its working graph view from cutoff-bounded item-linked graph primitives
-- rebuild must not consume global graph aggregates whose values can be changed by post-cutoff items unless those aggregates are recomputed from the same cutoff-bounded source set
+- rebuild must not consume global graph aggregates whose values can be changed by post-cutoff rows unless those aggregates are recomputed from the same cutoff-bounded source set
 - rebuild does not use previous thread projection as semantic input
-- rebuild processes items in stable order:
-  `semantic_time ASC, item_id ASC`
+- rebuild processes source rows in stable order:
+  `source_seq ASC`
 - rebuild runs the same discovery, normalization, and reducer logic as incremental intake
 - rebuild produces a full replacement current projection for exactly that cutoff
 - rebuild acquires the same memory-scoped projector lease used by incremental publication
-- successful rebuild must ensure that every authoritative item inside the cutoff has a canonical outbox row
-- successful rebuild must finalize every unresolved outbox row inside the cutoff as `COMPLETED` with `completion_mode = COVERED_BY_REBUILD`
-- successful rebuild publishes one new visible projection boundary and updates `servable_through_intake_seq` to the greatest intake row covered by that cutoff
-- items committed after the cutoff are explicitly out of scope for that rebuild run and remain eligible for later incremental intake
+- successful rebuild must ensure that every authoritative source row inside the cutoff has a canonical outbox row
+- successful rebuild must finalize every row inside the cutoff as one of:
+  - `COMPLETED` with `completion_mode = COVERED_BY_REBUILD`
+  - `RETRACTED`
+- successful rebuild publishes one new visible projection boundary and updates `servable_through_source_seq` to the greatest source row covered by that cutoff
+- source rows committed after the cutoff are explicitly out of scope for that rebuild run and remain eligible for later incremental intake
 
 Replacement projection includes:
 
 - `memory_thread`
 - `memory_thread_event`
 - `memory_thread_membership`
-- `memory_thread_anchor`
 
 Rebuild must repair:
 
-1. missing intake rows
+1. missing outbox rows
 2. failed intake rows
 3. inconsistent or stale thread projection
+4. source retraction fallout
 
 ## 24. Serving During Rebuild
 
@@ -933,9 +931,9 @@ Rules:
 - additive-gap rebuild may continue serving the previously published projection during rebuild execution
 - `REBUILD_REQUIRED` rebuild must not serve invalidated projection state during rebuild execution
 - cutover replaces the current projection atomically at `memoryId` scope
-- cutover must atomically include any outbox finalization needed to mark cutoff-covered rows as `COMPLETED/COVERED_BY_REBUILD`
+- cutover must atomically include any outbox finalization needed to mark cutoff-covered rows as `COMPLETED/COVERED_BY_REBUILD` or `RETRACTED`
 - after cutover, all current thread queries see the new projection together
-- source facts committed after rebuild start are excluded from that rebuild and must remain pending for later incremental processing or a later rebuild
+- source rows committed after rebuild start are excluded from that rebuild and must remain pending for later incremental processing or a later rebuild
 
 V1 does not allow query-visible half-cutover states inside one `memoryId`.
 
@@ -945,10 +943,10 @@ The current lightweight `MemoryThreadOperations` contract is not sufficient for 
 
 V1 requires a thread projection store that can:
 
-- idempotently upsert current incremental state by `thread_key`, membership uniqueness, active anchor uniqueness, and `event_key`
+- idempotently upsert current incremental state by `thread_key`, root-anchor uniqueness, membership uniqueness, and `event_key`
 - build replacement projection state in isolated scratch storage for one `memoryId`
 - atomically replace the current projection for one `memoryId`
-- atomically finalize rebuild-covered outbox rows in the same cutover boundary
+- atomically finalize rebuild-covered or retracted outbox rows in the same cutover boundary
 - maintain one memory-scoped publication boundary for the visible projection
 - coordinate the memory-scoped projector lease across incremental publication and rebuild
 
@@ -960,8 +958,10 @@ The current generic `GraphOperations` interface is not sufficient as a correctne
 
 V1 requires a thread source reader that can supply:
 
-- active items for one `memoryId`
-- cutoff-bounded item semantic time
+- committed immutable source rows for one `memoryId`
+- source-row liveness as active or retracted
+- monotonic `source_seq`
+- cutoff-bounded source-row semantic time
 - cutoff-bounded item-linked graph primitives
 - cutoff-bounded persisted thread semantic markers
 
@@ -972,39 +972,41 @@ Thread correctness must be defined against that source reader, not against mutab
 Thread V1 intentionally keeps a small set of strict invariants.
 
 - `thread_key` is unique within one `memoryId`
-- active exact anchor ownership is unique per `(memory_id, anchor_kind, anchor_key)`
+- exact canonical anchor ownership is unique per `(memory_id, anchor_kind, anchor_key)` on `memory_thread`
 - canonical anchor is immutable within one published thread identity
 - membership uniqueness is `(memory_id, thread_id, item_id)`
 - event uniqueness is `(memory_id, thread_id, event_key)`
 - `event_seq` is unique and monotonic inside one thread
-- outbox uniqueness is `(memory_id, intake_seq)` and `(memory_id, trigger_item_id)`
-- published projection is either unavailable due to `REBUILD_REQUIRED`, or exactly reflects source facts up to `servable_through_intake_seq`
+- outbox uniqueness is `(memory_id, source_seq)` and `(memory_id, trigger_item_id)`
+- published projection is either unavailable due to `REBUILD_REQUIRED`, or exactly reflects authoritative source rows up to `servable_through_source_seq`
 - `memory_thread.last_event_at` matches the reducer result from current thread events
 - `memory_thread.object_state`, `lifecycle_status`, and `snapshot_json` come from one structural reducer output
-- repeated rebuild over unchanged source facts and the same cutoff yields identical thread identity, anchors, memberships, normalized events, event ordering, and structured snapshot
-- successful incremental materialization is guaranteed rebuild-equivalent only over the same published prefix or the same rebuild cutoff
+- repeated rebuild over unchanged authoritative source rows and the same cutoff yields identical thread identity, anchors, memberships, normalized events, event ordering, and structured snapshot
+- successful incremental materialization is guaranteed rebuild-equivalent only over the same published source prefix or the same rebuild cutoff
 
 ## 26. Current Codebase Implications
 
-This V1 design intentionally aligns with the current memind architecture:
+This V1 design intentionally aligns with the current `memind` architecture:
 
-- thread derivation already runs after item extraction and commit rather than inside the source-fact transaction boundary
+- thread derivation already runs after source commit rather than inside the source-fact transaction boundary
 - the existing scheduler already supports full rebuild from persisted items
-- the current thread schema is small and simple
+- the current item layer is append-oriented, not update-oriented
 
 But the current codebase must change in important ways:
 
 - remove single-thread-per-item in both in-memory and store-backed implementations
 - replace the current lightweight snapshot-only thread model with event-centric thread state
-- introduce deterministic anchor canonicalization
-- make canonical anchor immutable within one published thread identity
-- extend source-fact extraction to persist thread-relevant semantic markers
-- introduce outbox claim and finalization semantics suitable for multi-instance deployment
+- make canonical anchor on `memory_thread` the sole current anchor source of truth
+- remove the separate current-anchor table from the thread core design
+- extend extraction to persist thread-relevant semantic markers on immutable source rows
+- introduce outbox rows keyed by authoritative `source_seq`, not publication correctness keyed by enqueue time
+- add `RETRACTED` as an outbox terminal state
+- model source corrections as retraction of the old source row plus insertion of a new source row, or provide an equivalent immutable source revision log
 - add source-retraction handling that marks thread projection `REBUILD_REQUIRED`
 - replace the current `MemoryThreadOperations` contract with a projection store that supports scratch build and atomic memory-scoped cutover
-- add a thread-specific source reader over active items plus cutoff-consistent graph primitives
+- add a thread-specific source reader over immutable source rows plus cutoff-consistent graph primitives
 - make rebuild operate against an explicit source cutoff rather than an unfenced full scan
-- preserve thread as optional experimental capability that depends on committed `item + graph`
+- preserve thread as optional experimental capability that depends on committed source facts
 
 ## 27. Verification Requirements
 
@@ -1012,22 +1014,22 @@ V1 is not complete unless the following are demonstrated by automated verificati
 
 ### 27.1 Many-to-many membership
 
-One item can belong to multiple threads and the association survives rebuild.
+One source item can belong to multiple threads and the association survives rebuild.
 
-### 27.2 Published-prefix and rebuild equivalence
+### 27.2 Published-source-prefix and rebuild equivalence
 
-Given the same authoritative `item + graph` inputs:
+Given the same authoritative source facts:
 
-- a published incremental prefix
+- a published incremental source prefix
 - a rebuild over the equivalent source cutoff
 
 must produce equivalent thread state.
 
-### 27.3 Missing outbox compensation
+### 27.3 Missing outbox compensation with preserved source order
 
 If source facts exist but outbox rows are missing:
 
-- `backfillMissingOutbox(memoryId)` must recover them, or
+- `backfillMissingOutbox(memoryId)` must recover them without changing canonical `source_seq`, or
 - `rebuild(memoryId)` must converge to the correct result without them
 
 ### 27.4 Failed intake tolerance
@@ -1041,53 +1043,58 @@ If one intake fails repeatedly and becomes `FAILED`:
 
 ### 27.5 Source retraction handling
 
-If an item is deleted, invalidated, or has thread-relevant source facts retracted:
+If a source row is deleted or invalidated:
 
 - thread runtime state must become `REBUILD_REQUIRED`
 - thread queries must not serve invalidated projection state
 - rebuild must converge to the correct replacement projection
+- affected outbox rows must be finalized as `RETRACTED` after successful rebuild
 
 ### 27.6 Rebuild cutoff under concurrent writes
 
-If new items are committed while rebuild is running:
+If new source rows are committed while rebuild is running:
 
-- the rebuild result must include only items at or below its captured cutoff
-- post-start items must remain pending after cutover
+- the rebuild result must include only rows at or below its captured cutoff
+- post-start rows must remain pending after cutover
 - later incremental processing or a later rebuild must incorporate them without corrupting current projection state
 
-### 27.7 Idempotent event and membership application
+### 27.7 Historical backfill publication discipline
 
-Repeated processing of the same trigger item, historical backfill, or rebuild must not create duplicate:
+Incremental backfill must not introduce supporting source rows whose `source_seq` is greater than the trigger row being published.
+
+### 27.8 Idempotent event and membership application
+
+Repeated processing of the same trigger row, historical backfill, or rebuild must not create duplicate:
 
 - outbox rows
 - thread events
 - memberships
 
-### 27.8 Deterministic identity
+### 27.9 Deterministic identity
 
-Identical authoritative inputs must produce identical:
+Identical authoritative source facts must produce identical:
 
 - `thread_key`
-- active anchors
+- canonical anchors
 - membership sets
 - normalized structural snapshot
 
-### 27.9 Dyadic relationship discipline
+### 27.10 Dyadic relationship discipline
 
 Representative `RELATIONSHIP` samples must:
 
 - produce one canonical dyadic anchor for the same participant pair
 - refuse to create a relationship thread from non-dyadic group evidence alone
 
-### 27.10 Graph cutoff determinism
+### 27.11 Graph cutoff determinism
 
-The same rebuild cutoff must produce the same result even if later committed items have changed global graph aggregates outside that cutoff.
+The same rebuild cutoff must produce the same result even if later committed source rows have changed global graph aggregates outside that cutoff.
 
-### 27.11 Event quality
+### 27.12 Event quality
 
-Representative `WORK`, `CASE`, `RELATIONSHIP`, and `TOPIC` samples must produce meaningful normalized events rather than raw item copies.
+Representative `WORK`, `CASE`, `RELATIONSHIP`, and `TOPIC` samples must produce meaningful normalized events rather than raw source-row copies.
 
-### 27.12 Snapshot correctness without text enrich
+### 27.13 Snapshot correctness without text enrich
 
 If text enrich fails or is disabled:
 
@@ -1099,11 +1106,11 @@ If text enrich fails or is disabled:
 ### Phase 1
 
 - new core schema
-- outbox claim model
-- published-prefix runtime status
+- outbox keyed by `source_seq`
+- published-source-prefix runtime status
 - many-to-many membership support
 - deterministic anchor canonicalization
-- immutable canonical anchor policy
+- immutable canonical anchor policy on `memory_thread`
 - minimal persisted thread semantic markers
 - event normalization skeleton
 - structural reducer
@@ -1155,7 +1162,7 @@ It deliberately removes the premature infrastructure burden:
 - recovery directives
 - generation headers
 - redirect chains
-- current-membership mirror tables
+- separate current-anchor tables
 - event-source side tables
 
 This produces a thread subsystem that is strict enough for an open-source core design, but still optimized for what users will actually perceive:
