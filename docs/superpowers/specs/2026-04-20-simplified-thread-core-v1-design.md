@@ -147,7 +147,7 @@ Expected semantics:
 
 ### 7.3 `RELATIONSHIP`
 
-Tracks durable relation objects between two or more stable actors.
+Tracks durable relation objects between exactly two stable actors.
 
 Expected semantics:
 
@@ -157,6 +157,8 @@ Expected semantics:
 - continuity across time
 
 The object is the relationship itself, not either participant alone.
+
+V1 intentionally narrows `RELATIONSHIP` to dyadic relationships only. N-ary relationship objects are out of scope for this experimental core.
 
 ### 7.4 `TOPIC`
 
@@ -226,6 +228,7 @@ This is the authoritative semantic evolution log for one thread.
 Required responsibilities:
 
 - append normalized thread-local events
+- preserve idempotent event identity
 - preserve thread-local event ordering
 - preserve the reducer input needed to rebuild the current snapshot
 
@@ -234,6 +237,7 @@ Recommended fields:
 - `id`
 - `memory_id`
 - `thread_id`
+- `event_key`
 - `event_seq`
 - `event_time`
 - `event_type`
@@ -243,6 +247,10 @@ Recommended fields:
 - `created_at`
 
 `event_payload_json` includes embedded source references. V1 does not require a separate `event_source` table.
+
+The unique constraint must be:
+
+- `UNIQUE(memory_id, thread_id, event_key)`
 
 ### 8.3 `memory_thread_membership`
 
@@ -313,8 +321,10 @@ This table stores pending and finalized asynchronous intake work.
 Required responsibilities:
 
 - represent outstanding thread intake work
+- provide one canonical intake row per committed item
 - support retryable asynchronous processing
 - support multi-instance worker claim safety
+- support completed-prefix consistency reporting
 - support operational diagnosis
 
 Recommended fields:
@@ -324,6 +334,7 @@ Recommended fields:
 - `intake_seq`
 - `trigger_item_id`
 - `status`
+- `completion_mode`
 - `attempt_count`
 - `lease_token`
 - `leased_at`
@@ -337,6 +348,18 @@ V1 outbox statuses:
 - `PROCESSING`
 - `COMPLETED`
 - `FAILED`
+
+V1 completion modes for `COMPLETED` rows:
+
+- `APPLIED`
+- `COVERED_BY_REBUILD`
+
+Required uniqueness rules:
+
+- `UNIQUE(memory_id, intake_seq)`
+- `UNIQUE(memory_id, trigger_item_id)`
+
+`COMPLETED` means the source item is already reflected in the current thread projection, either by direct incremental application or by successful rebuild coverage.
 
 This table is infrastructure, not thread-domain state.
 
@@ -376,13 +399,19 @@ The system must provide:
 
 This operation scans committed items and existing outbox rows and inserts missing intake rows.
 
+`backfillMissingOutbox(memoryId)` must be idempotent and must respect `UNIQUE(memory_id, trigger_item_id)`.
+
 ### 10.3 Rebuild covers the same gap
 
 `rebuild(memoryId)` must also repair the case where an item exists in authoritative storage but never entered the thread intake pipeline.
 
-## 11. Intake Ordering and Worker Claim Rules
+If rebuild discovers authoritative items without outbox rows inside its cutoff, it must create the missing rows and finalize them as `COMPLETED` with `completion_mode = COVERED_BY_REBUILD`.
+
+## 11. Intake Ordering, Finalization, and Safe Prefix
 
 V1 uses a minimal but strict claim model.
+
+### 11.1 Claim rules
 
 Rules:
 
@@ -392,6 +421,27 @@ Rules:
 - intake rows are allocated with increasing `intake_seq` per `memoryId`
 - workers should prefer lower `intake_seq` rows first
 - `FAILED` rows do not block later rows forever
+
+### 11.2 Completed-prefix consistency model
+
+Incremental correctness is defined over a completed prefix, not over arbitrary later successful rows.
+
+Definitions:
+
+- `completed row`: an outbox row with `status = COMPLETED`
+- `consistent_through_intake_seq`: the greatest `intake_seq = N` such that every outbox row for that `memoryId` with `intake_seq <= N` is `COMPLETED`
+- `higher completed tail`: completed rows with `intake_seq > consistent_through_intake_seq`
+- `consistency gap`: either a non-completed outbox row below a higher completed tail, or an authoritative committed item that still has no canonical outbox row
+
+Rules:
+
+- successful incremental processing finalizes a row as `COMPLETED` with `completion_mode = APPLIED`
+- successful rebuild may finalize uncovered rows inside its cutoff as `COMPLETED` with `completion_mode = COVERED_BY_REBUILD`
+- later rows may still be processed even if an earlier row is `FAILED` or temporarily missing
+- authoritative items without canonical outbox rows also count as consistency gaps until backfilled or rebuild-covered
+- the current thread projection may therefore contain a best-effort higher completed tail above the consistent prefix
+- formal equivalence to rebuild is claimed only for the projection over the same completed prefix or the same rebuild cutoff
+- `getThreadRuntimeStatus(memoryId)` must expose whether a consistency gap exists between the consistent prefix and the highest completed row
 
 Thread V1 provides:
 
@@ -416,7 +466,7 @@ For each claimed outbox row, the worker runs the following stages:
 6. refresh anchors
 7. reduce the new current snapshot
 8. overwrite the current `memory_thread` root cache
-9. finalize the outbox row as `COMPLETED` or `FAILED`
+9. finalize the outbox row as `COMPLETED` with `completion_mode = APPLIED`, or as `FAILED`
 
 V1 does not persist deferred ambiguity state. Unqualified items are simply ignored until later stronger evidence arrives or rebuild recomputes a different result.
 
@@ -434,6 +484,7 @@ record ThreadIntakeSignal(
     double continuity,
     double statefulness,
     List<Long> supportingHistoricalItemIds,
+    List<Map<String, Object>> semanticMarkers,
     Map<String, Object> semanticHints
 ) {}
 ```
@@ -443,6 +494,30 @@ Required properties:
 - deterministic from committed `item + graph` facts
 - no online LLM dependency
 - stable enough for rebuild equivalence
+
+### 13.1 Required upstream thread semantics
+
+Current `item category + graph` data is not sufficient by itself to support the full V1 event taxonomy deterministically.
+
+Thread V1 therefore requires the extraction path to persist thread-relevant structured semantics in source facts. At minimum, V1 must have deterministic access to:
+
+- item semantic time
+- normalized actor and object mentions
+- typed item-to-item links relevant to continuity
+- thread semantic markers persisted on the item or equivalent structured payload for:
+  - state transition
+  - blocker added or cleared
+  - decision
+  - question opened or closed
+  - milestone
+  - setback
+  - resolution or mitigation
+
+These markers are part of the source-fact boundary for thread V1. Thread materialization may use them, but may not infer them from raw text at materialization time with an online LLM.
+
+### 13.2 Degradation rule
+
+If required markers are absent for a given item, normalization must degrade to generic `OBSERVATION` or `UPDATE` events rather than inventing stronger event semantics.
 
 ## 14. Object Discovery and Creation Gate
 
@@ -461,11 +536,13 @@ interface ThreadEligibility {
 Creation rules by type:
 
 - `WORK`: strong `anchorability` and `statefulness`
-- `CASE`: strong `anchorability` and clear problem or resolution semantics
-- `RELATIONSHIP`: high `continuity` and stable multi-actor evidence
+- `CASE`: strong `anchorability`, clear problem or resolution semantics, and enough anchor specificity to identify one stable case object
+- `RELATIONSHIP`: high `continuity` and stable dyadic actor evidence
 - `TOPIC`: high `continuity` and repeated cumulative evidence
 
 If an item does not satisfy the create gate and does not attach to an existing thread, the correct V1 decision is `IGNORE`.
+
+V1 creates continuity threads, not repeated episode threads. If source facts do not identify one stable object identity, the system must prefer `IGNORE` over creating a weakly keyed thread.
 
 ## 15. Important V1 Rule: Create May Backfill Historical Members
 
@@ -484,6 +561,7 @@ Rules:
 - backfilled historical items may be referenced in event payload sources
 - backfilled items do not require separate synthetic outbox rows
 - backfill is bounded and deterministic
+- backfilled membership upserts and event emission must respect the same idempotence keys as ordinary trigger-item processing
 
 This rule is necessary so later stronger evidence can assemble a coherent `RELATIONSHIP` or `TOPIC` thread without extra accumulation infrastructure.
 
@@ -513,14 +591,14 @@ Preferred anchor kinds:
 - `ticket`
 - `exception`
 
-Fallback anchor:
+Constrained fallback anchor:
 
-- normalized problem-subject plus symptom key
+- a deterministic case key already persisted by extraction metadata with enough specificity to identify one stable case object
 
 Examples:
 
 - `issue:bug-123`
-- `case:legacy-session-incompatibility`
+- `case:legacy-session-incompatibility@auth-session-bridge`
 
 ### 16.3 `RELATIONSHIP` anchors
 
@@ -533,6 +611,8 @@ Example:
 - `relationship:person:user|person:zhangsan`
 
 Participant ordering must be canonicalized so the same pair cannot produce two threads.
+
+Participant count must be exactly two. If the evidence implies a broader group relation, V1 must not coerce it into a `RELATIONSHIP` thread.
 
 ### 16.4 `TOPIC` anchors
 
@@ -563,9 +643,14 @@ Canonical anchor generation must not depend on online LLM output.
 - `thread_type`
 - canonical active anchor
 
-Rule:
+Rules:
 
 - same `thread_type + canonical_anchor` must produce the same `thread_key`
+- V1 thread identity is continuity-based, not episode-based
+- `WORK`, `CASE`, `RELATIONSHIP`, and `TOPIC` all represent one persistent object identity per canonical anchor
+- reopenings, regressions, repeated blockers, or renewed investigation under the same anchor remain part of the same thread
+- V1 does not create multiple distinct historical threads under one unchanged canonical anchor
+- if source facts cannot provide anchor specificity sufficient to distinguish one stable object, the system must not create the thread
 
 This allows rebuild to preserve thread identity without introducing generation headers, redirected bindings, or explicit lineage state.
 
@@ -608,10 +693,13 @@ Recommended event payload shape:
 Rules:
 
 - one item may yield zero, one, or many thread events
+- event types more specific than `OBSERVATION` or `UPDATE` require corresponding persisted semantic markers
 - event normalization is thread-scoped semantic interpretation
 - event source references are embedded in payload
+- each event must have a deterministic `event_key` derived from `thread_key`, `event_type`, primary source item identity, and a normalized semantic fingerprint
+- repeated processing, historical backfill, and rebuild must upsert by `event_key` and must not create duplicate events
 - `event_seq` is unique only inside one thread
-- V1 does not require `event_seq` stability across rebuilds
+- `event_seq` ordering must be derived from a stable sort on `(event_time, event_key)` for the current event set
 
 ## 19. Reducer Design
 
@@ -726,6 +814,15 @@ V1 must not expose:
 
 The only supported repair mechanism is rebuild.
 
+`getThreadRuntimeStatus(memoryId)` must surface at least:
+
+- `consistentThroughIntakeSeq`
+- `highestCompletedIntakeSeq`
+- `hasConsistencyGap`
+- `failedRowCount`
+- `rebuildInProgress`
+- `latestRebuildCutoffItemId`
+
 ## 23. Rebuild Contract
 
 `rebuild(memoryId)` is the authoritative repair path.
@@ -733,11 +830,19 @@ The only supported repair mechanism is rebuild.
 Rules:
 
 - rebuild reads only authoritative `item + graph`
+- rebuild captures a deterministic source cutoff at start:
+  `latest_rebuild_cutoff_item_id = MAX(item_id)` visible for that `memoryId`
+- rebuild reads only items with `item_id <= latest_rebuild_cutoff_item_id`
+- rebuild reads only graph evidence attributable to items inside that same cutoff
+- if the store cannot expose a cutoff-filtered graph view directly, rebuild must derive its working graph view from cutoff-bounded item-linked graph primitives
 - rebuild does not use previous thread projection as semantic input
 - rebuild processes items in stable order:
   `semantic_time ASC, item_id ASC`
 - rebuild runs the same discovery, normalization, and reducer logic as incremental intake
-- rebuild produces a full replacement current projection
+- rebuild produces a full replacement current projection for exactly that cutoff
+- successful rebuild must ensure that every authoritative item inside the cutoff has a canonical outbox row
+- successful rebuild must finalize every unresolved outbox row inside the cutoff as `COMPLETED` with `completion_mode = COVERED_BY_REBUILD`
+- items committed after the cutoff are explicitly out of scope for that rebuild run and remain eligible for later incremental intake
 
 Replacement projection includes:
 
@@ -762,9 +867,24 @@ Rules:
 - rebuild computes replacement state in scratch storage or equivalent isolated state
 - queries continue to read the old projection during rebuild execution
 - cutover replaces the current projection atomically at `memoryId` scope
+- cutover must atomically include any outbox finalization needed to mark cutoff-covered rows as `COMPLETED/COVERED_BY_REBUILD`
 - after cutover, all current thread queries see the new projection together
+- source facts committed after rebuild start are excluded from that rebuild and must remain pending for later incremental processing or a later rebuild
 
 V1 does not allow query-visible half-cutover states inside one `memoryId`.
+
+### 24.1 Required thread store contract
+
+The current lightweight `MemoryThreadOperations` contract is not sufficient for V1.
+
+V1 requires a thread projection store that can:
+
+- idempotently upsert current incremental state by `thread_key`, membership uniqueness, active anchor uniqueness, and `event_key`
+- build replacement projection state in isolated scratch storage for one `memoryId`
+- atomically replace the current projection for one `memoryId`
+- atomically finalize rebuild-covered outbox rows in the same cutover boundary
+
+The implementation may use staging tables, copy-on-write rows, or transaction-scoped replace, but readers must never observe mixed old and new projection state inside one `memoryId`.
 
 ## 25. Core Invariants
 
@@ -773,11 +893,14 @@ Thread V1 intentionally keeps a small set of strict invariants.
 - `thread_key` is unique within one `memoryId`
 - active exact anchor ownership is unique per `(memory_id, anchor_kind, anchor_key)`
 - membership uniqueness is `(memory_id, thread_id, item_id)`
+- event uniqueness is `(memory_id, thread_id, event_key)`
 - `event_seq` is unique and monotonic inside one thread
+- outbox uniqueness is `(memory_id, intake_seq)` and `(memory_id, trigger_item_id)`
+- `consistent_through_intake_seq` is the largest contiguous prefix of `COMPLETED` outbox rows for one `memoryId`, after treating missing canonical outbox rows as consistency gaps
 - `memory_thread.last_event_at` matches the reducer result from current thread events
 - `memory_thread.object_state`, `lifecycle_status`, and `snapshot_json` come from one structural reducer output
-- repeated rebuild over unchanged source facts yields identical thread identity, anchors, memberships, normalized events, and structured snapshot
-- successful incremental intake over a fixed source-fact set is equivalent to full rebuild over the same set
+- repeated rebuild over unchanged source facts and the same cutoff yields identical thread identity, anchors, memberships, normalized events, event ordering, and structured snapshot
+- successful incremental materialization is guaranteed rebuild-equivalent only over the same completed prefix or the same rebuild cutoff
 
 ## 26. Current Codebase Implications
 
@@ -792,7 +915,10 @@ But the current codebase must change in important ways:
 - remove single-thread-per-item in both in-memory and store-backed implementations
 - replace the current lightweight snapshot-only thread model with event-centric thread state
 - introduce deterministic anchor canonicalization
+- extend source-fact extraction to persist thread-relevant semantic markers
 - introduce outbox claim and finalization semantics suitable for multi-instance deployment
+- replace the current `MemoryThreadOperations` contract with a projection store that supports scratch build and atomic memory-scoped cutover
+- make rebuild operate against an explicit source cutoff rather than an unfenced full scan
 - preserve thread as optional experimental capability that depends on committed `item + graph`
 
 ## 27. Verification Requirements
@@ -803,12 +929,12 @@ V1 is not complete unless the following are demonstrated by automated verificati
 
 One item can belong to multiple threads and the association survives rebuild.
 
-### 27.2 Incremental and rebuild equivalence
+### 27.2 Completed-prefix and rebuild equivalence
 
 Given the same authoritative `item + graph` inputs:
 
-- successful incremental intake
-- full rebuild
+- a gap-free completed intake prefix
+- a rebuild over the equivalent source cutoff
 
 must produce equivalent thread state.
 
@@ -824,9 +950,26 @@ If source facts exist but outbox rows are missing:
 If one intake fails repeatedly and becomes `FAILED`:
 
 - later intake work may still proceed
+- runtime status must report the resulting consistency gap
 - rebuild must recover final correctness
 
-### 27.5 Deterministic identity
+### 27.5 Rebuild cutoff under concurrent writes
+
+If new items are committed while rebuild is running:
+
+- the rebuild result must include only items at or below its captured cutoff
+- post-start items must remain pending after cutover
+- later incremental processing or a later rebuild must incorporate them without corrupting current projection state
+
+### 27.6 Idempotent event and membership application
+
+Repeated processing of the same trigger item, historical backfill, or rebuild must not create duplicate:
+
+- outbox rows
+- thread events
+- memberships
+
+### 27.7 Deterministic identity
 
 Identical authoritative inputs must produce identical:
 
@@ -835,11 +978,18 @@ Identical authoritative inputs must produce identical:
 - membership sets
 - normalized structural snapshot
 
-### 27.6 Event quality
+### 27.8 Dyadic relationship discipline
+
+Representative `RELATIONSHIP` samples must:
+
+- produce one canonical dyadic anchor for the same participant pair
+- refuse to create a relationship thread from non-dyadic group evidence alone
+
+### 27.9 Event quality
 
 Representative `WORK`, `CASE`, `RELATIONSHIP`, and `TOPIC` samples must produce meaningful normalized events rather than raw item copies.
 
-### 27.7 Snapshot correctness without text enrich
+### 27.10 Snapshot correctness without text enrich
 
 If text enrich fails or is disabled:
 
@@ -852,11 +1002,13 @@ If text enrich fails or is disabled:
 
 - new core schema
 - outbox claim model
+- safe-prefix runtime status
 - many-to-many membership support
 - deterministic anchor canonicalization
+- minimal persisted thread semantic markers
 - event normalization skeleton
 - structural reducer
-- rebuild path
+- rebuild path with cutoff and atomic cutover
 
 ### Phase 2
 
