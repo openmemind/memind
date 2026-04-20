@@ -547,12 +547,22 @@ Examples:
 
 Anchor quality is expected to improve over time. V1 must support the following first-class repair operations.
 
+All first-class repairs are projection-changing thread mutations.
+
+Rules:
+
+- explicit repair must not mutate thread-core rows through an unordered side path
+- every explicit repair must execute either through a derived ordered `thread_intake_outbox` repair trigger with a fresh `intakeSeq`, or as rebuild cutover under the same memory-scoped lease and fencing model
+- every impacted thread must cut over a new `projectionGeneration` in the same atomic repair transaction that updates lifecycle, bindings, memberships, events, and snapshot state
+
 `ANCHOR_REKEY`
 
 - same durable object, better canonical anchor
 - same `threadId`
 - same stable `threadKey`
-- append `ANCHOR_REKEYED`
+- must cut over a new projection generation for the impacted thread
+- old active anchor bindings for the thread must become `REDIRECTED` to that same thread atomically
+- append exactly one `ANCHOR_REKEYED` event in the repaired thread generation
 - update active canonical anchor binding atomically
 
 `MERGE`
@@ -560,8 +570,12 @@ Anchor quality is expected to improve over time. V1 must support the following f
 - two or more threads are determined to represent the same durable object
 - one survivor thread remains canonical
 - survivor keeps its existing `threadId` and `threadKey`
+- survivor must cut over a new projection generation that reflects the absorbed current state
 - losing thread transitions to `CLOSED` with `closureReason = MERGED`
 - losing thread sets `supersededByThreadId`
+- each losing thread must cut over a terminal projection generation
+- every active canonical anchor binding on each losing thread must become `REDIRECTED` to the survivor thread atomically
+- each losing thread terminal generation must append exactly one `MERGED_INTO` event naming the survivor thread
 - losing thread must not retain active canonical bindings or `ACTIVE` current-membership rows after the repair transaction commits
 - survivor absorbs members through migration or generation rebuild
 
@@ -570,8 +584,11 @@ Anchor quality is expected to improve over time. V1 must support the following f
 - one thread is determined to contain multiple durable objects
 - parent thread transitions to `CLOSED` with `closureReason = SPLIT`
 - parent keeps its existing `threadId` and `threadKey` as historical lineage identity
+- parent must cut over a terminal projection generation
 - child threads are created with `parentThreadId`
 - each child receives a newly minted `threadId` and `threadKey`
+- each child must cut over an opening projection generation
+- each child opening generation must append exactly one `SPLIT_FROM` event naming the parent thread
 - parent must not retain `ACTIVE` current-membership rows after the split cutover commits
 - parent anchor bindings become `RETIRED`, not `REDIRECTED`, unless a later one-to-one repair proves that one retired anchor now has a single canonical successor
 - split is performed as a rebuild or explicit repair operation, not as opportunistic incremental mutation
@@ -584,7 +601,9 @@ Rules:
 
 - every canonical anchor is represented as an explicit binding record
 - old anchors are retained as historical bindings after `ANCHOR_REKEY`
-- historical bindings may redirect to the current canonical thread
+- old active anchors from `ANCHOR_REKEY` must be retained as `REDIRECTED` bindings to the same canonical thread
+- active canonical bindings from a merged losing thread must be retained as `REDIRECTED` bindings to the canonical survivor thread
+- historical bindings may redirect to the current canonical thread only when there is exactly one canonical successor
 - `resolveThreadByAnchor` must resolve both active bindings and redirected historical bindings
 - `REDIRECTED` is valid only for one-to-one canonical successor resolution such as rekey or merge
 - split-origin anchors that no longer map to one canonical child must remain `RETIRED`; `resolveThreadByAnchor` must not silently choose one child
@@ -988,6 +1007,13 @@ Every item commit that could affect threads must persist a durable outbox record
 - `attemptCount`
 - enqueue time
 
+Explicit repair operations that affect canonical bindings, lineage, or current projection must not write thread-core rows directly. They must either:
+
+- enqueue a derived `thread_intake_outbox` repair trigger with a fresh `intakeSeq` under the same memory-scoped ordering model, or
+- execute as rebuild cutover under the same memory-scoped rebuild lease
+
+No second unordered repair write path is allowed in v1.
+
 Canonical outbox statuses:
 
 - `PENDING`
@@ -1043,6 +1069,7 @@ Rules:
 - at most one active thread materializer lease may process one `memoryId` at a time
 - the active lease and ordered checkpoint are fenced through `thread_materialization_state`
 - outbox entries for one `memoryId` must be finalized in strictly increasing `intakeSeq`
+- explicit repair triggers enqueued into `thread_intake_outbox` must obey the same `intakeSeq` ordering, lease ownership, retry, and finalization rules as item-derived intake
 - rebuild work acquires the same memory-scoped lease as incremental work
 - rebuild establishes a cutover `intakeSeq`; newer entries are applied only after the rebuild job finalizes that ordered prefix
 - rebuild consistency is per-thread, not memory-wide snapshot consistent in v1
@@ -1073,7 +1100,7 @@ Worker stages:
 
 ### 14.5 Thread-core transaction boundary
 
-Within the thread worker, the following writes must commit atomically:
+Within the thread worker, including repair-trigger processing that runs through the ordered outbox path, the following writes must commit atomically:
 
 - `memory_thread`
 - `memory_thread_anchor_binding`
@@ -1129,7 +1156,9 @@ Rebuild semantics:
 - threads not yet rebuilt during that job must remain suppressed from default current projection serving if they are `STALE_UNSAFE` or marked `REBUILDING`
 - rebuild must ignore `thread_intake_revisit` as a semantic input; revisit is operational ambiguity memory, not rebuild source-of-truth
 - a rebuild must use one stable `active_rebuild_job_id` for the chosen cutover prefix and must resume with that same job id after restart until the job is completed or explicitly abandoned
-- for every rebuilt surviving object, rebuild must first attempt to map continuity onto an existing canonical thread identity using active bindings, redirected one-to-one bindings, and explicit lineage metadata before minting any new `threadId` or `threadKey`
+- for every rebuilt surviving object, rebuild must choose an identity-preservation target in the following strict precedence order: active canonical binding target, then one-to-one redirected canonical binding target, then explicit lineage metadata that names exactly one eligible canonical current target
+- lower-precedence lineage metadata must not override a higher-precedence binding-derived target
+- threads closed by `MERGED | SPLIT | INVALIDATED`, and threads carrying `superseded_by_thread_id`, are never direct identity-preservation targets; they may only contribute evidence that points to an eligible canonical target
 - a new `threadId` and `threadKey` may be minted during rebuild only when authoritative rescan concludes a surviving object has no eligible existing thread identity to preserve
 - per-thread rebuild cutover must compare-and-swap on `generation_cutover_job_id`; if the thread already carries the current `active_rebuild_job_id`, retry must no-op rather than bump `projectionGeneration` again
 - deterministic rebuild must not leave a previously tracked thread in indefinite degraded limbo just because no surviving rebuilt object was produced
@@ -1302,6 +1331,10 @@ Rules:
 - `normalizedEventKey` must be derived from at least `eventType`, `eventSemanticSlot`, and the stable origin-revision fingerprint described in the event storage contract
 - replay, explicit reprocessing, or targeted revisit of the same source revision into the same thread generation must upsert or no-op on `normalizedEventKey` rather than append a duplicate event
 - if new evidence would reinterpret an already materialized source revision into a materially different event set, the correction must occur through rebuild or new projection generation, not by duplicating conflicting events in the same generation
+- `ANCHOR_REKEY`, `MERGE`, `SPLIT`, and `INVALIDATED` closure are projection-changing repair outcomes and must be represented in the cutover generation rather than as ad hoc side mutations
+- `ANCHOR_REKEY` must emit exactly one `ANCHOR_REKEYED` event in the repaired thread generation
+- `MERGE` must emit exactly one `MERGED_INTO` event in each losing thread terminal generation; survivor-side merge absorption is represented by the survivor generation cutover and resulting snapshot, not by a second merge-specific event in v1
+- `SPLIT` must emit exactly one `SPLIT_FROM` event in each child opening generation; parent-side split closure is represented by `closureReason = SPLIT` plus terminal generation cutover, not by a second split-specific parent event in v1
 
 ### 16.3 Meaningful update semantics
 
@@ -1590,10 +1623,12 @@ Required unit coverage:
 - intake signal extraction
 - attach/create/defer/ignore decision logic
 - canonical attach-target eligibility and redirect handling
+- repair-target redirect selection for rekey and merge
 - event normalization
 - event semantic-slot and origin-fingerprint derivation
 - normalized-event-key dedup semantics
 - hint-assisted decision equivalence against hint-free authoritative evaluation
+- repair event emission rules for `ANCHOR_REKEYED`, `MERGED_INTO`, and `SPLIT_FROM`
 - snapshot reduction
 - lifecycle transitions
 
@@ -1606,6 +1641,7 @@ Required store coverage:
 - current membership cutover behavior
 - degraded current-membership suppression behavior
 - lineage-terminal current-membership suppression behavior for `MERGED | SPLIT | INVALIDATED`
+- mandatory redirect persistence for `ANCHOR_REKEY` and `MERGE`
 - primary membership constraint
 - append-only event semantics
 - normalized-event-key uniqueness
@@ -1633,9 +1669,11 @@ Required integration coverage:
 - `FAILED_TERMINAL` is rejected when the unresolved intake could still create a new thread or mutate an unknown thread set
 - bounded-impact `FAILED_TERMINAL` atomically degrades all deterministically impacted existing threads before checkpoint advancement
 - concurrent outbox ordering and lease behavior
+- explicit repair trigger uses the same ordered intake path and fencing model as normal intake
 - crash-and-retry does not duplicate an already finalized `intakeSeq`
 - replay or targeted reconsideration of the same source revision does not duplicate events in the same thread generation
 - anchor rekey, redirect resolution, merge, and split scenarios
+- `ANCHOR_REKEY` and `MERGE` preserve one-to-one redirect resolution for old anchors
 - split-origin anchors stay retired and do not auto-resolve to an arbitrary child
 - exact anchor match never attaches directly to a retired, invalidated, split-parent, or superseded thread
 - stale-unsafe thread detail suppression scenarios
@@ -1645,6 +1683,8 @@ Required integration coverage:
 - interrupted rebuild resumes with the same rebuild job id and does not double-bump `projectionGeneration` on already cut-over threads
 - rebuild that finds no surviving object materializes an `INVALIDATED` closure generation instead of leaving the thread degraded
 - rebuild preserves `threadId` and `threadKey` for surviving object continuity and mints new ones only for truly new surviving objects
+- rebuild identity-preservation precedence is `ACTIVE` binding, then `REDIRECTED` binding, then exact one-to-one lineage target
+- repair-trigger and rebuild cutover emit the required repair events in the required impacted-thread generations
 - hint loss or recomputation does not change eventual thread existence when the same authoritative evidence is reconsidered
 - slow-forming `TOPIC` and `RELATIONSHIP` signals can accumulate through `thread_accumulation_hint` without introducing latent formal threads
 
@@ -1716,7 +1756,9 @@ V1 is complete when all of the following are true:
 - memory-scoped ordering and exclusivity semantics are enforced
 - memory-scoped materialization fencing and ordered checkpoint are implemented explicitly
 - anchor rekey, merge, and split are first-class repair operations
+- explicit repairs share the same ordered and fenced mutation model as intake or rebuild; no unordered repair write path exists
 - anchor binding history and redirect resolution are implemented
+- one-to-one rekey and merge successor anchors are preserved as mandatory redirected bindings
 - a lightweight weak-signal accumulation path exists for slow-forming `TOPIC` and `RELATIONSHIP` objects without introducing formal latent threads
 - weak-signal accumulation remains advisory only and does not alter eventual authoritative rebuild results
 - thread query contract is available
