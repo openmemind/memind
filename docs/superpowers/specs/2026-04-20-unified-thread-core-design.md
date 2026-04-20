@@ -116,9 +116,11 @@ V1 will not create independent storage and pipelines for issue threads, project 
 
 This spec defines the core object model and query contract. Full retrieval/context consumption is a later integration phase.
 
-### 4.4 No durable latent-candidate subsystem in v1
+### 4.4 No durable formal latent-thread object subsystem in v1
 
-Persistent `memory_thread_candidate` storage is explicitly postponed. V1 can still compute anchor candidates and decide `attach / create / defer / ignore`, but it does not persist weak thread candidates as first-class rows.
+Persistent `memory_thread_candidate` storage as a formal latent thread-object store is explicitly postponed. V1 can still compute anchor candidates and decide `attach / create / defer / ignore`, but it does not persist weak thread candidates as first-class thread objects.
+
+V1 may persist lightweight deferred-intake revisit state for ambiguity handling. That revisit state is infrastructure, not a latent formal thread object.
 
 ### 4.5 No LLM-only write-path decisions
 
@@ -566,13 +568,14 @@ Rules:
 
 ## 12. Persistence Model
 
-V1 persists six required thread-core objects.
+V1 persists seven required thread-core objects.
 
-In addition, the design requires one non-core infrastructure object:
+In addition, the design requires two non-core infrastructure objects:
 
 - `thread_intake_outbox`
+- `thread_intake_revisit`
 
-`thread_intake_outbox` is required for reliability, but it is not part of the formal thread object model itself.
+These infrastructure objects are required for reliability and ambiguity management, but they are not part of the formal thread object model itself.
 
 ### 12.1 `memory_thread`
 
@@ -656,13 +659,13 @@ Invariants:
 
 ### 12.3 `memory_thread_membership`
 
-This replaces the old `memory_thread_item` semantics.
+This stores immutable per-generation membership history.
 
 Required responsibilities:
 
-- item-to-thread membership
-- primary vs secondary membership
-- membership role and relevance
+- item-to-thread membership history by projection generation
+- reducer input and audit history
+- generation-level explanation of object context
 
 Recommended fields:
 
@@ -672,13 +675,10 @@ Recommended fields:
 - `projection_generation`
 - `item_id`
 - `membership_role`
-- `membership_status`
 - `is_primary`
 - `relevance_weight`
 - `contribution_tags_json`
-- `retired_at`
 - `created_at`
-- `updated_at`
 
 Canonical membership roles:
 
@@ -687,17 +687,47 @@ Canonical membership roles:
 - `REFERENCE`
 - `CONTRADICTING`
 
-Canonical membership statuses:
-
-- `ACTIVE`
-- `RETIRED`
-
 Invariants:
 
 - unique `(memory_id, thread_id, projection_generation, item_id)`
-- unique active primary `(memory_id, item_id)` where `is_primary = true` and `membership_status = ACTIVE`
 
-### 12.4 `memory_thread_event`
+### 12.4 `memory_thread_current_membership`
+
+This stores the current serveable membership projection.
+
+Required responsibilities:
+
+- power default current-only member reads
+- enforce active primary-membership uniqueness
+- separate current serving state from historical generation rows
+
+Recommended fields:
+
+- `biz_id`
+- `memory_id`
+- `thread_id`
+- `projection_generation`
+- `item_id`
+- `membership_role`
+- `is_primary`
+- `relevance_weight`
+- `contribution_tags_json`
+- `visibility_status`
+- `created_at`
+- `updated_at`
+
+Canonical visibility statuses:
+
+- `ACTIVE`
+- `SUPPRESSED`
+
+Invariants:
+
+- unique `(memory_id, thread_id, item_id)`
+- unique active primary `(memory_id, item_id)` where `is_primary = true` and `visibility_status = ACTIVE`
+- current-membership rows for a thread are atomically replaced or suppressed at projection cutover; they are not incrementally patched as historical truth
+
+### 12.5 `memory_thread_event`
 
 This stores append-only normalized thread events.
 
@@ -729,7 +759,7 @@ Invariants:
 - unique `(memory_id, thread_id, projection_generation, event_seq)`
 - append-only semantics within one projection generation
 
-### 12.5 `memory_thread_event_source`
+### 12.6 `memory_thread_event_source`
 
 This maps thread events to their source evidence.
 
@@ -766,7 +796,7 @@ Canonical source roles:
 - `ANCHOR_EVIDENCE`
 - `CONTRADICTION`
 
-### 12.6 `memory_thread_snapshot`
+### 12.7 `memory_thread_snapshot`
 
 This stores the current reduced thread state.
 
@@ -826,7 +856,14 @@ The synchronous path does not directly create or mutate formal thread state.
 
 The synchronous path must not persist semantic thread decisions or normalized thread-intake signals. Those are computed asynchronously from committed source facts.
 
-### 14.2 Durable outbox
+Source-fact commit rules:
+
+- item, extraction, graph, and `thread_intake_outbox` must be committed in one atomic logical transaction boundary
+- an outbox envelope must never become durable if the source facts it references are not committed
+- committed source facts that should affect thread must never be durable without a corresponding outbox envelope
+- if one source-fact subsystem cannot participate in the same transaction boundary, it is not eligible to trigger thread materialization in v1
+
+### 14.2 Durable outbox and revisit buffer
 
 Every item commit that could affect threads must persist a durable outbox record containing at least:
 
@@ -856,6 +893,23 @@ It is infrastructure, not thread domain state:
 - it must not be treated as a formal thread object
 - it must not store semantically normalized thread hints as durable write-path truth
 
+When an intake is finalized as `COMPLETED_DEFERRED`, the system must also persist a `thread_intake_revisit` record containing at least:
+
+- `memoryId`
+- `triggerBizId`
+- `triggerRevision`
+- `intakeSeq`
+- unresolved anchor or thread alternatives
+- revisit reason
+- created time
+
+`thread_intake_revisit` rules:
+
+- it is a lightweight ambiguity and revisit buffer, not a latent thread object
+- it must not block ordered intake progression
+- later compatible evidence may schedule targeted reconsideration of matching revisit records outside the ordered intake path
+- full rebuild may consume and then discard revisit records
+
 ### 14.3 Ordering and exclusivity model
 
 V1 explicitly prioritizes correctness over maximum parallelism.
@@ -868,7 +922,7 @@ Rules:
 - rebuild establishes a cutover `intakeSeq`; newer entries are applied only after the rebuild commits
 - per-thread `event_seq` must be allocated monotonically inside the thread-core transaction using row lock or equivalent compare-and-swap protection
 - `COMPLETED_DEFERRED` is a terminal finalized status and advances the per-memory intake watermark
-- deferred entries are not retried inside the ordered intake path; they may only be reconsidered through later evidence or full rebuild
+- deferred entries are not retried inside the ordered intake path; they may only be reconsidered through `thread_intake_revisit` or full rebuild
 
 ### 14.4 Asynchronous thread worker
 
@@ -894,6 +948,7 @@ Within the thread worker, the following writes must commit atomically:
 - `memory_thread`
 - `memory_thread_anchor_binding`
 - `memory_thread_membership`
+- `memory_thread_current_membership`
 - `memory_thread_event`
 - `memory_thread_event_source`
 - `memory_thread_snapshot`
@@ -906,6 +961,13 @@ The transaction must also advance:
 - `lastAppliedIntakeSeq`
 - canonical `object_state`
 - the final outbox status for the processed `intakeSeq`, or an equivalent exactly-once fencing record
+
+Exactly-once protocol rules:
+
+- success commit must atomically persist thread-core writes, final outbox status, and the new `lastAppliedIntakeSeq = intakeSeq`
+- retry logic must treat `(memoryId, intakeSeq)` as already finalized if either the outbox row is final or the memory watermark has already advanced past that `intakeSeq`
+- rebuild cutover must finalize only the ordered intake prefix it has fully incorporated
+- later retries of an already finalized `intakeSeq` must no-op rather than reapply thread changes
 
 ### 14.6 Rebuild path
 
@@ -938,8 +1000,9 @@ Rules:
 - successful rebuild advances `projectionGeneration`
 - prior generation rows may be retained for audit or garbage-collected later, but correctness must not depend on retention
 - snapshot and membership correctness after invalidation always comes from rebuild, not ad hoc patching
-- member and item-to-thread reads must immediately suppress `ACTIVE` rows whose source items are deleted or invalidated
+- `memory_thread_current_membership` rows for a `STALE_UNSAFE` thread must be treated as non-serveable by default until rebuild cutover
 - detail reads for `STALE_UNSAFE` threads must degrade to safe metadata only: identity, lifecycle, lineage, projection head, and explicit stale status
+- default member, event, and item-to-thread reads for a `STALE_UNSAFE` thread must return no current projection content
 - serving the pre-rebuild snapshot or stale current members/events requires explicit audit or stale-read opt-in and must never be the default
 
 ## 15. Intake Signal and Decision Model
@@ -1015,7 +1078,9 @@ Instead:
 
 - the item remains available to graph and later rebuild
 - future items may cause creation during later incremental materialization or full rebuild
-- `DEFER_AMBIGUOUS` remains an outbox-level state, not a formal thread object
+- `DEFER_AMBIGUOUS` remains an outbox finalization outcome, not a formal thread object
+- unresolved ambiguity is retained through `thread_intake_revisit`, not through `memory_thread_candidate`
+- targeted revisit may later reprocess the deferred source together with new evidence outside the ordered intake path
 
 ## 16. Event Model
 
@@ -1130,13 +1195,18 @@ These are defaults, not hard walls. A thread may carry any facet that its eviden
 
 Membership answers which items contribute to thread understanding.
 
+The design distinguishes between:
+
+- `memory_thread_membership`: immutable per-generation membership history
+- `memory_thread_current_membership`: current serveable membership state
+
 ### 18.1 Why membership exists separately from event source
 
 Event source explains why a particular event exists.
 
 Membership answers whether an item belongs in the broader case file or object context.
 
-Membership is projection state rather than immutable historical truth. If source facts are invalidated, memberships are recomputed during generation rebuild.
+Membership history is projection history rather than global source-of-truth fact. Current serveable membership is maintained separately from historical generations. If source facts are invalidated, current membership is withdrawn from default serving and recomputed during generation rebuild.
 
 An item may:
 
@@ -1152,7 +1222,7 @@ Purpose:
 - preserve a strongest owner-like association when one exists
 - still allow rich secondary memberships across related threads
 
-This constraint applies to the current projection state, not to retained historical generations.
+This constraint is enforced on `memory_thread_current_membership`, not on retained historical generations.
 
 ### 18.3 Secondary membership examples
 
@@ -1202,7 +1272,15 @@ The default thread detail response should include:
 
 Timeline and member rows should be queried separately.
 
+Default summary counts must be computed from the same current-serving projection used by default member and event queries.
+
 If a thread has been superseded by merge, the default detail query should either redirect to the canonical survivor or expose `supersededByThreadId` explicitly.
+
+If `projectionStatus = STALE_UNSAFE`, default detail response must omit:
+
+- cached snapshot payload
+- current event counts
+- current membership counts
 
 ### 19.4 Default serving rules
 
@@ -1211,12 +1289,12 @@ Default thread queries are current-projection reads, not historical audit reads.
 Rules:
 
 - `getThread`, `listThreads`, `listThreadMembers`, and `listThreadsByItem` operate on the current active projection only by default
-- `listThreadMembers` returns only memberships where `membership_status = ACTIVE` by default
-- `listThreadsByItem` resolves only current active memberships by default
+- `listThreadMembers` reads from `memory_thread_current_membership` and returns only rows where `visibility_status = ACTIVE` by default
+- `listThreadsByItem` resolves only `memory_thread_current_membership` rows where `visibility_status = ACTIVE` by default
 - `listThreadEvents` returns only the active `projectionGeneration` by default
 - `resolveThreadByAnchor` follows active bindings first and redirected bindings second by default
 - historical generations, retired memberships, and stale pre-rebuild projections are available only through explicit audit or history opt-in
-- if `projectionStatus = STALE_UNSAFE`, default detail reads must omit cached snapshot payload and expose explicit stale-state metadata instead
+- if `projectionStatus = STALE_UNSAFE`, default detail, member, event, and item-to-thread reads must suppress current projection content and expose explicit stale-state metadata instead
 
 ## 20. Consistency, Failure Handling, and Operations
 
@@ -1252,6 +1330,7 @@ The subsystem should expose at least:
 
 - outbox backlog size
 - oldest pending outbox age
+- revisit backlog size
 - attach/reopen/create/defer/ignore counts
 - deferred ambiguous count
 - ambiguous decision rate
@@ -1280,6 +1359,7 @@ Required store coverage:
 
 - thread uniqueness invariants
 - many-to-many membership behavior
+- current membership cutover behavior
 - primary membership constraint
 - append-only event semantics
 - snapshot replacement semantics
@@ -1288,6 +1368,7 @@ Required store coverage:
 
 Required integration coverage:
 
+- source facts and outbox envelope commit atomically
 - item commit writes durable outbox
 - worker materializes thread core from outbox
 - rebuild reproduces expected thread state
@@ -1296,10 +1377,12 @@ Required integration coverage:
 - multi-thread membership scenarios
 - ambiguous defer scenarios
 - deferred entries do not block later ordered intake processing
+- deferred revisit can later attach or create with new evidence
 - concurrent outbox ordering and lease behavior
 - crash-and-retry does not duplicate an already finalized `intakeSeq`
 - anchor rekey, redirect resolution, merge, and split scenarios
 - stale-unsafe thread detail suppression scenarios
+- stale-unsafe member and event suppression scenarios
 
 ### 21.4 Behavioral fixtures
 
@@ -1364,12 +1447,14 @@ V1 is complete when all of the following are true:
 - thread identity, lifecycle, timeline, membership, and snapshot are persisted
 - intake signal and decision pipeline is implemented
 - thread materialization runs through durable outbox plus async worker
+- source facts and outbox envelope share one atomic commit boundary
 - source invalidation and deletion trigger generation rebuild correctly
 - memory-scoped ordering and exclusivity semantics are enforced
 - anchor rekey, merge, and split are first-class repair operations
 - anchor binding history and redirect resolution are implemented
 - thread query contract is available
 - default query paths read current active projection only
+- current membership is served from an explicit current-membership model
 - boundaries with graph and insight are explicit
 
 V1 does not require:
