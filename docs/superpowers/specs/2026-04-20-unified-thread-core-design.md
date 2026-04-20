@@ -390,8 +390,10 @@ Canonical projection statuses:
 Rules:
 
 - only one projection generation is current for query and retrieval purposes
-- additive updates may append within the current generation
-- every projection generation must also have one immutable generation-header record that freezes that generation's type, lifecycle, anchor/display cache, lineage, reducer policy, and cutover metadata
+- additive updates may append within the current generation and refresh the active generation's projection-state caches
+- every projection generation must also have one generation-header record that carries that generation's type, anchor/display cache, lineage, reducer policy, cutover metadata, and current projection-state fields while that generation remains active
+- `threadType`, anchor/display cache, lineage, reducer policy, and cutover metadata are generation-stable and may change only by cutover into a new `projectionGeneration`
+- lifecycle, coarse object state, and recency timestamps may evolve inside one active generation; once a later generation is cut over, the superseded generation header becomes immutable and represents the final frozen state of that generation
 - source invalidation or source-fact repair may mark the thread `STALE_UNSAFE` and require rebuild into the next generation
 - rebuild and projection-changing explicit repair cutover atomically advance `projectionGeneration`
 - any generation cutover transaction must also advance `lastAppliedIntakeSeq` to the ordered intake prefix incorporated by that cutover
@@ -409,9 +411,10 @@ Generation header answers what exactly was true for one materialized projection 
 
 Properties:
 
-- immutable per `(threadId, projectionGeneration)`
-- stores generation-scoped type, lifecycle, anchor/display cache, lineage, reducer policy, and cutover metadata
-- is the authoritative contract for historical audit and historical snapshot reconstruction
+- unique per `(threadId, projectionGeneration)`
+- one current generation header may remain mutable while that generation is active; once superseded by a later generation it becomes immutable
+- stores generation-stable type, anchor/display cache, lineage, reducer policy, and cutover metadata together with the final frozen projection-state fields for historical audit
+- is the authoritative contract for historical audit and historical snapshot reconstruction after a generation is superseded
 - current root-row caches are mirrors of the active generation header, not substitutes for historical generation records
 
 ### 9.6 Timeline
@@ -655,13 +658,17 @@ Rules:
 
 V1 persists eight required thread-core objects.
 
-In addition, the design requires three non-core infrastructure objects:
+In addition, the design requires four non-core infrastructure objects plus one advisory accumulation object:
 
 - `thread_intake_outbox`
 - `thread_intake_revisit`
 - `thread_materialization_state`
+- `thread_intake_recovery_directive`
+- `thread_accumulation_hint`
 
-These infrastructure objects are required for reliability and ambiguity management, but they are not part of the formal thread object model itself.
+`thread_accumulation_hint` is advisory infrastructure and not correctness-critical.
+
+The other four infrastructure objects are required for reliability and ambiguity management, but they are not part of the formal thread object model itself.
 
 ### 12.1 `memory_thread`
 
@@ -700,6 +707,8 @@ Recommended fields:
 - `projection_status`
 - `last_applied_intake_seq`
 - `generation_cutover_job_id`
+- `reducer_policy_id`
+- `reducer_version`
 - `snapshot_version`
 - `created_at`
 - `updated_at`
@@ -707,7 +716,7 @@ Recommended fields:
 Invariants:
 
 - unique `(memory_id, thread_key)`
-- `thread_type`, `anchor_kind`, `anchor_key`, and cached label/alias fields on the root row are current-generation cache fields: if the thread currently has an active healthy generation they must mirror that generation header; otherwise they retain last-known cache values only
+- `thread_type`, `anchor_kind`, `anchor_key`, cached label/alias fields, and reducer fields on the root row are current-generation cache fields: if the thread currently has an active healthy generation they must mirror that generation header; otherwise they retain last-known cache values only
 - canonical anchor resolution and uniqueness must always consult `memory_thread_anchor_binding`; root-row anchor caches are not themselves authoritative binding state
 - `superseded_by_thread_id` threads are never canonical
 - `lifecycle_status`, `object_state`, `last_event_at`, `last_meaningful_update_at`, `closed_at`, `closure_reason`, and `snapshot_version` on the root row are projection-derived cache fields
@@ -718,11 +727,11 @@ Invariants:
 
 ### 12.2 `memory_thread_generation`
 
-This stores immutable per-generation projection headers.
+This stores per-generation projection headers.
 
 Required responsibilities:
 
-- freeze generation-scoped thread semantics for audit
+- preserve generation-stable thread semantics and freeze superseded generations for audit
 - preserve the exact reducer contract used by that generation
 - provide stable cutover metadata for historical queries and rebuild explainability
 
@@ -767,8 +776,11 @@ Invariants:
 
 - unique `(memory_id, thread_id, projection_generation)`
 - exactly one generation header exists for every materialized projection generation
+- the active generation header may be refreshed by additive updates while that generation remains current; once a later generation is cut over, the superseded header becomes immutable
 - current root-row cache fields must mirror the active generation header when one active healthy generation exists
-- historical audit and historical snapshot reconstruction must use the requested generation header rather than mutable current root-row caches or latest reducer defaults
+- `thread_type`, anchor/display cache, lineage fields, reducer policy, reducer version, and cutover metadata on a generation header are generation-stable and may change only via new generation cutover
+- `lifecycle_status`, `object_state`, and recency timestamps on the active generation header may refresh inside one generation and freeze when that generation is superseded
+- historical audit and historical snapshot reconstruction of non-current generations must use the requested frozen generation header rather than mutable current root-row caches or latest reducer defaults
 - if one preserved thread identity changes broad type, the next generation header must carry the new `thread_type` and reducer policy while retaining the same `thread_id` and `thread_key`
 - non-current generation headers are audit records and follow the configured history retention contract
 
@@ -953,6 +965,7 @@ Canonical source types:
 - `GRAPH_NODE`
 - `GRAPH_EDGE`
 - `OBSERVATION`
+- `REPAIR_DIRECTIVE`
 - `THREAD`
 
 Canonical source roles:
@@ -965,6 +978,7 @@ Canonical source roles:
 Invariants:
 
 - unique `(thread_event_id, source_type, source_biz_id, source_revision, source_role)`
+- events created by explicit repair or same-seq blocked recovery must cite the deterministic repair or recovery directive as one `REPAIR_DIRECTIVE` source tuple, in addition to any retained item, graph, observation, or thread evidence
 
 ### 12.8 `memory_thread_snapshot`
 
@@ -1042,7 +1056,45 @@ Invariants:
 - memory-scope quarantine has higher precedence than per-thread healthy caches; default current-serving queries for that memory must fail closed or degrade to explicit memory-blocked metadata
 - `memory_thread.last_applied_intake_seq` may trail or differ across threads and must never be used as the memory-global exactly-once fence
 
-### 12.10 `thread_accumulation_hint`
+### 12.10 `thread_intake_recovery_directive`
+
+This stores deterministic operator recovery directives for already-blocked outbox rows.
+
+Required responsibilities:
+
+- preserve recovery intent for a `QUARANTINED_BLOCKING` intake without mutating the original outbox provenance
+- let blocked same-seq recovery execute through the ordered checkpoint model
+- retain audit history for recovery revisions
+
+Recommended fields:
+
+- `memory_id`
+- `intake_seq`
+- `directive_revision`
+- `repair_operation`
+- `repair_directive_key`
+- `repair_payload_json`
+- `directive_status`
+- `created_at`
+- `applied_at`
+- `superseded_at`
+
+Canonical directive statuses:
+
+- `ACTIVE`
+- `APPLIED`
+- `SUPERSEDED`
+
+Invariants:
+
+- unique `(memory_id, intake_seq, directive_revision)`
+- at most one `ACTIVE` recovery directive may exist per `(memory_id, intake_seq)`
+- an active recovery directive may exist only for an outbox row currently marked `QUARANTINED_BLOCKING`
+- writing or superseding a recovery directive must not rewrite the original outbox row's `triggerType`, `triggerBizId`, `triggerRevision`, or `intakeSeq`
+- same-seq recovery must execute the original blocked row together with the latest `ACTIVE` recovery directive; it must finalize or keep blocking that same ordered row rather than creating a second ordered trigger ahead of or behind it
+- successful same-seq recovery must atomically move the applied directive out of `ACTIVE` state in the same commit that finalizes the blocked row
+
+### 12.11 `thread_accumulation_hint`
 
 This stores lightweight, expiring weak-signal accumulation state for object patterns that are not yet strong enough to justify a formal thread.
 
@@ -1149,7 +1201,7 @@ Explicit repair operations that affect canonical bindings, lineage, or current p
 - enqueue a derived `thread_intake_outbox` repair trigger with a fresh `intakeSeq` under the same memory-scoped ordering model, or
 - execute as rebuild cutover under the same memory-scoped rebuild lease
 
-If the enclosing memory is already `BLOCKED_QUARANTINED`, an operator repair that is intended to clear that quarantine must not enqueue a later repair trigger behind the blocked checkpoint. It must instead update the already blocked outbox row at `blocked_intake_seq` with deterministic recovery directive metadata, including rewriting `triggerType` to the derived explicit repair form and filling `repairOperation`, `repairDirectiveKey`, and `repairPayloadJson` as needed, while preserving that row's original `intakeSeq` and resuming it under the same lease and fencing model.
+If the enclosing memory is already `BLOCKED_QUARANTINED`, an operator repair that is intended to clear that quarantine must not enqueue a later repair trigger behind the blocked checkpoint. It must instead persist or supersede a deterministic `thread_intake_recovery_directive` keyed by `blocked_intake_seq` and resume that same blocked row under the same lease and fencing model. The original outbox row must retain its original `triggerType`, `triggerBizId`, `triggerRevision`, and `intakeSeq` for replay and audit.
 
 No second unordered repair write path is allowed in v1.
 
@@ -1187,7 +1239,7 @@ It is infrastructure, not thread domain state:
 - `QUARANTINED_BLOCKING` is operator-visible and must not be auto-retried in place
 - `QUARANTINED_BLOCKING` does not advance `thread_materialization_state.last_finalized_intake_seq`
 - while one memory is `BLOCKED_QUARANTINED`, later outbox entries for that memory must not finalize through the normal incremental path
-- ordered operator recovery of a blocked intake must reuse the same `blocked_intake_seq`; it may attach or replace deterministic repair directive metadata on that blocked row and rewrite that row into the derived explicit repair form, but it must not change that row's ordered position or clear quarantine before finalization
+- ordered operator recovery of a blocked intake must reuse the same `blocked_intake_seq`; it may attach or replace deterministic recovery directive metadata through `thread_intake_recovery_directive`, but it must not change the blocked row's ordered position or original trigger provenance, and it must not clear quarantine before finalization
 - clearing a memory-scope quarantine requires operator repair or rebuild that reprocesses from the blocked intake or an earlier safe ordered prefix; the system must not clear quarantine by metadata flip alone
 - quarantine recovery must atomically either finalize the blocked intake itself or cut over a rebuild prefix that fully subsumes it, and in the same transaction clear `materialization_status`, clear every `blocked_*` field, and restore default current-serving eligibility for that memory
 
@@ -1229,7 +1281,7 @@ Rules:
 - `COMPLETED`, `COMPLETED_DEFERRED`, and `FAILED_TERMINAL` are finalized statuses and advance `thread_materialization_state.last_finalized_intake_seq`
 - `FAILED_RETRYABLE` is not final, does not advance the ordered checkpoint, and blocks later intake finalization until it succeeds or is promoted to `FAILED_TERMINAL`
 - `QUARANTINED_BLOCKING` is a non-checkpoint-advancing blocked state, not a retryable loop; it freezes later incremental finalization for that memory until quarantine is cleared
-- if one memory is `BLOCKED_QUARANTINED`, the only non-rebuild row that may resume finalization is the blocked row itself at `blocked_intake_seq`; later repair triggers or source-derived rows must remain pending behind it
+- if one memory is `BLOCKED_QUARANTINED`, the only non-rebuild row that may resume finalization is the blocked row itself at `blocked_intake_seq`; later repair triggers or source-derived rows must remain pending behind it, and recovery must consult any attached `thread_intake_recovery_directive` rather than mutating ordered row identity
 - deferred entries are not retried in place; targeted reconsideration must re-enter the same ordered outbox path through a newly enqueued derived intake, or be handled by full rebuild
 - if `FAILED_TERMINAL` uses `BOUNDED_THREADS_DEGRADED`, those impacted threads must be atomically moved into query-safe degraded serving before the checkpoint advances
 
@@ -1240,13 +1292,13 @@ The thread worker processes outbox entries per `memoryId`.
 Worker stages:
 
 1. load the next outbox entry in `intakeSeq` order together with current thread projection heads
-2. branch by `triggerType`
+2. branch by `triggerType` and whether the current row carries an active `thread_intake_recovery_directive`
 3. for source-derived item intake, extract `ThreadIntakeSignal` from committed item and graph facts
 4. for source-derived item intake, generate canonical anchor candidates and, if present, consult any matching `thread_accumulation_hint` only to prioritize bounded historical evidence reinspection
 5. for source-derived item intake, decide `attach / reopen / create / defer / ignore`
 6. for source-derived item intake, if the signal is hint-worthy but still below formal creation threshold, refresh or merge the matching `thread_accumulation_hint`
 7. for derived explicit repair intake, load the deterministic repair directive from `repairOperation`, `repairDirectiveKey`, and `repairPayloadJson`, validate that the referenced impacted threads and successor targets still satisfy the repair preconditions, and build the repair mutation plan without running `attach / reopen / create / defer / ignore` or retargeting through fresh semantic search
-   This same deterministic repair flow is also used when operator recovery re-drives a previously blocked outbox row at `blocked_intake_seq`.
+   This same deterministic repair flow is also used when operator recovery re-drives a previously blocked outbox row at `blocked_intake_seq`, except the directive is loaded from the active `thread_intake_recovery_directive` while the original blocked outbox row retains its source-derived provenance.
 8. normalize one or more thread events
 9. update thread root row
 10. upsert memberships
@@ -1266,11 +1318,14 @@ Within the thread worker, including repair-trigger processing that runs through 
 - `memory_thread_event`
 - `memory_thread_event_source`
 - `memory_thread_snapshot`
+- `thread_intake_recovery_directive` when blocked-row recovery is being applied
 - `thread_materialization_state`
 
 If snapshot reduction fails, the thread-core transaction fails and the outbox entry remains retryable.
 
 If finalization outcome is `COMPLETED_DEFERRED`, no thread-core rows are required to change. In that case the atomic finalization boundary consists of outbox finalization, `thread_intake_revisit`, and `thread_materialization_state.last_finalized_intake_seq` advancement only.
+
+If finalization outcome is `COMPLETED` and the definitive result is `IGNORE` or deterministic no-op after dedup, no thread-core rows are required to change. In that case the atomic finalization boundary consists of outbox finalization and `thread_materialization_state.last_finalized_intake_seq` advancement only.
 
 If finalization outcome is `FAILED_TERMINAL`, no thread-core rows are required to change only for `NOOP_CONFIRMED`. For `BOUNDED_THREADS_DEGRADED`, the same atomic boundary must also mark every deterministically impacted existing thread `FAILED` and suppress all of their current-membership rows.
 
@@ -1293,10 +1348,11 @@ For explicit repair generation cutover, `generationCutoverJobId` must identify t
 Exactly-once protocol rules:
 
 - success commit must atomically persist thread-core writes, final outbox status, the new `lastAppliedIntakeSeq = intakeSeq` on affected threads, and `thread_materialization_state.last_finalized_intake_seq = intakeSeq`
+- successful definitive no-op commit must atomically persist the final outbox status `COMPLETED` together with `thread_materialization_state.last_finalized_intake_seq = intakeSeq` without requiring thread-core row changes
 - deferred success commit must atomically persist the final outbox status, `thread_materialization_state.last_finalized_intake_seq = intakeSeq`, and the corresponding `thread_intake_revisit` write
 - terminal failure commit must atomically persist the final outbox status, terminal failure metadata, and `thread_materialization_state.last_finalized_intake_seq = intakeSeq`
 - quarantine commit must atomically persist the final outbox quarantine status together with memory-scoped blocked metadata and must not advance `thread_materialization_state.last_finalized_intake_seq`
-- successful same-seq recovery of a previously blocked outbox row must atomically persist the repaired thread-core writes or deterministic no-op/degraded finalization, the final outbox status for that blocked row, clearing of every `blocked_*` field, and `thread_materialization_state.last_finalized_intake_seq = blocked_intake_seq`
+- successful same-seq recovery of a previously blocked outbox row must atomically persist the repaired thread-core writes or deterministic no-op/degraded finalization, the final outbox status for that blocked row, clearing of every `blocked_*` field, transition of the applied `thread_intake_recovery_directive` out of `ACTIVE`, and `thread_materialization_state.last_finalized_intake_seq = blocked_intake_seq`
 - retry logic must treat `(memoryId, intakeSeq)` as already finalized only by consulting the final outbox status or `thread_materialization_state.last_finalized_intake_seq`, never by inferring from any thread root row alone
 - rebuild cutover must finalize only the ordered intake prefix it has fully incorporated
 - later retries of an already finalized `intakeSeq` must no-op rather than reapply thread changes
@@ -1311,6 +1367,7 @@ Rebuild semantics:
 - compute replacement thread-core state from authoritative items and graph facts
 - rescan committed items and graph evidence in stable order
 - rerun the same thread materialization logic
+- rebuild object discovery must read only authoritative items, graph facts, retained anchor-binding history, and explicit lineage metadata needed for identity preservation; it must not treat the mutable current thread set, recent-thread heuristics, or prior attach decisions as semantic input
 - rebuild in a non-empty memory must preserve surviving thread identities rather than dropping all thread rows and minting new public ids wholesale
 - hold a memory-scoped rebuild lease while processing the chosen rebuild prefix
 - choose one rebuild cutover `intakeSeq` prefix and exclude newer intake until that prefix is fully finalized
@@ -1389,12 +1446,15 @@ Anchor and thread candidates should be generated from:
 - recent active threads in the same memory
 - exact anchor-key match against existing threads
 
+`recent active threads in the same memory` is an incremental-path heuristic only. Full rebuild and invalidation recovery must not use mutable current-thread recency as semantic evidence or as an identity source.
+
 Candidate eligibility rules:
 
 - exact anchor-key and alias matches must resolve through `memory_thread_anchor_binding`, not by scanning root-row anchor caches alone
 - direct `ATTACH_EXISTING` candidates must be canonical current targets resolved from an `ACTIVE` binding or a one-to-one `REDIRECTED` binding
 - retired non-redirected bindings, invalidated threads, split parents, and superseded merge losers must never be direct `ATTACH_EXISTING` targets
 - if an old anchor resolves by redirect, the attach target is the canonical destination thread, not the retired source thread
+- during rebuild, preserved bindings and lineage metadata may be consulted only in the dedicated identity-preservation step after object derivation, not as free-form semantic candidate discovery over the old thread state
 
 ### 15.3 Decision outputs
 
@@ -1438,6 +1498,8 @@ The worker must apply the following logic.
 `REOPEN_EXISTING` must never target a thread closed by `MERGED` or `SPLIT`, or any thread that already points at `supersededByThreadId`.
 
 `REOPEN_EXISTING` must never target a thread closed by `INVALIDATED`; if authoritative facts support a new object after invalidation, that object must be evaluated for `CREATE_NEW` against the current canonical binding set.
+
+`IGNORE` is a successful definitive no-op and must finalize the outbox row as `COMPLETED`, not as failure or deferred ambiguity.
 
 ### 15.6 No formal latent candidate object in v1
 
@@ -1659,9 +1721,11 @@ The thread query layer must support:
 - one-to-one redirected canonical resolution
 - retired anchor with no direct canonical successor
 
-`listThreadGenerations` must return immutable generation headers ordered by `projectionGeneration`.
+`listThreadGenerations` must return generation headers ordered by `projectionGeneration`.
 
-`getThreadGeneration` must return the requested immutable generation header and may optionally include reconstructed historical snapshot content if the caller explicitly opts into audit detail and the requested generation is retained.
+Non-current generation headers are immutable. The active current generation header is a live projection view until the next cutover and must then freeze as the final state of that generation.
+
+`getThreadGeneration` must return the requested generation header and may optionally include reconstructed historical snapshot content if the caller explicitly opts into audit detail and the requested generation is retained. If the requested generation is the active one, the response reflects the live current header rather than a frozen historical record and should make that status explicit.
 
 `getThreadMaterializationState` must return the memory-scoped ordered checkpoint, rebuild metadata, and any `BLOCKED_QUARANTINED` status together with the blocked intake identifiers and reason when present.
 
@@ -1806,10 +1870,11 @@ Required techniques include:
 - single active materializer lease per memory
 - uniqueness constraints for memberships and event sequence allocation
 - stable `normalized_event_key` generation and uniqueness
-- immutable per-generation headers that freeze reducer contract and generation semantics for audit
+- generation headers that freeze reducer contract and generation semantics once a later cutover supersedes them
 - projection-generation cutover instead of partial in-place repair
 - one ordered mutation path for both normal intake and revisit-driven reconsideration
 - deterministic repair directives persisted on ordered repair-trigger rows rather than reconstructed from unordered operator state
+- deterministic same-seq recovery directives persisted separately from blocked outbox provenance
 - explicit memory-scope quarantine state for poison intake that cannot safely retry or terminalize
 - per-thread atomic rebuild cutover under a memory-scoped rebuild lease
 - explicit memory-scoped checkpoint fencing through `thread_materialization_state`
@@ -1874,6 +1939,7 @@ Required store coverage:
 - normalized-event-key uniqueness
 - event-source dedup uniqueness
 - repair-trigger envelope persistence for `repairOperation`, `repairDirectiveKey`, and `repairPayloadJson`
+- `thread_intake_recovery_directive` persistence and applied/superseded state transitions without rewriting original blocked outbox provenance
 - snapshot replacement semantics
 - generation-header retention under historical compaction
 - current-only snapshot cache semantics and historical-snapshot independence from persisted historical snapshot rows
@@ -1903,6 +1969,7 @@ Required integration coverage:
 - blocked memory cannot finalize later incremental intake until operator repair or rebuild clears quarantine
 - successful quarantine recovery clears blocked state only together with blocked-intake finalization or rebuild-prefix cutover
 - blocked-row operator recovery reuses `blocked_intake_seq` and does not bypass ordered finalization with a later repair trigger
+- blocked-row operator recovery preserves original outbox trigger provenance and executes through `thread_intake_recovery_directive`
 - concurrent outbox ordering and lease behavior
 - explicit repair trigger persists deterministic repair directive metadata and uses the same ordered intake path and fencing model as normal intake
 - projection-changing explicit repair cutover stamps `generationCutoverJobId` with the ordered repair trigger identity
@@ -1922,9 +1989,10 @@ Required integration coverage:
 - rebuild that finds no surviving object materializes an `INVALIDATED` closure generation instead of leaving the thread degraded
 - rebuild preserves `threadId` and `threadKey` for surviving object continuity and mints new ones only for truly new surviving objects
 - rebuild identity-preservation precedence is `ACTIVE` binding, then `REDIRECTED` binding, then exact one-to-one lineage target
+- rebuild output is invariant to mutable current-thread recency ordering when authoritative items, graph facts, bindings, and lineage inputs are held constant
 - repair-trigger and rebuild cutover emit `THREAD_RETYPED`, `ANCHOR_REKEYED`, survivor `MERGE_ABSORBED`, loser `MERGED_INTO`, and `SPLIT_FROM` in the required impacted-thread generations
 - historical snapshot audit reconstructs from retained generation headers, historical events, and memberships without persisted historical snapshot rows
-- query surface exposes immutable generation headers and memory materialization state, including blocked-memory metadata and retained-history availability
+- query surface exposes generation headers together with their live-vs-frozen semantics and memory materialization state, including blocked-memory metadata and retained-history availability
 - hint loss or recomputation does not change eventual thread existence when the same authoritative evidence is reconsidered
 - slow-forming `TOPIC` and `RELATIONSHIP` signals can accumulate through `thread_accumulation_hint` without introducing latent formal threads
 
@@ -1988,7 +2056,7 @@ Migration should proceed as follows.
 1. Introduce the new thread-core schema and outbox path.
 2. Replace `memory_thread_item` with `memory_thread_membership`.
 3. Extend or recreate `memory_thread` with the new core fields.
-4. Add `memory_thread_generation`, `memory_thread_event`, `memory_thread_event_source`, `memory_thread_snapshot`, and `thread_materialization_state`.
+4. Add `memory_thread_generation`, `memory_thread_event`, `memory_thread_event_source`, `memory_thread_snapshot`, `thread_materialization_state`, `thread_intake_revisit`, and `thread_intake_recovery_directive`.
 5. Roll out incremental materialization for new item writes.
 6. Rebuild thread core from committed items and graph facts per memory.
 7. Remove legacy retrieval-thread assumptions from storage and admin views.
@@ -2013,7 +2081,8 @@ V1 is complete when all of the following are true:
 - retype, anchor rekey, merge, and split are first-class repair operations
 - explicit repairs share the same ordered and fenced mutation model as intake or rebuild; no unordered repair write path exists
 - explicit repair triggers persist deterministic repair directives on the ordered outbox path
-- immutable `memory_thread_generation` headers exist and historical audit semantics read from them rather than mutable current caches
+- blocked-row quarantine recovery persists deterministic recovery directives without rewriting original outbox provenance
+- `memory_thread_generation` exists with a live current header that freezes when superseded, and historical audit semantics read from those frozen generations rather than mutable current caches
 - anchor binding history and redirect resolution are implemented
 - one-to-one rekey and merge successor anchors are preserved as mandatory redirected bindings
 - repair generations emit the required canonical repair events, including `THREAD_RETYPED`, survivor-side `MERGE_ABSORBED`, and loser-side `MERGED_INTO`
