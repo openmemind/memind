@@ -120,7 +120,7 @@ This spec defines the core object model and query contract. Full retrieval/conte
 
 Persistent `memory_thread_candidate` storage as a formal latent thread-object store is explicitly postponed. V1 can still compute anchor candidates and decide `attach / create / defer / ignore`, but it does not persist weak thread candidates as first-class thread objects.
 
-V1 may persist lightweight expiring `thread_accumulation_hint` records so slow-forming `TOPIC` and `RELATIONSHIP` objects can accumulate bounded evidence across multiple weak items. These hints are advisory infrastructure, not formal latent thread objects, and never become correctness dependencies.
+V1 may persist lightweight expiring `thread_accumulation_hint` records so slow-forming `TOPIC` and `RELATIONSHIP` objects can accumulate bounded discovery cues across multiple weak items. These hints are advisory infrastructure, not formal latent thread objects, and never become correctness dependencies.
 
 V1 may persist lightweight deferred-intake revisit state for ambiguity handling. That revisit state is infrastructure, not a latent formal thread object.
 
@@ -306,6 +306,8 @@ Design decisions:
 - `normalizedAliases[]` stores stable alternate labels for matching and display.
 - `anchorConfidence` expresses how strongly the system believes the anchor is canonical.
 - `threadKey` remains stable even if anchor normalization or display labeling later improves.
+- `threadKey` is minted exactly once when a formal thread row is first created; rebuild must preserve that existing key whenever rebuilt object continuity maps back to the same thread identity.
+- rebuild is projection repair over persistent thread identities, not a license to resynthesize public thread identifiers from scratch inside a non-empty memory.
 
 ### 9.2 Lifecycle and Lineage
 
@@ -557,15 +559,20 @@ Anchor quality is expected to improve over time. V1 must support the following f
 
 - two or more threads are determined to represent the same durable object
 - one survivor thread remains canonical
+- survivor keeps its existing `threadId` and `threadKey`
 - losing thread transitions to `CLOSED` with `closureReason = MERGED`
 - losing thread sets `supersededByThreadId`
+- losing thread must not retain active canonical bindings or `ACTIVE` current-membership rows after the repair transaction commits
 - survivor absorbs members through migration or generation rebuild
 
 `SPLIT`
 
 - one thread is determined to contain multiple durable objects
 - parent thread transitions to `CLOSED` with `closureReason = SPLIT`
+- parent keeps its existing `threadId` and `threadKey` as historical lineage identity
 - child threads are created with `parentThreadId`
+- each child receives a newly minted `threadId` and `threadKey`
+- parent must not retain `ACTIVE` current-membership rows after the split cutover commits
 - parent anchor bindings become `RETIRED`, not `REDIRECTED`, unless a later one-to-one repair proves that one retired anchor now has a single canonical successor
 - split is performed as a rebuild or explicit repair operation, not as opportunistic incremental mutation
 
@@ -638,7 +645,8 @@ Recommended fields:
 Invariants:
 
 - unique `(memory_id, thread_key)`
-- `anchor_kind` and `anchor_key` on the root row are cached copies of the current active canonical binding
+- `anchor_kind`, `anchor_key`, and cached label/alias fields on the root row are identity caches: if the thread currently has an active canonical binding they must mirror that binding; otherwise they retain the last canonical binding values that identified the thread before closure or supersession
+- canonical anchor resolution and uniqueness must always consult `memory_thread_anchor_binding`; root-row anchor caches are not themselves authoritative binding state
 - `superseded_by_thread_id` threads are never canonical
 - `lifecycle_status`, `object_state`, `last_event_at`, `last_meaningful_update_at`, `closed_at`, and `closure_reason` on the root row are projection-derived cache fields
 - if `projection_status = STALE_UNSAFE | REBUILDING | FAILED`, projection-derived cache fields and cached anchor/display fields on the root row must not be served under their normal current-state names as authoritative truth
@@ -680,6 +688,7 @@ Invariants:
 - unique active `(memory_id, anchor_kind, anchor_key)` where `binding_status = ACTIVE`
 - redirected bindings must point at the canonical destination thread through `redirect_thread_id`
 - retired bindings that do not have one canonical successor must leave `redirect_thread_id` null and rely on thread lineage for follow-up navigation
+- threads closed by `MERGED | SPLIT | INVALIDATED`, and any thread carrying `superseded_by_thread_id`, must not retain `ACTIVE` canonical anchor bindings
 - threads closed as `INVALIDATED` must not retain active canonical anchor bindings; their previously active bindings must be retired unless an explicit repair redirects them elsewhere
 
 ### 12.3 `memory_thread_membership`
@@ -752,6 +761,8 @@ Invariants:
 - unique active primary `(memory_id, item_id)` where `is_primary = true` and `visibility_status = ACTIVE`
 - current-membership rows for a thread are atomically replaced or suppressed at projection cutover; they are not incrementally patched as historical truth
 - when a thread enters `STALE_UNSAFE | REBUILDING | FAILED`, every `memory_thread_current_membership` row for that thread must be atomically moved to `SUPPRESSED`
+- threads closed by `MERGED | SPLIT | INVALIDATED`, and any thread carrying `superseded_by_thread_id`, must not retain `ACTIVE` current-membership rows
+- only threads that remain canonical current objects may retain `ACTIVE` current-membership rows in default serving
 - degraded threads must never retain `ACTIVE` current-membership rows after the degrading transaction commits
 
 ### 12.5 `memory_thread_event`
@@ -899,7 +910,7 @@ This stores lightweight, expiring weak-signal accumulation state for object patt
 Required responsibilities:
 
 - accumulate bounded multi-item support for slow-forming `TOPIC` and `RELATIONSHIP` candidates
-- improve later incremental `CREATE_NEW` or `DEFER_AMBIGUOUS` decisions without creating latent thread objects
+- accelerate later weak-signal candidate discovery or bounded authoritative reconsideration without creating latent thread objects
 - remain safely discardable and rebuildable because it is advisory infrastructure, not correctness-critical state
 
 Recommended fields:
@@ -923,6 +934,8 @@ Invariants:
 - hint expiry or loss must not change correctness; at worst it delays weak-signal thread creation until later evidence or full rebuild
 - rebuild may recompute, refresh, or ignore hints, but authoritative thread existence must never depend on them
 - hint updates are advisory and are not part of the thread-core exactly-once correctness boundary; they may be repaired or recomputed asynchronously
+- hints may narrow which historical evidence slice to reconsider, but they must never contribute independent semantic evidence or raise a below-threshold object directly into `CREATE_NEW`
+- any hint-assisted `ATTACH_EXISTING`, `REOPEN_EXISTING`, `CREATE_NEW`, or `DEFER_AMBIGUOUS` outcome must still be justified entirely from authoritative items, graph facts, and deterministic rules available without the hint
 
 ## 13. Objects Explicitly Deferred
 
@@ -1048,7 +1061,7 @@ Worker stages:
 
 1. load the next outbox entry in `intakeSeq` order together with current thread projection heads
 2. extract `ThreadIntakeSignal` from committed item and graph facts
-3. generate anchor candidates and consult any matching `thread_accumulation_hint`
+3. generate canonical anchor candidates and, if present, consult any matching `thread_accumulation_hint` only to prioritize bounded historical evidence reinspection
 4. decide `attach / reopen / create / defer / ignore`
 5. if the signal is hint-worthy but still below formal creation threshold, refresh or merge the matching `thread_accumulation_hint`
 6. normalize one or more thread events
@@ -1108,6 +1121,7 @@ Rebuild semantics:
 - compute replacement thread-core state from authoritative items and graph facts
 - rescan committed items and graph evidence in stable order
 - rerun the same thread materialization logic
+- rebuild in a non-empty memory must preserve surviving thread identities rather than dropping all thread rows and minting new public ids wholesale
 - hold a memory-scoped rebuild lease while processing the chosen rebuild prefix
 - choose one rebuild cutover `intakeSeq` prefix and exclude newer intake until that prefix is fully finalized
 - atomically cut over each rebuilt thread independently: root row, active anchor binding cache, current membership projection, events, and snapshot for that thread move to the new `projectionGeneration` in one transaction
@@ -1115,6 +1129,8 @@ Rebuild semantics:
 - threads not yet rebuilt during that job must remain suppressed from default current projection serving if they are `STALE_UNSAFE` or marked `REBUILDING`
 - rebuild must ignore `thread_intake_revisit` as a semantic input; revisit is operational ambiguity memory, not rebuild source-of-truth
 - a rebuild must use one stable `active_rebuild_job_id` for the chosen cutover prefix and must resume with that same job id after restart until the job is completed or explicitly abandoned
+- for every rebuilt surviving object, rebuild must first attempt to map continuity onto an existing canonical thread identity using active bindings, redirected one-to-one bindings, and explicit lineage metadata before minting any new `threadId` or `threadKey`
+- a new `threadId` and `threadKey` may be minted during rebuild only when authoritative rescan concludes a surviving object has no eligible existing thread identity to preserve
 - per-thread rebuild cutover must compare-and-swap on `generation_cutover_job_id`; if the thread already carries the current `active_rebuild_job_id`, retry must no-op rather than bump `projectionGeneration` again
 - deterministic rebuild must not leave a previously tracked thread in indefinite degraded limbo just because no surviving rebuilt object was produced
 - if authoritative rescan concludes a previously existing thread has no surviving rebuilt object and no explicit merge or split successor applies, rebuild must cut over an explicit closure generation on that same thread with `projectionStatus = HEALTHY`, `lifecycleStatus = CLOSED`, `closureReason = INVALIDATED`, `objectState = UNCERTAIN`, an `INVALIDATED` event, empty current membership, retired active anchor bindings, and a corresponding authoritative snapshot
@@ -1178,6 +1194,13 @@ Anchor and thread candidates should be generated from:
 - recent active threads in the same memory
 - exact anchor-key match against existing threads
 
+Candidate eligibility rules:
+
+- exact anchor-key and alias matches must resolve through `memory_thread_anchor_binding`, not by scanning root-row anchor caches alone
+- direct `ATTACH_EXISTING` candidates must be canonical current targets resolved from an `ACTIVE` binding or a one-to-one `REDIRECTED` binding
+- retired non-redirected bindings, invalidated threads, split parents, and superseded merge losers must never be direct `ATTACH_EXISTING` targets
+- if an old anchor resolves by redirect, the attach target is the canonical destination thread, not the retired source thread
+
 ### 15.3 Decision outputs
 
 The decision stage must return exactly one of:
@@ -1215,7 +1238,11 @@ The worker must apply the following logic.
 4. If no existing thread is strong enough, ambiguity is low, and `anchorability + continuity + statefulness` all exceed creation threshold, use `CREATE_NEW`.
 5. Otherwise use `IGNORE`.
 
+`ATTACH_EXISTING` must target only a canonical current thread selected from the candidate-eligibility rules above.
+
 `REOPEN_EXISTING` must never target a thread closed by `MERGED` or `SPLIT`, or any thread that already points at `supersededByThreadId`.
+
+`REOPEN_EXISTING` must never target a thread closed by `INVALIDATED`; if authoritative facts support a new object after invalidation, that object must be evaluated for `CREATE_NEW` against the current canonical binding set.
 
 ### 15.6 No formal latent candidate object in v1
 
@@ -1225,7 +1252,7 @@ Instead:
 
 - the worker may upsert an expiring `thread_accumulation_hint` keyed by a deterministic weak object cue such as topic phrase, relationship pair, or other anchor precursor
 - hints may accumulate only bounded support count, support weight, timestamps, and small source samples; they are not full latent object records
-- hints are advisory only: they may strengthen a later `CREATE_NEW` or `DEFER_AMBIGUOUS` decision, but they must never reserve anchors, appear in thread queries, or prove that a formal thread already exists
+- hints are advisory only: they may help the system rediscover which evidence slice to re-read, but they must never reserve anchors, appear in thread queries, prove that a formal thread already exists, or by themselves push a decision across a creation threshold
 - hint expiry, loss, or corruption must not compromise correctness; at worst it delays weak-signal thread creation until later evidence or full rebuild
 - the item remains available to graph and later rebuild
 - future items may cause creation during later incremental materialization or full rebuild
@@ -1233,7 +1260,7 @@ Instead:
 - unresolved ambiguity is retained through `thread_intake_revisit`, not through `memory_thread_candidate`
 - targeted revisit may later reprocess the deferred source together with new evidence only by enqueuing a fresh derived outbox intake with a new `intakeSeq`
 - full rebuild does not read revisit state as semantic input; unresolved items are reconsidered from authoritative source facts only
-- full rebuild may recompute or ignore `thread_accumulation_hint`, but correctness must never depend on it
+- full rebuild may recompute or ignore `thread_accumulation_hint`, but correctness and eventual object existence must never depend on it
 
 ## 16. Event Model
 
@@ -1562,9 +1589,11 @@ Required unit coverage:
 - anchor normalization
 - intake signal extraction
 - attach/create/defer/ignore decision logic
+- canonical attach-target eligibility and redirect handling
 - event normalization
 - event semantic-slot and origin-fingerprint derivation
 - normalized-event-key dedup semantics
+- hint-assisted decision equivalence against hint-free authoritative evaluation
 - snapshot reduction
 - lifecycle transitions
 
@@ -1576,6 +1605,7 @@ Required store coverage:
 - many-to-many membership behavior
 - current membership cutover behavior
 - degraded current-membership suppression behavior
+- lineage-terminal current-membership suppression behavior for `MERGED | SPLIT | INVALIDATED`
 - primary membership constraint
 - append-only event semantics
 - normalized-event-key uniqueness
@@ -1607,12 +1637,15 @@ Required integration coverage:
 - replay or targeted reconsideration of the same source revision does not duplicate events in the same thread generation
 - anchor rekey, redirect resolution, merge, and split scenarios
 - split-origin anchors stay retired and do not auto-resolve to an arbitrary child
+- exact anchor match never attaches directly to a retired, invalidated, split-parent, or superseded thread
 - stale-unsafe thread detail suppression scenarios
 - stale-unsafe member and event suppression scenarios
 - `REBUILDING` and `FAILED` threads follow the same safe-serving suppression contract as `STALE_UNSAFE`
 - per-thread rebuild cutover is atomic while same-memory threads may temporarily be on different rebuilt generations
 - interrupted rebuild resumes with the same rebuild job id and does not double-bump `projectionGeneration` on already cut-over threads
 - rebuild that finds no surviving object materializes an `INVALIDATED` closure generation instead of leaving the thread degraded
+- rebuild preserves `threadId` and `threadKey` for surviving object continuity and mints new ones only for truly new surviving objects
+- hint loss or recomputation does not change eventual thread existence when the same authoritative evidence is reconsidered
 - slow-forming `TOPIC` and `RELATIONSHIP` signals can accumulate through `thread_accumulation_hint` without introducing latent formal threads
 
 ### 21.4 Behavioral fixtures
@@ -1685,6 +1718,7 @@ V1 is complete when all of the following are true:
 - anchor rekey, merge, and split are first-class repair operations
 - anchor binding history and redirect resolution are implemented
 - a lightweight weak-signal accumulation path exists for slow-forming `TOPIC` and `RELATIONSHIP` objects without introducing formal latent threads
+- weak-signal accumulation remains advisory only and does not alter eventual authoritative rebuild results
 - thread query contract is available
 - default query paths read current active projection only
 - current membership is served from an explicit current-membership model
