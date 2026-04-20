@@ -389,8 +389,9 @@ Rules:
 
 - only one projection generation is current for query and retrieval purposes
 - additive updates may append within the current generation
-- source invalidation or repair may mark the thread `STALE_UNSAFE` and require rebuild into the next generation
-- rebuild atomically advances `projectionGeneration` and `lastAppliedIntakeSeq`
+- source invalidation or source-fact repair may mark the thread `STALE_UNSAFE` and require rebuild into the next generation
+- rebuild and projection-changing explicit repair cutover atomically advance `projectionGeneration`
+- any generation cutover transaction must also advance `lastAppliedIntakeSeq` to the ordered intake prefix incorporated by that cutover
 - `STALE_UNSAFE` means the last materialized snapshot is no longer safe to serve as current truth
 - when `projectionStatus = STALE_UNSAFE`, root-row lifecycle, object-state, and recency timestamps are last-known caches, not authoritative current state
 - `REBUILDING` means replacement projection work is in progress under rebuild control; default serving must follow degraded non-authoritative semantics until cutover completes
@@ -553,6 +554,7 @@ Rules:
 
 - explicit repair must not mutate thread-core rows through an unordered side path
 - every explicit repair must execute either through a derived ordered `thread_intake_outbox` repair trigger with a fresh `intakeSeq`, or as rebuild cutover under the same memory-scoped lease and fencing model
+- projection-changing explicit repair may cut over the next safe current projection directly; it does not require an intermediate `STALE_UNSAFE` period unless the system must fall back to rebuild
 - every impacted thread must cut over a new `projectionGeneration` in the same atomic repair transaction that updates lifecycle, bindings, memberships, events, and snapshot state
 
 `ANCHOR_REKEY`
@@ -571,6 +573,7 @@ Rules:
 - one survivor thread remains canonical
 - survivor keeps its existing `threadId` and `threadKey`
 - survivor must cut over a new projection generation that reflects the absorbed current state
+- survivor merge generation must append exactly one `MERGE_ABSORBED` event naming the absorbed losing thread ids
 - losing thread transitions to `CLOSED` with `closureReason = MERGED`
 - losing thread sets `supersededByThreadId`
 - each losing thread must cut over a terminal projection generation
@@ -891,6 +894,7 @@ Invariants:
 - exactly one current snapshot row per thread
 - snapshot version must match or trail the current thread reducer version
 - snapshot must identify which `projection_generation` it represents
+- persisted snapshot rows are required only for the active current projection; historical snapshot audit must not depend on storing one snapshot row per historical generation
 
 ### 12.8 `thread_materialization_state`
 
@@ -1007,6 +1011,23 @@ Every item commit that could affect threads must persist a durable outbox record
 - `attemptCount`
 - enqueue time
 
+`triggerType` must distinguish at least:
+
+- source-derived item intake
+- derived explicit repair intake
+
+When `triggerType` is source-derived item intake:
+
+- `triggerBizId` and `triggerRevision` identify the committed source item revision that entered the thread pipeline
+
+When `triggerType` is derived explicit repair intake:
+
+- `triggerBizId` and `triggerRevision` identify one deterministic repair directive revision, not an item revision
+- the outbox record must also persist `repairOperation`
+- the outbox record must also persist `repairDirectiveKey`
+- the outbox record must also persist `repairPayloadJson`
+- `repairPayloadJson` must name the impacted thread ids and the canonical successor, anchor, or split-child targets needed to execute the repair deterministically without consulting any unordered side channel
+
 Explicit repair operations that affect canonical bindings, lineage, or current projection must not write thread-core rows directly. They must either:
 
 - enqueue a derived `thread_intake_outbox` repair trigger with a fresh `intakeSeq` under the same memory-scoped ordering model, or
@@ -1038,6 +1059,7 @@ It is infrastructure, not thread domain state:
 - terminal failure must record `terminalFailureClass` and reason
 - `terminalFailureClass = NOOP_CONFIRMED` means the intake would not mutate any thread projection
 - `terminalFailureClass = BOUNDED_THREADS_DEGRADED` means all deterministically impacted existing threads are atomically marked `FAILED` before checkpoint advancement
+- a derived explicit repair intake whose deterministic preconditions no longer hold must not silently retarget through fresh semantic search; it may finalize as `NOOP_CONFIRMED` only if the requested canonical end state is already true, otherwise it may use `BOUNDED_THREADS_DEGRADED` only when every impacted existing thread is explicitly named in `repairPayloadJson` and degraded atomically before checkpoint advancement
 - `FAILED_TERMINAL` must not be used if the unresolved intake could create a new thread or mutate an unknown or unbounded thread set
 
 When an intake is finalized as `COMPLETED_DEFERRED`, the system must also persist a `thread_intake_revisit` record containing at least:
@@ -1087,16 +1109,18 @@ The thread worker processes outbox entries per `memoryId`.
 Worker stages:
 
 1. load the next outbox entry in `intakeSeq` order together with current thread projection heads
-2. extract `ThreadIntakeSignal` from committed item and graph facts
-3. generate canonical anchor candidates and, if present, consult any matching `thread_accumulation_hint` only to prioritize bounded historical evidence reinspection
-4. decide `attach / reopen / create / defer / ignore`
-5. if the signal is hint-worthy but still below formal creation threshold, refresh or merge the matching `thread_accumulation_hint`
-6. normalize one or more thread events
-7. update thread root row
-8. upsert memberships
-9. append thread events and event-source links
-10. reduce and write snapshot
-11. update outbox status to `COMPLETED`, `COMPLETED_DEFERRED`, `FAILED_RETRYABLE`, or `FAILED_TERMINAL`
+2. branch by `triggerType`
+3. for source-derived item intake, extract `ThreadIntakeSignal` from committed item and graph facts
+4. for source-derived item intake, generate canonical anchor candidates and, if present, consult any matching `thread_accumulation_hint` only to prioritize bounded historical evidence reinspection
+5. for source-derived item intake, decide `attach / reopen / create / defer / ignore`
+6. for source-derived item intake, if the signal is hint-worthy but still below formal creation threshold, refresh or merge the matching `thread_accumulation_hint`
+7. for derived explicit repair intake, load the deterministic repair directive from `repairOperation`, `repairDirectiveKey`, and `repairPayloadJson`, validate that the referenced impacted threads and successor targets still satisfy the repair preconditions, and build the repair mutation plan without running `attach / reopen / create / defer / ignore` or retargeting through fresh semantic search
+8. normalize one or more thread events
+9. update thread root row
+10. upsert memberships
+11. append thread events and event-source links
+12. reduce and write snapshot
+13. update outbox status to `COMPLETED`, `COMPLETED_DEFERRED`, `FAILED_RETRYABLE`, or `FAILED_TERMINAL`
 
 ### 14.5 Thread-core transaction boundary
 
@@ -1119,13 +1143,15 @@ If finalization outcome is `FAILED_TERMINAL`, no thread-core rows are required t
 
 The transaction must also advance:
 
-- `projectionGeneration` when a rebuild or invalidation-closure generation is cut over
-- `generationCutoverJobId` when a rebuild or invalidation-closure generation is cut over
+- `projectionGeneration` when a rebuild, explicit repair, or invalidation-closure generation is cut over
+- `generationCutoverJobId` when a rebuild, explicit repair, or invalidation-closure generation is cut over
 - `lastAppliedIntakeSeq`
 - canonical `object_state`
 - the final outbox status for the processed `intakeSeq`, or an equivalent exactly-once fencing record
 - `thread_materialization_state.last_finalized_intake_seq`
 - the `thread_intake_revisit` record when finalizing `COMPLETED_DEFERRED`
+
+For explicit repair generation cutover, `generationCutoverJobId` must identify the ordered repair trigger that produced that generation.
 
 `thread_accumulation_hint` is intentionally excluded from this exactly-once correctness boundary. It may be updated in the same transaction when convenient, or repaired asynchronously later, because correctness must not depend on its freshness.
 
@@ -1178,12 +1204,12 @@ The following source-fact changes must mark impacted threads `STALE_UNSAFE` and 
 - item revision or content replacement
 - extraction-version change that alters normalized meaning
 - graph evidence invalidation or repair
-- anchor repair, merge, or split operations
 
 Rules:
 
 - default query traffic must not continue to expose stale derived thread state once a thread is marked `STALE_UNSAFE`
-- successful rebuild advances `projectionGeneration`
+- first-class explicit `ANCHOR_REKEY`, `MERGE`, and `SPLIT` repairs may cut over a new generation directly through the ordered repair-trigger path; they do not require an intermediate `STALE_UNSAFE` state when the repair transaction itself produces the next safe current projection
+- successful rebuild or projection-changing explicit repair advances `projectionGeneration`
 - prior generation rows may be retained for audit or garbage-collected later, but correctness must not depend on retention
 - snapshot and membership correctness after invalidation always comes from rebuild, not ad hoc patching
 - `memory_thread_current_membership` rows for a `STALE_UNSAFE` thread must be atomically moved to `SUPPRESSED` as part of the invalidation transaction
@@ -1313,6 +1339,7 @@ V1 supports the following event types:
 - `REOPENED`
 - `INVALIDATED`
 - `ANCHOR_REKEYED`
+- `MERGE_ABSORBED`
 - `MERGED_INTO`
 - `SPLIT_FROM`
 
@@ -1333,7 +1360,8 @@ Rules:
 - if new evidence would reinterpret an already materialized source revision into a materially different event set, the correction must occur through rebuild or new projection generation, not by duplicating conflicting events in the same generation
 - `ANCHOR_REKEY`, `MERGE`, `SPLIT`, and `INVALIDATED` closure are projection-changing repair outcomes and must be represented in the cutover generation rather than as ad hoc side mutations
 - `ANCHOR_REKEY` must emit exactly one `ANCHOR_REKEYED` event in the repaired thread generation
-- `MERGE` must emit exactly one `MERGED_INTO` event in each losing thread terminal generation; survivor-side merge absorption is represented by the survivor generation cutover and resulting snapshot, not by a second merge-specific event in v1
+- `MERGE` must emit exactly one `MERGE_ABSORBED` event in the survivor merge generation naming the absorbed losing threads
+- `MERGE` must emit exactly one `MERGED_INTO` event in each losing thread terminal generation
 - `SPLIT` must emit exactly one `SPLIT_FROM` event in each child opening generation; parent-side split closure is represented by `closureReason = SPLIT` plus terminal generation cutover, not by a second split-specific parent event in v1
 
 ### 16.3 Meaningful update semantics
@@ -1376,9 +1404,13 @@ The reducer must be deterministic over:
 - current memberships
 - thread type and reducer policy
 
+Historical audit snapshot reconstruction, when the requested generation is retained, must run the same reducer over that generation's events, that generation's memberships, and the applicable reducer policy for that generation.
+
 `memory_thread.object_state` is the canonical coarse state for filtering and indexing.
 
 `snapshot.currentState` is an embedded copy written in the same transaction and must match `memory_thread.object_state` exactly.
+
+The persisted `memory_thread_snapshot` row is the active-generation cache only. Historical snapshot reads may reconstruct on demand from retained historical events and memberships and must not require persisted historical snapshot rows.
 
 ### 17.3 Structured first, textual second
 
@@ -1549,6 +1581,7 @@ Rules:
 - `listThreadEvents` returns only the active `projectionGeneration` by default
 - `resolveThreadByAnchor` follows active bindings first and redirected bindings second by default; retired non-redirected anchors must not be auto-resolved
 - historical generations, retired memberships, and stale pre-rebuild projections are available only through explicit audit or history opt-in
+- if explicit audit or history opt-in requests a historical snapshot and the requested generation is still retained, v1 may reconstruct it on demand from that generation's historical events and memberships; it must not require a persisted historical snapshot row
 - if `projectionStatus = STALE_UNSAFE | REBUILDING | FAILED`, default detail, member, event, and item-to-thread reads must suppress current projection content and expose explicit projection-status metadata instead
 - degraded default detail must use `lastKnown*` cache field names or omission, never the normal current-state field names for projection-derived values
 - degraded threads must not match default `lifecycleStatus` or `objectState` filters unless the caller explicitly opts into `lastKnown*` filter semantics
@@ -1591,6 +1624,7 @@ Required techniques include:
 - stable `normalized_event_key` generation and uniqueness
 - projection-generation cutover instead of partial in-place repair
 - one ordered mutation path for both normal intake and revisit-driven reconsideration
+- deterministic repair directives persisted on ordered repair-trigger rows rather than reconstructed from unordered operator state
 - per-thread atomic rebuild cutover under a memory-scoped rebuild lease
 - explicit memory-scoped checkpoint fencing through `thread_materialization_state`
 - restart-safe rebuild job identity through `generation_cutover_job_id` and `active_rebuild_job_id`
@@ -1628,8 +1662,9 @@ Required unit coverage:
 - event semantic-slot and origin-fingerprint derivation
 - normalized-event-key dedup semantics
 - hint-assisted decision equivalence against hint-free authoritative evaluation
-- repair event emission rules for `ANCHOR_REKEYED`, `MERGED_INTO`, and `SPLIT_FROM`
+- repair event emission rules for `ANCHOR_REKEYED`, `MERGE_ABSORBED`, `MERGED_INTO`, and `SPLIT_FROM`
 - snapshot reduction
+- historical snapshot reconstruction determinism from generation-scoped events and memberships
 - lifecycle transitions
 
 ### 21.2 Store tests
@@ -1646,7 +1681,9 @@ Required store coverage:
 - append-only event semantics
 - normalized-event-key uniqueness
 - event-source dedup uniqueness
+- repair-trigger envelope persistence for `repairOperation`, `repairDirectiveKey`, and `repairPayloadJson`
 - snapshot replacement semantics
+- current-only snapshot cache semantics and historical-snapshot independence from persisted historical snapshot rows
 - `thread_materialization_state` monotonic checkpoint behavior
 
 ### 21.3 Integration tests
@@ -1669,7 +1706,9 @@ Required integration coverage:
 - `FAILED_TERMINAL` is rejected when the unresolved intake could still create a new thread or mutate an unknown thread set
 - bounded-impact `FAILED_TERMINAL` atomically degrades all deterministically impacted existing threads before checkpoint advancement
 - concurrent outbox ordering and lease behavior
-- explicit repair trigger uses the same ordered intake path and fencing model as normal intake
+- explicit repair trigger persists deterministic repair directive metadata and uses the same ordered intake path and fencing model as normal intake
+- projection-changing explicit repair cutover stamps `generationCutoverJobId` with the ordered repair trigger identity
+- repair trigger whose preconditions no longer hold does not retarget through fresh semantic search and resolves only as deterministic no-op or bounded degraded fallback
 - crash-and-retry does not duplicate an already finalized `intakeSeq`
 - replay or targeted reconsideration of the same source revision does not duplicate events in the same thread generation
 - anchor rekey, redirect resolution, merge, and split scenarios
@@ -1684,7 +1723,8 @@ Required integration coverage:
 - rebuild that finds no surviving object materializes an `INVALIDATED` closure generation instead of leaving the thread degraded
 - rebuild preserves `threadId` and `threadKey` for surviving object continuity and mints new ones only for truly new surviving objects
 - rebuild identity-preservation precedence is `ACTIVE` binding, then `REDIRECTED` binding, then exact one-to-one lineage target
-- repair-trigger and rebuild cutover emit the required repair events in the required impacted-thread generations
+- repair-trigger and rebuild cutover emit `ANCHOR_REKEYED`, survivor `MERGE_ABSORBED`, loser `MERGED_INTO`, and `SPLIT_FROM` in the required impacted-thread generations
+- historical snapshot audit reconstructs from retained historical events and memberships without persisted historical snapshot rows
 - hint loss or recomputation does not change eventual thread existence when the same authoritative evidence is reconsidered
 - slow-forming `TOPIC` and `RELATIONSHIP` signals can accumulate through `thread_accumulation_hint` without introducing latent formal threads
 
@@ -1757,12 +1797,15 @@ V1 is complete when all of the following are true:
 - memory-scoped materialization fencing and ordered checkpoint are implemented explicitly
 - anchor rekey, merge, and split are first-class repair operations
 - explicit repairs share the same ordered and fenced mutation model as intake or rebuild; no unordered repair write path exists
+- explicit repair triggers persist deterministic repair directives on the ordered outbox path
 - anchor binding history and redirect resolution are implemented
 - one-to-one rekey and merge successor anchors are preserved as mandatory redirected bindings
+- repair generations emit the required canonical repair events, including survivor-side `MERGE_ABSORBED` and loser-side `MERGED_INTO`
 - a lightweight weak-signal accumulation path exists for slow-forming `TOPIC` and `RELATIONSHIP` objects without introducing formal latent threads
 - weak-signal accumulation remains advisory only and does not alter eventual authoritative rebuild results
 - thread query contract is available
 - default query paths read current active projection only
+- explicit audit or history opt-in can reconstruct historical snapshots from retained generation events and memberships without persisted historical snapshot rows
 - current membership is served from an explicit current-membership model
 - boundaries with graph and insight are explicit
 
