@@ -118,7 +118,7 @@ This spec defines the core object model and query contract. Full retrieval/conte
 
 ### 4.4 No durable latent-candidate subsystem in v1
 
-Persistent `memory_thread_candidate` storage is explicitly postponed. V1 can still compute anchor candidates and decide `attach / create / ignore`, but it does not persist weak thread candidates as first-class rows.
+Persistent `memory_thread_candidate` storage is explicitly postponed. V1 can still compute anchor candidates and decide `attach / create / defer / ignore`, but it does not persist weak thread candidates as first-class rows.
 
 ### 4.5 No LLM-only write-path decisions
 
@@ -138,9 +138,13 @@ If a structure has only identity, it is just an object card. If it has only hist
 
 Broad thread types share the same core schema and lifecycle. Type-specific behavior lives in reducers, facets, and policies, not separate object systems.
 
-### 5.4 Events are source-of-truth; snapshot is a reduction
+### 5.4 Source facts vs thread projection
 
-Thread history is append-only. Snapshot is the current reduced view computed from events and memberships. Snapshot may be rebuilt from event history.
+`item` and `graph` remain the global source-of-truth fact layers.
+
+Within thread core, events are the authoritative current projection and snapshot is a reduction over that projection.
+
+If source facts are deleted, revised, invalidated, or re-extracted, thread projection may be rebuilt into a new projection generation. Correctness must never depend on in-place mutation of previously materialized snapshot state.
 
 ### 5.5 Membership is many-to-many
 
@@ -272,7 +276,7 @@ It is not:
 
 ## 9. Core Object Model
 
-Every formal thread consists of six required parts plus optional typed facets.
+Every formal thread consists of seven required parts plus optional typed facets.
 
 ### 9.1 Identity
 
@@ -299,9 +303,9 @@ Design decisions:
 - `anchorConfidence` expresses how strongly the system believes the anchor is canonical.
 - `threadKey` remains stable even if anchor normalization or display labeling later improves.
 
-### 9.2 Lifecycle
+### 9.2 Lifecycle and Lineage
 
-Lifecycle answers whether the thread is actively tracked.
+Lifecycle answers whether the thread is actively tracked and whether it remains canonical.
 
 Required fields:
 
@@ -310,6 +314,9 @@ Required fields:
 - `lastEventAt`
 - `lastMeaningfulUpdateAt`
 - `closedAt`
+- `closureReason`
+- `parentThreadId`
+- `supersededByThreadId`
 
 Canonical lifecycle states:
 
@@ -323,6 +330,14 @@ Lifecycle rules:
 - lack of meaningful updates may transition `ACTIVE -> DORMANT`
 - resolution or explicit closure may transition `ACTIVE|DORMANT -> CLOSED`
 - a qualifying new update may transition `DORMANT|CLOSED -> ACTIVE` and append `REOPENED`
+- a superseded thread is never reopened in place; callers must follow lineage to the surviving or child thread set
+
+Canonical closure reasons:
+
+- `RESOLVED`
+- `EXPLICIT`
+- `MERGED`
+- `SPLIT`
 
 ### 9.3 Object State
 
@@ -341,17 +356,42 @@ Rules:
 - this is a cross-type coarse state for filtering and shared reasoning
 - type-specific nuance lives in snapshot facets, not in this top-level enum
 
-### 9.4 Timeline
+### 9.4 Projection Head
+
+Projection head answers which materialized thread generation is current and how far ordered intake has been applied.
+
+Required fields:
+
+- `projectionGeneration`
+- `projectionStatus`
+- `lastAppliedIntakeSeq`
+
+Canonical projection statuses:
+
+- `HEALTHY`
+- `DIRTY`
+- `REBUILDING`
+- `FAILED`
+
+Rules:
+
+- only one projection generation is current for query and retrieval purposes
+- additive updates may append within the current generation
+- source invalidation or repair may mark the thread `DIRTY` and require rebuild into the next generation
+- rebuild atomically advances `projectionGeneration` and `lastAppliedIntakeSeq`
+
+### 9.5 Timeline
 
 Timeline is the append-only sequence of normalized thread events.
 
 Properties:
 
+- append-only within one projection generation
 - ordered by per-thread sequence and effective event time
 - derived from items and graph evidence, but not equal to them
-- durable source-of-truth for thread evolution
+- durable authoritative history for the current thread projection
 
-### 9.5 Members
+### 9.6 Members
 
 Members are the items and other evidence-bearing objects that support the thread.
 
@@ -361,7 +401,7 @@ Properties:
 - one item may have at most one primary membership
 - membership does not replace event source links; event source links explain why a specific event exists
 
-### 9.6 Snapshot
+### 9.7 Snapshot
 
 Snapshot is the current reduced view of the thread.
 
@@ -371,7 +411,7 @@ Properties:
 - structured first, textual second
 - optimized for fast query and future consumption
 
-### 9.7 Facets
+### 9.8 Facets
 
 Facets are typed extensions attached to the shared core snapshot.
 
@@ -465,12 +505,14 @@ Examples:
 
 ### 11.3 Uniqueness invariant
 
-Within one `memoryId`, there must be at most one formal thread for a given canonical `anchorKind + anchorKey`.
+Within one `memoryId`, there must be at most one active canonical anchor binding for a given `anchorKind + anchorKey`.
 
 Implications:
 
 - the system should reopen the existing thread rather than create a duplicate when new evidence arrives
 - anchor normalization quality matters because anchor identity drives thread continuity
+- superseded threads or split parents must not continue to hold the active canonical binding
+- implementation may enforce this through a partial unique index or an equivalent active-binding mechanism
 
 ### 11.4 Anchor is object-level, not entity-level
 
@@ -481,6 +523,33 @@ Examples:
 - a bug case thread may be anchored by issue identity, not just a service name
 - a relationship thread may be anchored by a canonical pair, not by one person entity alone
 - a topic thread may be anchored by the normalized topic, not by the latest mentioning item
+
+### 11.5 Anchor evolution and repair
+
+Anchor quality is expected to improve over time. V1 must support the following first-class repair operations.
+
+`ANCHOR_REKEY`
+
+- same durable object, better canonical anchor
+- same `threadId`
+- same stable `threadKey`
+- append `ANCHOR_REKEYED`
+- update active canonical anchor binding atomically
+
+`MERGE`
+
+- two or more threads are determined to represent the same durable object
+- one survivor thread remains canonical
+- losing thread transitions to `CLOSED` with `closureReason = MERGED`
+- losing thread sets `supersededByThreadId`
+- survivor absorbs members through migration or generation rebuild
+
+`SPLIT`
+
+- one thread is determined to contain multiple durable objects
+- parent thread transitions to `CLOSED` with `closureReason = SPLIT`
+- child threads are created with `parentThreadId`
+- split is performed as a rebuild or explicit repair operation, not as opportunistic incremental mutation
 
 ## 12. Persistence Model
 
@@ -521,6 +590,12 @@ Recommended fields:
 - `last_event_at`
 - `last_meaningful_update_at`
 - `closed_at`
+- `closure_reason`
+- `parent_thread_id`
+- `superseded_by_thread_id`
+- `projection_generation`
+- `projection_status`
+- `last_applied_intake_seq`
 - `snapshot_version`
 - `created_at`
 - `updated_at`
@@ -528,7 +603,8 @@ Recommended fields:
 Invariants:
 
 - unique `(memory_id, thread_key)`
-- unique `(memory_id, anchor_kind, anchor_key)`
+- at most one active canonical anchor binding per `(memory_id, anchor_kind, anchor_key)`
+- `superseded_by_thread_id` threads are never canonical
 
 ### 12.2 `memory_thread_membership`
 
@@ -545,6 +621,7 @@ Recommended fields:
 - `biz_id`
 - `memory_id`
 - `thread_id`
+- `projection_generation`
 - `item_id`
 - `membership_role`
 - `is_primary`
@@ -562,8 +639,8 @@ Canonical membership roles:
 
 Invariants:
 
-- unique `(memory_id, thread_id, item_id)`
-- at most one `is_primary = true` membership for a given `item_id` in one `memory_id`
+- unique `(memory_id, thread_id, projection_generation, item_id)`
+- at most one active `is_primary = true` membership for a given `item_id` in one `memory_id`
 
 ### 12.3 `memory_thread_event`
 
@@ -581,18 +658,21 @@ Recommended fields:
 - `biz_id`
 - `memory_id`
 - `thread_id`
+- `projection_generation`
 - `event_seq`
 - `event_time`
 - `event_type`
 - `event_payload_json`
+- `payload_schema_version`
+- `normalization_version`
 - `is_meaningful`
 - `confidence`
 - `created_at`
 
 Invariants:
 
-- unique `(memory_id, thread_id, event_seq)`
-- append-only semantics
+- unique `(memory_id, thread_id, projection_generation, event_seq)`
+- append-only semantics within one projection generation
 
 ### 12.4 `memory_thread_event_source`
 
@@ -611,6 +691,7 @@ Recommended fields:
 - `thread_event_id`
 - `source_type`
 - `source_biz_id`
+- `source_revision`
 - `source_role`
 - `confidence`
 - `created_at`
@@ -621,6 +702,7 @@ Canonical source types:
 - `GRAPH_NODE`
 - `GRAPH_EDGE`
 - `OBSERVATION`
+- `THREAD`
 
 Canonical source roles:
 
@@ -643,7 +725,10 @@ Recommended fields:
 
 - `thread_id`
 - `memory_id`
+- `projection_generation`
 - `snapshot_version`
+- `payload_schema_version`
+- `reducer_version`
 - `reduced_from_event_seq`
 - `snapshot_payload_json`
 - `snapshot_text`
@@ -653,6 +738,7 @@ Invariants:
 
 - exactly one current snapshot row per thread
 - snapshot version must match or trail the current thread reducer version
+- snapshot must identify which `projection_generation` it represents
 
 ## 13. Objects Explicitly Deferred
 
@@ -679,18 +765,24 @@ The main write path persists:
 - raw input and normalized item data
 - extraction result
 - graph facts
-- `thread_intake_outbox` record
+- `thread_intake_outbox` envelope
 
 The synchronous path does not directly create or mutate formal thread state.
+
+The synchronous path must not persist semantic thread decisions or normalized thread-intake signals. Those are computed asynchronously from committed source facts.
 
 ### 14.2 Durable outbox
 
 Every item commit that could affect threads must persist a durable outbox record containing at least:
 
 - `memoryId`
-- `itemId`
-- item timestamp
-- normalized thread-intake hints
+- `triggerType`
+- `triggerBizId`
+- `triggerRevision`
+- `intakeSeq`
+- `status`
+- `deferredUntil`
+- `attemptCount`
 - enqueue time
 
 Outbox is required so thread work is retryable and rebuildable.
@@ -701,25 +793,38 @@ It is infrastructure, not thread domain state:
 - it must survive process restart
 - it must be safe to replay
 - it must not be treated as a formal thread object
+- it must not store semantically normalized thread hints as durable write-path truth
 
-### 14.3 Asynchronous thread worker
+### 14.3 Ordering and exclusivity model
+
+V1 explicitly prioritizes correctness over maximum parallelism.
+
+Rules:
+
+- at most one active thread materializer lease may process one `memoryId` at a time
+- outbox entries for one `memoryId` must be applied in strictly increasing `intakeSeq`
+- rebuild work acquires the same memory-scoped lease as incremental work
+- rebuild establishes a cutover `intakeSeq`; newer entries are applied only after the rebuild commits
+- per-thread `event_seq` must be allocated monotonically inside the thread-core transaction using row lock or equivalent compare-and-swap protection
+
+### 14.4 Asynchronous thread worker
 
 The thread worker processes outbox entries per `memoryId`.
 
 Worker stages:
 
-1. load pending outbox entry and current thread state
-2. extract `ThreadIntakeSignal`
+1. load the next outbox entry in `intakeSeq` order together with current thread projection heads
+2. extract `ThreadIntakeSignal` from committed item and graph facts
 3. generate anchor candidates
-4. decide `attach / reopen / create / ignore`
+4. decide `attach / reopen / create / defer / ignore`
 5. normalize one or more thread events
 6. update thread root row
 7. upsert memberships
 8. append thread events and event-source links
 9. reduce and write snapshot
-10. mark outbox entry complete
+10. update outbox status to complete, deferred, or retryable failure
 
-### 14.4 Thread-core transaction boundary
+### 14.5 Thread-core transaction boundary
 
 Within the thread worker, the following writes must commit atomically:
 
@@ -731,17 +836,43 @@ Within the thread worker, the following writes must commit atomically:
 
 If snapshot reduction fails, the thread-core transaction fails and the outbox entry remains retryable.
 
-### 14.5 Rebuild path
+The transaction must also advance:
+
+- `projectionGeneration` when a rebuild generation is cut over
+- `lastAppliedIntakeSeq`
+- canonical `object_state`
+
+### 14.6 Rebuild path
 
 The subsystem must support full rebuild per `memoryId`.
 
 Rebuild semantics:
 
-- clear or replace existing thread-core state for the memory
+- compute replacement thread-core state from authoritative items and graph facts
 - rescan committed items and graph evidence in stable order
 - rerun the same thread materialization logic
+- cut over atomically to the rebuilt projection generations
 
 This replaces reliance on legacy thread rows for correctness.
+
+### 14.7 Invalidation, deletion, and repair semantics
+
+V1 does not rely on in-place event retraction.
+
+The following source-fact changes must mark impacted threads `DIRTY` and schedule generation rebuild:
+
+- item deletion
+- item revision or content replacement
+- extraction-version change that alters normalized meaning
+- graph evidence invalidation or repair
+- anchor repair, merge, or split operations
+
+Rules:
+
+- current query traffic continues to read the last `HEALTHY` generation until rebuild cutover
+- successful rebuild advances `projectionGeneration`
+- prior generation rows may be retained for audit or garbage-collected later, but correctness must not depend on retention
+- snapshot and membership correctness after invalidation always comes from rebuild, not ad hoc patching
 
 ## 15. Intake Signal and Decision Model
 
@@ -778,6 +909,7 @@ The decision stage must return exactly one of:
 - `ATTACH_EXISTING`
 - `REOPEN_EXISTING`
 - `CREATE_NEW`
+- `DEFER_AMBIGUOUS`
 - `IGNORE`
 
 ### 15.4 Decision dimensions
@@ -803,8 +935,9 @@ The worker must apply the following logic.
 
 1. If a canonical existing thread is matched strongly enough, prefer `ATTACH_EXISTING`.
 2. If the chosen existing thread is `DORMANT` or `CLOSED` and the new signal restores continuity, prefer `REOPEN_EXISTING`.
-3. If no existing thread is strong enough and `anchorability + continuity + statefulness` all exceed creation threshold, use `CREATE_NEW`.
-4. Otherwise use `IGNORE`.
+3. If multiple existing threads or object interpretations remain plausible and ambiguity stays above threshold, use `DEFER_AMBIGUOUS`.
+4. If no existing thread is strong enough, ambiguity is low, and `anchorability + continuity + statefulness` all exceed creation threshold, use `CREATE_NEW`.
+5. Otherwise use `IGNORE`.
 
 ### 15.6 No persisted latent candidate in v1
 
@@ -814,6 +947,7 @@ Instead:
 
 - the item remains available to graph and later rebuild
 - future items may cause creation during later incremental materialization or full rebuild
+- `DEFER_AMBIGUOUS` remains an outbox-level state, not a formal thread object
 
 ## 16. Event Model
 
@@ -835,6 +969,9 @@ V1 supports the following event types:
 - `RELATION_CHANGE`
 - `RESOLUTION_DECLARED`
 - `REOPENED`
+- `ANCHOR_REKEYED`
+- `MERGED_INTO`
+- `SPLIT_FROM`
 
 ### 16.2 Event normalization rules
 
@@ -843,7 +980,9 @@ Rules:
 - one item may generate zero, one, or multiple thread events
 - one thread event may cite multiple evidence sources
 - event payload must be structured JSON, not only summary text
+- event payload must carry explicit payload schema and normalization versions
 - event type is reducer-critical and must not be hidden only inside metadata
+- current timeline queries read only the active `projectionGeneration` unless audit mode explicitly asks for historical generations
 
 ### 16.3 Meaningful update semantics
 
@@ -864,13 +1003,18 @@ Snapshot is the current reduced object view.
 Every thread snapshot must include at least:
 
 - `currentState`
+- `headline`
 - `latestUpdate`
-- `activeBlockers[]`
-- `nextActions[]`
-- `resolutionState`
-- `openQuestions[]`
+- `salientFacts[]`
 - `lastMeaningfulUpdateAt`
 - `confidence`
+
+The following structures are no longer mandatory shared fields and instead live in typed facets:
+
+- blockers
+- next actions
+- resolution detail
+- open questions
 
 ### 17.2 Snapshot reduction contract
 
@@ -879,6 +1023,10 @@ The reducer must be deterministic over:
 - ordered thread events
 - current memberships
 - thread type and reducer policy
+
+`memory_thread.object_state` is the canonical coarse state for filtering and indexing.
+
+`snapshot.currentState` is an embedded copy written in the same transaction and must match `memory_thread.object_state` exactly.
 
 ### 17.3 Structured first, textual second
 
@@ -920,6 +1068,8 @@ Event source explains why a particular event exists.
 
 Membership answers whether an item belongs in the broader case file or object context.
 
+Membership is projection state rather than immutable historical truth. If source facts are invalidated, memberships are recomputed during generation rebuild.
+
 An item may:
 
 - be a member without being the main trigger of the latest event
@@ -933,6 +1083,8 @@ Purpose:
 
 - preserve a strongest owner-like association when one exists
 - still allow rich secondary memberships across related threads
+
+This constraint applies to the current projection state, not to retained historical generations.
 
 ### 18.3 Secondary membership examples
 
@@ -973,10 +1125,14 @@ The default thread detail response should include:
 
 - thread identity
 - lifecycle and coarse state
+- lineage metadata
+- projection head metadata
 - current snapshot
 - summary counts for events and members
 
 Timeline and member rows should be queried separately.
+
+If a thread has been superseded by merge, the default detail query should either redirect to the canonical survivor or expose `supersededByThreadId` explicitly.
 
 ## 20. Consistency, Failure Handling, and Operations
 
@@ -991,6 +1147,7 @@ If thread materialization fails:
 - the outbox entry remains pending
 - no partial thread-core transaction is committed
 - the worker may retry safely
+- `lastAppliedIntakeSeq` must not advance
 
 ### 20.3 Idempotency requirement
 
@@ -999,8 +1156,11 @@ Materialization must be idempotent for repeated outbox processing and full rebui
 Required techniques include:
 
 - deterministic anchor normalization
+- monotonic `intakeSeq` per memory
 - stable event normalization
+- single active materializer lease per memory
 - uniqueness constraints for memberships and event sequence allocation
+- projection-generation cutover instead of partial in-place repair
 
 ### 20.4 Operational controls
 
@@ -1008,8 +1168,10 @@ The subsystem should expose at least:
 
 - outbox backlog size
 - oldest pending outbox age
-- attach/create/ignore counts
+- attach/reopen/create/defer/ignore counts
+- deferred ambiguous count
 - ambiguous decision rate
+- dirty and rebuilding thread counts
 - snapshot reduction failures
 - rebuild success and failure counts
 
@@ -1023,7 +1185,7 @@ Required unit coverage:
 
 - anchor normalization
 - intake signal extraction
-- attach/create/ignore decision logic
+- attach/create/defer/ignore decision logic
 - event normalization
 - snapshot reduction
 - lifecycle transitions
@@ -1045,8 +1207,12 @@ Required integration coverage:
 - item commit writes durable outbox
 - worker materializes thread core from outbox
 - rebuild reproduces expected thread state
+- item deletion and source invalidation trigger generation rebuild
 - dormant and reopen scenarios
 - multi-thread membership scenarios
+- ambiguous defer scenarios
+- concurrent outbox ordering and lease behavior
+- anchor rekey, merge, and split scenarios
 
 ### 21.4 Behavioral fixtures
 
@@ -1111,6 +1277,9 @@ V1 is complete when all of the following are true:
 - thread identity, lifecycle, timeline, membership, and snapshot are persisted
 - intake signal and decision pipeline is implemented
 - thread materialization runs through durable outbox plus async worker
+- source invalidation and deletion trigger generation rebuild correctly
+- memory-scoped ordering and exclusivity semantics are enforced
+- anchor rekey, merge, and split are first-class repair operations
 - thread query contract is available
 - boundaries with graph and insight are explicit
 
