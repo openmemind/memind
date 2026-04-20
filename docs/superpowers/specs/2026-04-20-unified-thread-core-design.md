@@ -382,6 +382,7 @@ Rules:
 - source invalidation or repair may mark the thread `STALE_UNSAFE` and require rebuild into the next generation
 - rebuild atomically advances `projectionGeneration` and `lastAppliedIntakeSeq`
 - `STALE_UNSAFE` means the last materialized snapshot is no longer safe to serve as current truth
+- when `projectionStatus = STALE_UNSAFE`, root-row lifecycle, object-state, and recency timestamps are last-known caches, not authoritative current state
 
 ### 9.5 Timeline
 
@@ -621,6 +622,8 @@ Invariants:
 - unique `(memory_id, thread_key)`
 - `anchor_kind` and `anchor_key` on the root row are cached copies of the current active canonical binding
 - `superseded_by_thread_id` threads are never canonical
+- `lifecycle_status`, `object_state`, `last_event_at`, `last_meaningful_update_at`, `closed_at`, and `closure_reason` on the root row are projection-derived cache fields
+- if `projection_status = STALE_UNSAFE`, projection-derived cache fields and cached anchor/display fields on the root row must not be served under their normal current-state names as authoritative truth
 
 ### 12.2 `memory_thread_anchor_binding`
 
@@ -907,8 +910,10 @@ When an intake is finalized as `COMPLETED_DEFERRED`, the system must also persis
 
 - it is a lightweight ambiguity and revisit buffer, not a latent thread object
 - it must not block ordered intake progression
-- later compatible evidence may schedule targeted reconsideration of matching revisit records outside the ordered intake path
-- full rebuild may consume and then discard revisit records
+- it must be created or updated atomically with the same finalization transaction that marks the outbox entry `COMPLETED_DEFERRED`
+- later compatible evidence may schedule targeted reconsideration only by enqueuing a fresh derived `thread_intake_outbox` record with a new `intakeSeq`
+- `thread_intake_revisit` itself must never mutate thread-core state and must never act as a second unordered write path
+- full rebuild may consult revisit records as ambiguity memory and may discard them after the ambiguity is resolved
 
 ### 14.3 Ordering and exclusivity model
 
@@ -919,10 +924,12 @@ Rules:
 - at most one active thread materializer lease may process one `memoryId` at a time
 - outbox entries for one `memoryId` must be finalized in strictly increasing `intakeSeq`
 - rebuild work acquires the same memory-scoped lease as incremental work
-- rebuild establishes a cutover `intakeSeq`; newer entries are applied only after the rebuild commits
+- rebuild establishes a cutover `intakeSeq`; newer entries are applied only after the rebuild job finalizes that ordered prefix
+- rebuild consistency is per-thread, not memory-wide snapshot consistent in v1
+- rebuild may atomically cut over one thread at a time under the memory-scoped lease; different threads in the same memory may temporarily sit at different rebuilt generations during one rebuild job
 - per-thread `event_seq` must be allocated monotonically inside the thread-core transaction using row lock or equivalent compare-and-swap protection
 - `COMPLETED_DEFERRED` is a terminal finalized status and advances the per-memory intake watermark
-- deferred entries are not retried inside the ordered intake path; they may only be reconsidered through `thread_intake_revisit` or full rebuild
+- deferred entries are not retried in place; targeted reconsideration must re-enter the same ordered outbox path through a newly enqueued derived intake, or be handled by full rebuild
 
 ### 14.4 Asynchronous thread worker
 
@@ -955,16 +962,20 @@ Within the thread worker, the following writes must commit atomically:
 
 If snapshot reduction fails, the thread-core transaction fails and the outbox entry remains retryable.
 
+If finalization outcome is `COMPLETED_DEFERRED`, no thread-core rows are required to change. In that case the atomic finalization boundary consists of outbox finalization, `thread_intake_revisit`, and ordered-intake watermark advancement only.
+
 The transaction must also advance:
 
 - `projectionGeneration` when a rebuild generation is cut over
 - `lastAppliedIntakeSeq`
 - canonical `object_state`
 - the final outbox status for the processed `intakeSeq`, or an equivalent exactly-once fencing record
+- the `thread_intake_revisit` record when finalizing `COMPLETED_DEFERRED`
 
 Exactly-once protocol rules:
 
 - success commit must atomically persist thread-core writes, final outbox status, and the new `lastAppliedIntakeSeq = intakeSeq`
+- deferred success commit must atomically persist the final outbox status, the new `lastAppliedIntakeSeq = intakeSeq`, and the corresponding `thread_intake_revisit` write
 - retry logic must treat `(memoryId, intakeSeq)` as already finalized if either the outbox row is final or the memory watermark has already advanced past that `intakeSeq`
 - rebuild cutover must finalize only the ordered intake prefix it has fully incorporated
 - later retries of an already finalized `intakeSeq` must no-op rather than reapply thread changes
@@ -978,7 +989,11 @@ Rebuild semantics:
 - compute replacement thread-core state from authoritative items and graph facts
 - rescan committed items and graph evidence in stable order
 - rerun the same thread materialization logic
-- cut over atomically to the rebuilt projection generations
+- hold a memory-scoped rebuild lease while processing the chosen rebuild prefix
+- choose one rebuild cutover `intakeSeq` prefix and exclude newer intake until that prefix is fully finalized
+- atomically cut over each rebuilt thread independently: root row, active anchor binding cache, current membership projection, events, and snapshot for that thread move to the new `projectionGeneration` in one transaction
+- v1 does not guarantee one memory-wide snapshot-consistent rebuild epoch across all threads; the guarantee is atomic cutover per thread
+- threads not yet rebuilt during that job must remain suppressed from default current projection serving if they are `STALE_UNSAFE` or marked `REBUILDING`
 
 This replaces reliance on legacy thread rows for correctness.
 
@@ -1001,7 +1016,8 @@ Rules:
 - prior generation rows may be retained for audit or garbage-collected later, but correctness must not depend on retention
 - snapshot and membership correctness after invalidation always comes from rebuild, not ad hoc patching
 - `memory_thread_current_membership` rows for a `STALE_UNSAFE` thread must be treated as non-serveable by default until rebuild cutover
-- detail reads for `STALE_UNSAFE` threads must degrade to safe metadata only: identity, lifecycle, lineage, projection head, and explicit stale status
+- detail reads for `STALE_UNSAFE` threads must degrade to safe metadata only: immutable identity, lineage, projection head, explicit stale status, and optional `lastKnown*` cache fields
+- stale default detail must not expose `lifecycleStatus`, `objectState`, `lastEventAt`, or `lastMeaningfulUpdateAt` as authoritative current-state fields
 - default member, event, and item-to-thread reads for a `STALE_UNSAFE` thread must return no current projection content
 - serving the pre-rebuild snapshot or stale current members/events requires explicit audit or stale-read opt-in and must never be the default
 
@@ -1080,7 +1096,7 @@ Instead:
 - future items may cause creation during later incremental materialization or full rebuild
 - `DEFER_AMBIGUOUS` remains an outbox finalization outcome, not a formal thread object
 - unresolved ambiguity is retained through `thread_intake_revisit`, not through `memory_thread_candidate`
-- targeted revisit may later reprocess the deferred source together with new evidence outside the ordered intake path
+- targeted revisit may later reprocess the deferred source together with new evidence only by enqueuing a fresh derived outbox intake with a new `intakeSeq`
 
 ## 16. Event Model
 
@@ -1259,6 +1275,8 @@ Thread lists should filter by:
 - anchor label or alias
 - updated time range
 
+If `projectionStatus = STALE_UNSAFE`, default list filtering must not treat cached projection-derived fields as authoritative current state. Stale threads may be filtered by `projectionStatus`, identity, lineage, or explicit `lastKnown*` cache filters only if the API exposes them.
+
 ### 19.3 Return-shape requirement
 
 The default thread detail response should include:
@@ -1278,9 +1296,24 @@ If a thread has been superseded by merge, the default detail query should either
 
 If `projectionStatus = STALE_UNSAFE`, default detail response must omit:
 
+- `lifecycleStatus`
+- `objectState`
+- `lastEventAt`
+- `lastMeaningfulUpdateAt`
 - cached snapshot payload
 - current event counts
 - current membership counts
+
+Instead, stale default detail may expose only:
+
+- immutable identity fields
+- lineage metadata
+- projection head metadata
+- explicit stale marker or stale reason
+- optional `lastKnownLifecycleStatus`
+- optional `lastKnownObjectState`
+- optional `lastKnownLastEventAt`
+- optional `lastKnownLastMeaningfulUpdateAt`
 
 ### 19.4 Default serving rules
 
@@ -1289,12 +1322,14 @@ Default thread queries are current-projection reads, not historical audit reads.
 Rules:
 
 - `getThread`, `listThreads`, `listThreadMembers`, and `listThreadsByItem` operate on the current active projection only by default
+- `listThreads` must not expose stale threads with normal current-state fields populated from projection-derived caches; it must either omit those fields or expose them only through `lastKnown*` names
 - `listThreadMembers` reads from `memory_thread_current_membership` and returns only rows where `visibility_status = ACTIVE` by default
 - `listThreadsByItem` resolves only `memory_thread_current_membership` rows where `visibility_status = ACTIVE` by default
 - `listThreadEvents` returns only the active `projectionGeneration` by default
 - `resolveThreadByAnchor` follows active bindings first and redirected bindings second by default
 - historical generations, retired memberships, and stale pre-rebuild projections are available only through explicit audit or history opt-in
 - if `projectionStatus = STALE_UNSAFE`, default detail, member, event, and item-to-thread reads must suppress current projection content and expose explicit stale-state metadata instead
+- stale default detail must use `lastKnown*` cache field names or omission, never the normal current-state field names for projection-derived values
 
 ## 20. Consistency, Failure Handling, and Operations
 
@@ -1323,6 +1358,8 @@ Required techniques include:
 - single active materializer lease per memory
 - uniqueness constraints for memberships and event sequence allocation
 - projection-generation cutover instead of partial in-place repair
+- one ordered mutation path for both normal intake and revisit-driven reconsideration
+- per-thread atomic rebuild cutover under a memory-scoped rebuild lease
 
 ### 20.4 Operational controls
 
@@ -1377,12 +1414,14 @@ Required integration coverage:
 - multi-thread membership scenarios
 - ambiguous defer scenarios
 - deferred entries do not block later ordered intake processing
-- deferred revisit can later attach or create with new evidence
+- `COMPLETED_DEFERRED` finalization atomically persists the revisit record
+- deferred revisit can later attach or create with new evidence only by re-entering `thread_intake_outbox` with a new `intakeSeq`
 - concurrent outbox ordering and lease behavior
 - crash-and-retry does not duplicate an already finalized `intakeSeq`
 - anchor rekey, redirect resolution, merge, and split scenarios
 - stale-unsafe thread detail suppression scenarios
 - stale-unsafe member and event suppression scenarios
+- per-thread rebuild cutover is atomic while same-memory threads may temporarily be on different rebuilt generations
 
 ### 21.4 Behavioral fixtures
 
