@@ -369,6 +369,7 @@ Required fields:
 - `projectionGeneration`
 - `projectionStatus`
 - `lastAppliedIntakeSeq`
+- `projectionJobId`
 
 Canonical projection statuses:
 
@@ -388,6 +389,7 @@ Rules:
 - `REBUILDING` means replacement projection work is in progress under rebuild control; default serving must follow degraded non-authoritative semantics until cutover completes
 - `FAILED` means the thread could not be materialized into a safe current projection and requires operator repair or successful rebuild before default current serving resumes
 - `lastAppliedIntakeSeq` on the root row is per-thread projection progress, not the memory-global exactly-once checkpoint
+- `projectionJobId` identifies the materialization or rebuild job that produced the current projection generation and is used for restart-safe cutover idempotency
 
 ### 9.5 Timeline
 
@@ -622,6 +624,7 @@ Recommended fields:
 - `projection_generation`
 - `projection_status`
 - `last_applied_intake_seq`
+- `projection_job_id`
 - `snapshot_version`
 - `created_at`
 - `updated_at`
@@ -633,6 +636,7 @@ Invariants:
 - `superseded_by_thread_id` threads are never canonical
 - `lifecycle_status`, `object_state`, `last_event_at`, `last_meaningful_update_at`, `closed_at`, and `closure_reason` on the root row are projection-derived cache fields
 - if `projection_status = STALE_UNSAFE | REBUILDING | FAILED`, projection-derived cache fields and cached anchor/display fields on the root row must not be served under their normal current-state names as authoritative truth
+- `projection_job_id` must identify the job that last cut over the current projection generation; replay of the same job must not advance the same thread to a second new generation
 
 ### 12.2 `memory_thread_anchor_binding`
 
@@ -758,6 +762,7 @@ Recommended fields:
 - `thread_id`
 - `projection_generation`
 - `event_seq`
+- `normalized_event_key`
 - `event_time`
 - `event_type`
 - `event_payload_json`
@@ -770,6 +775,7 @@ Recommended fields:
 Invariants:
 
 - unique `(memory_id, thread_id, projection_generation, event_seq)`
+- unique `(memory_id, thread_id, projection_generation, normalized_event_key)`
 - append-only semantics within one projection generation
 
 ### 12.6 `memory_thread_event_source`
@@ -808,6 +814,10 @@ Canonical source roles:
 - `SUPPORT`
 - `ANCHOR_EVIDENCE`
 - `CONTRADICTION`
+
+Invariants:
+
+- unique `(thread_event_id, source_type, source_biz_id, source_revision, source_role)`
 
 ### 12.7 `memory_thread_snapshot`
 
@@ -865,6 +875,7 @@ Invariants:
 - unique `memory_id`
 - `last_finalized_intake_seq` is monotonic per memory
 - only the active lease holder may advance `last_finalized_intake_seq` or finalize a rebuild cutover prefix
+- the same `active_rebuild_job_id` must be reused when resuming an interrupted rebuild for the same cutover prefix
 - `memory_thread.last_applied_intake_seq` may trail or differ across threads and must never be used as the memory-global exactly-once fence
 
 ## 13. Objects Explicitly Deferred
@@ -937,6 +948,13 @@ It is infrastructure, not thread domain state:
 - it must not store semantically normalized thread hints as durable write-path truth
 - terminal finalization metadata must remain on the outbox row so operators can diagnose and replay safely
 
+`FAILED_TERMINAL` eligibility rules:
+
+- terminal failure must record `terminalFailureClass` and reason
+- `terminalFailureClass = NOOP_CONFIRMED` means the intake would not mutate any thread projection
+- `terminalFailureClass = BOUNDED_THREADS_DEGRADED` means all deterministically impacted existing threads are atomically marked `FAILED` before checkpoint advancement
+- `FAILED_TERMINAL` must not be used if the unresolved intake could create a new thread or mutate an unknown or unbounded thread set
+
 When an intake is finalized as `COMPLETED_DEFERRED`, the system must also persist a `thread_intake_revisit` record containing at least:
 
 - `memoryId`
@@ -974,6 +992,7 @@ Rules:
 - `COMPLETED`, `COMPLETED_DEFERRED`, and `FAILED_TERMINAL` are finalized statuses and advance `thread_materialization_state.last_finalized_intake_seq`
 - `FAILED_RETRYABLE` is not final, does not advance the ordered checkpoint, and blocks later intake finalization until it succeeds or is promoted to `FAILED_TERMINAL`
 - deferred entries are not retried in place; targeted reconsideration must re-enter the same ordered outbox path through a newly enqueued derived intake, or be handled by full rebuild
+- if `FAILED_TERMINAL` uses `BOUNDED_THREADS_DEGRADED`, those impacted threads must be atomically moved into query-safe degraded serving before the checkpoint advances
 
 ### 14.4 Asynchronous thread worker
 
@@ -1009,7 +1028,7 @@ If snapshot reduction fails, the thread-core transaction fails and the outbox en
 
 If finalization outcome is `COMPLETED_DEFERRED`, no thread-core rows are required to change. In that case the atomic finalization boundary consists of outbox finalization, `thread_intake_revisit`, and `thread_materialization_state.last_finalized_intake_seq` advancement only.
 
-If finalization outcome is `FAILED_TERMINAL`, no thread-core rows are required to change. In that case the atomic finalization boundary consists of terminal outbox finalization metadata and `thread_materialization_state.last_finalized_intake_seq` advancement only.
+If finalization outcome is `FAILED_TERMINAL`, no thread-core rows are required to change only for `NOOP_CONFIRMED`. For `BOUNDED_THREADS_DEGRADED`, the same atomic boundary must also mark every deterministically impacted existing thread `FAILED`.
 
 The transaction must also advance:
 
@@ -1028,6 +1047,7 @@ Exactly-once protocol rules:
 - retry logic must treat `(memoryId, intakeSeq)` as already finalized only by consulting the final outbox status or `thread_materialization_state.last_finalized_intake_seq`, never by inferring from any thread root row alone
 - rebuild cutover must finalize only the ordered intake prefix it has fully incorporated
 - later retries of an already finalized `intakeSeq` must no-op rather than reapply thread changes
+- event replay or targeted reconsideration must be deduplicated at source-revision and normalized-event-key level within one active projection generation; a new `intakeSeq` alone is not enough to justify duplicate events
 
 ### 14.6 Rebuild path
 
@@ -1044,6 +1064,9 @@ Rebuild semantics:
 - v1 does not guarantee one memory-wide snapshot-consistent rebuild epoch across all threads; the guarantee is atomic cutover per thread
 - threads not yet rebuilt during that job must remain suppressed from default current projection serving if they are `STALE_UNSAFE` or marked `REBUILDING`
 - rebuild must ignore `thread_intake_revisit` as a semantic input; revisit is operational ambiguity memory, not rebuild source-of-truth
+- a rebuild must use one stable `active_rebuild_job_id` for the chosen cutover prefix and must resume with that same job id after restart until the job is completed or explicitly abandoned
+- per-thread rebuild cutover must compare-and-swap on `projection_job_id`; if the thread already carries the current `active_rebuild_job_id`, retry must no-op rather than bump `projectionGeneration` again
+- rebuild prefix finalization is allowed only after deterministic rescan confirms that every thread in scope for the cutover prefix is either already cut over by the current job id or deterministically absent from the rebuilt result
 
 This replaces reliance on legacy thread rows for correctness.
 
@@ -1070,6 +1093,7 @@ Rules:
 - stale default detail must not expose `lifecycleStatus`, `objectState`, `lastEventAt`, or `lastMeaningfulUpdateAt` as authoritative current-state fields
 - default member, event, and item-to-thread reads for a `STALE_UNSAFE`, `REBUILDING`, or `FAILED` thread must return no current projection content
 - serving the pre-rebuild snapshot or stale current members/events requires explicit audit or stale-read opt-in and must never be the default
+- if a terminalized intake degraded bounded impacted threads, those threads must follow the same default serving suppression contract as `FAILED`
 
 ## 15. Intake Signal and Decision Model
 
@@ -1185,6 +1209,9 @@ Rules:
 - event payload must carry explicit payload schema and normalization versions
 - event type is reducer-critical and must not be hidden only inside metadata
 - current timeline queries read only the active `projectionGeneration` unless audit mode explicitly asks for historical generations
+- event normalization must emit a deterministic `normalizedEventKey` for each thread event
+- replay, explicit reprocessing, or targeted revisit of the same source revision into the same thread generation must upsert or no-op on `normalizedEventKey` rather than append a duplicate event
+- if new evidence would reinterpret an already materialized source revision into a materially different event set, the correction must occur through rebuild or new projection generation, not by duplicating conflicting events in the same generation
 
 ### 16.3 Meaningful update semantics
 
@@ -1334,9 +1361,16 @@ Thread lists should filter by:
 - anchor label or alias
 - updated time range
 
-If `projectionStatus = STALE_UNSAFE`, default list filtering must not treat cached projection-derived fields as authoritative current state. Stale threads may be filtered by `projectionStatus`, identity, lineage, or explicit `lastKnown*` cache filters only if the API exposes them.
+If `projectionStatus = STALE_UNSAFE`, default list filtering must not treat cached projection-derived fields as authoritative current state. Stale threads may be filtered by `projectionStatus`, identity, lineage, or explicit opt-in `lastKnown*` filters only if the API exposes them.
 
 If `projectionStatus = REBUILDING | FAILED`, default list filtering must apply the same non-authoritative rule as `STALE_UNSAFE`.
+
+Default filter closure rules:
+
+- `lifecycleStatus` and `objectState` filters apply only to `HEALTHY` threads by default
+- threads in `STALE_UNSAFE | REBUILDING | FAILED` must be excluded from `lifecycleStatus` and `objectState` filter matches unless the API explicitly exposes opt-in `lastKnownLifecycleStatus` or `lastKnownObjectState` filters
+- `updated time range` on degraded threads must be interpreted only from source-safe or explicitly labeled `lastKnown*` timestamps, never from unlabeled projection-derived cache fields
+- if no safe timestamp is available for a degraded thread, it must not match `updated time range` filters by default
 
 ### 19.3 Return-shape requirement
 
@@ -1393,6 +1427,7 @@ Rules:
 - historical generations, retired memberships, and stale pre-rebuild projections are available only through explicit audit or history opt-in
 - if `projectionStatus = STALE_UNSAFE | REBUILDING | FAILED`, default detail, member, event, and item-to-thread reads must suppress current projection content and expose explicit projection-status metadata instead
 - degraded default detail must use `lastKnown*` cache field names or omission, never the normal current-state field names for projection-derived values
+- degraded threads must not match default `lifecycleStatus` or `objectState` filters unless the caller explicitly opts into `lastKnown*` filter semantics
 
 ## 20. Consistency, Failure Handling, and Operations
 
@@ -1415,6 +1450,8 @@ If repeated failure crosses the terminal-failure policy or the error is classifi
 - terminal finalization advances `thread_materialization_state.last_finalized_intake_seq` so later intake is not permanently blocked
 - the source facts remain durable and available for later rebuild or explicit replay by enqueuing a new derived intake
 - terminal failure must be surfaced as an operator-visible condition, never as a silent drop
+- `FAILED_TERMINAL` must not be used to silently skip a potentially thread-creating or unbounded-impact intake
+- if `terminalFailureClass = BOUNDED_THREADS_DEGRADED`, every deterministically impacted existing thread must be atomically degraded to `FAILED` before checkpoint advancement
 
 ### 20.3 Idempotency requirement
 
@@ -1427,10 +1464,12 @@ Required techniques include:
 - stable event normalization
 - single active materializer lease per memory
 - uniqueness constraints for memberships and event sequence allocation
+- stable `normalized_event_key` generation and uniqueness
 - projection-generation cutover instead of partial in-place repair
 - one ordered mutation path for both normal intake and revisit-driven reconsideration
 - per-thread atomic rebuild cutover under a memory-scoped rebuild lease
 - explicit memory-scoped checkpoint fencing through `thread_materialization_state`
+- restart-safe rebuild job identity through `projection_job_id` and `active_rebuild_job_id`
 
 ### 20.4 Operational controls
 
@@ -1460,6 +1499,7 @@ Required unit coverage:
 - intake signal extraction
 - attach/create/defer/ignore decision logic
 - event normalization
+- normalized-event-key dedup semantics
 - snapshot reduction
 - lifecycle transitions
 
@@ -1472,6 +1512,8 @@ Required store coverage:
 - current membership cutover behavior
 - primary membership constraint
 - append-only event semantics
+- normalized-event-key uniqueness
+- event-source dedup uniqueness
 - snapshot replacement semantics
 - `thread_materialization_state` monotonic checkpoint behavior
 
@@ -1492,14 +1534,18 @@ Required integration coverage:
 - deferred revisit can later attach or create with new evidence only by re-entering `thread_intake_outbox` with a new `intakeSeq`
 - retryable poison intake blocks later finalization until success or promotion to `FAILED_TERMINAL`
 - `FAILED_TERMINAL` finalization advances the memory checkpoint without silently losing rebuildability of the source facts
+- `FAILED_TERMINAL` is rejected when the unresolved intake could still create a new thread or mutate an unknown thread set
+- bounded-impact `FAILED_TERMINAL` atomically degrades all deterministically impacted existing threads before checkpoint advancement
 - concurrent outbox ordering and lease behavior
 - crash-and-retry does not duplicate an already finalized `intakeSeq`
+- replay or targeted reconsideration of the same source revision does not duplicate events in the same thread generation
 - anchor rekey, redirect resolution, merge, and split scenarios
 - split-origin anchors stay retired and do not auto-resolve to an arbitrary child
 - stale-unsafe thread detail suppression scenarios
 - stale-unsafe member and event suppression scenarios
 - `REBUILDING` and `FAILED` threads follow the same safe-serving suppression contract as `STALE_UNSAFE`
 - per-thread rebuild cutover is atomic while same-memory threads may temporarily be on different rebuilt generations
+- interrupted rebuild resumes with the same rebuild job id and does not double-bump `projectionGeneration` on already cut-over threads
 
 ### 21.4 Behavioral fixtures
 
