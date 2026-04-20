@@ -369,7 +369,7 @@ Required fields:
 Canonical projection statuses:
 
 - `HEALTHY`
-- `DIRTY`
+- `STALE_UNSAFE`
 - `REBUILDING`
 - `FAILED`
 
@@ -377,8 +377,9 @@ Rules:
 
 - only one projection generation is current for query and retrieval purposes
 - additive updates may append within the current generation
-- source invalidation or repair may mark the thread `DIRTY` and require rebuild into the next generation
+- source invalidation or repair may mark the thread `STALE_UNSAFE` and require rebuild into the next generation
 - rebuild atomically advances `projectionGeneration` and `lastAppliedIntakeSeq`
+- `STALE_UNSAFE` means the last materialized snapshot is no longer safe to serve as current truth
 
 ### 9.5 Timeline
 
@@ -551,9 +552,21 @@ Anchor quality is expected to improve over time. V1 must support the following f
 - child threads are created with `parentThreadId`
 - split is performed as a rebuild or explicit repair operation, not as opportunistic incremental mutation
 
+### 11.6 Anchor binding history
+
+V1 must preserve anchor binding history rather than storing only the latest active anchor on the thread root row.
+
+Rules:
+
+- every canonical anchor is represented as an explicit binding record
+- old anchors are retained as historical bindings after `ANCHOR_REKEY`
+- historical bindings may redirect to the current canonical thread
+- `resolveThreadByAnchor` must resolve both active bindings and redirected historical bindings
+- `normalizedAliases[]` are display and match aliases, not a substitute for anchor binding history
+
 ## 12. Persistence Model
 
-V1 persists five required thread-core objects.
+V1 persists six required thread-core objects.
 
 In addition, the design requires one non-core infrastructure object:
 
@@ -603,10 +616,45 @@ Recommended fields:
 Invariants:
 
 - unique `(memory_id, thread_key)`
-- at most one active canonical anchor binding per `(memory_id, anchor_kind, anchor_key)`
+- `anchor_kind` and `anchor_key` on the root row are cached copies of the current active canonical binding
 - `superseded_by_thread_id` threads are never canonical
 
-### 12.2 `memory_thread_membership`
+### 12.2 `memory_thread_anchor_binding`
+
+This stores canonical anchor bindings and redirected anchor history.
+
+Required responsibilities:
+
+- enforce active canonical anchor uniqueness
+- preserve old anchor bindings after rekey
+- resolve historical anchors to the current canonical thread
+
+Recommended fields:
+
+- `biz_id`
+- `memory_id`
+- `thread_id`
+- `anchor_kind`
+- `anchor_key`
+- `binding_status`
+- `redirect_thread_id`
+- `bound_at`
+- `unbound_at`
+- `created_at`
+- `updated_at`
+
+Canonical binding statuses:
+
+- `ACTIVE`
+- `RETIRED`
+- `REDIRECTED`
+
+Invariants:
+
+- unique active `(memory_id, anchor_kind, anchor_key)` where `binding_status = ACTIVE`
+- redirected bindings must point at the canonical destination thread through `redirect_thread_id`
+
+### 12.3 `memory_thread_membership`
 
 This replaces the old `memory_thread_item` semantics.
 
@@ -624,9 +672,11 @@ Recommended fields:
 - `projection_generation`
 - `item_id`
 - `membership_role`
+- `membership_status`
 - `is_primary`
 - `relevance_weight`
 - `contribution_tags_json`
+- `retired_at`
 - `created_at`
 - `updated_at`
 
@@ -637,12 +687,17 @@ Canonical membership roles:
 - `REFERENCE`
 - `CONTRADICTING`
 
+Canonical membership statuses:
+
+- `ACTIVE`
+- `RETIRED`
+
 Invariants:
 
 - unique `(memory_id, thread_id, projection_generation, item_id)`
-- at most one active `is_primary = true` membership for a given `item_id` in one `memory_id`
+- unique active primary `(memory_id, item_id)` where `is_primary = true` and `membership_status = ACTIVE`
 
-### 12.3 `memory_thread_event`
+### 12.4 `memory_thread_event`
 
 This stores append-only normalized thread events.
 
@@ -674,7 +729,7 @@ Invariants:
 - unique `(memory_id, thread_id, projection_generation, event_seq)`
 - append-only semantics within one projection generation
 
-### 12.4 `memory_thread_event_source`
+### 12.5 `memory_thread_event_source`
 
 This maps thread events to their source evidence.
 
@@ -711,7 +766,7 @@ Canonical source roles:
 - `ANCHOR_EVIDENCE`
 - `CONTRADICTION`
 
-### 12.5 `memory_thread_snapshot`
+### 12.6 `memory_thread_snapshot`
 
 This stores the current reduced thread state.
 
@@ -781,9 +836,15 @@ Every item commit that could affect threads must persist a durable outbox record
 - `triggerRevision`
 - `intakeSeq`
 - `status`
-- `deferredUntil`
 - `attemptCount`
 - enqueue time
+
+Canonical outbox statuses:
+
+- `PENDING`
+- `COMPLETED`
+- `COMPLETED_DEFERRED`
+- `FAILED_RETRYABLE`
 
 Outbox is required so thread work is retryable and rebuildable.
 
@@ -802,10 +863,12 @@ V1 explicitly prioritizes correctness over maximum parallelism.
 Rules:
 
 - at most one active thread materializer lease may process one `memoryId` at a time
-- outbox entries for one `memoryId` must be applied in strictly increasing `intakeSeq`
+- outbox entries for one `memoryId` must be finalized in strictly increasing `intakeSeq`
 - rebuild work acquires the same memory-scoped lease as incremental work
 - rebuild establishes a cutover `intakeSeq`; newer entries are applied only after the rebuild commits
 - per-thread `event_seq` must be allocated monotonically inside the thread-core transaction using row lock or equivalent compare-and-swap protection
+- `COMPLETED_DEFERRED` is a terminal finalized status and advances the per-memory intake watermark
+- deferred entries are not retried inside the ordered intake path; they may only be reconsidered through later evidence or full rebuild
 
 ### 14.4 Asynchronous thread worker
 
@@ -822,13 +885,14 @@ Worker stages:
 7. upsert memberships
 8. append thread events and event-source links
 9. reduce and write snapshot
-10. update outbox status to complete, deferred, or retryable failure
+10. update outbox status to `COMPLETED`, `COMPLETED_DEFERRED`, or `FAILED_RETRYABLE`
 
 ### 14.5 Thread-core transaction boundary
 
 Within the thread worker, the following writes must commit atomically:
 
 - `memory_thread`
+- `memory_thread_anchor_binding`
 - `memory_thread_membership`
 - `memory_thread_event`
 - `memory_thread_event_source`
@@ -841,6 +905,7 @@ The transaction must also advance:
 - `projectionGeneration` when a rebuild generation is cut over
 - `lastAppliedIntakeSeq`
 - canonical `object_state`
+- the final outbox status for the processed `intakeSeq`, or an equivalent exactly-once fencing record
 
 ### 14.6 Rebuild path
 
@@ -859,7 +924,7 @@ This replaces reliance on legacy thread rows for correctness.
 
 V1 does not rely on in-place event retraction.
 
-The following source-fact changes must mark impacted threads `DIRTY` and schedule generation rebuild:
+The following source-fact changes must mark impacted threads `STALE_UNSAFE` and schedule generation rebuild:
 
 - item deletion
 - item revision or content replacement
@@ -869,10 +934,13 @@ The following source-fact changes must mark impacted threads `DIRTY` and schedul
 
 Rules:
 
-- current query traffic continues to read the last `HEALTHY` generation until rebuild cutover
+- default query traffic must not continue to expose stale derived thread state once a thread is marked `STALE_UNSAFE`
 - successful rebuild advances `projectionGeneration`
 - prior generation rows may be retained for audit or garbage-collected later, but correctness must not depend on retention
 - snapshot and membership correctness after invalidation always comes from rebuild, not ad hoc patching
+- member and item-to-thread reads must immediately suppress `ACTIVE` rows whose source items are deleted or invalidated
+- detail reads for `STALE_UNSAFE` threads must degrade to safe metadata only: identity, lifecycle, lineage, projection head, and explicit stale status
+- serving the pre-rebuild snapshot or stale current members/events requires explicit audit or stale-read opt-in and must never be the default
 
 ## 15. Intake Signal and Decision Model
 
@@ -1109,6 +1177,8 @@ The thread query layer must support:
 - `listThreadsByItem(itemId)`
 - `resolveThreadByAnchor(memoryId, anchorKind, anchorKey)`
 
+`resolveThreadByAnchor` must consult `memory_thread_anchor_binding`, not only the cached root-row anchor.
+
 ### 19.2 Minimum list filters
 
 Thread lists should filter by:
@@ -1133,6 +1203,20 @@ The default thread detail response should include:
 Timeline and member rows should be queried separately.
 
 If a thread has been superseded by merge, the default detail query should either redirect to the canonical survivor or expose `supersededByThreadId` explicitly.
+
+### 19.4 Default serving rules
+
+Default thread queries are current-projection reads, not historical audit reads.
+
+Rules:
+
+- `getThread`, `listThreads`, `listThreadMembers`, and `listThreadsByItem` operate on the current active projection only by default
+- `listThreadMembers` returns only memberships where `membership_status = ACTIVE` by default
+- `listThreadsByItem` resolves only current active memberships by default
+- `listThreadEvents` returns only the active `projectionGeneration` by default
+- `resolveThreadByAnchor` follows active bindings first and redirected bindings second by default
+- historical generations, retired memberships, and stale pre-rebuild projections are available only through explicit audit or history opt-in
+- if `projectionStatus = STALE_UNSAFE`, default detail reads must omit cached snapshot payload and expose explicit stale-state metadata instead
 
 ## 20. Consistency, Failure Handling, and Operations
 
@@ -1171,7 +1255,7 @@ The subsystem should expose at least:
 - attach/reopen/create/defer/ignore counts
 - deferred ambiguous count
 - ambiguous decision rate
-- dirty and rebuilding thread counts
+- stale-unsafe and rebuilding thread counts
 - snapshot reduction failures
 - rebuild success and failure counts
 
@@ -1211,8 +1295,11 @@ Required integration coverage:
 - dormant and reopen scenarios
 - multi-thread membership scenarios
 - ambiguous defer scenarios
+- deferred entries do not block later ordered intake processing
 - concurrent outbox ordering and lease behavior
-- anchor rekey, merge, and split scenarios
+- crash-and-retry does not duplicate an already finalized `intakeSeq`
+- anchor rekey, redirect resolution, merge, and split scenarios
+- stale-unsafe thread detail suppression scenarios
 
 ### 21.4 Behavioral fixtures
 
@@ -1280,7 +1367,9 @@ V1 is complete when all of the following are true:
 - source invalidation and deletion trigger generation rebuild correctly
 - memory-scoped ordering and exclusivity semantics are enforced
 - anchor rekey, merge, and split are first-class repair operations
+- anchor binding history and redirect resolution are implemented
 - thread query contract is available
+- default query paths read current active projection only
 - boundaries with graph and insight are explicit
 
 V1 does not require:
