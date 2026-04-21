@@ -14,20 +14,15 @@
 package com.openmemind.ai.memory.server.domain.memorythread.view;
 
 import java.time.Instant;
-import java.util.Map;
 
 public record AdminMemoryThreadItemView(
-        Long threadItemId,
         String userId,
         String agentId,
         String memoryId,
-        Long threadId,
         String threadKey,
         Long itemId,
         String role,
-        double membershipWeight,
-        int sequenceHint,
-        Instant joinedAt,
-        Map<String, Object> metadata,
+        boolean primary,
+        double relevanceWeight,
         Instant createdAt,
         Instant updatedAt) {}

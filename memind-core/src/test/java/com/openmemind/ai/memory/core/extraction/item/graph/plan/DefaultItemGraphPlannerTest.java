@@ -1,0 +1,216 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.openmemind.ai.memory.core.extraction.item.graph.plan;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import com.openmemind.ai.memory.core.builder.ItemGraphOptions;
+import com.openmemind.ai.memory.core.data.DefaultMemoryId;
+import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.data.MemoryItem;
+import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
+import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
+import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.alias.EntityAliasIndexPlanner;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.ExactCanonicalEntityResolutionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.graph.link.semantic.SemanticItemLinker;
+import com.openmemind.ai.memory.core.extraction.item.graph.link.temporal.TemporalItemLinker;
+import com.openmemind.ai.memory.core.extraction.item.graph.pipeline.GraphHintNormalizer;
+import com.openmemind.ai.memory.core.extraction.item.support.ExtractedGraphHints;
+import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
+import com.openmemind.ai.memory.core.store.graph.ItemLink;
+import com.openmemind.ai.memory.core.store.graph.ItemLinkType;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
+
+class DefaultItemGraphPlannerTest {
+
+    private static final MemoryId MEMORY_ID = DefaultMemoryId.of("user-1", "agent-1");
+    private static final Instant NOW = Instant.parse("2026-04-19T00:00:00Z");
+
+    @Test
+    void plannerBuildsTypedWritePlanFromStructuredTemporalAndSemanticFamilies() {
+        var planner =
+                planner(
+                        temporalLinkerReturning(beforeLink(101L, 102L)),
+                        semanticLinkerReturning(semanticLink(101L, 201L)));
+
+        StepVerifier.create(planner.plan(MEMORY_ID, batchItems(), batchEntries()))
+                .assertNext(
+                        result -> {
+                            // Causal relations in this fixture come from GraphHintNormalizer over
+                            // batchEntries(), not from the temporal or semantic linker stubs.
+                            assertThat(result.writePlan().temporalRelations()).hasSize(1);
+                            assertThat(result.writePlan().semanticRelations()).hasSize(1);
+                            assertThat(result.writePlan().causalRelations()).hasSize(1);
+                            assertThat(result.stats().structuredItemLinkCount()).isEqualTo(1);
+                            assertThat(result.stats().temporalCreatedLinkCount()).isEqualTo(1);
+                            assertThat(result.stats().semanticLinkCount()).isEqualTo(1);
+                        })
+                .verifyComplete();
+    }
+
+    @Test
+    void plannerTurnsStageFailuresIntoFamilyScopedDegradationInsteadOfThrowing() {
+        var planner = planner(temporalLinkerFailing(), semanticLinkerFailing());
+
+        StepVerifier.create(planner.plan(MEMORY_ID, batchItems(), batchEntries()))
+                .assertNext(
+                        result -> {
+                            assertThat(result.stats().temporalDegraded()).isTrue();
+                            assertThat(result.stats().semanticDegraded()).isTrue();
+                        })
+                .verifyComplete();
+    }
+
+    private static DefaultItemGraphPlanner planner(
+            TemporalItemLinker temporalLinker, SemanticItemLinker semanticLinker) {
+        return new DefaultItemGraphPlanner(
+                new GraphHintNormalizer(),
+                new ExactCanonicalEntityResolutionStrategy(),
+                new EntityAliasIndexPlanner(),
+                temporalLinker,
+                semanticLinker,
+                ItemGraphOptions.defaults().withEnabled(true));
+    }
+
+    private static TemporalItemLinker temporalLinkerReturning(ItemLink link) {
+        var linker = mock(TemporalItemLinker.class);
+        when(linker.plan(eq(MEMORY_ID), any()))
+                .thenReturn(
+                        Mono.just(
+                                new TemporalItemLinker.TemporalLinkingPlan(
+                                        List.of(link),
+                                        TemporalItemLinker.TemporalLinkingStats.success(
+                                                2, 0, 0, 0, 1, 1, 0L, 0L, 0L, false))));
+        return linker;
+    }
+
+    private static TemporalItemLinker temporalLinkerFailing() {
+        var linker = mock(TemporalItemLinker.class);
+        when(linker.plan(eq(MEMORY_ID), any()))
+                .thenReturn(Mono.error(new IllegalStateException("temporal stage failed")));
+        return linker;
+    }
+
+    private static SemanticItemLinker semanticLinkerReturning(ItemLink link) {
+        var linker = mock(SemanticItemLinker.class);
+        when(linker.plan(eq(MEMORY_ID), any()))
+                .thenReturn(
+                        Mono.just(
+                                new SemanticItemLinker.SemanticLinkingPlan(
+                                        List.of(link),
+                                        new SemanticItemLinker.SemanticLinkingStats(
+                                                0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0L, 0L, 0L,
+                                                0L, false))));
+        return linker;
+    }
+
+    private static SemanticItemLinker semanticLinkerFailing() {
+        var linker = mock(SemanticItemLinker.class);
+        when(linker.plan(eq(MEMORY_ID), any()))
+                .thenReturn(Mono.error(new IllegalStateException("semantic stage failed")));
+        return linker;
+    }
+
+    private static List<MemoryItem> batchItems() {
+        return List.of(item(101L, "Cause item"), item(102L, "Effect item"));
+    }
+
+    private static List<ExtractedMemoryEntry> batchEntries() {
+        return List.of(
+                entry("Cause item", List.of(), List.of()),
+                entry(
+                        "Effect item",
+                        List.of(
+                                new ExtractedGraphHints.ExtractedEntityHint(
+                                        "OpenAI", "organization", 0.95f)),
+                        List.of(
+                                new ExtractedGraphHints.ExtractedCausalRelationHint(
+                                        0, "caused_by", 0.92f))));
+    }
+
+    private static MemoryItem item(Long id, String content) {
+        return new MemoryItem(
+                id,
+                MEMORY_ID.toIdentifier(),
+                content,
+                MemoryScope.USER,
+                MemoryCategory.EVENT,
+                "conversation",
+                "vector-" + id,
+                "raw-" + id,
+                "hash-" + id,
+                NOW.plusSeconds(id),
+                NOW,
+                Map.of(),
+                NOW,
+                MemoryItemType.FACT);
+    }
+
+    private static ExtractedMemoryEntry entry(
+            String content,
+            List<ExtractedGraphHints.ExtractedEntityHint> entityHints,
+            List<ExtractedGraphHints.ExtractedCausalRelationHint> causalHints) {
+        return new ExtractedMemoryEntry(
+                content,
+                1.0f,
+                null,
+                null,
+                null,
+                null,
+                NOW,
+                "raw-" + Math.abs(content.hashCode()),
+                null,
+                List.of(),
+                Map.of(),
+                MemoryItemType.FACT,
+                "event",
+                new ExtractedGraphHints(entityHints, causalHints));
+    }
+
+    private static ItemLink beforeLink(long sourceItemId, long targetItemId) {
+        return new ItemLink(
+                MEMORY_ID.toIdentifier(),
+                sourceItemId,
+                targetItemId,
+                ItemLinkType.TEMPORAL,
+                "before",
+                null,
+                0.88d,
+                Map.of(),
+                NOW);
+    }
+
+    private static ItemLink semanticLink(long sourceItemId, long targetItemId) {
+        return new ItemLink(
+                MEMORY_ID.toIdentifier(),
+                sourceItemId,
+                targetItemId,
+                ItemLinkType.SEMANTIC,
+                null,
+                "vector_search",
+                0.81d,
+                Map.of(),
+                NOW);
+    }
+}

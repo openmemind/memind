@@ -24,15 +24,19 @@ import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
 import com.openmemind.ai.memory.core.data.MemoryResource;
-import com.openmemind.ai.memory.core.data.MemoryThread;
-import com.openmemind.ai.memory.core.data.MemoryThreadItem;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
-import com.openmemind.ai.memory.core.data.enums.MemoryThreadRole;
-import com.openmemind.ai.memory.core.data.enums.MemoryThreadStatus;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadLifecycleStatus;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadMembershipRole;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadObjectState;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadProjectionState;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadType;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadMembership;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadProjection;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadRuntimeState;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import java.time.Instant;
 import java.util.List;
@@ -167,19 +171,33 @@ class InMemoryMemoryStoreTest {
     }
 
     @Test
-    @DisplayName("threadOperations persists memory threads in the in-memory store")
-    void threadOperationsPersistsMemoryThreadsInTheInMemoryStore() {
+    @DisplayName("threadOperations persists many-to-many memberships in the in-memory store")
+    void threadOperationsPersistsManyToManyMembershipsInTheInMemoryStore() {
         var store = new InMemoryMemoryStore();
 
-        store.threadOperations().upsertThreads(MEMORY_ID, List.of(thread(101L)));
-        store.threadOperations().upsertThreadItems(MEMORY_ID, List.of(threadItem(201L, 101L, 1)));
+        store.threadOperations()
+                .replaceProjection(
+                        MEMORY_ID,
+                        List.of(
+                                projection("relationship:relationship:person:alice|person:bob"),
+                                projection("topic:topic:concept:travel")),
+                        List.of(),
+                        List.of(
+                                membership(
+                                        "relationship:relationship:person:alice|person:bob", 101L),
+                                membership("topic:topic:concept:travel", 101L)),
+                        runtime(),
+                        BASE_TIME);
 
-        assertThat(store.threadOperations().listThreads(MEMORY_ID))
-                .extracting(MemoryThread::threadKey)
-                .containsExactly("ep:101");
-        assertThat(store.threadOperations().listThreadItems(MEMORY_ID))
-                .extracting(MemoryThreadItem::itemId)
-                .containsExactly(101L);
+        assertThat(store.threadOperations().listThreadsByItemId(MEMORY_ID, 101L))
+                .extracting(MemoryThreadProjection::threadKey)
+                .containsExactlyInAnyOrder(
+                        "relationship:relationship:person:alice|person:bob",
+                        "topic:topic:concept:travel");
+        assertThat(store.threadOperations().getRuntime(MEMORY_ID))
+                .get()
+                .extracting(MemoryThreadRuntimeState::projectionState)
+                .isEqualTo(MemoryThreadProjectionState.AVAILABLE);
     }
 
     private static MemoryRawData rawData(
@@ -254,41 +272,53 @@ class InMemoryMemoryStoreTest {
                 1);
     }
 
-    private static MemoryThread thread(Long id) {
-        return new MemoryThread(
-                id,
+    private static MemoryThreadProjection projection(String threadKey) {
+        return new MemoryThreadProjection(
                 MEMORY_ID.toIdentifier(),
-                "ep:" + id,
-                "project",
-                "Phase 4 Delivery Line",
-                "From implementation start toward bounded delivery",
-                MemoryThreadStatus.OPEN,
-                0.92d,
+                threadKey,
+                MemoryThreadType.TOPIC,
+                "topic",
+                threadKey.substring(threadKey.lastIndexOf(':') + 1),
+                "label-" + threadKey,
+                MemoryThreadLifecycleStatus.ACTIVE,
+                MemoryThreadObjectState.ONGOING,
+                "headline",
+                Map.of("source", "test"),
+                1,
+                BASE_TIME,
+                BASE_TIME,
                 BASE_TIME,
                 null,
-                BASE_TIME,
-                id,
-                id,
                 1,
-                Map.of("source", "test"),
+                1,
                 BASE_TIME,
-                BASE_TIME,
-                false);
+                BASE_TIME);
     }
 
-    private static MemoryThreadItem threadItem(Long id, Long threadId, int sequenceHint) {
-        return new MemoryThreadItem(
-                id,
+    private static MemoryThreadMembership membership(String threadKey, Long itemId) {
+        return new MemoryThreadMembership(
                 MEMORY_ID.toIdentifier(),
-                threadId,
+                threadKey,
+                itemId,
+                MemoryThreadMembershipRole.CORE,
+                true,
+                1.0d,
+                BASE_TIME,
+                BASE_TIME);
+    }
+
+    private static MemoryThreadRuntimeState runtime() {
+        return new MemoryThreadRuntimeState(
+                MEMORY_ID.toIdentifier(),
+                MemoryThreadProjectionState.AVAILABLE,
+                0,
+                0,
                 101L,
-                0.95d,
-                MemoryThreadRole.CORE,
-                sequenceHint,
-                BASE_TIME,
-                Map.of("source", "test"),
-                BASE_TIME,
-                BASE_TIME,
-                false);
+                101L,
+                false,
+                null,
+                "v1",
+                null,
+                BASE_TIME);
     }
 }

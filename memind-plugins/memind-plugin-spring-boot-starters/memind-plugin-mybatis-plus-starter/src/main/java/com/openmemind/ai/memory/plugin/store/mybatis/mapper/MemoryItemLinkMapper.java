@@ -16,8 +16,10 @@ package com.openmemind.ai.memory.plugin.store.mybatis.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryItemLinkDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.sql.GraphQuerySqlProvider;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.sql.ItemGraphMutationSqlProvider;
 import java.util.Collection;
 import java.util.List;
+import org.apache.ibatis.annotations.InsertProvider;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.ResultMap;
@@ -25,6 +27,9 @@ import org.apache.ibatis.annotations.SelectProvider;
 
 @Mapper
 public interface MemoryItemLinkMapper extends BaseMapper<MemoryItemLinkDO> {
+
+    @InsertProvider(type = ItemGraphMutationSqlProvider.class, method = "insertItemLinks")
+    int insertBatch(@Param("links") List<MemoryItemLinkDO> links);
 
     @SelectProvider(type = GraphQuerySqlProvider.class, method = "selectLocalSubgraphLinks")
     @ResultMap("mybatis-plus_MemoryItemLinkDO")

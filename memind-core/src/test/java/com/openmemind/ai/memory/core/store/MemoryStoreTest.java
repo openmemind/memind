@@ -56,12 +56,13 @@ class MemoryStoreTest {
                         new InMemoryItemOperations(),
                         new InMemoryInsightOperations());
 
-        store.threadOperations().upsertThreads(MEMORY_ID, List.of());
-        store.threadOperations().upsertThreadItems(MEMORY_ID, List.of());
-        store.threadOperations().deleteMembershipsByItemIds(MEMORY_ID, List.of(1L));
+        store.threadOperations().ensureRuntime(MEMORY_ID, "v1");
+        store.threadOperations().enqueue(MEMORY_ID, 1L);
+        store.threadOperations().markRebuildRequired(MEMORY_ID, "test");
 
         assertThat(store.threadOperations().listThreads(MEMORY_ID)).isEmpty();
-        assertThat(store.threadOperations().listThreadItems(MEMORY_ID)).isEmpty();
+        assertThat(store.threadOperations().listOutbox(MEMORY_ID)).isEmpty();
+        assertThat(store.threadOperations().getRuntime(MEMORY_ID)).isEmpty();
     }
 
     @Test

@@ -34,4 +34,12 @@ public interface GraphOperationsCapabilities {
     boolean supportsBoundedEntityKeyLookup();
 
     boolean supportsHistoricalAliasLookup();
+
+    default boolean supportsBoundedAdjacencyLookup() {
+        return false;
+    }
+
+    default boolean supportsStoreSideCooccurrenceRebuild() {
+        return false;
+    }
 }

@@ -36,6 +36,7 @@ import com.openmemind.ai.memory.core.builder.SimpleMemoryThreadAssistOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalGraphOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphMode;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
@@ -116,6 +117,7 @@ class MemoryOptionsCodecTest {
                                                 false,
                                                 new SimpleRetrievalGraphOptions(
                                                         true,
+                                                        RetrievalGraphMode.ASSIST,
                                                         4,
                                                         12,
                                                         2,
@@ -156,6 +158,7 @@ class MemoryOptionsCodecTest {
                                                 RetrievalOptions.defaults().deep().sufficiency(),
                                                 new DeepRetrievalGraphOptions(
                                                         true,
+                                                        RetrievalGraphMode.ASSIST,
                                                         6,
                                                         14,
                                                         2,

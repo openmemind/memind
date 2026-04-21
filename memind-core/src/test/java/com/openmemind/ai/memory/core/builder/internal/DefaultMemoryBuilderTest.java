@@ -55,6 +55,7 @@ import com.openmemind.ai.memory.core.extraction.item.graph.NoOpItemGraphMaterial
 import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.EntityResolutionStrategy;
 import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.ExactCanonicalEntityResolutionStrategy;
 import com.openmemind.ai.memory.core.extraction.item.graph.pipeline.DefaultItemGraphMaterializer;
+import com.openmemind.ai.memory.core.extraction.item.graph.plan.DefaultItemGraphPlanner;
 import com.openmemind.ai.memory.core.extraction.item.strategy.LlmItemExtractionStrategy;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
@@ -66,10 +67,12 @@ import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphMode;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepRetrievalStrategy;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
 import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
+import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
@@ -233,6 +236,7 @@ class DefaultMemoryBuilderTest {
                                                 true,
                                                 new SimpleRetrievalGraphOptions(
                                                         true,
+                                                        RetrievalGraphMode.ASSIST,
                                                         6,
                                                         12,
                                                         2,
@@ -270,6 +274,7 @@ class DefaultMemoryBuilderTest {
 
         assertThat(runtimeConfig.strategyConfig()).isInstanceOf(SimpleStrategyConfig.class);
         var simpleConfig = (SimpleStrategyConfig) runtimeConfig.strategyConfig();
+        assertThat(simpleConfig.graphAssist().mode()).isEqualTo(RetrievalGraphMode.ASSIST);
         assertThat(simpleConfig.graphAssist().semanticEvidenceDecayFactor()).isEqualTo(0.65d);
     }
 
@@ -291,6 +296,7 @@ class DefaultMemoryBuilderTest {
                                                 SufficiencyOptions.defaults(),
                                                 new DeepRetrievalGraphOptions(
                                                         true,
+                                                        RetrievalGraphMode.ASSIST,
                                                         8,
                                                         16,
                                                         2,
@@ -328,6 +334,7 @@ class DefaultMemoryBuilderTest {
         assertThat(runtimeConfig.strategyConfig()).isInstanceOf(DeepStrategyConfig.class);
         var deepConfig = (DeepStrategyConfig) runtimeConfig.strategyConfig();
         assertThat(deepConfig.graphAssist().enabled()).isTrue();
+        assertThat(deepConfig.graphAssist().mode()).isEqualTo(RetrievalGraphMode.ASSIST);
         assertThat(deepConfig.graphAssist().maxExpandedItems()).isEqualTo(16);
         assertThat(deepConfig.graphAssist().protectDirectTopK()).isEqualTo(5);
         assertThat(deepConfig.graphAssist().semanticEvidenceDecayFactor()).isEqualTo(0.45d);
@@ -464,7 +471,7 @@ class DefaultMemoryBuilderTest {
                 (DefaultMemory)
                         Memory.builder()
                                 .chatClient(CHAT_CLIENT)
-                                .store(MEMORY_STORE)
+                                .store(new InMemoryMemoryStore())
                                 .buffer(MEMORY_BUFFER)
                                 .vector(MEMORY_VECTOR)
                                 .memoryObserver(observer)
@@ -484,7 +491,7 @@ class DefaultMemoryBuilderTest {
                 (DefaultMemory)
                         Memory.builder()
                                 .chatClient(CHAT_CLIENT)
-                                .store(MEMORY_STORE)
+                                .store(new InMemoryMemoryStore())
                                 .buffer(MEMORY_BUFFER)
                                 .vector(MEMORY_VECTOR)
                                 .options(graphEnabledBuildOptions())
@@ -495,7 +502,9 @@ class DefaultMemoryBuilderTest {
         var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
         var delegate = readField(tracing, "delegate", DefaultItemGraphMaterializer.class);
 
-        assertThat(readField(delegate, "resolutionStrategy", EntityResolutionStrategy.class))
+        var planner = readField(delegate, "planner", DefaultItemGraphPlanner.class);
+
+        assertThat(readField(planner, "resolutionStrategy", EntityResolutionStrategy.class))
                 .isInstanceOf(ExactCanonicalEntityResolutionStrategy.class);
     }
 
@@ -518,7 +527,7 @@ class DefaultMemoryBuilderTest {
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
 
         assertThat(readField(itemLayer, "graphMaterializer", ItemGraphMaterializer.class))
-                .isSameAs(NoOpItemGraphMaterializer.INSTANCE);
+                .isInstanceOf(NoOpItemGraphMaterializer.class);
     }
 
     @Test

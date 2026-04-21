@@ -31,9 +31,12 @@ public final class ItemLinkConverter {
         dataObject.setSourceItemId(record.sourceItemId());
         dataObject.setTargetItemId(record.targetItemId());
         dataObject.setLinkType(record.linkType().name());
+        dataObject.setRelationCode(record.relationCode());
+        dataObject.setEvidenceSource(record.evidenceSource());
         dataObject.setStrength(record.strength());
         dataObject.setMetadata(record.metadata());
         dataObject.setCreatedAt(record.createdAt() != null ? record.createdAt() : Instant.now());
+        dataObject.setUpdatedAt(dataObject.getCreatedAt());
         return dataObject;
     }
 
@@ -43,6 +46,8 @@ public final class ItemLinkConverter {
                 dataObject.getSourceItemId(),
                 dataObject.getTargetItemId(),
                 ItemLinkType.valueOf(dataObject.getLinkType()),
+                dataObject.getRelationCode(),
+                dataObject.getEvidenceSource(),
                 dataObject.getStrength(),
                 dataObject.getMetadata(),
                 dataObject.getCreatedAt());

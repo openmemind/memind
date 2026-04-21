@@ -61,6 +61,7 @@ class DefaultRetrievalGraphAssistantTest {
                     true,
                     new SimpleStrategyConfig.GraphAssistConfig(
                             true,
+                            RetrievalGraphMode.ASSIST,
                             2,
                             6,
                             2,
@@ -81,6 +82,7 @@ class DefaultRetrievalGraphAssistantTest {
                     true,
                     new SimpleStrategyConfig.GraphAssistConfig(
                             SIMPLE_CONFIG.graphAssist().enabled(),
+                            RetrievalGraphMode.ASSIST,
                             SIMPLE_CONFIG.graphAssist().maxSeedItems(),
                             SIMPLE_CONFIG.graphAssist().maxExpandedItems(),
                             SIMPLE_CONFIG.graphAssist().maxSemanticNeighborsPerSeed(),
@@ -124,10 +126,16 @@ class DefaultRetrievalGraphAssistantTest {
     }
 
     @Test
-    void graphAssistantPinsDirectPrefixAndInterleavesGraphTailOnly() {
+    void assistModePinsProtectedDirectPrefixAndInterleavesGraphTailOnly() {
         var direct = List.of(scored("101", 1.00d), scored("102", 0.85d), scored("103", 0.75d));
+        var assistConfig =
+                SIMPLE_CONFIG.withGraphAssist(
+                        SIMPLE_CONFIG
+                                .graphAssist()
+                                .withMode(RetrievalGraphMode.ASSIST)
+                                .withProtectDirectTopK(2));
 
-        StepVerifier.create(assistant.assist(CONTEXT, CONFIG, SIMPLE_CONFIG.graphAssist(), direct))
+        StepVerifier.create(assistant.assist(CONTEXT, CONFIG, assistConfig.graphAssist(), direct))
                 .assertNext(
                         result -> {
                             assertThat(result.items().get(0).sourceId()).isEqualTo("101");
@@ -136,6 +144,25 @@ class DefaultRetrievalGraphAssistantTest {
                                     .extracting(ScoredResult::sourceId)
                                     .contains("201");
                         })
+                .verifyComplete();
+    }
+
+    @Test
+    void expandModeAllowsGraphCandidatesToDisplaceDirectTail() {
+        var direct = List.of(scored("101", 1.00d), scored("102", 0.85d), scored("103", 0.75d));
+        var expandConfig =
+                SIMPLE_CONFIG.withGraphAssist(
+                        SIMPLE_CONFIG
+                                .graphAssist()
+                                .withMode(RetrievalGraphMode.EXPAND)
+                                .withProtectDirectTopK(0));
+
+        StepVerifier.create(assistant.assist(CONTEXT, CONFIG, expandConfig.graphAssist(), direct))
+                .assertNext(
+                        result ->
+                                assertThat(result.items())
+                                        .extracting(ScoredResult::sourceId)
+                                        .contains("201"))
                 .verifyComplete();
     }
 
@@ -504,9 +531,23 @@ class DefaultRetrievalGraphAssistantTest {
                 sourceItemId,
                 targetItemId,
                 type,
+                defaultRelationCode(type),
+                defaultEvidenceSource(type),
                 strength,
                 Map.of(),
                 NOW);
+    }
+
+    private static String defaultRelationCode(ItemLinkType type) {
+        return switch (type) {
+            case SEMANTIC -> null;
+            case TEMPORAL -> "before";
+            case CAUSAL -> "caused_by";
+        };
+    }
+
+    private static String defaultEvidenceSource(ItemLinkType type) {
+        return type == ItemLinkType.SEMANTIC ? "vector_search" : null;
     }
 
     private static ItemEntityMention mention(long itemId, String entityKey, float confidence) {

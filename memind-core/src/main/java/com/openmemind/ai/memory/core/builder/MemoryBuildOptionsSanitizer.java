@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core.builder;
 import com.openmemind.ai.memory.core.extraction.item.graph.EntityResolutionMode;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.graph.NoOpGraphOperations;
+import com.openmemind.ai.memory.core.store.graph.NoOpItemGraphCommitOperations;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -34,23 +35,32 @@ public final class MemoryBuildOptionsSanitizer {
         MemoryBuildOptions effective = options;
         String forcedDisableReason = null;
 
-        if (options.memoryThread().derivation().enabled()
-                && !options.extraction().item().graph().enabled()) {
+        if (effective.extraction().item().graph().enabled()
+                && store.itemGraphCommitOperations() == NoOpItemGraphCommitOperations.INSTANCE) {
+            warnings.add(
+                    "extraction.item.graph.enabled requires store-backed item graph commit"
+                            + " operations; item graph was force-disabled");
+            effective = disableItemGraph(effective);
+        }
+
+        if (effective.memoryThread().derivation().enabled()
+                && !effective.extraction().item().graph().enabled()) {
             forcedDisableReason =
                     "memoryThread.derivation.enabled requires extraction.item.graph.enabled;"
                             + " derivation was force-disabled";
             warnings.add(forcedDisableReason);
-            effective = disableThreadDerivation(options);
-        } else if (options.memoryThread().derivation().enabled()
+            effective = disableThreadDerivation(effective);
+        } else if (effective.memoryThread().derivation().enabled()
                 && store.graphOperations() == NoOpGraphOperations.INSTANCE) {
             forcedDisableReason =
                     "memoryThread.derivation.enabled requires store-backed typed item graph"
                             + " operations; derivation was force-disabled";
             warnings.add(forcedDisableReason);
-            effective = disableThreadDerivation(options);
+            effective = disableThreadDerivation(effective);
         }
 
-        if (effective.extraction().item().graph().resolutionMode()
+        if (effective.extraction().item().graph().enabled()
+                && effective.extraction().item().graph().resolutionMode()
                         == EntityResolutionMode.CONSERVATIVE
                 && !store.graphOperationsCapabilities().supportsBoundedEntityKeyLookup()) {
             warnings.add(
@@ -60,7 +70,8 @@ public final class MemoryBuildOptionsSanitizer {
             effective = disableConservativeResolution(effective);
         }
 
-        if (effective.extraction().item().graph().resolutionMode()
+        if (effective.extraction().item().graph().enabled()
+                && effective.extraction().item().graph().resolutionMode()
                         == EntityResolutionMode.CONSERVATIVE
                 && store.graphOperationsCapabilities().supportsBoundedEntityKeyLookup()
                 && !store.graphOperationsCapabilities().supportsHistoricalAliasLookup()) {
@@ -83,6 +94,22 @@ public final class MemoryBuildOptionsSanitizer {
                         options.memoryThread()
                                 .withDerivation(
                                         options.memoryThread().derivation().withEnabled(false)))
+                .build();
+    }
+
+    private static MemoryBuildOptions disableItemGraph(MemoryBuildOptions options) {
+        return MemoryBuildOptions.builder()
+                .extraction(
+                        new ExtractionOptions(
+                                options.extraction().common(),
+                                options.extraction().rawdata(),
+                                new ItemExtractionOptions(
+                                        options.extraction().item().foresightEnabled(),
+                                        options.extraction().item().promptBudget(),
+                                        options.extraction().item().graph().withEnabled(false)),
+                                options.extraction().insight()))
+                .retrieval(options.retrieval())
+                .memoryThread(options.memoryThread())
                 .build();
     }
 

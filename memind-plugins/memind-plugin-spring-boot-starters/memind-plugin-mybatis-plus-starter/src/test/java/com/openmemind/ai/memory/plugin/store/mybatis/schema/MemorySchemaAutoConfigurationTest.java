@@ -66,7 +66,9 @@ class MemorySchemaAutoConfigurationTest {
                                             "db/migration/sqlite/V6__graph_store.sql",
                                             "db/migration/sqlite/V7__memory_thread.sql",
                                             "db/migration/sqlite/V8__graph_entity_alias_store.sql",
-                                            "db/migration/sqlite/V9__item_temporal_lookup.sql");
+                                            "db/migration/sqlite/V9__item_temporal_lookup.sql",
+                                            "db/migration/sqlite/V10__item_graph_evolution.sql",
+                                            "db/migration/sqlite/V11__simplified_thread_core_v1.sql");
 
                             DdlApplicationRunner runner =
                                     context.getBean(DdlApplicationRunner.class);

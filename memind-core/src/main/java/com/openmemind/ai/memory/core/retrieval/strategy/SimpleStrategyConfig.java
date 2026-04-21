@@ -17,9 +17,11 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.openmemind.ai.memory.core.builder.SimpleMemoryThreadAssistOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalGraphOptions;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphMode;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphSettings;
 import com.openmemind.ai.memory.core.retrieval.thread.RetrievalMemoryThreadSettings;
 import java.time.Duration;
+import java.util.Objects;
 
 /**
  * Simple Strategy Configuration
@@ -75,6 +77,7 @@ public record SimpleStrategyConfig(
 
     public record GraphAssistConfig(
             boolean enabled,
+            RetrievalGraphMode mode,
             int maxSeedItems,
             int maxExpandedItems,
             int maxSemanticNeighborsPerSeed,
@@ -91,6 +94,7 @@ public record SimpleStrategyConfig(
             implements RetrievalGraphSettings {
 
         public GraphAssistConfig {
+            Objects.requireNonNull(mode, "mode");
             SimpleRetrievalGraphOptions.validateGraphAssistShape(
                     maxSeedItems,
                     maxExpandedItems,
@@ -111,6 +115,7 @@ public record SimpleStrategyConfig(
             var defaults = SimpleRetrievalGraphOptions.defaults();
             return new GraphAssistConfig(
                     defaults.enabled(),
+                    defaults.mode(),
                     defaults.maxSeedItems(),
                     defaults.maxExpandedItems(),
                     defaults.maxSemanticNeighborsPerSeed(),
@@ -129,6 +134,7 @@ public record SimpleStrategyConfig(
         @JsonCreator
         public static GraphAssistConfig fromJson(
                 @JsonProperty("enabled") Boolean enabled,
+                @JsonProperty("mode") RetrievalGraphMode mode,
                 @JsonProperty("maxSeedItems") Integer maxSeedItems,
                 @JsonProperty("maxExpandedItems") Integer maxExpandedItems,
                 @JsonProperty("maxSemanticNeighborsPerSeed") Integer maxSemanticNeighborsPerSeed,
@@ -145,6 +151,7 @@ public record SimpleStrategyConfig(
             var defaults = defaults();
             return new GraphAssistConfig(
                     enabled != null ? enabled : defaults.enabled(),
+                    mode != null ? mode : defaults.mode(),
                     maxSeedItems != null ? maxSeedItems : defaults.maxSeedItems(),
                     maxExpandedItems != null ? maxExpandedItems : defaults.maxExpandedItems(),
                     maxSemanticNeighborsPerSeed != null
@@ -175,6 +182,26 @@ public record SimpleStrategyConfig(
         public GraphAssistConfig withEnabled(boolean enabled) {
             return new GraphAssistConfig(
                     enabled,
+                    mode,
+                    maxSeedItems,
+                    maxExpandedItems,
+                    maxSemanticNeighborsPerSeed,
+                    maxTemporalNeighborsPerSeed,
+                    maxCausalNeighborsPerSeed,
+                    maxEntitySiblingItemsPerSeed,
+                    maxItemsPerEntity,
+                    graphChannelWeight,
+                    minLinkStrength,
+                    minMentionConfidence,
+                    protectDirectTopK,
+                    semanticEvidenceDecayFactor,
+                    timeout);
+        }
+
+        public GraphAssistConfig withMode(RetrievalGraphMode mode) {
+            return new GraphAssistConfig(
+                    enabled,
+                    mode,
                     maxSeedItems,
                     maxExpandedItems,
                     maxSemanticNeighborsPerSeed,
@@ -193,6 +220,26 @@ public record SimpleStrategyConfig(
         public GraphAssistConfig withMaxSeedItems(int maxSeedItems) {
             return new GraphAssistConfig(
                     enabled,
+                    mode,
+                    maxSeedItems,
+                    maxExpandedItems,
+                    maxSemanticNeighborsPerSeed,
+                    maxTemporalNeighborsPerSeed,
+                    maxCausalNeighborsPerSeed,
+                    maxEntitySiblingItemsPerSeed,
+                    maxItemsPerEntity,
+                    graphChannelWeight,
+                    minLinkStrength,
+                    minMentionConfidence,
+                    protectDirectTopK,
+                    semanticEvidenceDecayFactor,
+                    timeout);
+        }
+
+        public GraphAssistConfig withProtectDirectTopK(int protectDirectTopK) {
+            return new GraphAssistConfig(
+                    enabled,
+                    mode,
                     maxSeedItems,
                     maxExpandedItems,
                     maxSemanticNeighborsPerSeed,
@@ -211,6 +258,7 @@ public record SimpleStrategyConfig(
         public GraphAssistConfig withTimeout(Duration timeout) {
             return new GraphAssistConfig(
                     enabled,
+                    mode,
                     maxSeedItems,
                     maxExpandedItems,
                     maxSemanticNeighborsPerSeed,

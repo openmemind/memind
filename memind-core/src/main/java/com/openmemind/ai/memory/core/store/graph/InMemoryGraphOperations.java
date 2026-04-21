@@ -14,11 +14,15 @@
 package com.openmemind.ai.memory.core.store.graph;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.extraction.item.graph.commit.ExtractionBatchId;
+import com.openmemind.ai.memory.core.extraction.item.graph.plan.ItemGraphWritePlan;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -31,13 +35,112 @@ import java.util.concurrent.ConcurrentHashMap;
 public class InMemoryGraphOperations implements GraphOperations {
 
     private final Map<String, Map<String, GraphEntity>> entities = new ConcurrentHashMap<>();
-    private final Map<String, Map<MentionKey, ItemEntityMention>> mentions =
+    private final Map<String, Map<String, ItemEntityMention>> mentions = new ConcurrentHashMap<>();
+    private final Map<String, Map<String, ItemLink>> itemLinks = new ConcurrentHashMap<>();
+    private final Map<String, Map<String, GraphEntityAlias>> entityAliases =
             new ConcurrentHashMap<>();
-    private final Map<String, Map<LinkKey, ItemLink>> itemLinks = new ConcurrentHashMap<>();
-    private final Map<String, Map<AliasIdentity, GraphEntityAlias>> entityAliases =
+    private final Map<String, Map<String, EntityCooccurrence>> entityCooccurrences =
             new ConcurrentHashMap<>();
-    private final Map<String, Map<CooccurrenceKey, EntityCooccurrence>> entityCooccurrences =
+    private final Map<String, Map<ExtractionBatchId, PendingGraphBatch>> pendingBatches =
             new ConcurrentHashMap<>();
+    private final Map<String, Set<String>> aliasBatchReceipts = new ConcurrentHashMap<>();
+
+    @Override
+    public void applyGraphWritePlan(
+            MemoryId memoryId, ExtractionBatchId extractionBatchId, ItemGraphWritePlan writePlan) {
+        Objects.requireNonNull(memoryId, "memoryId");
+        Objects.requireNonNull(extractionBatchId, "extractionBatchId");
+        Objects.requireNonNull(writePlan, "writePlan");
+        pendingBatches
+                .computeIfAbsent(memoryId.toIdentifier(), ignored -> new ConcurrentHashMap<>())
+                .put(extractionBatchId, PendingGraphBatch.from(memoryId, writePlan));
+    }
+
+    @Override
+    public CommittedGraphView previewPromotedBatch(
+            MemoryId memoryId, ExtractionBatchId extractionBatchId) {
+        String memoryKey = memoryId.toIdentifier();
+        PendingGraphBatch pendingBatch =
+                pendingBatches.getOrDefault(memoryKey, Map.of()).get(extractionBatchId);
+        if (pendingBatch == null) {
+            throw new IllegalStateException(
+                    "no pending graph batch for extractionBatchId=" + extractionBatchId);
+        }
+
+        var nextEntities = new LinkedHashMap<>(entities.getOrDefault(memoryKey, Map.of()));
+        pendingBatch
+                .writePlan()
+                .entities()
+                .forEach(entity -> nextEntities.put(entity.entityKey(), entity));
+
+        var nextMentions = new LinkedHashMap<>(mentions.getOrDefault(memoryKey, Map.of()));
+        pendingBatch
+                .writePlan()
+                .mentions()
+                .forEach(
+                        mention ->
+                                nextMentions.put(
+                                        mentionIdentity(mention.itemId(), mention.entityKey()),
+                                        mention));
+
+        var nextLinks = new LinkedHashMap<>(itemLinks.getOrDefault(memoryKey, Map.of()));
+        pendingBatch
+                .persistedLinks()
+                .forEach(
+                        link ->
+                                nextLinks.put(
+                                        linkIdentity(
+                                                link.sourceItemId(),
+                                                link.targetItemId(),
+                                                link.linkType()),
+                                        link));
+
+        var nextAliases = new LinkedHashMap<>(entityAliases.getOrDefault(memoryKey, Map.of()));
+        var nextAliasReceipts =
+                new LinkedHashSet<>(aliasBatchReceipts.getOrDefault(memoryKey, Set.of()));
+        upsertAliasesWithBatchReceipts(
+                extractionBatchId,
+                pendingBatch.writePlan().aliases(),
+                nextAliases,
+                nextAliasReceipts);
+
+        return new CommittedGraphView(
+                nextEntities,
+                nextMentions,
+                nextAliases,
+                nextLinks,
+                entityCooccurrences.getOrDefault(memoryKey, Map.of()),
+                nextAliasReceipts);
+    }
+
+    @Override
+    public void installCommittedBatch(
+            MemoryId memoryId,
+            ExtractionBatchId extractionBatchId,
+            CommittedGraphView committedGraphView) {
+        Objects.requireNonNull(memoryId, "memoryId");
+        Objects.requireNonNull(extractionBatchId, "extractionBatchId");
+        Objects.requireNonNull(committedGraphView, "committedGraphView");
+
+        String memoryKey = memoryId.toIdentifier();
+        entities.put(memoryKey, new ConcurrentHashMap<>(committedGraphView.entitiesByKey()));
+        mentions.put(memoryKey, new ConcurrentHashMap<>(committedGraphView.mentionsByIdentity()));
+        entityAliases.put(
+                memoryKey, new ConcurrentHashMap<>(committedGraphView.aliasesByIdentity()));
+        itemLinks.put(memoryKey, new ConcurrentHashMap<>(committedGraphView.itemLinksByIdentity()));
+        entityCooccurrences.put(
+                memoryKey,
+                new ConcurrentHashMap<>(committedGraphView.entityCooccurrencesByIdentity()));
+        Set<String> installedReceipts = ConcurrentHashMap.newKeySet();
+        installedReceipts.addAll(committedGraphView.aliasBatchReceipts());
+        aliasBatchReceipts.put(memoryKey, installedReceipts);
+        removePendingBatch(memoryKey, extractionBatchId);
+    }
+
+    @Override
+    public void discardPendingBatch(MemoryId memoryId, ExtractionBatchId extractionBatchId) {
+        removePendingBatch(memoryId.toIdentifier(), extractionBatchId);
+    }
 
     @Override
     public void upsertEntities(MemoryId memoryId, List<GraphEntity> records) {
@@ -55,12 +158,13 @@ public class InMemoryGraphOperations implements GraphOperations {
         if (records == null || records.isEmpty()) {
             return;
         }
-        Map<MentionKey, ItemEntityMention> scoped =
+        Map<String, ItemEntityMention> scoped =
                 mentions.computeIfAbsent(
                         memoryId.toIdentifier(), ignored -> new ConcurrentHashMap<>());
         records.forEach(
                 mention ->
-                        scoped.put(new MentionKey(mention.itemId(), mention.entityKey()), mention));
+                        scoped.put(
+                                mentionIdentity(mention.itemId(), mention.entityKey()), mention));
     }
 
     @Override
@@ -71,14 +175,15 @@ public class InMemoryGraphOperations implements GraphOperations {
         }
 
         String memoryKey = memoryId.toIdentifier();
-        Map<CooccurrenceKey, EntityCooccurrence> scoped =
+        Map<String, EntityCooccurrence> scoped =
                 entityCooccurrences.computeIfAbsent(
                         memoryKey, ignored -> new ConcurrentHashMap<>());
-        scoped.keySet()
+        scoped.values()
                 .removeIf(
-                        key ->
-                                affectedEntityKeys.contains(key.leftEntityKey())
-                                        || affectedEntityKeys.contains(key.rightEntityKey()));
+                        cooccurrence ->
+                                affectedEntityKeys.contains(cooccurrence.leftEntityKey())
+                                        || affectedEntityKeys.contains(
+                                                cooccurrence.rightEntityKey()));
 
         Map<Long, Set<String>> mentionsByItem = new HashMap<>();
         mentions.getOrDefault(memoryKey, Map.of())
@@ -99,7 +204,7 @@ public class InMemoryGraphOperations implements GraphOperations {
         counts.forEach(
                 (key, count) ->
                         scoped.put(
-                                key,
+                                cooccurrenceIdentity(key.leftEntityKey(), key.rightEntityKey()),
                                 new EntityCooccurrence(
                                         memoryKey,
                                         key.leftEntityKey(),
@@ -114,13 +219,13 @@ public class InMemoryGraphOperations implements GraphOperations {
         if (records == null || records.isEmpty()) {
             return;
         }
-        Map<LinkKey, ItemLink> scoped =
+        Map<String, ItemLink> scoped =
                 itemLinks.computeIfAbsent(
                         memoryId.toIdentifier(), ignored -> new ConcurrentHashMap<>());
         records.forEach(
                 link ->
                         scoped.put(
-                                new LinkKey(
+                                linkIdentity(
                                         link.sourceItemId(), link.targetItemId(), link.linkType()),
                                 link));
     }
@@ -130,13 +235,13 @@ public class InMemoryGraphOperations implements GraphOperations {
         if (records == null || records.isEmpty()) {
             return;
         }
-        Map<AliasIdentity, GraphEntityAlias> scoped =
+        Map<String, GraphEntityAlias> scoped =
                 entityAliases.computeIfAbsent(
                         memoryId.toIdentifier(), ignored -> new ConcurrentHashMap<>());
         records.forEach(
                 alias ->
                         scoped.merge(
-                                new AliasIdentity(
+                                aliasIdentity(
                                         alias.entityKey(),
                                         alias.entityType(),
                                         alias.normalizedAlias()),
@@ -309,6 +414,59 @@ public class InMemoryGraphOperations implements GraphOperations {
                 laterOf(existing.updatedAt(), incoming.updatedAt()));
     }
 
+    private void upsertAliasesWithBatchReceipts(
+            ExtractionBatchId extractionBatchId,
+            List<GraphEntityAlias> aliases,
+            Map<String, GraphEntityAlias> scopedAliases,
+            Set<String> receipts) {
+        if (aliases == null || aliases.isEmpty()) {
+            return;
+        }
+        for (var alias : aliases) {
+            String aliasIdentity =
+                    aliasIdentity(alias.entityKey(), alias.entityType(), alias.normalizedAlias());
+            String receiptKey = aliasBatchReceiptIdentity(aliasIdentity, extractionBatchId);
+            if (!receipts.add(receiptKey)) {
+                continue;
+            }
+            scopedAliases.merge(aliasIdentity, alias, InMemoryGraphOperations::mergeAlias);
+        }
+    }
+
+    private void removePendingBatch(String memoryKey, ExtractionBatchId extractionBatchId) {
+        var scopedPending = pendingBatches.get(memoryKey);
+        if (scopedPending == null) {
+            return;
+        }
+        scopedPending.remove(extractionBatchId);
+        if (scopedPending.isEmpty()) {
+            pendingBatches.remove(memoryKey);
+        }
+    }
+
+    private static String mentionIdentity(Long itemId, String entityKey) {
+        return itemId + "::" + entityKey;
+    }
+
+    private static String linkIdentity(
+            Long sourceItemId, Long targetItemId, ItemLinkType linkType) {
+        return sourceItemId + "::" + targetItemId + "::" + linkType.name();
+    }
+
+    private static String cooccurrenceIdentity(String leftEntityKey, String rightEntityKey) {
+        return leftEntityKey + "::" + rightEntityKey;
+    }
+
+    private static String aliasIdentity(
+            String entityKey, GraphEntityType entityType, String normalizedAlias) {
+        return entityKey + "::" + entityType.name() + "::" + normalizedAlias;
+    }
+
+    private static String aliasBatchReceiptIdentity(
+            String aliasIdentity, ExtractionBatchId extractionBatchId) {
+        return aliasIdentity + "::" + extractionBatchId.value();
+    }
+
     private static Set<String> normalizeEntityKeys(Collection<String> entityKeys) {
         if (entityKeys == null || entityKeys.isEmpty()) {
             return Set.of();
@@ -356,12 +514,13 @@ public class InMemoryGraphOperations implements GraphOperations {
         return right;
     }
 
-    private record MentionKey(Long itemId, String entityKey) {}
-
-    private record LinkKey(Long sourceItemId, Long targetItemId, ItemLinkType linkType) {}
-
     private record CooccurrenceKey(String leftEntityKey, String rightEntityKey) {}
 
-    private record AliasIdentity(
-            String entityKey, GraphEntityType entityType, String normalizedAlias) {}
+    private record PendingGraphBatch(ItemGraphWritePlan writePlan, List<ItemLink> persistedLinks) {
+
+        private static PendingGraphBatch from(MemoryId memoryId, ItemGraphWritePlan writePlan) {
+            ItemGraphWritePlan normalized = writePlan.normalized();
+            return new PendingGraphBatch(normalized, normalized.toPersistedLinks(memoryId));
+        }
+    }
 }

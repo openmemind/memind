@@ -21,7 +21,6 @@ import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.item.dedup.DeduplicationResult;
 import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicator;
 import com.openmemind.ai.memory.core.extraction.item.extractor.MemoryItemExtractor;
-import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializationResult;
 import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.item.graph.NoOpItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
@@ -74,7 +73,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 vector,
                 IdUtils.snowflake(),
                 null,
-                NoOpItemGraphMaterializer.INSTANCE);
+                NoOpItemGraphMaterializer.persistItemsOnly(memoryStore.itemOperations()));
     }
 
     public MemoryItemLayer(
@@ -90,7 +89,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 vector,
                 IdUtils.snowflake(),
                 selfVerificationStep,
-                NoOpItemGraphMaterializer.INSTANCE);
+                NoOpItemGraphMaterializer.persistItemsOnly(memoryStore.itemOperations()));
     }
 
     public MemoryItemLayer(
@@ -123,7 +122,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 vector,
                 idGenerator,
                 selfVerificationStep,
-                NoOpItemGraphMaterializer.INSTANCE);
+                NoOpItemGraphMaterializer.persistItemsOnly(memoryStore.itemOperations()));
     }
 
     public MemoryItemLayer(
@@ -141,7 +140,9 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
         this.idGenerator = idGenerator;
         this.selfVerificationStep = selfVerificationStep;
         this.graphMaterializer =
-                graphMaterializer != null ? graphMaterializer : NoOpItemGraphMaterializer.INSTANCE;
+                graphMaterializer != null
+                        ? graphMaterializer
+                        : NoOpItemGraphMaterializer.persistItemsOnly(memoryStore.itemOperations());
     }
 
     @Override
@@ -346,7 +347,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                         .toList();
 
         return vector.storeBatch(memoryId, contents, metadataList)
-                .map(
+                .flatMap(
                         vectorIds -> {
                             List<MemoryItem> newItems =
                                     IntStream.range(0, newEntries.size())
@@ -360,22 +361,16 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                                                                     contentType))
                                             .toList();
 
-                            memoryStore.itemOperations().insertItems(memoryId, newItems);
-
-                            return newItems;
-                        })
-                .flatMap(
-                        newItems ->
-                                graphMaterializer
-                                        .materialize(memoryId, newItems, newEntries)
-                                        .onErrorResume(
-                                                ignored ->
-                                                        Mono.just(
-                                                                ItemGraphMaterializationResult
-                                                                        .empty()))
-                                        .thenReturn(
-                                                new MemoryItemResult(
-                                                        newItems, resolvedInsightTypes)));
+                            return graphMaterializer
+                                    .materialize(memoryId, newItems, newEntries)
+                                    .onErrorResume(
+                                            error ->
+                                                    vector.deleteBatch(memoryId, vectorIds)
+                                                            .onErrorResume(ignore -> Mono.empty())
+                                                            .then(Mono.error(error)))
+                                    .thenReturn(
+                                            new MemoryItemResult(newItems, resolvedInsightTypes));
+                        });
     }
 
     // ===== Utility methods =====

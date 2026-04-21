@@ -200,8 +200,22 @@ class DefaultInsightGraphAssistantTest {
                 sourceItemId,
                 targetItemId,
                 linkType,
+                defaultRelationCode(linkType),
+                defaultEvidenceSource(linkType),
                 strength,
                 Map.of(),
                 NOW);
+    }
+
+    private static String defaultRelationCode(ItemLinkType linkType) {
+        return switch (linkType) {
+            case SEMANTIC -> null;
+            case TEMPORAL -> "before";
+            case CAUSAL -> "caused_by";
+        };
+    }
+
+    private static String defaultEvidenceSource(ItemLinkType linkType) {
+        return linkType == ItemLinkType.SEMANTIC ? "vector_search" : null;
     }
 }

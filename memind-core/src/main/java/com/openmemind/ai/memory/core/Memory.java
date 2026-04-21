@@ -302,9 +302,9 @@ public interface Memory extends AutoCloseable {
     default void rebuildMemoryThreads(MemoryId memoryId) {}
 
     /**
-     * Returns the current runtime status of memory-thread derivation.
+     * Returns the current runtime status of thread projection materialization for one memory.
      */
-    default MemoryThreadRuntimeStatus memoryThreadStatus() {
+    default MemoryThreadRuntimeStatus getThreadRuntimeStatus(MemoryId memoryId) {
         return MemoryThreadRuntimeStatus.disabled("memoryThread disabled");
     }
 

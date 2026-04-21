@@ -27,83 +27,28 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.mes
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
-import com.openmemind.ai.memory.server.domain.common.PageResponse;
-import com.openmemind.ai.memory.server.domain.memorythread.query.MemoryThreadPageQuery;
-import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadItemView;
-import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadView;
-import com.openmemind.ai.memory.server.mapper.memorythread.AdminMemoryThreadQueryMapper;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeManager;
 import com.openmemind.ai.memory.server.runtime.RuntimeHandle;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
 class MemoryThreadRebuildServiceTest {
 
     @Test
-    void rebuildMemoryDelegatesToRuntimeMemory() {
-        FakeMemoryThreadQueryMapper queryMapper = new FakeMemoryThreadQueryMapper();
+    void rebuildDelegatesToRuntimeMemoryForTheRequestedScope() {
         RecordingMemory memory = new RecordingMemory();
         MemoryThreadRebuildService service =
                 new MemoryThreadRebuildService(
-                        queryMapper,
                         new MemoryRuntimeManager(
                                 new RuntimeHandle(memory, MemoryBuildOptions.defaults(), 1L)));
 
-        int rebuilt = service.rebuildMemory("u1:a1");
+        int rebuilt = service.rebuild("u1", "a1");
 
         assertThat(rebuilt).isEqualTo(1);
         assertThat(memory.rebuildCalls()).containsExactly("u1:a1");
-    }
-
-    @Test
-    void rebuildAllDelegatesForEachKnownMemoryId() {
-        FakeMemoryThreadQueryMapper queryMapper = new FakeMemoryThreadQueryMapper();
-        queryMapper.memoryIds = List.of("u1:a1", "u2:a1");
-        RecordingMemory memory = new RecordingMemory();
-        MemoryThreadRebuildService service =
-                new MemoryThreadRebuildService(
-                        queryMapper,
-                        new MemoryRuntimeManager(
-                                new RuntimeHandle(memory, MemoryBuildOptions.defaults(), 1L)));
-
-        int rebuilt = service.rebuildAll();
-
-        assertThat(rebuilt).isEqualTo(2);
-        assertThat(memory.rebuildCalls()).containsExactly("u1:a1", "u2:a1");
-    }
-
-    private static final class FakeMemoryThreadQueryMapper implements AdminMemoryThreadQueryMapper {
-
-        private List<String> memoryIds = List.of();
-
-        @Override
-        public PageResponse<AdminMemoryThreadView> page(MemoryThreadPageQuery query) {
-            return new PageResponse<>(query.pageNo(), query.pageSize(), 0, List.of());
-        }
-
-        @Override
-        public Optional<AdminMemoryThreadView> findByBizId(Long threadId) {
-            return Optional.empty();
-        }
-
-        @Override
-        public List<AdminMemoryThreadItemView> findItemsByThreadId(Long threadId) {
-            return List.of();
-        }
-
-        @Override
-        public Optional<AdminMemoryThreadItemView> findByItemId(Long itemId) {
-            return Optional.empty();
-        }
-
-        @Override
-        public List<String> listDistinctMemoryIds() {
-            return memoryIds;
-        }
     }
 
     private static final class RecordingMemory implements Memory {

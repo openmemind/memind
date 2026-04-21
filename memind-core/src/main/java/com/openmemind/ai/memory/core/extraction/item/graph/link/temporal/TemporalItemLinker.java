@@ -57,8 +57,24 @@ public class TemporalItemLinker {
     }
 
     public Mono<TemporalLinkingStats> link(MemoryId memoryId, List<MemoryItem> items) {
+        return plan(memoryId, items)
+                .map(
+                        plan -> {
+                            long upsertStartedAt = System.nanoTime();
+                            try {
+                                graphOperations.upsertItemLinks(memoryId, plan.links());
+                                return plan.stats()
+                                        .withUpsertDuration(elapsedMillis(upsertStartedAt));
+                            } catch (Exception error) {
+                                return plan.stats()
+                                        .withUpsertFailure(elapsedMillis(upsertStartedAt));
+                            }
+                        });
+    }
+
+    public Mono<TemporalLinkingPlan> plan(MemoryId memoryId, List<MemoryItem> items) {
         if (!options.enabled() || items == null || items.isEmpty()) {
-            return Mono.just(TemporalLinkingStats.empty());
+            return Mono.just(TemporalLinkingPlan.empty());
         }
 
         return Mono.fromSupplier(
@@ -73,7 +89,7 @@ public class TemporalItemLinker {
                                     .filter(entry -> entry.window() != null)
                                     .toList();
                     if (incoming.isEmpty()) {
-                        return TemporalLinkingStats.empty();
+                        return TemporalLinkingPlan.empty();
                     }
 
                     var excludedItemIds =
@@ -122,33 +138,21 @@ public class TemporalItemLinker {
                     }
                     long buildDurationMs = elapsedMillis(buildStartedAt);
 
-                    long upsertStartedAt = System.nanoTime();
-                    try {
-                        graphOperations.upsertItemLinks(memoryId, List.copyOf(finalLinks.values()));
-                    } catch (Exception error) {
-                        return TemporalLinkingStats.stageFailure(
-                                incoming.size(),
-                                requestBatches.size(),
-                                historyMatchesBySource.values().stream().mapToInt(List::size).sum(),
-                                countSameBatchCandidates(incoming),
-                                selectedPairs,
-                                finalLinks.size(),
-                                queryDurationMs,
-                                buildDurationMs,
-                                elapsedMillis(upsertStartedAt));
-                    }
-
-                    return TemporalLinkingStats.success(
-                            incoming.size(),
-                            requestBatches.size(),
-                            historyMatchesBySource.values().stream().mapToInt(List::size).sum(),
-                            countSameBatchCandidates(incoming),
-                            selectedPairs,
-                            finalLinks.size(),
-                            queryDurationMs,
-                            buildDurationMs,
-                            elapsedMillis(upsertStartedAt),
-                            degraded);
+                    return new TemporalLinkingPlan(
+                            List.copyOf(finalLinks.values()),
+                            TemporalLinkingStats.success(
+                                    incoming.size(),
+                                    requestBatches.size(),
+                                    historyMatchesBySource.values().stream()
+                                            .mapToInt(List::size)
+                                            .sum(),
+                                    countSameBatchCandidates(incoming),
+                                    selectedPairs,
+                                    finalLinks.size(),
+                                    queryDurationMs,
+                                    buildDurationMs,
+                                    0L,
+                                    degraded));
                 });
     }
 
@@ -386,6 +390,50 @@ public class TemporalItemLinker {
                     buildDurationMs,
                     upsertDurationMs,
                     true);
+        }
+
+        public TemporalLinkingStats withUpsertDuration(long upsertDurationMs) {
+            return new TemporalLinkingStats(
+                    sourceCount,
+                    historyQueryBatchCount,
+                    historyCandidateCount,
+                    intraBatchCandidateCount,
+                    selectedPairCount,
+                    createdLinkCount,
+                    queryDurationMs,
+                    buildDurationMs,
+                    upsertDurationMs,
+                    degraded);
+        }
+
+        public TemporalLinkingStats withUpsertFailure(long upsertDurationMs) {
+            return new TemporalLinkingStats(
+                    sourceCount,
+                    historyQueryBatchCount,
+                    historyCandidateCount,
+                    intraBatchCandidateCount,
+                    selectedPairCount,
+                    createdLinkCount,
+                    queryDurationMs,
+                    buildDurationMs,
+                    upsertDurationMs,
+                    true);
+        }
+    }
+
+    public record TemporalLinkingPlan(List<ItemLink> links, TemporalLinkingStats stats) {
+
+        public TemporalLinkingPlan {
+            links = links == null ? List.of() : List.copyOf(links);
+            stats = stats == null ? TemporalLinkingStats.empty() : stats;
+        }
+
+        public static TemporalLinkingPlan empty() {
+            return new TemporalLinkingPlan(List.of(), TemporalLinkingStats.empty());
+        }
+
+        public static TemporalLinkingPlan stageFailure() {
+            return new TemporalLinkingPlan(List.of(), TemporalLinkingStats.stageFailure());
         }
     }
 }

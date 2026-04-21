@@ -348,6 +348,55 @@ class LlmItemExtractionStrategyTest {
     }
 
     @Test
+    @DisplayName("mergeMetadata should store thread semantics under versioned metadata key")
+    void mergeMetadataShouldStoreThreadSemanticsUnderVersionedMetadataKey() {
+        var segment =
+                new ParsedSegment("text", null, 0, 1, "raw-1", Map.of("channel", "chat"), null);
+        var semantics =
+                new MemoryItemExtractionResponse.ExtractedThreadSemantics(
+                        1,
+                        List.of(
+                                new MemoryItemExtractionResponse.ExtractedThreadMarker(
+                                        "STATE_CHANGE",
+                                        "project:memind-v1",
+                                        "Memind v1 moved into implementation",
+                                        Map.of(
+                                                "fromState",
+                                                "planning",
+                                                "toState",
+                                                "implementation"))),
+                        List.of(
+                                new MemoryItemExtractionResponse.ExtractedCanonicalRef(
+                                        "project", "memind-v1")),
+                        List.of(
+                                new MemoryItemExtractionResponse.ExtractedContinuityLink(
+                                        "CONTINUES", 301L)));
+        var item =
+                new MemoryItemExtractionResponse.ExtractedItem(
+                        "fact",
+                        0.9f,
+                        null,
+                        null,
+                        List.of(),
+                        Map.of("source", "llm"),
+                        "event",
+                        List.of(),
+                        List.of(),
+                        semantics);
+
+        assertThat(LlmItemExtractionStrategy.mergeMetadata(segment, item))
+                .containsEntry("channel", "chat")
+                .containsEntry("source", "llm")
+                .containsKey("threadSemantics");
+        assertThat(LlmItemExtractionStrategy.mergeMetadata(segment, item).get("threadSemantics"))
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("version", 1)
+                .containsKey("markers")
+                .containsKey("canonicalRefs")
+                .containsKey("continuityLinks");
+    }
+
+    @Test
     @ResourceLock(Resources.SYSTEM_PROPERTIES)
     @DisplayName("extract should normalize structured week time")
     void extractShouldNormalizeStructuredWeekTime() {

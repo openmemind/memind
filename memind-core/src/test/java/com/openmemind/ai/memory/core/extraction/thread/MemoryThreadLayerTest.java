@@ -13,9 +13,10 @@
  */
 package com.openmemind.ai.memory.core.extraction.thread;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -29,7 +30,7 @@ import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
-import com.openmemind.ai.memory.core.extraction.thread.scheduler.MemoryThreadBuildScheduler;
+import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 import com.openmemind.ai.memory.core.support.TestMemoryIds;
 import java.time.Instant;
 import java.util.List;
@@ -41,21 +42,18 @@ import reactor.test.StepVerifier;
 class MemoryThreadLayerTest {
 
     @Test
-    void extractSchedulesDerivationWithoutBlockingItemWrites() {
+    void extractEnqueuesCommittedItemsAndWakesWorkerWithoutBlockingItemWrites() {
         MemoryItemExtractStep delegate = mock(MemoryItemExtractStep.class);
-        MemoryThreadBuildScheduler scheduler = mock(MemoryThreadBuildScheduler.class);
-        MemoryThreadLayer layer =
-                new MemoryThreadLayer(
-                        delegate,
-                        scheduler,
-                        MemoryThreadOptions.defaults()
-                                .withEnabled(true)
-                                .withDerivation(
-                                        MemoryThreadDerivationOptions.defaults()
-                                                .withEnabled(true)));
+        ThreadProjectionStore store = mock(ThreadProjectionStore.class);
+        ThreadIntakeWorker worker = mock(ThreadIntakeWorker.class);
+        MemoryThreadLayer layer = new MemoryThreadLayer(delegate, store, worker, enabledOptions());
         MemoryItem item = item(101L, "Started seeing friends again");
         MemoryItemResult result = new MemoryItemResult(List.of(item), List.of());
-        when(delegate.extract(any(), any(), any())).thenReturn(Mono.just(result));
+        when(delegate.extract(
+                        eq(TestMemoryIds.userAgent()),
+                        eq(RawDataResult.empty()),
+                        eq(ItemExtractionConfig.defaults())))
+                .thenReturn(Mono.just(result));
 
         StepVerifier.create(
                         layer.extract(
@@ -65,11 +63,38 @@ class MemoryThreadLayerTest {
                 .expectNext(result)
                 .verifyComplete();
 
-        verify(scheduler)
-                .submitDerivation(
+        verify(store).ensureRuntime(TestMemoryIds.userAgent(), "thread-core-v1");
+        verify(store).enqueue(TestMemoryIds.userAgent(), 101L);
+        verify(worker).wake(TestMemoryIds.userAgent());
+    }
+
+    @Test
+    void enqueueFailureMarksRuntimeRebuildRequiredWithoutFailingExtraction() {
+        MemoryItemExtractStep delegate = mock(MemoryItemExtractStep.class);
+        ThreadProjectionStore store = mock(ThreadProjectionStore.class);
+        ThreadIntakeWorker worker = mock(ThreadIntakeWorker.class);
+        MemoryThreadLayer layer = new MemoryThreadLayer(delegate, store, worker, enabledOptions());
+        MemoryItem item = item(201L, "Alice followed up again");
+        MemoryItemResult result = new MemoryItemResult(List.of(item), List.of());
+        when(delegate.extract(
                         eq(TestMemoryIds.userAgent()),
-                        eq(List.of(item)),
-                        any(ItemExtractionConfig.class));
+                        eq(RawDataResult.empty()),
+                        eq(ItemExtractionConfig.defaults())))
+                .thenReturn(Mono.just(result));
+        doThrow(new IllegalStateException("boom"))
+                .when(store)
+                .enqueue(TestMemoryIds.userAgent(), 201L);
+
+        StepVerifier.create(
+                        layer.extract(
+                                TestMemoryIds.userAgent(),
+                                RawDataResult.empty(),
+                                ItemExtractionConfig.defaults()))
+                .expectNext(result)
+                .verifyComplete();
+
+        verify(store).markRebuildRequired(TestMemoryIds.userAgent(), "enqueue failure");
+        verify(worker, never()).wake(TestMemoryIds.userAgent());
     }
 
     private static MemoryItem item(Long id, String content) {
@@ -88,5 +113,11 @@ class MemoryThreadLayerTest {
                 Map.of(),
                 Instant.parse("2026-04-18T00:00:00Z"),
                 MemoryItemType.FACT);
+    }
+
+    private static MemoryThreadOptions enabledOptions() {
+        return MemoryThreadOptions.defaults()
+                .withEnabled(true)
+                .withDerivation(MemoryThreadDerivationOptions.defaults().withEnabled(true));
     }
 }

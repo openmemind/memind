@@ -21,26 +21,37 @@ import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
 import com.openmemind.ai.memory.core.data.MemoryResource;
-import com.openmemind.ai.memory.core.data.MemoryThread;
-import com.openmemind.ai.memory.core.data.MemoryThreadItem;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadEventType;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadIntakeStatus;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadLifecycleStatus;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadMembershipRole;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadObjectState;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadProjectionState;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadType;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadEvent;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadIntakeOutboxEntry;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadMembership;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadProjection;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadRuntimeState;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.graph.GraphOperations;
 import com.openmemind.ai.memory.core.store.graph.GraphOperationsCapabilities;
+import com.openmemind.ai.memory.core.store.graph.ItemGraphCommitOperations;
 import com.openmemind.ai.memory.core.store.graph.NoOpGraphOperations;
+import com.openmemind.ai.memory.core.store.graph.NoOpItemGraphCommitOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.item.TemporalCandidateMatch;
 import com.openmemind.ai.memory.core.store.item.TemporalCandidateRequest;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
-import com.openmemind.ai.memory.core.store.thread.MemoryThreadOperations;
-import com.openmemind.ai.memory.core.store.thread.NoOpMemoryThreadOperations;
+import com.openmemind.ai.memory.core.store.thread.NoOpThreadProjectionStore;
+import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.InsightConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.InsightTypeConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.ItemConverter;
-import com.openmemind.ai.memory.plugin.store.mybatis.converter.MemoryThreadConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.RawDataConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.ResourceConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryInsightDO;
@@ -48,26 +59,31 @@ import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryInsightTyp
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryItemDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryRawDataDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryResourceDO;
-import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadDO;
-import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadItemDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadEventDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadIntakeOutboxDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadMembershipDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadProjectionDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadRuntimeDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightTypeMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryRawDataMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryResourceMapper;
-import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadItemMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadEventMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadIntakeOutboxMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMembershipMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadProjectionMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadRuntimeMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.schema.DatabaseDialect;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -79,7 +95,7 @@ public class MybatisPlusMemoryStore
                 ItemOperations,
                 InsightOperations,
                 ResourceOperations,
-                MemoryThreadOperations {
+                ThreadProjectionStore {
 
     private final MemoryRawDataMapper rawDataMapper;
     private final MemoryItemMapper itemMapper;
@@ -89,9 +105,13 @@ public class MybatisPlusMemoryStore
     private final ResourceStore resourceStore;
     private final GraphOperations graphOperations;
     private final GraphOperationsCapabilities graphOperationsCapabilities;
+    private final ItemGraphCommitOperations itemGraphCommitOperations;
     private final DatabaseDialect dialect;
-    private final MemoryThreadMapper threadMapper;
-    private final MemoryThreadItemMapper threadItemMapper;
+    private final MemoryThreadProjectionMapper threadProjectionMapper;
+    private final MemoryThreadEventMapper threadEventMapper;
+    private final MemoryThreadMembershipMapper threadMembershipMapper;
+    private final MemoryThreadIntakeOutboxMapper threadIntakeOutboxMapper;
+    private final MemoryThreadRuntimeMapper threadRuntimeMapper;
 
     public MybatisPlusMemoryStore(
             MemoryRawDataMapper rawDataMapper,
@@ -103,6 +123,11 @@ public class MybatisPlusMemoryStore
                 itemMapper,
                 insightTypeMapper,
                 insightMapper,
+                null,
+                null,
+                null,
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -130,6 +155,11 @@ public class MybatisPlusMemoryStore
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 null);
     }
 
@@ -152,6 +182,11 @@ public class MybatisPlusMemoryStore
                 graphOperations,
                 null,
                 null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 null);
     }
 
@@ -166,7 +201,12 @@ public class MybatisPlusMemoryStore
             GraphOperations graphOperations,
             GraphOperationsCapabilities graphOperationsCapabilities,
             MemoryThreadMapper threadMapper,
-            MemoryThreadItemMapper threadItemMapper) {
+            MemoryThreadProjectionMapper threadProjectionMapper,
+            MemoryThreadEventMapper threadEventMapper,
+            MemoryThreadMembershipMapper threadMembershipMapper,
+            MemoryThreadIntakeOutboxMapper threadIntakeOutboxMapper,
+            MemoryThreadRuntimeMapper threadRuntimeMapper,
+            ItemGraphCommitOperations itemGraphCommitOperations) {
         this.rawDataMapper = rawDataMapper;
         this.itemMapper = itemMapper;
         this.insightTypeMapper = insightTypeMapper;
@@ -180,8 +220,15 @@ public class MybatisPlusMemoryStore
                 graphOperationsCapabilities != null
                         ? graphOperationsCapabilities
                         : GraphOperationsCapabilities.NONE;
-        this.threadMapper = threadMapper;
-        this.threadItemMapper = threadItemMapper;
+        this.itemGraphCommitOperations =
+                itemGraphCommitOperations != null
+                        ? itemGraphCommitOperations
+                        : NoOpItemGraphCommitOperations.INSTANCE;
+        this.threadProjectionMapper = threadProjectionMapper;
+        this.threadEventMapper = threadEventMapper;
+        this.threadMembershipMapper = threadMembershipMapper;
+        this.threadIntakeOutboxMapper = threadIntakeOutboxMapper;
+        this.threadRuntimeMapper = threadRuntimeMapper;
     }
 
     @Override
@@ -220,10 +267,19 @@ public class MybatisPlusMemoryStore
     }
 
     @Override
-    public MemoryThreadOperations threadOperations() {
-        return threadMapper != null && threadItemMapper != null
+    public ItemGraphCommitOperations itemGraphCommitOperations() {
+        return itemGraphCommitOperations;
+    }
+
+    @Override
+    public ThreadProjectionStore threadOperations() {
+        return threadProjectionMapper != null
+                        && threadEventMapper != null
+                        && threadMembershipMapper != null
+                        && threadIntakeOutboxMapper != null
+                        && threadRuntimeMapper != null
                 ? this
-                : NoOpMemoryThreadOperations.INSTANCE;
+                : NoOpThreadProjectionStore.INSTANCE;
     }
 
     // ===== MemoryRawData =====
@@ -555,138 +611,476 @@ public class MybatisPlusMemoryStore
         }
     }
 
-    // ===== MemoryThread =====
+    // ===== ThreadProjectionStore =====
 
     @Override
     @Transactional
-    public void upsertThreads(MemoryId id, List<MemoryThread> threads) {
-        if (threadMapper == null || threads == null || threads.isEmpty()) {
+    public void ensureRuntime(MemoryId memoryId, String materializationPolicyVersion) {
+        if (threadRuntimeMapper == null) {
             return;
         }
-
-        var threadIds = threads.stream().map(MemoryThread::id).filter(Objects::nonNull).toList();
-        Map<Long, MemoryThreadDO> existingByBizId =
-                threadIds.isEmpty()
-                        ? Map.of()
-                        : threadMapper
-                                .selectList(
-                                        memoryQuery(id, MemoryThreadDO.class)
-                                                .in("biz_id", threadIds))
-                                .stream()
-                                .collect(
-                                        Collectors.toMap(
-                                                MemoryThreadDO::getBizId, Function.identity()));
-
-        threads.forEach(
-                thread -> {
-                    Objects.requireNonNull(thread.id(), "memoryThread.id");
-                    MemoryThreadDO dataObject = MemoryThreadConverter.toDO(id, thread);
-                    MemoryThreadDO existing = existingByBizId.get(thread.id());
-                    if (existing != null) {
-                        dataObject.setId(existing.getId());
-                        threadMapper.updateById(dataObject);
-                    } else {
-                        threadMapper.insert(dataObject);
-                    }
-                });
+        String memoryIdentifier = memoryId.toIdentifier();
+        if (threadRuntimeMapper.selectById(memoryIdentifier) != null) {
+            return;
+        }
+        upsertRuntime(
+                new MemoryThreadRuntimeState(
+                        memoryIdentifier,
+                        MemoryThreadProjectionState.REBUILD_REQUIRED,
+                        0,
+                        0,
+                        null,
+                        null,
+                        false,
+                        null,
+                        materializationPolicyVersion,
+                        "runtime bootstrap",
+                        Instant.now()));
     }
 
     @Override
-    @Transactional
-    public void upsertThreadItems(MemoryId id, List<MemoryThreadItem> items) {
-        if (threadItemMapper == null || items == null || items.isEmpty()) {
-            return;
+    public Optional<MemoryThreadRuntimeState> getRuntime(MemoryId memoryId) {
+        if (threadRuntimeMapper == null) {
+            return Optional.empty();
         }
-
-        validateIncomingMembershipBatch(items);
-
-        var membershipIds =
-                items.stream().map(MemoryThreadItem::id).filter(Objects::nonNull).toList();
-        var itemIds = items.stream().map(MemoryThreadItem::itemId).toList();
-        Map<Long, MemoryThreadItemDO> existingByBizId =
-                membershipIds.isEmpty()
-                        ? Map.of()
-                        : threadItemMapper
-                                .selectList(
-                                        memoryQuery(id, MemoryThreadItemDO.class)
-                                                .in("biz_id", membershipIds))
-                                .stream()
-                                .collect(
-                                        Collectors.toMap(
-                                                MemoryThreadItemDO::getBizId, Function.identity()));
-        Map<Long, MemoryThreadItemDO> existingByItemId =
-                itemIds.isEmpty()
-                        ? Map.of()
-                        : threadItemMapper
-                                .selectList(
-                                        memoryQuery(id, MemoryThreadItemDO.class)
-                                                .in("item_id", itemIds))
-                                .stream()
-                                .collect(
-                                        Collectors.toMap(
-                                                MemoryThreadItemDO::getItemId,
-                                                Function.identity(),
-                                                (left, right) -> left));
-
-        items.forEach(
-                item -> {
-                    Objects.requireNonNull(item.id(), "memoryThreadItem.id");
-                    MemoryThreadItemDO existingForItem = existingByItemId.get(item.itemId());
-                    if (existingForItem != null
-                            && !Objects.equals(existingForItem.getBizId(), item.id())) {
-                        throw new IllegalStateException(
-                                "single-thread-per-item violated for itemId=" + item.itemId());
-                    }
-
-                    MemoryThreadItemDO dataObject = MemoryThreadConverter.toDO(id, item);
-                    MemoryThreadItemDO existing = existingByBizId.get(item.id());
-                    if (existing != null) {
-                        dataObject.setId(existing.getId());
-                        threadItemMapper.updateById(dataObject);
-                    } else {
-                        threadItemMapper.insert(dataObject);
-                    }
-                });
+        return Optional.ofNullable(threadRuntimeMapper.selectById(memoryId.toIdentifier()))
+                .map(MybatisPlusMemoryStore::toRuntimeRecord);
     }
 
     @Override
-    public List<MemoryThread> listThreads(MemoryId id) {
-        if (threadMapper == null) {
+    public List<MemoryThreadProjection> listThreads(MemoryId memoryId) {
+        if (threadProjectionMapper == null) {
             return List.of();
         }
-        return threadMapper.selectList(memoryQuery(id, MemoryThreadDO.class)).stream()
-                .map(MemoryThreadConverter::toRecord)
-                .sorted(
-                        Comparator.comparingInt(MemoryThread::displayOrderHint)
-                                .thenComparing(
-                                        thread ->
-                                                thread.id() != null ? thread.id() : Long.MAX_VALUE)
-                                .thenComparing(MemoryThread::threadKey))
+        return threadProjectionMapper
+                .selectList(
+                        threadMemoryQuery(memoryId.toIdentifier(), MemoryThreadProjectionDO.class)
+                                .orderByAsc("thread_key"))
+                .stream()
+                .map(MybatisPlusMemoryStore::toProjectionRecord)
                 .toList();
     }
 
     @Override
-    public List<MemoryThreadItem> listThreadItems(MemoryId id) {
-        if (threadItemMapper == null) {
+    public Optional<MemoryThreadProjection> getThread(MemoryId memoryId, String threadKey) {
+        if (threadProjectionMapper == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(
+                        threadProjectionMapper.selectOne(
+                                threadMemoryQuery(
+                                                memoryId.toIdentifier(),
+                                                MemoryThreadProjectionDO.class)
+                                        .eq("thread_key", threadKey)
+                                        .last("LIMIT 1")))
+                .map(MybatisPlusMemoryStore::toProjectionRecord);
+    }
+
+    @Override
+    public List<MemoryThreadEvent> listEvents(MemoryId memoryId, String threadKey) {
+        if (threadEventMapper == null) {
             return List.of();
         }
-        return threadItemMapper.selectList(memoryQuery(id, MemoryThreadItemDO.class)).stream()
-                .map(MemoryThreadConverter::toRecord)
-                .sorted(
-                        Comparator.comparingInt(MemoryThreadItem::sequenceHint)
-                                .thenComparing(MemoryThreadItem::itemId)
-                                .thenComparing(
-                                        item -> item.id() != null ? item.id() : Long.MAX_VALUE))
+        return threadEventMapper
+                .selectList(
+                        threadMemoryQuery(memoryId.toIdentifier(), MemoryThreadEventDO.class)
+                                .eq("thread_key", threadKey)
+                                .orderByAsc("event_seq", "event_key"))
+                .stream()
+                .map(MybatisPlusMemoryStore::toEventRecord)
+                .toList();
+    }
+
+    @Override
+    public List<MemoryThreadMembership> listMemberships(MemoryId memoryId, String threadKey) {
+        if (threadMembershipMapper == null) {
+            return List.of();
+        }
+        return threadMembershipMapper
+                .selectList(
+                        threadMemoryQuery(memoryId.toIdentifier(), MemoryThreadMembershipDO.class)
+                                .eq("thread_key", threadKey)
+                                .orderByAsc("item_id", "role"))
+                .stream()
+                .map(MybatisPlusMemoryStore::toMembershipRecord)
+                .toList();
+    }
+
+    @Override
+    public List<MemoryThreadProjection> listThreadsByItemId(MemoryId memoryId, long itemId) {
+        if (threadMembershipMapper == null || threadProjectionMapper == null) {
+            return List.of();
+        }
+        List<String> threadKeys =
+                threadMembershipMapper
+                        .selectList(
+                                threadMemoryQuery(
+                                                memoryId.toIdentifier(),
+                                                MemoryThreadMembershipDO.class)
+                                        .eq("item_id", itemId)
+                                        .orderByAsc("thread_key"))
+                        .stream()
+                        .map(MemoryThreadMembershipDO::getThreadKey)
+                        .distinct()
+                        .toList();
+        if (threadKeys.isEmpty()) {
+            return List.of();
+        }
+        return threadProjectionMapper
+                .selectList(
+                        threadMemoryQuery(memoryId.toIdentifier(), MemoryThreadProjectionDO.class)
+                                .in("thread_key", threadKeys)
+                                .orderByAsc("thread_key"))
+                .stream()
+                .map(MybatisPlusMemoryStore::toProjectionRecord)
                 .toList();
     }
 
     @Override
     @Transactional
-    public void deleteMembershipsByItemIds(MemoryId id, List<Long> itemIds) {
-        if (threadItemMapper == null || itemIds == null || itemIds.isEmpty()) {
+    public void enqueue(MemoryId memoryId, long triggerItemId) {
+        if (threadIntakeOutboxMapper == null) {
             return;
         }
-        threadItemMapper.delete(memoryQuery(id, MemoryThreadItemDO.class).in("item_id", itemIds));
+        String memoryIdentifier = memoryId.toIdentifier();
+        MemoryThreadIntakeOutboxDO existing =
+                threadIntakeOutboxMapper.selectOne(
+                        threadMemoryQuery(memoryIdentifier, MemoryThreadIntakeOutboxDO.class)
+                                .eq("trigger_item_id", triggerItemId)
+                                .last("LIMIT 1"));
+        if (existing != null) {
+            return;
+        }
+
+        Instant now = Instant.now();
+        MemoryThreadIntakeOutboxDO row = new MemoryThreadIntakeOutboxDO();
+        row.setMemoryId(memoryIdentifier);
+        row.setTriggerItemId(triggerItemId);
+        row.setStatus(MemoryThreadIntakeStatus.PENDING.name());
+        row.setAttemptCount(0);
+        row.setEnqueuedAt(now);
+        row.setCreatedAt(now);
+        row.setUpdatedAt(now);
+        threadIntakeOutboxMapper.insert(row);
+
+        MemoryThreadRuntimeDO runtime =
+                threadRuntimeMapper != null
+                        ? threadRuntimeMapper.selectById(memoryIdentifier)
+                        : null;
+        if (runtime != null) {
+            runtime.setLastEnqueuedItemId(
+                    runtime.getLastEnqueuedItemId() == null
+                            ? triggerItemId
+                            : Math.max(runtime.getLastEnqueuedItemId(), triggerItemId));
+            runtime.setUpdatedAt(now);
+            refreshRuntimeCounters(memoryIdentifier, runtime);
+        }
+    }
+
+    @Override
+    public List<MemoryThreadIntakeOutboxEntry> listOutbox(MemoryId memoryId) {
+        if (threadIntakeOutboxMapper == null) {
+            return List.of();
+        }
+        return threadIntakeOutboxMapper
+                .selectList(
+                        threadMemoryQuery(memoryId.toIdentifier(), MemoryThreadIntakeOutboxDO.class)
+                                .orderByAsc("trigger_item_id"))
+                .stream()
+                .map(MybatisPlusMemoryStore::toOutboxRecord)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public List<MemoryThreadIntakeOutboxEntry> claimPending(
+            MemoryId memoryId, Instant claimedAt, Instant leaseExpiresAt, int batchSize) {
+        if (threadIntakeOutboxMapper == null || batchSize <= 0) {
+            return List.of();
+        }
+        String memoryIdentifier = memoryId.toIdentifier();
+        List<MemoryThreadIntakeOutboxDO> claimedRows =
+                threadIntakeOutboxMapper.selectList(
+                        threadMemoryQuery(memoryIdentifier, MemoryThreadIntakeOutboxDO.class)
+                                .eq("status", MemoryThreadIntakeStatus.PENDING.name())
+                                .orderByAsc("trigger_item_id")
+                                .last("LIMIT " + batchSize));
+        if (claimedRows.isEmpty()) {
+            return List.of();
+        }
+        Instant now = Instant.now();
+        for (MemoryThreadIntakeOutboxDO row : claimedRows) {
+            row.setStatus(MemoryThreadIntakeStatus.PROCESSING.name());
+            row.setClaimedAt(claimedAt);
+            row.setLeaseExpiresAt(leaseExpiresAt);
+            row.setUpdatedAt(now);
+            threadIntakeOutboxMapper.updateById(row);
+        }
+        MemoryThreadRuntimeDO runtime =
+                threadRuntimeMapper != null
+                        ? threadRuntimeMapper.selectById(memoryIdentifier)
+                        : null;
+        if (runtime != null) {
+            refreshRuntimeCounters(memoryIdentifier, runtime);
+        }
+        return claimedRows.stream().map(MybatisPlusMemoryStore::toOutboxRecord).toList();
+    }
+
+    @Override
+    @Transactional
+    public int recoverAbandoned(MemoryId memoryId, Instant now, int maxAttempts) {
+        if (threadIntakeOutboxMapper == null) {
+            return 0;
+        }
+        String memoryIdentifier = memoryId.toIdentifier();
+        List<MemoryThreadIntakeOutboxDO> abandonedRows =
+                threadIntakeOutboxMapper.selectList(
+                        threadMemoryQuery(memoryIdentifier, MemoryThreadIntakeOutboxDO.class)
+                                .eq("status", MemoryThreadIntakeStatus.PROCESSING.name())
+                                .isNotNull("lease_expires_at")
+                                .lt("lease_expires_at", now));
+        if (abandonedRows.isEmpty()) {
+            return 0;
+        }
+        for (MemoryThreadIntakeOutboxDO row : abandonedRows) {
+            int nextAttempt = (row.getAttemptCount() != null ? row.getAttemptCount() : 0) + 1;
+            boolean failed = nextAttempt >= maxAttempts;
+            row.setAttemptCount(nextAttempt);
+            row.setStatus(
+                    failed
+                            ? MemoryThreadIntakeStatus.FAILED.name()
+                            : MemoryThreadIntakeStatus.PENDING.name());
+            row.setClaimedAt(null);
+            row.setLeaseExpiresAt(null);
+            row.setFailureReason(failed ? "lease expired" : null);
+            row.setFinalizedAt(failed ? now : null);
+            row.setUpdatedAt(now);
+            threadIntakeOutboxMapper.updateById(row);
+        }
+        MemoryThreadRuntimeDO runtime =
+                threadRuntimeMapper != null
+                        ? threadRuntimeMapper.selectById(memoryIdentifier)
+                        : null;
+        if (runtime != null) {
+            refreshRuntimeCounters(memoryIdentifier, runtime);
+        }
+        return abandonedRows.size();
+    }
+
+    @Override
+    @Transactional
+    public void finalizeOutboxSuccess(
+            MemoryId memoryId, long triggerItemId, long lastProcessedItemId, Instant finalizedAt) {
+        if (threadIntakeOutboxMapper == null) {
+            return;
+        }
+        String memoryIdentifier = memoryId.toIdentifier();
+        MemoryThreadIntakeOutboxDO row = outboxRow(memoryIdentifier, triggerItemId);
+        if (row == null) {
+            return;
+        }
+        row.setStatus(MemoryThreadIntakeStatus.COMPLETED.name());
+        row.setFailureReason(null);
+        row.setLastProcessedItemId(lastProcessedItemId);
+        row.setFinalizedAt(finalizedAt);
+        row.setUpdatedAt(finalizedAt);
+        threadIntakeOutboxMapper.updateById(row);
+
+        MemoryThreadRuntimeDO runtime =
+                threadRuntimeMapper != null
+                        ? threadRuntimeMapper.selectById(memoryIdentifier)
+                        : null;
+        if (runtime != null) {
+            runtime.setLastProcessedItemId(lastProcessedItemId);
+            runtime.setUpdatedAt(finalizedAt);
+            refreshRuntimeCounters(memoryIdentifier, runtime);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void finalizeOutboxFailure(
+            MemoryId memoryId,
+            long triggerItemId,
+            String reason,
+            int maxAttempts,
+            Instant finalizedAt) {
+        if (threadIntakeOutboxMapper == null) {
+            return;
+        }
+        String memoryIdentifier = memoryId.toIdentifier();
+        MemoryThreadIntakeOutboxDO row = outboxRow(memoryIdentifier, triggerItemId);
+        if (row == null) {
+            return;
+        }
+        int attempts =
+                Math.max(
+                        (row.getAttemptCount() != null ? row.getAttemptCount() : 0) + 1,
+                        maxAttempts);
+        row.setStatus(MemoryThreadIntakeStatus.FAILED.name());
+        row.setAttemptCount(attempts);
+        row.setFailureReason(reason);
+        row.setFinalizedAt(finalizedAt);
+        row.setUpdatedAt(finalizedAt);
+        threadIntakeOutboxMapper.updateById(row);
+
+        MemoryThreadRuntimeDO runtime =
+                threadRuntimeMapper != null
+                        ? threadRuntimeMapper.selectById(memoryIdentifier)
+                        : null;
+        if (runtime != null) {
+            refreshRuntimeCounters(memoryIdentifier, runtime);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void finalizeOutboxSkippedPrefix(
+            MemoryId memoryId, long rebuildCutoffItemId, Instant finalizedAt) {
+        if (threadIntakeOutboxMapper == null) {
+            return;
+        }
+        String memoryIdentifier = memoryId.toIdentifier();
+        List<MemoryThreadIntakeOutboxDO> rows =
+                threadIntakeOutboxMapper.selectList(
+                        threadMemoryQuery(memoryIdentifier, MemoryThreadIntakeOutboxDO.class)
+                                .le("trigger_item_id", rebuildCutoffItemId));
+        for (MemoryThreadIntakeOutboxDO row : rows) {
+            row.setStatus(MemoryThreadIntakeStatus.SKIPPED.name());
+            row.setFinalizedAt(finalizedAt);
+            row.setUpdatedAt(finalizedAt);
+            threadIntakeOutboxMapper.updateById(row);
+        }
+        MemoryThreadRuntimeDO runtime =
+                threadRuntimeMapper != null
+                        ? threadRuntimeMapper.selectById(memoryIdentifier)
+                        : null;
+        if (runtime != null) {
+            refreshRuntimeCounters(memoryIdentifier, runtime);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void markRebuildRequired(MemoryId memoryId, String reason) {
+        if (threadRuntimeMapper == null) {
+            return;
+        }
+        String memoryIdentifier = memoryId.toIdentifier();
+        MemoryThreadRuntimeDO runtime = threadRuntimeMapper.selectById(memoryIdentifier);
+        Instant now = Instant.now();
+        if (runtime == null) {
+            upsertRuntime(
+                    new MemoryThreadRuntimeState(
+                            memoryIdentifier,
+                            MemoryThreadProjectionState.REBUILD_REQUIRED,
+                            outboxCount(memoryIdentifier, MemoryThreadIntakeStatus.PENDING),
+                            outboxCount(memoryIdentifier, MemoryThreadIntakeStatus.FAILED),
+                            null,
+                            null,
+                            false,
+                            null,
+                            "v1",
+                            reason,
+                            now));
+            return;
+        }
+        runtime.setProjectionState(MemoryThreadProjectionState.REBUILD_REQUIRED.name());
+        runtime.setInvalidationReason(reason);
+        runtime.setUpdatedAt(now);
+        refreshRuntimeCounters(memoryIdentifier, runtime);
+    }
+
+    @Override
+    @Transactional
+    public boolean beginRebuild(
+            MemoryId memoryId, String materializationPolicyVersion, long rebuildCutoffItemId) {
+        if (threadRuntimeMapper == null) {
+            return false;
+        }
+        String memoryIdentifier = memoryId.toIdentifier();
+        MemoryThreadRuntimeDO runtime = threadRuntimeMapper.selectById(memoryIdentifier);
+        if (runtime != null && Boolean.TRUE.equals(runtime.getRebuildInProgress())) {
+            return false;
+        }
+        Instant now = Instant.now();
+        if (runtime == null) {
+            upsertRuntime(
+                    new MemoryThreadRuntimeState(
+                            memoryIdentifier,
+                            MemoryThreadProjectionState.REBUILD_REQUIRED,
+                            outboxCount(memoryIdentifier, MemoryThreadIntakeStatus.PENDING),
+                            outboxCount(memoryIdentifier, MemoryThreadIntakeStatus.FAILED),
+                            null,
+                            null,
+                            true,
+                            rebuildCutoffItemId,
+                            materializationPolicyVersion,
+                            "rebuild bootstrap",
+                            now));
+            return true;
+        }
+        runtime.setPendingCount(outboxCount(memoryIdentifier, MemoryThreadIntakeStatus.PENDING));
+        runtime.setFailedCount(outboxCount(memoryIdentifier, MemoryThreadIntakeStatus.FAILED));
+        runtime.setRebuildInProgress(true);
+        runtime.setRebuildCutoffItemId(rebuildCutoffItemId);
+        runtime.setMaterializationPolicyVersion(materializationPolicyVersion);
+        runtime.setUpdatedAt(now);
+        threadRuntimeMapper.updateById(runtime);
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public void replaceProjection(
+            MemoryId memoryId,
+            List<MemoryThreadProjection> threads,
+            List<MemoryThreadEvent> events,
+            List<MemoryThreadMembership> memberships,
+            MemoryThreadRuntimeState runtimeState,
+            Instant finalizedAt) {
+        if (threadProjectionMapper == null
+                || threadEventMapper == null
+                || threadMembershipMapper == null
+                || threadRuntimeMapper == null) {
+            return;
+        }
+        String memoryIdentifier = memoryId.toIdentifier();
+        threadEventMapper.delete(threadMemoryQuery(memoryIdentifier, MemoryThreadEventDO.class));
+        threadMembershipMapper.delete(
+                threadMemoryQuery(memoryIdentifier, MemoryThreadMembershipDO.class));
+        threadProjectionMapper.delete(
+                threadMemoryQuery(memoryIdentifier, MemoryThreadProjectionDO.class));
+
+        if (threads != null) {
+            for (MemoryThreadProjection thread : threads) {
+                threadProjectionMapper.insert(toProjectionDO(thread));
+            }
+        }
+        if (events != null) {
+            for (MemoryThreadEvent event : events) {
+                threadEventMapper.insert(toEventDO(event));
+            }
+        }
+        if (memberships != null) {
+            for (MemoryThreadMembership membership : memberships) {
+                threadMembershipMapper.insert(toMembershipDO(membership));
+            }
+        }
+        MemoryThreadRuntimeState adjustedRuntime =
+                new MemoryThreadRuntimeState(
+                        runtimeState.memoryId(),
+                        runtimeState.projectionState(),
+                        outboxCount(memoryIdentifier, MemoryThreadIntakeStatus.PENDING),
+                        outboxCount(memoryIdentifier, MemoryThreadIntakeStatus.FAILED),
+                        runtimeState.lastEnqueuedItemId(),
+                        runtimeState.lastProcessedItemId(),
+                        runtimeState.rebuildInProgress(),
+                        runtimeState.rebuildCutoffItemId(),
+                        runtimeState.materializationPolicyVersion(),
+                        runtimeState.invalidationReason(),
+                        finalizedAt != null ? finalizedAt : runtimeState.updatedAt());
+        upsertRuntime(adjustedRuntime);
     }
 
     // ===== MemoryInsightType =====
@@ -863,21 +1257,201 @@ public class MybatisPlusMemoryStore
                 .eq("agent_id", id.getAttribute("agentId"));
     }
 
-    private void validateIncomingMembershipBatch(List<MemoryThreadItem> items) {
-        Map<Long, Long> threadByItemId = new HashMap<>();
-        for (MemoryThreadItem item : items) {
-            Long existingThreadId = threadByItemId.putIfAbsent(item.itemId(), item.threadId());
-            if (existingThreadId != null && !Objects.equals(existingThreadId, item.threadId())) {
-                throw new IllegalStateException(
-                        "single-thread-per-item violated for itemId=" + item.itemId());
-            }
-        }
-    }
-
     /**
      * InsightType is global (not scoped by userId/agentId), so no extra conditions needed.
      */
     private <T> QueryWrapper<T> appQuery(Class<T> clazz) {
         return new QueryWrapper<>();
+    }
+
+    private <T> QueryWrapper<T> threadMemoryQuery(String memoryId, Class<T> clazz) {
+        return new QueryWrapper<T>().eq("memory_id", memoryId);
+    }
+
+    private MemoryThreadIntakeOutboxDO outboxRow(String memoryId, long triggerItemId) {
+        return threadIntakeOutboxMapper.selectOne(
+                threadMemoryQuery(memoryId, MemoryThreadIntakeOutboxDO.class)
+                        .eq("trigger_item_id", triggerItemId)
+                        .last("LIMIT 1"));
+    }
+
+    private long outboxCount(String memoryId, MemoryThreadIntakeStatus status) {
+        if (threadIntakeOutboxMapper == null) {
+            return 0L;
+        }
+        Long count =
+                threadIntakeOutboxMapper.selectCount(
+                        threadMemoryQuery(memoryId, MemoryThreadIntakeOutboxDO.class)
+                                .eq("status", status.name()));
+        return count != null ? count : 0L;
+    }
+
+    private void refreshRuntimeCounters(String memoryId, MemoryThreadRuntimeDO runtime) {
+        runtime.setPendingCount(outboxCount(memoryId, MemoryThreadIntakeStatus.PENDING));
+        runtime.setFailedCount(outboxCount(memoryId, MemoryThreadIntakeStatus.FAILED));
+        upsertRuntime(toRuntimeRecord(runtime));
+    }
+
+    private void upsertRuntime(MemoryThreadRuntimeState runtimeState) {
+        if (threadRuntimeMapper == null) {
+            return;
+        }
+        MemoryThreadRuntimeDO dataObject = toRuntimeDO(runtimeState);
+        if (threadRuntimeMapper.selectById(runtimeState.memoryId()) != null) {
+            threadRuntimeMapper.updateById(dataObject);
+        } else {
+            threadRuntimeMapper.insert(dataObject);
+        }
+    }
+
+    private static MemoryThreadProjectionDO toProjectionDO(MemoryThreadProjection projection) {
+        MemoryThreadProjectionDO dataObject = new MemoryThreadProjectionDO();
+        dataObject.setMemoryId(projection.memoryId());
+        dataObject.setThreadKey(projection.threadKey());
+        dataObject.setThreadType(projection.threadType().name());
+        dataObject.setAnchorKind(projection.anchorKind());
+        dataObject.setAnchorKey(projection.anchorKey());
+        dataObject.setDisplayLabel(projection.displayLabel());
+        dataObject.setLifecycleStatus(projection.lifecycleStatus().name());
+        dataObject.setObjectState(projection.objectState().name());
+        dataObject.setHeadline(projection.headline());
+        dataObject.setSnapshotJson(projection.snapshotJson());
+        dataObject.setSnapshotVersion(projection.snapshotVersion());
+        dataObject.setOpenedAt(projection.openedAt());
+        dataObject.setLastEventAt(projection.lastEventAt());
+        dataObject.setLastMeaningfulUpdateAt(projection.lastMeaningfulUpdateAt());
+        dataObject.setClosedAt(projection.closedAt());
+        dataObject.setEventCount(projection.eventCount());
+        dataObject.setMemberCount(projection.memberCount());
+        dataObject.setCreatedAt(projection.createdAt());
+        dataObject.setUpdatedAt(projection.updatedAt());
+        return dataObject;
+    }
+
+    private static MemoryThreadProjection toProjectionRecord(MemoryThreadProjectionDO dataObject) {
+        return new MemoryThreadProjection(
+                dataObject.getMemoryId(),
+                dataObject.getThreadKey(),
+                MemoryThreadType.valueOf(dataObject.getThreadType()),
+                dataObject.getAnchorKind(),
+                dataObject.getAnchorKey(),
+                dataObject.getDisplayLabel(),
+                MemoryThreadLifecycleStatus.valueOf(dataObject.getLifecycleStatus()),
+                MemoryThreadObjectState.valueOf(dataObject.getObjectState()),
+                dataObject.getHeadline(),
+                dataObject.getSnapshotJson(),
+                dataObject.getSnapshotVersion() != null ? dataObject.getSnapshotVersion() : 0,
+                dataObject.getOpenedAt(),
+                dataObject.getLastEventAt(),
+                dataObject.getLastMeaningfulUpdateAt(),
+                dataObject.getClosedAt(),
+                dataObject.getEventCount() != null ? dataObject.getEventCount() : 0L,
+                dataObject.getMemberCount() != null ? dataObject.getMemberCount() : 0L,
+                dataObject.getCreatedAt(),
+                dataObject.getUpdatedAt());
+    }
+
+    private static MemoryThreadEventDO toEventDO(MemoryThreadEvent event) {
+        MemoryThreadEventDO dataObject = new MemoryThreadEventDO();
+        dataObject.setMemoryId(event.memoryId());
+        dataObject.setThreadKey(event.threadKey());
+        dataObject.setEventKey(event.eventKey());
+        dataObject.setEventSeq(event.eventSeq());
+        dataObject.setEventType(event.eventType().name());
+        dataObject.setEventTime(event.eventTime());
+        dataObject.setEventPayloadJson(event.eventPayloadJson());
+        dataObject.setEventPayloadVersion(event.eventPayloadVersion());
+        dataObject.setMeaningful(event.meaningful());
+        dataObject.setConfidence(event.confidence());
+        dataObject.setCreatedAt(event.createdAt());
+        return dataObject;
+    }
+
+    private static MemoryThreadEvent toEventRecord(MemoryThreadEventDO dataObject) {
+        return new MemoryThreadEvent(
+                dataObject.getMemoryId(),
+                dataObject.getThreadKey(),
+                dataObject.getEventKey(),
+                dataObject.getEventSeq() != null ? dataObject.getEventSeq() : 0L,
+                MemoryThreadEventType.valueOf(dataObject.getEventType()),
+                dataObject.getEventTime(),
+                dataObject.getEventPayloadJson(),
+                dataObject.getEventPayloadVersion() != null
+                        ? dataObject.getEventPayloadVersion()
+                        : 0,
+                Boolean.TRUE.equals(dataObject.getMeaningful()),
+                dataObject.getConfidence(),
+                dataObject.getCreatedAt());
+    }
+
+    private static MemoryThreadMembershipDO toMembershipDO(MemoryThreadMembership membership) {
+        MemoryThreadMembershipDO dataObject = new MemoryThreadMembershipDO();
+        dataObject.setMemoryId(membership.memoryId());
+        dataObject.setThreadKey(membership.threadKey());
+        dataObject.setItemId(membership.itemId());
+        dataObject.setRole(membership.role().name());
+        dataObject.setPrimary(membership.primary());
+        dataObject.setRelevanceWeight(membership.relevanceWeight());
+        dataObject.setCreatedAt(membership.createdAt());
+        dataObject.setUpdatedAt(membership.updatedAt());
+        return dataObject;
+    }
+
+    private static MemoryThreadMembership toMembershipRecord(MemoryThreadMembershipDO dataObject) {
+        return new MemoryThreadMembership(
+                dataObject.getMemoryId(),
+                dataObject.getThreadKey(),
+                dataObject.getItemId(),
+                MemoryThreadMembershipRole.valueOf(dataObject.getRole()),
+                Boolean.TRUE.equals(dataObject.getPrimary()),
+                dataObject.getRelevanceWeight() != null ? dataObject.getRelevanceWeight() : 0.0d,
+                dataObject.getCreatedAt(),
+                dataObject.getUpdatedAt());
+    }
+
+    private static MemoryThreadIntakeOutboxEntry toOutboxRecord(
+            MemoryThreadIntakeOutboxDO dataObject) {
+        return new MemoryThreadIntakeOutboxEntry(
+                dataObject.getMemoryId(),
+                dataObject.getTriggerItemId(),
+                MemoryThreadIntakeStatus.valueOf(dataObject.getStatus()),
+                dataObject.getAttemptCount() != null ? dataObject.getAttemptCount() : 0,
+                dataObject.getClaimedAt(),
+                dataObject.getLeaseExpiresAt(),
+                dataObject.getFailureReason(),
+                dataObject.getLastProcessedItemId(),
+                dataObject.getEnqueuedAt(),
+                dataObject.getFinalizedAt());
+    }
+
+    private static MemoryThreadRuntimeDO toRuntimeDO(MemoryThreadRuntimeState runtimeState) {
+        MemoryThreadRuntimeDO dataObject = new MemoryThreadRuntimeDO();
+        dataObject.setMemoryId(runtimeState.memoryId());
+        dataObject.setProjectionState(runtimeState.projectionState().name());
+        dataObject.setPendingCount(runtimeState.pendingCount());
+        dataObject.setFailedCount(runtimeState.failedCount());
+        dataObject.setLastEnqueuedItemId(runtimeState.lastEnqueuedItemId());
+        dataObject.setLastProcessedItemId(runtimeState.lastProcessedItemId());
+        dataObject.setRebuildInProgress(runtimeState.rebuildInProgress());
+        dataObject.setRebuildCutoffItemId(runtimeState.rebuildCutoffItemId());
+        dataObject.setMaterializationPolicyVersion(runtimeState.materializationPolicyVersion());
+        dataObject.setInvalidationReason(runtimeState.invalidationReason());
+        dataObject.setUpdatedAt(runtimeState.updatedAt());
+        return dataObject;
+    }
+
+    private static MemoryThreadRuntimeState toRuntimeRecord(MemoryThreadRuntimeDO dataObject) {
+        return new MemoryThreadRuntimeState(
+                dataObject.getMemoryId(),
+                MemoryThreadProjectionState.valueOf(dataObject.getProjectionState()),
+                dataObject.getPendingCount() != null ? dataObject.getPendingCount() : 0L,
+                dataObject.getFailedCount() != null ? dataObject.getFailedCount() : 0L,
+                dataObject.getLastEnqueuedItemId(),
+                dataObject.getLastProcessedItemId(),
+                Boolean.TRUE.equals(dataObject.getRebuildInProgress()),
+                dataObject.getRebuildCutoffItemId(),
+                dataObject.getMaterializationPolicyVersion(),
+                dataObject.getInvalidationReason(),
+                dataObject.getUpdatedAt());
     }
 }

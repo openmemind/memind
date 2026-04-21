@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.builder;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphMode;
 import java.time.Duration;
 import java.util.Objects;
 
@@ -23,6 +24,7 @@ import java.util.Objects;
  */
 public record SimpleRetrievalGraphOptions(
         boolean enabled,
+        RetrievalGraphMode mode,
         int maxSeedItems,
         int maxExpandedItems,
         int maxSemanticNeighborsPerSeed,
@@ -38,6 +40,7 @@ public record SimpleRetrievalGraphOptions(
         Duration timeout) {
 
     public SimpleRetrievalGraphOptions {
+        Objects.requireNonNull(mode, "mode");
         validateGraphAssistShape(
                 maxSeedItems,
                 maxExpandedItems,
@@ -96,12 +99,27 @@ public record SimpleRetrievalGraphOptions(
 
     public static SimpleRetrievalGraphOptions defaults() {
         return new SimpleRetrievalGraphOptions(
-                false, 6, 12, 2, 2, 2, 3, 8, 0.35d, 0.55d, 0.70f, 3, 0.5d, Duration.ofMillis(200));
+                false,
+                RetrievalGraphMode.ASSIST,
+                6,
+                12,
+                2,
+                2,
+                2,
+                3,
+                8,
+                0.35d,
+                0.55d,
+                0.70f,
+                3,
+                0.5d,
+                Duration.ofMillis(200));
     }
 
     @JsonCreator
     public static SimpleRetrievalGraphOptions fromJson(
             @JsonProperty("enabled") Boolean enabled,
+            @JsonProperty("mode") RetrievalGraphMode mode,
             @JsonProperty("maxSeedItems") Integer maxSeedItems,
             @JsonProperty("maxExpandedItems") Integer maxExpandedItems,
             @JsonProperty("maxSemanticNeighborsPerSeed") Integer maxSemanticNeighborsPerSeed,
@@ -118,6 +136,7 @@ public record SimpleRetrievalGraphOptions(
         var defaults = defaults();
         return new SimpleRetrievalGraphOptions(
                 enabled != null ? enabled : defaults.enabled(),
+                mode != null ? mode : defaults.mode(),
                 maxSeedItems != null ? maxSeedItems : defaults.maxSeedItems(),
                 maxExpandedItems != null ? maxExpandedItems : defaults.maxExpandedItems(),
                 maxSemanticNeighborsPerSeed != null
@@ -148,6 +167,26 @@ public record SimpleRetrievalGraphOptions(
     public SimpleRetrievalGraphOptions withEnabled(boolean enabled) {
         return new SimpleRetrievalGraphOptions(
                 enabled,
+                mode,
+                maxSeedItems,
+                maxExpandedItems,
+                maxSemanticNeighborsPerSeed,
+                maxTemporalNeighborsPerSeed,
+                maxCausalNeighborsPerSeed,
+                maxEntitySiblingItemsPerSeed,
+                maxItemsPerEntity,
+                graphChannelWeight,
+                minLinkStrength,
+                minMentionConfidence,
+                protectDirectTopK,
+                semanticEvidenceDecayFactor,
+                timeout);
+    }
+
+    public SimpleRetrievalGraphOptions withMode(RetrievalGraphMode mode) {
+        return new SimpleRetrievalGraphOptions(
+                enabled,
+                mode,
                 maxSeedItems,
                 maxExpandedItems,
                 maxSemanticNeighborsPerSeed,
@@ -166,6 +205,26 @@ public record SimpleRetrievalGraphOptions(
     public SimpleRetrievalGraphOptions withMaxSeedItems(int maxSeedItems) {
         return new SimpleRetrievalGraphOptions(
                 enabled,
+                mode,
+                maxSeedItems,
+                maxExpandedItems,
+                maxSemanticNeighborsPerSeed,
+                maxTemporalNeighborsPerSeed,
+                maxCausalNeighborsPerSeed,
+                maxEntitySiblingItemsPerSeed,
+                maxItemsPerEntity,
+                graphChannelWeight,
+                minLinkStrength,
+                minMentionConfidence,
+                protectDirectTopK,
+                semanticEvidenceDecayFactor,
+                timeout);
+    }
+
+    public SimpleRetrievalGraphOptions withProtectDirectTopK(int protectDirectTopK) {
+        return new SimpleRetrievalGraphOptions(
+                enabled,
+                mode,
                 maxSeedItems,
                 maxExpandedItems,
                 maxSemanticNeighborsPerSeed,
@@ -184,6 +243,7 @@ public record SimpleRetrievalGraphOptions(
     public SimpleRetrievalGraphOptions withTimeout(Duration timeout) {
         return new SimpleRetrievalGraphOptions(
                 enabled,
+                mode,
                 maxSeedItems,
                 maxExpandedItems,
                 maxSemanticNeighborsPerSeed,

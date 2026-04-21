@@ -60,28 +60,31 @@ public class AdminMemoryThreadController {
                                         pageNo, pageSize, userId, agentId, status))));
     }
 
-    @GetMapping("/{threadId}")
-    public ApiResult<AdminMemoryThreadView> detail(@PathVariable Long threadId) {
-        return ApiResult.success(queryService.getThread(threadId));
+    @GetMapping("/{threadKey}")
+    public ApiResult<AdminMemoryThreadView> detail(
+            @PathVariable String threadKey,
+            @RequestParam String userId,
+            @RequestParam(required = false) String agentId) {
+        return ApiResult.success(queryService.getThread(userId, agentId, threadKey));
     }
 
-    @GetMapping("/{threadId}/items")
-    public ApiResult<List<AdminMemoryThreadItemView>> items(@PathVariable Long threadId) {
-        return ApiResult.success(queryService.listThreadItems(threadId));
+    @GetMapping("/{threadKey}/items")
+    public ApiResult<List<AdminMemoryThreadItemView>> items(
+            @PathVariable String threadKey,
+            @RequestParam String userId,
+            @RequestParam(required = false) String agentId) {
+        return ApiResult.success(queryService.listThreadItems(userId, agentId, threadKey));
     }
 
     @GetMapping("/status")
-    public ApiResult<AdminMemoryThreadStatusView> status() {
-        return ApiResult.success(queryService.getStatus());
+    public ApiResult<AdminMemoryThreadStatusView> status(
+            @RequestParam String userId, @RequestParam(required = false) String agentId) {
+        return ApiResult.success(queryService.getStatus(userId, agentId));
     }
 
     @PostMapping("/rebuild")
-    public ApiResult<Integer> rebuildAll() {
-        return ApiResult.success(rebuildService.rebuildAll());
-    }
-
-    @PostMapping("/rebuild/{memoryId}")
-    public ApiResult<Integer> rebuildMemory(@PathVariable String memoryId) {
-        return ApiResult.success(rebuildService.rebuildMemory(memoryId));
+    public ApiResult<Integer> rebuild(
+            @RequestParam String userId, @RequestParam(required = false) String agentId) {
+        return ApiResult.success(rebuildService.rebuild(userId, agentId));
     }
 }

@@ -67,6 +67,7 @@ public class MemoryItemDO extends BaseDO {
     private String type;
 
     private String rawDataType;
+    private String extractionBatchId;
 
     public Integer getId() {
         return id;
@@ -242,5 +243,13 @@ public class MemoryItemDO extends BaseDO {
 
     public void setRawDataType(String rawDataType) {
         this.rawDataType = rawDataType;
+    }
+
+    public String getExtractionBatchId() {
+        return extractionBatchId;
+    }
+
+    public void setExtractionBatchId(String extractionBatchId) {
+        this.extractionBatchId = extractionBatchId;
     }
 }

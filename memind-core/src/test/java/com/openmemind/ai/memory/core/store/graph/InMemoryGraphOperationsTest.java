@@ -18,7 +18,11 @@ import static org.assertj.core.api.Assertions.tuple;
 
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.extraction.item.graph.commit.ExtractionBatchId;
 import com.openmemind.ai.memory.core.extraction.item.graph.entity.normalize.EntityNormalizationVersions;
+import com.openmemind.ai.memory.core.extraction.item.graph.plan.ItemGraphWritePlan;
+import com.openmemind.ai.memory.core.extraction.item.graph.relation.semantic.SemanticEvidenceSource;
+import com.openmemind.ai.memory.core.extraction.item.graph.relation.semantic.SemanticItemRelation;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -112,6 +116,68 @@ class InMemoryGraphOperationsTest {
                         ops.listEntityAliasesByNormalizedAlias(
                                 MEMORY_ID, GraphEntityType.ORGANIZATION, "谷歌"))
                 .isEmpty();
+    }
+
+    @Test
+    void applyGraphWritePlanStagesFactsUntilBatchPromotion() {
+        var ops = new InMemoryGraphOperations();
+        var batchId = new ExtractionBatchId("batch-1");
+        var plan = planWithDuplicateMentionAliasAndSemanticRelation();
+
+        ops.applyGraphWritePlan(MEMORY_ID, batchId, plan);
+        ops.applyGraphWritePlan(MEMORY_ID, batchId, plan);
+
+        assertThat(ops.listItemEntityMentions(MEMORY_ID)).isEmpty();
+        assertThat(ops.listEntityAliases(MEMORY_ID)).isEmpty();
+        assertThat(ops.listItemLinks(MEMORY_ID)).isEmpty();
+
+        var nextView = ops.previewPromotedBatch(MEMORY_ID, batchId);
+        ops.installCommittedBatch(MEMORY_ID, batchId, nextView);
+
+        assertThat(ops.listItemEntityMentions(MEMORY_ID)).hasSize(1);
+        assertThat(ops.listEntityAliases(MEMORY_ID))
+                .singleElement()
+                .extracting(GraphEntityAlias::evidenceCount)
+                .isEqualTo(2);
+        assertThat(ops.listItemLinks(MEMORY_ID))
+                .singleElement()
+                .extracting(
+                        ItemLink::sourceItemId, ItemLink::targetItemId, ItemLink::evidenceSource)
+                .containsExactly(101L, 102L, "vector_search");
+    }
+
+    @Test
+    void applyingDifferentBatchesAccumulatesAliasEvidenceOnlyOncePerBatch() {
+        var ops = new InMemoryGraphOperations();
+
+        ops.applyGraphWritePlan(MEMORY_ID, new ExtractionBatchId("batch-1"), aliasOnlyPlan());
+        ops.applyGraphWritePlan(MEMORY_ID, new ExtractionBatchId("batch-2"), aliasOnlyPlan());
+        ops.installCommittedBatch(
+                MEMORY_ID,
+                new ExtractionBatchId("batch-1"),
+                ops.previewPromotedBatch(MEMORY_ID, new ExtractionBatchId("batch-1")));
+        ops.installCommittedBatch(
+                MEMORY_ID,
+                new ExtractionBatchId("batch-2"),
+                ops.previewPromotedBatch(MEMORY_ID, new ExtractionBatchId("batch-2")));
+
+        assertThat(ops.listEntityAliases(MEMORY_ID))
+                .singleElement()
+                .extracting(GraphEntityAlias::evidenceCount)
+                .isEqualTo(2);
+    }
+
+    @Test
+    void discardingPendingBatchLeavesCommittedViewUntouched() {
+        var ops = new InMemoryGraphOperations();
+        var batchId = new ExtractionBatchId("batch-1");
+
+        ops.applyGraphWritePlan(MEMORY_ID, batchId, aliasOnlyPlan());
+        ops.discardPendingBatch(MEMORY_ID, batchId);
+
+        assertThat(ops.listEntityAliases(MEMORY_ID)).isEmpty();
+        assertThat(ops.listItemEntityMentions(MEMORY_ID)).isEmpty();
+        assertThat(ops.listItemLinks(MEMORY_ID)).isEmpty();
     }
 
     @Test
@@ -402,8 +468,82 @@ class InMemoryGraphOperationsTest {
                 sourceItemId,
                 targetItemId,
                 linkType,
+                defaultRelationCode(linkType),
+                defaultEvidenceSource(linkType),
                 1.0d,
-                Map.of("source", "test"),
+                Map.of(),
                 NOW);
+    }
+
+    private static String defaultRelationCode(ItemLinkType linkType) {
+        return switch (linkType) {
+            case SEMANTIC -> null;
+            case TEMPORAL -> "before";
+            case CAUSAL -> "caused_by";
+        };
+    }
+
+    private static String defaultEvidenceSource(ItemLinkType linkType) {
+        return linkType == ItemLinkType.SEMANTIC ? "vector_search" : null;
+    }
+
+    private static ItemGraphWritePlan planWithDuplicateMentionAliasAndSemanticRelation() {
+        return ItemGraphWritePlan.builder()
+                .mentions(
+                        List.of(
+                                new ItemEntityMention(
+                                        MEMORY_ID.toIdentifier(),
+                                        101L,
+                                        "person:sam_altman",
+                                        0.40f,
+                                        Map.of(),
+                                        NOW),
+                                new ItemEntityMention(
+                                        MEMORY_ID.toIdentifier(),
+                                        101L,
+                                        "person:sam_altman",
+                                        0.95f,
+                                        Map.of(),
+                                        NOW)))
+                .aliases(
+                        List.of(
+                                alias(
+                                        "person:sam_altman",
+                                        GraphEntityType.PERSON,
+                                        "sam altman",
+                                        1,
+                                        NOW,
+                                        NOW),
+                                alias(
+                                        "person:sam_altman",
+                                        GraphEntityType.PERSON,
+                                        "sam altman",
+                                        1,
+                                        NOW,
+                                        NOW)))
+                .semanticRelations(
+                        List.of(
+                                new SemanticItemRelation(
+                                        101L,
+                                        102L,
+                                        SemanticEvidenceSource.VECTOR_SEARCH_FALLBACK,
+                                        0.81d),
+                                new SemanticItemRelation(
+                                        101L, 102L, SemanticEvidenceSource.VECTOR_SEARCH, 0.92d)))
+                .build();
+    }
+
+    private static ItemGraphWritePlan aliasOnlyPlan() {
+        return ItemGraphWritePlan.builder()
+                .aliases(
+                        List.of(
+                                alias(
+                                        "person:sam_altman",
+                                        GraphEntityType.PERSON,
+                                        "sam altman",
+                                        1,
+                                        NOW,
+                                        NOW)))
+                .build();
     }
 }

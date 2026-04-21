@@ -14,6 +14,8 @@
 package com.openmemind.ai.memory.core.store.graph;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.extraction.item.graph.commit.ExtractionBatchId;
+import com.openmemind.ai.memory.core.extraction.item.graph.plan.ItemGraphWritePlan;
 import java.util.Collection;
 import java.util.List;
 
@@ -25,6 +27,22 @@ public final class NoOpGraphOperations implements GraphOperations {
     public static final NoOpGraphOperations INSTANCE = new NoOpGraphOperations();
 
     private NoOpGraphOperations() {}
+
+    @Override
+    public void applyGraphWritePlan(
+            MemoryId memoryId, ExtractionBatchId extractionBatchId, ItemGraphWritePlan writePlan) {}
+
+    @Override
+    public CommittedGraphView previewPromotedBatch(
+            MemoryId memoryId, ExtractionBatchId extractionBatchId) {
+        return CommittedGraphView.empty();
+    }
+
+    @Override
+    public void installCommittedBatch(
+            MemoryId memoryId,
+            ExtractionBatchId extractionBatchId,
+            CommittedGraphView committedGraphView) {}
 
     @Override
     public void upsertEntities(MemoryId memoryId, List<GraphEntity> entities) {}

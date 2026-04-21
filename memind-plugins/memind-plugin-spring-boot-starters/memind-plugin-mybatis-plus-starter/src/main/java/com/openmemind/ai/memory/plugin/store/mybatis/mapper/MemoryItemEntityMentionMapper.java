@@ -16,9 +16,11 @@ package com.openmemind.ai.memory.plugin.store.mybatis.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryItemEntityMentionDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.sql.GraphQuerySqlProvider;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.sql.ItemGraphMutationSqlProvider;
 import com.openmemind.ai.memory.plugin.store.mybatis.schema.DatabaseDialect;
 import java.util.Collection;
 import java.util.List;
+import org.apache.ibatis.annotations.InsertProvider;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.ResultMap;
@@ -26,6 +28,9 @@ import org.apache.ibatis.annotations.SelectProvider;
 
 @Mapper
 public interface MemoryItemEntityMentionMapper extends BaseMapper<MemoryItemEntityMentionDO> {
+
+    @InsertProvider(type = ItemGraphMutationSqlProvider.class, method = "insertItemEntityMentions")
+    int insertBatch(@Param("mentions") List<MemoryItemEntityMentionDO> mentions);
 
     @SelectProvider(type = GraphQuerySqlProvider.class, method = "selectMentionsByItemIds")
     @ResultMap("mybatis-plus_MemoryItemEntityMentionDO")

@@ -14,6 +14,7 @@
 package com.openmemind.ai.memory.core.extraction.item.support;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -71,6 +72,95 @@ public record MemoryItemExtractionResponse(List<ExtractedItem> items) {
             Integer targetIndex, String relationType, Float strength) {}
 
     /**
+     * Thread-specific semantic extraction payload to be merged into item metadata.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ExtractedThreadSemantics(
+            Integer version,
+            List<ExtractedThreadMarker> markers,
+            List<ExtractedCanonicalRef> canonicalRefs,
+            List<ExtractedContinuityLink> continuityLinks) {
+
+        public ExtractedThreadSemantics {
+            version = version == null ? 1 : version;
+            markers = markers == null ? List.of() : List.copyOf(markers);
+            canonicalRefs = canonicalRefs == null ? List.of() : List.copyOf(canonicalRefs);
+            continuityLinks = continuityLinks == null ? List.of() : List.copyOf(continuityLinks);
+        }
+
+        public boolean isEmpty() {
+            return markers.isEmpty() && canonicalRefs.isEmpty() && continuityLinks.isEmpty();
+        }
+
+        public Map<String, Object> toMetadataValue() {
+            var value = new LinkedHashMap<String, Object>();
+            value.put("version", version);
+            if (!markers.isEmpty()) {
+                value.put(
+                        "markers",
+                        markers.stream().map(ExtractedThreadMarker::toMetadataValue).toList());
+            }
+            if (!canonicalRefs.isEmpty()) {
+                value.put(
+                        "canonicalRefs",
+                        canonicalRefs.stream()
+                                .map(ExtractedCanonicalRef::toMetadataValue)
+                                .toList());
+            }
+            if (!continuityLinks.isEmpty()) {
+                value.put(
+                        "continuityLinks",
+                        continuityLinks.stream()
+                                .map(ExtractedContinuityLink::toMetadataValue)
+                                .toList());
+            }
+            return Map.copyOf(value);
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ExtractedThreadMarker(
+            String type, String objectRef, String summary, Map<String, Object> attributes) {
+
+        public ExtractedThreadMarker {
+            attributes = attributes == null ? Map.of() : Map.copyOf(attributes);
+        }
+
+        public Map<String, Object> toMetadataValue() {
+            var value = new LinkedHashMap<String, Object>();
+            if (type != null && !type.isBlank()) {
+                value.put("type", type);
+            }
+            if (objectRef != null && !objectRef.isBlank()) {
+                value.put("objectRef", objectRef);
+            }
+            if (summary != null && !summary.isBlank()) {
+                value.put("summary", summary);
+            }
+            value.putAll(attributes);
+            return Map.copyOf(value);
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ExtractedCanonicalRef(String refType, String refKey) {
+
+        public Map<String, Object> toMetadataValue() {
+            return Map.of("refType", refType, "refKey", refKey);
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ExtractedContinuityLink(String linkType, Long targetItemId) {
+
+        public Map<String, Object> toMetadataValue() {
+            return targetItemId == null
+                    ? Map.of("linkType", linkType)
+                    : Map.of("linkType", linkType, "targetItemId", targetItemId);
+        }
+    }
+
+    /**
      * Single extraction result
      *
      * @param content Memory content
@@ -91,12 +181,38 @@ public record MemoryItemExtractionResponse(List<ExtractedItem> items) {
             Map<String, Object> metadata,
             String category,
             List<ExtractedEntity> entities,
-            List<ExtractedCausalRelation> causalRelations) {
+            List<ExtractedCausalRelation> causalRelations,
+            ExtractedThreadSemantics threadSemantics) {
 
         public ExtractedItem {
             insightTypes = insightTypes == null ? List.of() : List.copyOf(insightTypes);
             entities = entities == null ? List.of() : List.copyOf(entities);
             causalRelations = causalRelations == null ? List.of() : List.copyOf(causalRelations);
+            threadSemantics =
+                    threadSemantics != null && threadSemantics.isEmpty() ? null : threadSemantics;
+        }
+
+        public ExtractedItem(
+                String content,
+                float confidence,
+                String occurredAt,
+                ExtractedTime time,
+                List<String> insightTypes,
+                Map<String, Object> metadata,
+                String category,
+                List<ExtractedEntity> entities,
+                List<ExtractedCausalRelation> causalRelations) {
+            this(
+                    content,
+                    confidence,
+                    occurredAt,
+                    time,
+                    insightTypes,
+                    metadata,
+                    category,
+                    entities,
+                    causalRelations,
+                    null);
         }
 
         public ExtractedItem(
@@ -116,7 +232,8 @@ public record MemoryItemExtractionResponse(List<ExtractedItem> items) {
                     metadata,
                     category,
                     List.of(),
-                    List.of());
+                    List.of(),
+                    null);
         }
 
         public ExtractedItem(
@@ -135,7 +252,8 @@ public record MemoryItemExtractionResponse(List<ExtractedItem> items) {
                     metadata,
                     category,
                     List.of(),
-                    List.of());
+                    List.of(),
+                    null);
         }
     }
 }

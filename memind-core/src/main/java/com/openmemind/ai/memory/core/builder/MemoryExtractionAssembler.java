@@ -42,6 +42,7 @@ import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItem
 import com.openmemind.ai.memory.core.extraction.item.extractor.MemoryItemExtractor;
 import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.item.graph.NoOpItemGraphMaterializer;
+import com.openmemind.ai.memory.core.extraction.item.graph.derived.GraphDerivedMaintainer;
 import com.openmemind.ai.memory.core.extraction.item.graph.entity.alias.EntityAliasIndexPlanner;
 import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.ConservativeHeuristicEntityResolutionStrategy;
 import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.DefaultEntityCandidateRetriever;
@@ -53,7 +54,7 @@ import com.openmemind.ai.memory.core.extraction.item.graph.link.temporal.Tempora
 import com.openmemind.ai.memory.core.extraction.item.graph.link.temporal.TemporalRelationClassifier;
 import com.openmemind.ai.memory.core.extraction.item.graph.pipeline.DefaultItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.item.graph.pipeline.GraphHintNormalizer;
-import com.openmemind.ai.memory.core.extraction.item.graph.pipeline.StructuredGraphPersister;
+import com.openmemind.ai.memory.core.extraction.item.graph.plan.DefaultItemGraphPlanner;
 import com.openmemind.ai.memory.core.extraction.item.strategy.LlmItemExtractionStrategy;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
@@ -66,9 +67,9 @@ import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChu
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.thread.MemoryThreadLayer;
-import com.openmemind.ai.memory.core.extraction.thread.derivation.RuleBasedMemoryThreadDeriver;
-import com.openmemind.ai.memory.core.extraction.thread.scheduler.MemoryThreadBuildScheduler;
-import com.openmemind.ai.memory.core.extraction.thread.text.RuleBasedMemoryThreadTextGenerator;
+import com.openmemind.ai.memory.core.extraction.thread.ThreadIntakeWorker;
+import com.openmemind.ai.memory.core.extraction.thread.ThreadMaterializationPolicy;
+import com.openmemind.ai.memory.core.extraction.thread.ThreadProjectionRebuilder;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicy;
@@ -80,6 +81,7 @@ import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.DefaultContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.HttpResourceFetcher;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
+import com.openmemind.ai.memory.core.store.graph.NoOpItemGraphCommitOperations;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingItemGraphMaterializer;
 import com.openmemind.ai.memory.core.utils.IdUtils;
 import java.util.ArrayList;
@@ -199,19 +201,25 @@ final class MemoryExtractionAssembler {
                         context.promptRegistry());
         AutoCloseable extractionLifecycle = insightBuildScheduler;
         if (context.options().memoryThread().enabled()) {
-            MemoryThreadBuildScheduler memoryThreadScheduler =
-                    new MemoryThreadBuildScheduler(
+            ThreadMaterializationPolicy threadPolicy = ThreadMaterializationPolicy.v1();
+            ThreadIntakeWorker threadIntakeWorker =
+                    new ThreadIntakeWorker(
                             context.memoryStore().threadOperations(),
-                            context.memoryStore(),
-                            new RuleBasedMemoryThreadDeriver(context.options().memoryThread()),
-                            new RuleBasedMemoryThreadTextGenerator(),
-                            context.options().memoryThread(),
-                            context.memoryObserver(),
-                            context.memoryThreadForcedDisableReason());
+                            context.memoryStore().itemOperations(),
+                            context.memoryStore().graphOperations(),
+                            threadPolicy);
+            ThreadProjectionRebuilder threadProjectionRebuilder =
+                    new ThreadProjectionRebuilder(
+                            context.memoryStore().threadOperations(),
+                            context.memoryStore().itemOperations(),
+                            context.memoryStore().graphOperations(),
+                            threadPolicy);
             memoryThreadLayer =
                     new MemoryThreadLayer(
                             memoryItemLayer,
-                            memoryThreadScheduler,
+                            context.memoryStore().threadOperations(),
+                            threadIntakeWorker,
+                            threadProjectionRebuilder,
                             context.options().memoryThread());
             memoryItemStep = memoryThreadLayer;
             extractionLifecycle = lifecycle(insightBuildScheduler, memoryThreadLayer);
@@ -263,8 +271,11 @@ final class MemoryExtractionAssembler {
     }
 
     private ItemGraphMaterializer graphMaterializer(MemoryAssemblyContext context) {
-        if (!context.options().extraction().item().graph().enabled()) {
-            return NoOpItemGraphMaterializer.INSTANCE;
+        if (!context.options().extraction().item().graph().enabled()
+                || context.memoryStore().itemGraphCommitOperations()
+                        == NoOpItemGraphCommitOperations.INSTANCE) {
+            return NoOpItemGraphMaterializer.persistItemsOnly(
+                    context.memoryStore().itemOperations());
         }
 
         EntityResolutionStrategy resolutionStrategy =
@@ -283,12 +294,11 @@ final class MemoryExtractionAssembler {
                                         historicalAliasLookupEnabled));
                     }
                 };
-        ItemGraphMaterializer graphMaterializer =
-                new DefaultItemGraphMaterializer(
+        var planner =
+                new DefaultItemGraphPlanner(
                         new GraphHintNormalizer(),
                         resolutionStrategy,
                         new EntityAliasIndexPlanner(),
-                        new StructuredGraphPersister(context.memoryStore().graphOperations()),
                         new TemporalItemLinker(
                                 context.memoryStore().itemOperations(),
                                 context.memoryStore().graphOperations(),
@@ -299,6 +309,21 @@ final class MemoryExtractionAssembler {
                                 context.memoryStore().graphOperations(),
                                 context.memoryVector(),
                                 context.options().extraction().item().graph()),
+                        context.options().extraction().item().graph());
+        GraphDerivedMaintainer derivedMaintainer =
+                (memoryId, affectedEntityKeys) -> {
+                    if (affectedEntityKeys == null || affectedEntityKeys.isEmpty()) {
+                        return;
+                    }
+                    context.memoryStore()
+                            .graphOperations()
+                            .rebuildEntityCooccurrences(memoryId, affectedEntityKeys);
+                };
+        ItemGraphMaterializer graphMaterializer =
+                new DefaultItemGraphMaterializer(
+                        planner,
+                        context.memoryStore().itemGraphCommitOperations(),
+                        derivedMaintainer,
                         context.options().extraction().item().graph());
         return new TracingItemGraphMaterializer(graphMaterializer, context.memoryObserver());
     }

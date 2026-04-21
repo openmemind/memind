@@ -57,8 +57,10 @@ class MemoryItemLayerLanguageTest {
         MemoryItemDeduplicator deduplicator = mock(MemoryItemDeduplicator.class);
         MemoryStore memoryStore = mock(MemoryStore.class);
         InsightOperations insightOperations = mock(InsightOperations.class);
+        ItemOperations itemOperations = mock(ItemOperations.class);
         MemoryVector vector = mock(MemoryVector.class);
         var selfVerificationStep = new CapturingSelfVerificationStep();
+        when(memoryStore.itemOperations()).thenReturn(itemOperations);
         var layer =
                 new MemoryItemLayer(
                         extractor, deduplicator, memoryStore, vector, selfVerificationStep);
@@ -120,7 +122,9 @@ class MemoryItemLayerLanguageTest {
         MemoryItemDeduplicator deduplicator = mock(MemoryItemDeduplicator.class);
         MemoryStore memoryStore = mock(MemoryStore.class);
         InsightOperations insightOperations = mock(InsightOperations.class);
+        ItemOperations itemOperations = mock(ItemOperations.class);
         MemoryVector vector = mock(MemoryVector.class);
+        when(memoryStore.itemOperations()).thenReturn(itemOperations);
         var layer = new MemoryItemLayer(extractor, deduplicator, memoryStore, vector);
 
         var segment =
@@ -203,6 +207,7 @@ class MemoryItemLayerLanguageTest {
         InsightOperations insightOperations = mock(InsightOperations.class);
         ItemOperations itemOperations = mock(ItemOperations.class);
         MemoryVector vector = mock(MemoryVector.class);
+        when(memoryStore.itemOperations()).thenReturn(itemOperations);
         var layer = new MemoryItemLayer(extractor, deduplicator, memoryStore, vector);
         var memoryId = DefaultMemoryId.of("user1", "agent1");
 
@@ -243,7 +248,6 @@ class MemoryItemLayerLanguageTest {
                         "English");
 
         when(memoryStore.insightOperations()).thenReturn(insightOperations);
-        when(memoryStore.itemOperations()).thenReturn(itemOperations);
         when(insightOperations.listInsightTypes()).thenReturn(DefaultInsightTypes.all());
         when(extractor.extract(eq(List.of(segment)), anyList(), eq(config)))
                 .thenReturn(Mono.just(List.of(temporalEntry)));

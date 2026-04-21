@@ -22,6 +22,8 @@ import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.item.graph.entity.normalize.EntityNormalizationVersions;
+import com.openmemind.ai.memory.core.extraction.item.graph.relation.causal.CausalRelationCode;
+import com.openmemind.ai.memory.core.extraction.item.graph.relation.semantic.SemanticEvidenceSource;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.graph.EntityCooccurrence;
 import com.openmemind.ai.memory.core.store.graph.GraphEntity;
@@ -487,14 +489,33 @@ class MybatisGraphOperationsTest {
     }
 
     private static ItemLink link(long sourceItemId, long targetItemId, ItemLinkType linkType) {
-        return new ItemLink(
-                MEMORY_ID.toIdentifier(),
-                sourceItemId,
-                targetItemId,
-                linkType,
-                1.0d,
-                Map.of(),
-                NOW);
+        return switch (linkType) {
+            case CAUSAL ->
+                    new ItemLink(
+                            MEMORY_ID.toIdentifier(),
+                            sourceItemId,
+                            targetItemId,
+                            linkType,
+                            CausalRelationCode.CAUSED_BY.code(),
+                            null,
+                            1.0d,
+                            Map.of(),
+                            NOW);
+            case SEMANTIC ->
+                    new ItemLink(
+                            MEMORY_ID.toIdentifier(),
+                            sourceItemId,
+                            targetItemId,
+                            linkType,
+                            null,
+                            SemanticEvidenceSource.VECTOR_SEARCH.code(),
+                            1.0d,
+                            Map.of(),
+                            NOW);
+            case TEMPORAL ->
+                    throw new IllegalArgumentException(
+                            "temporal test fixture requires explicit relation selection");
+        };
     }
 
     private static GraphEntityAlias alias(

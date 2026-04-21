@@ -14,47 +14,23 @@
 package com.openmemind.ai.memory.server.service.memorythread;
 
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
-import com.openmemind.ai.memory.server.mapper.memorythread.AdminMemoryThreadQueryMapper;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeManager;
-import java.util.LinkedHashSet;
 import org.springframework.stereotype.Service;
 
 @Service
 public class MemoryThreadRebuildService {
 
-    private final AdminMemoryThreadQueryMapper queryMapper;
     private final MemoryRuntimeManager runtimeManager;
 
-    public MemoryThreadRebuildService(
-            AdminMemoryThreadQueryMapper queryMapper, MemoryRuntimeManager runtimeManager) {
-        this.queryMapper = queryMapper;
+    public MemoryThreadRebuildService(MemoryRuntimeManager runtimeManager) {
         this.runtimeManager = runtimeManager;
     }
 
-    public int rebuildMemory(String memoryIdText) {
-        var memoryId = parseMemoryId(memoryIdText);
+    public int rebuild(String userId, String agentId) {
+        var memoryId = DefaultMemoryId.of(userId, agentId);
         try (var lease = runtimeManager.acquire()) {
             lease.handle().memory().rebuildMemoryThreads(memoryId);
         }
         return 1;
-    }
-
-    public int rebuildAll() {
-        var memoryIds = new LinkedHashSet<>(queryMapper.listDistinctMemoryIds());
-        try (var lease = runtimeManager.acquire()) {
-            for (String memoryIdText : memoryIds) {
-                lease.handle().memory().rebuildMemoryThreads(parseMemoryId(memoryIdText));
-            }
-        }
-        return memoryIds.size();
-    }
-
-    private static DefaultMemoryId parseMemoryId(String memoryIdText) {
-        int separator = memoryIdText.indexOf(':');
-        if (separator < 0) {
-            return DefaultMemoryId.of(memoryIdText, null);
-        }
-        return DefaultMemoryId.of(
-                memoryIdText.substring(0, separator), memoryIdText.substring(separator + 1));
     }
 }

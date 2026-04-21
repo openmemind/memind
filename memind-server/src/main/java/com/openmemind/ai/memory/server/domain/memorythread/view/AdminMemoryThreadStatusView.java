@@ -17,24 +17,29 @@ import com.openmemind.ai.memory.core.data.MemoryThreadRuntimeStatus;
 import java.time.Instant;
 
 public record AdminMemoryThreadStatusView(
-        boolean memoryThreadEnabled,
-        boolean derivationEnabled,
-        boolean derivationAvailable,
-        String forcedDisabledReason,
-        int queueDepth,
-        Instant lastSuccessAt,
-        Instant lastFailureAt,
-        long failureCount) {
+        String projectionState,
+        long pendingCount,
+        long failedCount,
+        boolean rebuildInProgress,
+        Long lastProcessedItemId,
+        String materializationPolicyVersion,
+        Instant updatedAt,
+        String invalidationReason) {
 
     public static AdminMemoryThreadStatusView from(MemoryThreadRuntimeStatus status) {
         return new AdminMemoryThreadStatusView(
-                status.memoryThreadEnabled(),
-                status.derivationEnabled(),
-                status.derivationAvailable(),
-                status.forcedDisabledReason(),
-                status.queueDepth(),
-                status.lastSuccessAt(),
-                status.lastFailureAt(),
-                status.failureCount());
+                normalizeLabel(
+                        status.projectionState() != null ? status.projectionState().name() : null),
+                status.pendingCount(),
+                status.failedCount(),
+                status.rebuildInProgress(),
+                status.lastProcessedItemId(),
+                status.materializationPolicyVersion(),
+                status.updatedAt(),
+                status.invalidationReason());
+    }
+
+    private static String normalizeLabel(String value) {
+        return value == null ? null : value.toLowerCase(java.util.Locale.ROOT);
     }
 }

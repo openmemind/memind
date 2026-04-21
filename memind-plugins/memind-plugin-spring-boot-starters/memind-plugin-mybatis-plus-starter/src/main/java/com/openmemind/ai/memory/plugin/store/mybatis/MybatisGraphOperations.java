@@ -15,6 +15,8 @@ package com.openmemind.ai.memory.plugin.store.mybatis;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.extraction.item.graph.commit.ExtractionBatchId;
+import com.openmemind.ai.memory.core.extraction.item.graph.plan.ItemGraphWritePlan;
 import com.openmemind.ai.memory.core.store.graph.EntityCooccurrence;
 import com.openmemind.ai.memory.core.store.graph.GraphEntity;
 import com.openmemind.ai.memory.core.store.graph.GraphEntityAlias;
@@ -29,17 +31,20 @@ import com.openmemind.ai.memory.plugin.store.mybatis.converter.GraphEntityConver
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.ItemEntityMentionConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.ItemLinkConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryEntityCooccurrenceDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryGraphAliasBatchReceiptDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryGraphEntityAliasDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryGraphEntityDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryItemEntityMentionDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryItemLinkDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryEntityCooccurrenceMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryGraphAliasBatchReceiptMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryGraphEntityAliasMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryGraphEntityMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemEntityMentionMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemLinkMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.schema.DatabaseDialect;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -57,6 +62,7 @@ public class MybatisGraphOperations implements GraphOperations {
     private final MemoryItemLinkMapper itemLinkMapper;
     private final MemoryEntityCooccurrenceMapper entityCooccurrenceMapper;
     private final MemoryGraphEntityAliasMapper entityAliasMapper;
+    private final MemoryGraphAliasBatchReceiptMapper aliasBatchReceiptMapper;
     private final DatabaseDialect dialect;
 
     public MybatisGraphOperations(
@@ -65,6 +71,7 @@ public class MybatisGraphOperations implements GraphOperations {
             MemoryItemLinkMapper itemLinkMapper,
             MemoryEntityCooccurrenceMapper entityCooccurrenceMapper,
             MemoryGraphEntityAliasMapper entityAliasMapper,
+            MemoryGraphAliasBatchReceiptMapper aliasBatchReceiptMapper,
             DatabaseDialect dialect) {
         this.graphEntityMapper = Objects.requireNonNull(graphEntityMapper, "graphEntityMapper");
         this.itemEntityMentionMapper =
@@ -73,7 +80,25 @@ public class MybatisGraphOperations implements GraphOperations {
         this.entityCooccurrenceMapper =
                 Objects.requireNonNull(entityCooccurrenceMapper, "entityCooccurrenceMapper");
         this.entityAliasMapper = Objects.requireNonNull(entityAliasMapper, "entityAliasMapper");
+        this.aliasBatchReceiptMapper =
+                Objects.requireNonNull(aliasBatchReceiptMapper, "aliasBatchReceiptMapper");
         this.dialect = Objects.requireNonNull(dialect, "dialect");
+    }
+
+    @Override
+    public void applyGraphWritePlan(
+            MemoryId memoryId, ExtractionBatchId extractionBatchId, ItemGraphWritePlan writePlan) {
+        ItemGraphWritePlan normalizedPlan = writePlan.normalized();
+        upsertEntities(memoryId, normalizedPlan.entities());
+        upsertItemEntityMentions(memoryId, normalizedPlan.mentions());
+        upsertPersistedLinks(memoryId, normalizedPlan.toPersistedLinks(memoryId));
+        upsertAliasesWithBatchReceipts(memoryId, extractionBatchId, normalizedPlan.aliases());
+        rebuildEntityCooccurrences(memoryId, normalizedPlan.affectedEntityKeys());
+    }
+
+    @Override
+    public boolean supportsTransactionalBatchCommit() {
+        return true;
     }
 
     @Override
@@ -96,17 +121,23 @@ public class MybatisGraphOperations implements GraphOperations {
                                         MemoryGraphEntityDO::getEntityKey,
                                         Function.identity(),
                                         (left, right) -> left));
+        List<MemoryGraphEntityDO> inserts = new ArrayList<>();
+        List<MemoryGraphEntityDO> updates = new ArrayList<>();
         entities.forEach(
                 entity -> {
                     MemoryGraphEntityDO dataObject = GraphEntityConverter.toDO(memoryId, entity);
                     MemoryGraphEntityDO existing = existingByKey.get(entity.entityKey());
                     if (existing != null) {
                         dataObject.setId(existing.getId());
-                        graphEntityMapper.updateById(dataObject);
+                        updates.add(dataObject);
                     } else {
-                        graphEntityMapper.insert(dataObject);
+                        inserts.add(dataObject);
                     }
                 });
+        if (!inserts.isEmpty()) {
+            graphEntityMapper.insertBatch(inserts);
+        }
+        updates.forEach(graphEntityMapper::updateById);
     }
 
     @Override
@@ -137,6 +168,8 @@ public class MybatisGraphOperations implements GraphOperations {
                                                         dataObject.getEntityKey()),
                                         Function.identity(),
                                         (left, right) -> left));
+        List<MemoryItemEntityMentionDO> inserts = new ArrayList<>();
+        List<MemoryItemEntityMentionDO> updates = new ArrayList<>();
         mentions.forEach(
                 mention -> {
                     MemoryItemEntityMentionDO dataObject =
@@ -146,11 +179,15 @@ public class MybatisGraphOperations implements GraphOperations {
                                     new MentionIdentity(mention.itemId(), mention.entityKey()));
                     if (existing != null) {
                         dataObject.setId(existing.getId());
-                        itemEntityMentionMapper.updateById(dataObject);
+                        updates.add(dataObject);
                     } else {
-                        itemEntityMentionMapper.insert(dataObject);
+                        inserts.add(dataObject);
                     }
                 });
+        if (!inserts.isEmpty()) {
+            itemEntityMentionMapper.insertBatch(inserts);
+        }
+        updates.forEach(itemEntityMentionMapper::updateById);
     }
 
     @Override
@@ -221,6 +258,8 @@ public class MybatisGraphOperations implements GraphOperations {
                                                         dataObject.getLinkType()),
                                         Function.identity(),
                                         (left, right) -> left));
+        List<MemoryItemLinkDO> inserts = new ArrayList<>();
+        List<MemoryItemLinkDO> updates = new ArrayList<>();
         links.forEach(
                 link -> {
                     MemoryItemLinkDO dataObject = ItemLinkConverter.toDO(memoryId, link);
@@ -232,11 +271,15 @@ public class MybatisGraphOperations implements GraphOperations {
                                             link.linkType().name()));
                     if (existing != null) {
                         dataObject.setId(existing.getId());
-                        itemLinkMapper.updateById(dataObject);
+                        updates.add(dataObject);
                     } else {
-                        itemLinkMapper.insert(dataObject);
+                        inserts.add(dataObject);
                     }
                 });
+        if (!inserts.isEmpty()) {
+            itemLinkMapper.insertBatch(inserts);
+        }
+        updates.forEach(itemLinkMapper::updateById);
     }
 
     @Override
@@ -247,6 +290,8 @@ public class MybatisGraphOperations implements GraphOperations {
         List<GraphEntityAlias> mergedAliases = mergeAliasBatch(aliases);
         Map<AliasIdentity, MemoryGraphEntityAliasDO> existingByIdentity =
                 loadExistingAliases(memoryId, mergedAliases);
+        List<MemoryGraphEntityAliasDO> inserts = new ArrayList<>();
+        List<MemoryGraphEntityAliasDO> updates = new ArrayList<>();
         mergedAliases.forEach(
                 alias -> {
                     MemoryGraphEntityAliasDO dataObject =
@@ -265,11 +310,15 @@ public class MybatisGraphOperations implements GraphOperations {
                                 earlierOf(existing.getCreatedAt(), alias.createdAt()));
                         dataObject.setUpdatedAt(
                                 laterOf(existing.getUpdatedAt(), alias.updatedAt()));
-                        entityAliasMapper.updateById(dataObject);
+                        updates.add(dataObject);
                     } else {
-                        entityAliasMapper.insert(dataObject);
+                        inserts.add(dataObject);
                     }
                 });
+        if (!inserts.isEmpty()) {
+            entityAliasMapper.insertBatch(inserts);
+        }
+        updates.forEach(entityAliasMapper::updateById);
     }
 
     @Override
@@ -461,6 +510,33 @@ public class MybatisGraphOperations implements GraphOperations {
                                 alias,
                                 MybatisGraphOperations::mergeAlias));
         return List.copyOf(merged.values());
+    }
+
+    private void upsertPersistedLinks(MemoryId memoryId, List<ItemLink> links) {
+        upsertItemLinks(memoryId, links);
+    }
+
+    private void upsertAliasesWithBatchReceipts(
+            MemoryId memoryId,
+            ExtractionBatchId extractionBatchId,
+            List<GraphEntityAlias> aliases) {
+        if (aliases == null || aliases.isEmpty()) {
+            return;
+        }
+        List<GraphEntityAlias> mergedAliases = mergeAliasBatch(aliases);
+        List<GraphEntityAlias> aliasesToPersist = new ArrayList<>();
+        for (GraphEntityAlias alias : mergedAliases) {
+            boolean firstReceipt =
+                    aliasBatchReceiptMapper.insertIfAbsent(
+                                    MemoryGraphAliasBatchReceiptDO.from(
+                                            memoryId, extractionBatchId, alias),
+                                    dialect)
+                            == 1;
+            if (firstReceipt) {
+                aliasesToPersist.add(alias);
+            }
+        }
+        upsertEntityAliases(memoryId, aliasesToPersist);
     }
 
     private static void accumulateCounts(

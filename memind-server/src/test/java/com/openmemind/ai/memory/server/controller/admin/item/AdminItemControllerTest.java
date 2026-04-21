@@ -24,7 +24,7 @@ import com.openmemind.ai.memory.server.domain.common.BatchDeleteResult;
 import com.openmemind.ai.memory.server.domain.common.PageResponse;
 import com.openmemind.ai.memory.server.domain.item.query.ItemPageQuery;
 import com.openmemind.ai.memory.server.domain.item.view.AdminItemView;
-import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadItemView;
+import com.openmemind.ai.memory.server.domain.memorythread.view.AdminItemMemoryThreadView;
 import com.openmemind.ai.memory.server.handler.ApiExceptionHandler;
 import com.openmemind.ai.memory.server.service.item.ItemDeleteService;
 import com.openmemind.ai.memory.server.service.item.ItemQueryService;
@@ -115,14 +115,20 @@ class AdminItemControllerTest {
     }
 
     @Test
-    void memoryThreadReturnsOwningThreadForItem() throws Exception {
-        mockMvc.perform(get("/admin/v1/items/101/memory-thread"))
+    void memoryThreadsReturnAllThreadsForItem() throws Exception {
+        mockMvc.perform(
+                        get("/admin/v1/items/101/memory-threads")
+                                .param("userId", "u1")
+                                .param("agentId", "a1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("success"))
                 .andExpect(jsonPath("$.timestamp").isNotEmpty())
-                .andExpect(jsonPath("$.data.threadId").value(201))
-                .andExpect(jsonPath("$.data.threadKey").value("mt:201"))
-                .andExpect(jsonPath("$.data.role").value("core"));
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].threadKey").value("topic:concept:travel"))
+                .andExpect(jsonPath("$.data[0].threadId").doesNotExist())
+                .andExpect(
+                        jsonPath("$.data[1].threadKey")
+                                .value("relationship:relationship:person:alice|person:bob"));
     }
 
     private static final class StubItemQueryService extends ItemQueryService {
@@ -168,8 +174,15 @@ class AdminItemControllerTest {
         }
 
         @Override
-        public AdminMemoryThreadItemView getThreadByItemId(Long itemId) {
-            return memoryThreadItemView();
+        public List<AdminItemMemoryThreadView> listThreadsByItemId(
+                String userId, String agentId, Long itemId) {
+            return List.of(
+                    memoryThreadView("topic:concept:travel", "topic", "Travel planning", "active"),
+                    memoryThreadView(
+                            "relationship:relationship:person:alice|person:bob",
+                            "relationship",
+                            "Alice and Bob",
+                            "active"));
         }
     }
 
@@ -194,20 +207,24 @@ class AdminItemControllerTest {
                 Instant.parse("2026-03-31T10:00:03Z"));
     }
 
-    private static AdminMemoryThreadItemView memoryThreadItemView() {
-        return new AdminMemoryThreadItemView(
-                401L,
+    private static AdminItemMemoryThreadView memoryThreadView(
+            String threadKey, String threadType, String displayLabel, String lifecycleStatus) {
+        return new AdminItemMemoryThreadView(
                 "u1",
                 "a1",
                 "u1:a1",
-                201L,
-                "mt:201",
+                threadKey,
+                threadType,
+                "concept",
+                "travel",
+                displayLabel,
+                lifecycleStatus,
+                "ongoing",
+                "Discussing a summer trip.",
                 101L,
                 "core",
+                true,
                 0.91d,
-                1,
-                Instant.parse("2026-03-31T10:00:04Z"),
-                Map.of("source", "test"),
                 Instant.parse("2026-03-31T10:00:05Z"),
                 Instant.parse("2026-03-31T10:00:06Z"));
     }

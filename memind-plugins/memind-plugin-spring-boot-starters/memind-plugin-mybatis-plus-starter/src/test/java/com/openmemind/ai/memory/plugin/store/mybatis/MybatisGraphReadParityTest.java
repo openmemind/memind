@@ -20,6 +20,8 @@ import com.baomidou.mybatisplus.autoconfigure.DdlApplicationRunner;
 import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.extraction.item.graph.relation.causal.CausalRelationCode;
+import com.openmemind.ai.memory.core.extraction.item.graph.relation.semantic.SemanticEvidenceSource;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.graph.GraphEntity;
 import com.openmemind.ai.memory.core.store.graph.GraphEntityAlias;
@@ -337,6 +339,8 @@ class MybatisGraphReadParityTest {
                                     101L,
                                     102L,
                                     ItemLinkType.CAUSAL,
+                                    CausalRelationCode.CAUSED_BY.code(),
+                                    null,
                                     0.92d,
                                     Map.of(),
                                     NOW),
@@ -345,6 +349,8 @@ class MybatisGraphReadParityTest {
                                     103L,
                                     101L,
                                     ItemLinkType.CAUSAL,
+                                    CausalRelationCode.CAUSED_BY.code(),
+                                    null,
                                     0.88d,
                                     Map.of(),
                                     NOW),
@@ -353,6 +359,8 @@ class MybatisGraphReadParityTest {
                                     101L,
                                     104L,
                                     ItemLinkType.SEMANTIC,
+                                    null,
+                                    SemanticEvidenceSource.VECTOR_SEARCH.code(),
                                     0.81d,
                                     Map.of(),
                                     NOW)),

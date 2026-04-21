@@ -22,25 +22,34 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryInsightDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryItemDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryRawDataDO;
-import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadDO;
-import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadItemDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadMembershipDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadProjectionDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadRuntimeDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryRawDataMapper;
-import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadItemMapper;
-import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMembershipMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadProjectionMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadRuntimeMapper;
 import com.openmemind.ai.memory.server.domain.config.model.ServerRuntimeConfigDO;
+import com.openmemind.ai.memory.server.domain.config.response.MemoryOptionsSnapshot;
+import com.openmemind.ai.memory.server.domain.config.view.MemoryOptionItemView;
 import com.openmemind.ai.memory.server.mapper.config.ServerRuntimeConfigMapper;
+import com.openmemind.ai.memory.server.runtime.MemoryRuntimeFactory;
+import com.openmemind.ai.memory.server.runtime.MemoryRuntimeManager;
 import com.openmemind.ai.memory.server.service.config.MemoryOptionService;
 import com.openmemind.ai.memory.server.support.NoopRuntimeTestConfiguration;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -95,9 +104,17 @@ class MemindServerIntegrationTest {
 
     @Autowired private MemoryInsightMapper insightMapper;
 
-    @Autowired private MemoryThreadMapper threadMapper;
+    @Autowired private MemoryThreadProjectionMapper threadProjectionMapper;
 
-    @Autowired private MemoryThreadItemMapper threadItemMapper;
+    @Autowired private MemoryThreadMembershipMapper threadMembershipMapper;
+
+    @Autowired private MemoryThreadRuntimeMapper threadRuntimeMapper;
+
+    @Autowired private MemoryOptionService memoryOptionService;
+
+    @Autowired private MemoryRuntimeFactory memoryRuntimeFactory;
+
+    @Autowired private MemoryRuntimeManager runtimeManager;
 
     @Autowired private JdbcTemplate jdbcTemplate;
 
@@ -106,7 +123,10 @@ class MemindServerIntegrationTest {
         this.mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
         jdbcTemplate.update("DELETE FROM memory_insight_buffer");
         jdbcTemplate.update("DELETE FROM memory_conversation_buffer");
-        jdbcTemplate.update("DELETE FROM memory_thread_item");
+        jdbcTemplate.update("DELETE FROM thread_intake_outbox");
+        jdbcTemplate.update("DELETE FROM memory_thread_event");
+        jdbcTemplate.update("DELETE FROM memory_thread_membership");
+        jdbcTemplate.update("DELETE FROM memory_thread_runtime");
         jdbcTemplate.update("DELETE FROM memory_thread");
         jdbcTemplate.update("DELETE FROM memory_insight");
         jdbcTemplate.update("DELETE FROM memory_item");
@@ -114,6 +134,12 @@ class MemindServerIntegrationTest {
         jdbcTemplate.update("DELETE FROM insight_fts");
         jdbcTemplate.update("DELETE FROM item_fts");
         jdbcTemplate.update("DELETE FROM raw_data_fts");
+        jdbcTemplate.update("DELETE FROM memind_server_runtime_config");
+
+        MemoryBuildOptions defaults = MemoryBuildOptions.defaults();
+        MemoryRuntimeFactory.CreationResult created = memoryRuntimeFactory.create(defaults);
+        runtimeManager.swap(created.memory(), created.effectiveOptions(), 1L);
+        memoryOptionService.getCurrent();
     }
 
     @AfterAll
@@ -264,42 +290,88 @@ class MemindServerIntegrationTest {
 
     @Test
     void memoryThreadAdminEndpointsAreVisibleInRunningServer() throws Exception {
-        insertThread(thread(301L, "u1", "a1", "u1:a1", "mt:301"));
-        insertThreadItem(threadItem(401L, "u1", "a1", "u1:a1", 301L, 101L));
+        enableThreadProjectionRuntime();
+        try (var lease = runtimeManager.acquire()) {
+            assertThat(lease.handle().options().extraction().item().graph().enabled()).isTrue();
+            assertThat(lease.handle().options().memoryThread().enabled()).isTrue();
+            assertThat(lease.handle().options().memoryThread().derivation().enabled()).isTrue();
+        }
+        insertItem(item(101L, "u1", "a1", "u1:a1", "rd-1", "USER", "profile", "FACT"));
+        insertThread(
+                thread(
+                        "u1:a1",
+                        "topic:concept:travel",
+                        "TOPIC",
+                        "concept",
+                        "travel",
+                        "Travel planning"));
+        insertThread(
+                thread(
+                        "u1:a1",
+                        "relationship:relationship:person:alice|person:bob",
+                        "RELATIONSHIP",
+                        "relationship",
+                        "person:alice|person:bob",
+                        "Alice and Bob"));
+        insertThreadMembership(
+                threadMembership("u1:a1", "topic:concept:travel", 101L, "CORE", true, 0.92d));
+        insertThreadMembership(
+                threadMembership(
+                        "u1:a1",
+                        "relationship:relationship:person:alice|person:bob",
+                        101L,
+                        "RELATED",
+                        false,
+                        0.74d));
+        insertThreadRuntime(threadRuntime("u1:a1", "AVAILABLE", 101L, 0L, 0L));
 
         mockMvc.perform(get("/admin/v1/memory-threads"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.data.total").value(1))
-                .andExpect(jsonPath("$.data.list[0].threadKey").value("mt:301"));
+                .andExpect(jsonPath("$.data.total").value(2))
+                .andExpect(jsonPath("$.data.list[0].threadId").doesNotExist());
 
-        mockMvc.perform(get("/admin/v1/memory-threads/{threadId}", 301L))
+        mockMvc.perform(
+                        get("/admin/v1/memory-threads/{threadKey}", "topic:concept:travel")
+                                .queryParam("userId", "u1")
+                                .queryParam("agentId", "a1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.data.threadKey").value("mt:301"));
+                .andExpect(jsonPath("$.data.threadKey").value("topic:concept:travel"))
+                .andExpect(jsonPath("$.data.threadId").doesNotExist());
 
-        mockMvc.perform(get("/admin/v1/memory-threads/{threadId}/items", 301L))
+        mockMvc.perform(
+                        get("/admin/v1/memory-threads/{threadKey}/items", "topic:concept:travel")
+                                .queryParam("userId", "u1")
+                                .queryParam("agentId", "a1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.data[0].itemId").value(101));
+                .andExpect(jsonPath("$.data[0].itemId").value(101))
+                .andExpect(jsonPath("$.data[0].threadKey").value("topic:concept:travel"))
+                .andExpect(jsonPath("$.data[0].threadId").doesNotExist());
 
-        mockMvc.perform(get("/admin/v1/items/{itemId}/memory-thread", 101L))
+        mockMvc.perform(
+                        get("/admin/v1/items/{itemId}/memory-threads", 101L)
+                                .queryParam("userId", "u1")
+                                .queryParam("agentId", "a1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.data.threadId").value(301))
-                .andExpect(jsonPath("$.data.threadKey").value("mt:301"));
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].threadId").doesNotExist());
 
-        mockMvc.perform(get("/admin/v1/memory-threads/status"))
+        mockMvc.perform(
+                        get("/admin/v1/memory-threads/status")
+                                .queryParam("userId", "u1")
+                                .queryParam("agentId", "a1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.data.memoryThreadEnabled").value(false));
+                .andExpect(jsonPath("$.data.projectionState").value("available"))
+                .andExpect(jsonPath("$.data.pendingCount").value(0));
 
-        mockMvc.perform(post("/admin/v1/memory-threads/rebuild/{memoryId}", "u1:a1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.data").value(1));
-
-        mockMvc.perform(post("/admin/v1/memory-threads/rebuild"))
+        mockMvc.perform(
+                        post("/admin/v1/memory-threads/rebuild")
+                                .queryParam("userId", "u1")
+                                .queryParam("agentId", "a1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("success"))
                 .andExpect(jsonPath("$.data").value(1));
@@ -313,12 +385,16 @@ class MemindServerIntegrationTest {
         itemMapper.insert(item);
     }
 
-    private void insertThread(MemoryThreadDO thread) {
-        threadMapper.insert(thread);
+    private void insertThread(MemoryThreadProjectionDO thread) {
+        threadProjectionMapper.insert(thread);
     }
 
-    private void insertThreadItem(MemoryThreadItemDO threadItem) {
-        threadItemMapper.insert(threadItem);
+    private void insertThreadMembership(MemoryThreadMembershipDO threadMembership) {
+        threadMembershipMapper.insert(threadMembership);
+    }
+
+    private void insertThreadRuntime(MemoryThreadRuntimeDO threadRuntime) {
+        threadRuntimeMapper.insert(threadRuntime);
     }
 
     private void insertInsight(MemoryInsightDO insight) {
@@ -351,55 +427,111 @@ class MemindServerIntegrationTest {
         return dataObject;
     }
 
-    private static MemoryThreadDO thread(
-            long bizId, String userId, String agentId, String memoryId, String threadKey) {
-        MemoryThreadDO dataObject = new MemoryThreadDO();
-        dataObject.setBizId(bizId);
-        dataObject.setUserId(userId);
-        dataObject.setAgentId(agentId);
+    private static MemoryThreadProjectionDO thread(
+            String memoryId,
+            String threadKey,
+            String threadType,
+            String anchorKind,
+            String anchorKey,
+            String displayLabel) {
+        MemoryThreadProjectionDO dataObject = new MemoryThreadProjectionDO();
         dataObject.setMemoryId(memoryId);
         dataObject.setThreadKey(threadKey);
-        dataObject.setEpisodeType("conversation");
-        dataObject.setTitle("Travel planning");
-        dataObject.setSummarySnapshot("Discussed a summer trip.");
-        dataObject.setStatus("OPEN");
-        dataObject.setConfidence(0.88d);
-        dataObject.setStartAt(Instant.parse("2026-03-31T09:00:00Z"));
-        dataObject.setEndAt(Instant.parse("2026-03-31T10:00:00Z"));
-        dataObject.setLastActivityAt(Instant.parse("2026-03-31T10:00:00Z"));
-        dataObject.setOriginItemId(101L);
-        dataObject.setAnchorItemId(101L);
-        dataObject.setDisplayOrderHint(1);
-        dataObject.setMetadata(Map.of("source", "integration-test"));
+        dataObject.setThreadType(threadType);
+        dataObject.setAnchorKind(anchorKind);
+        dataObject.setAnchorKey(anchorKey);
+        dataObject.setDisplayLabel(displayLabel);
+        dataObject.setLifecycleStatus("ACTIVE");
+        dataObject.setObjectState("ONGOING");
+        dataObject.setHeadline("Discussing a summer trip.");
+        dataObject.setSnapshotJson(Map.of("latestUpdate", "Booked flights"));
+        dataObject.setSnapshotVersion(1);
+        dataObject.setOpenedAt(Instant.parse("2026-03-31T09:00:00Z"));
+        dataObject.setLastEventAt(Instant.parse("2026-03-31T10:00:00Z"));
+        dataObject.setLastMeaningfulUpdateAt(Instant.parse("2026-03-31T10:00:00Z"));
+        dataObject.setEventCount(3L);
+        dataObject.setMemberCount(1L);
         dataObject.setCreatedAt(Instant.parse("2026-03-31T10:00:01Z"));
         dataObject.setUpdatedAt(Instant.parse("2026-03-31T10:00:02Z"));
-        dataObject.setDeleted(Boolean.FALSE);
         return dataObject;
     }
 
-    private static MemoryThreadItemDO threadItem(
-            long bizId,
-            String userId,
-            String agentId,
+    private static MemoryThreadMembershipDO threadMembership(
             String memoryId,
-            long threadId,
-            long itemId) {
-        MemoryThreadItemDO dataObject = new MemoryThreadItemDO();
-        dataObject.setBizId(bizId);
-        dataObject.setUserId(userId);
-        dataObject.setAgentId(agentId);
+            String threadKey,
+            long itemId,
+            String role,
+            boolean primary,
+            double relevanceWeight) {
+        MemoryThreadMembershipDO dataObject = new MemoryThreadMembershipDO();
         dataObject.setMemoryId(memoryId);
-        dataObject.setThreadId(threadId);
+        dataObject.setThreadKey(threadKey);
         dataObject.setItemId(itemId);
-        dataObject.setMembershipWeight(0.92d);
-        dataObject.setRole("CORE");
-        dataObject.setSequenceHint(1);
-        dataObject.setJoinedAt(Instant.parse("2026-03-31T10:00:03Z"));
-        dataObject.setMetadata(Map.of("source", "integration-test"));
+        dataObject.setRole(role);
+        dataObject.setPrimary(primary);
+        dataObject.setRelevanceWeight(relevanceWeight);
         dataObject.setCreatedAt(Instant.parse("2026-03-31T10:00:04Z"));
         dataObject.setUpdatedAt(Instant.parse("2026-03-31T10:00:05Z"));
-        dataObject.setDeleted(Boolean.FALSE);
         return dataObject;
+    }
+
+    private static MemoryThreadRuntimeDO threadRuntime(
+            String memoryId,
+            String projectionState,
+            Long lastProcessedItemId,
+            Long pendingCount,
+            Long failedCount) {
+        MemoryThreadRuntimeDO dataObject = new MemoryThreadRuntimeDO();
+        dataObject.setMemoryId(memoryId);
+        dataObject.setProjectionState(projectionState);
+        dataObject.setPendingCount(pendingCount);
+        dataObject.setFailedCount(failedCount);
+        dataObject.setLastProcessedItemId(lastProcessedItemId);
+        dataObject.setLastEnqueuedItemId(lastProcessedItemId);
+        dataObject.setRebuildInProgress(Boolean.FALSE);
+        dataObject.setMaterializationPolicyVersion("thread-core-v1");
+        dataObject.setInvalidationReason(null);
+        dataObject.setUpdatedAt(Instant.parse("2026-03-31T10:00:06Z"));
+        return dataObject;
+    }
+
+    private void enableThreadProjectionRuntime() {
+        MemoryOptionsSnapshot snapshot = memoryOptionService.getCurrent();
+        Map<String, List<MemoryOptionItemView>> projection = deepCopy(snapshot.config());
+        updateValue(projection, "memoryThread.enabled", true);
+        updateValue(projection, "memoryThread.derivation.enabled", true);
+        updateValue(projection, "extraction.item.graph.enabled", true);
+        memoryOptionService.update(snapshot.version(), projection);
+    }
+
+    private static Map<String, List<MemoryOptionItemView>> deepCopy(
+            Map<String, List<MemoryOptionItemView>> config) {
+        Map<String, List<MemoryOptionItemView>> copy = new HashMap<>();
+        config.forEach((key, value) -> copy.put(key, new ArrayList<>(value)));
+        return copy;
+    }
+
+    private static void updateValue(
+            Map<String, List<MemoryOptionItemView>> projection, String key, Object value) {
+        projection
+                .values()
+                .forEach(
+                        items -> {
+                            for (int i = 0; i < items.size(); i++) {
+                                MemoryOptionItemView item = items.get(i);
+                                if (item.key().equals(key)) {
+                                    items.set(
+                                            i,
+                                            new MemoryOptionItemView(
+                                                    item.key(),
+                                                    value,
+                                                    item.description(),
+                                                    item.type(),
+                                                    item.defaultValue(),
+                                                    item.constraints()));
+                                }
+                            }
+                        });
     }
 
     private static MemoryItemDO item(

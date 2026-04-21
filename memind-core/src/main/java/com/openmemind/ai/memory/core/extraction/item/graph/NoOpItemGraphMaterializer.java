@@ -16,21 +16,39 @@ package com.openmemind.ai.memory.core.extraction.item.graph;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
+import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import java.util.List;
+import java.util.Objects;
 import reactor.core.publisher.Mono;
 
 /**
- * Disabled-mode graph materializer.
+ * Disabled-mode materializer that may still persist items when graph extraction is off.
  */
 public final class NoOpItemGraphMaterializer implements ItemGraphMaterializer {
 
     public static final NoOpItemGraphMaterializer INSTANCE = new NoOpItemGraphMaterializer();
 
-    private NoOpItemGraphMaterializer() {}
+    private final ItemOperations itemOperations;
+
+    private NoOpItemGraphMaterializer() {
+        this.itemOperations = null;
+    }
+
+    private NoOpItemGraphMaterializer(ItemOperations itemOperations) {
+        this.itemOperations = Objects.requireNonNull(itemOperations, "itemOperations");
+    }
+
+    public static ItemGraphMaterializer persistItemsOnly(ItemOperations itemOperations) {
+        return new NoOpItemGraphMaterializer(itemOperations);
+    }
 
     @Override
     public Mono<ItemGraphMaterializationResult> materialize(
             MemoryId memoryId, List<MemoryItem> items, List<ExtractedMemoryEntry> sourceEntries) {
-        return Mono.just(ItemGraphMaterializationResult.empty());
+        if (itemOperations == null || items == null || items.isEmpty()) {
+            return Mono.just(ItemGraphMaterializationResult.empty());
+        }
+        return Mono.fromRunnable(() -> itemOperations.insertItems(memoryId, items))
+                .thenReturn(ItemGraphMaterializationResult.empty());
     }
 }

@@ -50,6 +50,7 @@ import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.resource.SourceDescriptor;
+import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
@@ -124,7 +125,7 @@ class MemindServerRuntimeConfigurationTest {
         MemoryRuntimeFactory factory =
                 configuration.memoryRuntimeFactory(
                         provider(StructuredChatClient.class, proxy(StructuredChatClient.class)),
-                        provider(MemoryStore.class, memoryStore()),
+                        provider(MemoryStore.class, new InMemoryMemoryStore()),
                         provider(MemoryBuffer.class, memoryBuffer()),
                         provider(MemoryVector.class, proxy(MemoryVector.class)),
                         emptyProvider(MemoryTextSearch.class),

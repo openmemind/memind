@@ -33,6 +33,7 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationCont
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.thread.MemoryThreadLayer;
+import com.openmemind.ai.memory.core.extraction.thread.ThreadMaterializationPolicy;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
@@ -41,8 +42,6 @@ import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistConfigMapper;
 import com.openmemind.ai.memory.core.store.MemoryStore;
-import com.openmemind.ai.memory.core.store.thread.MemoryThreadOperations;
-import com.openmemind.ai.memory.core.store.thread.NoOpMemoryThreadOperations;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Duration;
@@ -313,6 +312,7 @@ public class DefaultMemory implements Memory {
                                         retrieval.simple().keywordSearchEnabled(),
                                         new SimpleStrategyConfig.GraphAssistConfig(
                                                 graph.enabled(),
+                                                graph.mode(),
                                                 graph.maxSeedItems(),
                                                 graph.maxExpandedItems(),
                                                 graph.maxSemanticNeighborsPerSeed(),
@@ -351,6 +351,7 @@ public class DefaultMemory implements Memory {
                                 baseStrategy.minScore(),
                                 new DeepStrategyConfig.GraphAssistConfig(
                                         graph.enabled(),
+                                        graph.mode(),
                                         graph.maxSeedItems(),
                                         graph.maxExpandedItems(),
                                         graph.maxSemanticNeighborsPerSeed(),
@@ -416,7 +417,6 @@ public class DefaultMemory implements Memory {
         if (requestedIds.isEmpty()) {
             return Mono.<Void>empty();
         }
-        MemoryThreadOperations threadOperations = resolveThreadOperations();
 
         return Mono.fromCallable(
                         () -> memoryStore.itemOperations().getItemsByIds(memoryId, requestedIds))
@@ -433,10 +433,11 @@ public class DefaultMemory implements Memory {
                                         ? Mono.<Void>empty()
                                         : vector.deleteBatch(memoryId, vectorIds))
                 .then(
-                        Mono.<Void>fromRunnable(
+                        Mono.fromRunnable(
                                 () ->
-                                        threadOperations.deleteMembershipsByItemIds(
-                                                memoryId, requestedIds)))
+                                        memoryStore
+                                                .threadOperations()
+                                                .markRebuildRequired(memoryId, "item deletion")))
                 .then(
                         Mono.<Void>fromRunnable(
                                 () ->
@@ -498,22 +499,22 @@ public class DefaultMemory implements Memory {
     }
 
     @Override
-    public MemoryThreadRuntimeStatus memoryThreadStatus() {
+    public MemoryThreadRuntimeStatus getThreadRuntimeStatus(MemoryId memoryId) {
+        Objects.requireNonNull(memoryId, "memoryId");
         if (memoryThreadLayer != null) {
-            return memoryThreadLayer.status();
+            return memoryThreadLayer.getThreadRuntimeStatus(memoryId);
         }
         if (!buildOptions.memoryThread().enabled()) {
             return MemoryThreadRuntimeStatus.disabled("memoryThread disabled");
         }
-        return new MemoryThreadRuntimeStatus(
-                true,
-                buildOptions.memoryThread().derivation().enabled(),
-                false,
-                "memoryThread layer unavailable",
-                0,
-                null,
-                null,
-                0L);
+        if (!buildOptions.memoryThread().derivation().enabled()) {
+            return MemoryThreadRuntimeStatus.disabled("memoryThread derivation disabled");
+        }
+        memoryStore
+                .threadOperations()
+                .ensureRuntime(memoryId, ThreadMaterializationPolicy.v1().version());
+        return MemoryThreadRuntimeStatus.fromRuntimeState(
+                memoryStore.threadOperations().getRuntime(memoryId).orElse(null), true, true, null);
     }
 
     @Override
@@ -527,10 +528,5 @@ public class DefaultMemory implements Memory {
         } catch (Exception e) {
             log.warn("Failed to close memory lifecycle", e);
         }
-    }
-
-    private MemoryThreadOperations resolveThreadOperations() {
-        MemoryThreadOperations threadOperations = memoryStore.threadOperations();
-        return threadOperations != null ? threadOperations : NoOpMemoryThreadOperations.INSTANCE;
     }
 }

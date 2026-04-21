@@ -73,7 +73,7 @@ import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
-import com.openmemind.ai.memory.core.store.thread.MemoryThreadOperations;
+import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 import com.openmemind.ai.memory.core.support.TestMemoryIds;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Duration;
@@ -102,6 +102,7 @@ class DefaultMemoryTest {
     @Mock private MemoryBuffer memoryBuffer;
     @Mock private ItemOperations itemOperations;
     @Mock private InsightOperations insightOperations;
+    @Mock private ThreadProjectionStore threadProjectionStore;
     @Mock private MemoryVector vector;
 
     private Memory memind;
@@ -111,6 +112,7 @@ class DefaultMemoryTest {
     void setUp() {
         lenient().when(store.itemOperations()).thenReturn(itemOperations);
         lenient().when(store.insightOperations()).thenReturn(insightOperations);
+        lenient().when(store.threadOperations()).thenReturn(threadProjectionStore);
         memind =
                 new DefaultMemory(
                         extractor,
@@ -600,21 +602,19 @@ class DefaultMemoryTest {
         }
 
         @Test
-        @DisplayName("deleteItems also removes thread memberships before deleting items")
-        void deleteItemsAlsoRemovesThreadMembershipsBeforeDeletingItems() {
+        @DisplayName("deleteItems marks thread rebuild before deleting items")
+        void deleteItemsMarksThreadRebuildBeforeDeletingItems() {
             var itemIds = List.of(101L);
-            var threadOperations = mock(MemoryThreadOperations.class);
-            when(store.threadOperations()).thenReturn(threadOperations);
             when(itemOperations.getItemsByIds(memoryId, itemIds))
                     .thenReturn(List.of(memoryItem(101L, "vec-101")));
             when(vector.deleteBatch(memoryId, List.of("vec-101"))).thenReturn(Mono.empty());
 
             StepVerifier.create(memind.deleteItems(memoryId, itemIds)).verifyComplete();
 
-            InOrder inOrder = inOrder(itemOperations, vector, threadOperations, retriever);
+            InOrder inOrder = inOrder(itemOperations, vector, threadProjectionStore, retriever);
             inOrder.verify(itemOperations).getItemsByIds(memoryId, itemIds);
             inOrder.verify(vector).deleteBatch(memoryId, List.of("vec-101"));
-            inOrder.verify(threadOperations).deleteMembershipsByItemIds(memoryId, itemIds);
+            inOrder.verify(threadProjectionStore).markRebuildRequired(memoryId, "item deletion");
             inOrder.verify(itemOperations).deleteItems(memoryId, itemIds);
             inOrder.verify(retriever).onDataChanged(memoryId);
         }
@@ -657,13 +657,25 @@ class DefaultMemoryTest {
     }
 
     @Test
-    @DisplayName("memoryThreadStatus delegates to the memory thread layer")
-    void memoryThreadStatusDelegatesToTheMemoryThreadLayer() {
+    @DisplayName("getThreadRuntimeStatus delegates to the memory thread layer")
+    void getThreadRuntimeStatusDelegatesToTheMemoryThreadLayer() {
         var threadLayer = mock(MemoryThreadLayer.class);
         var status =
                 new MemoryThreadRuntimeStatus(
-                        true, true, true, null, 2, Instant.parse("2026-04-18T00:00:00Z"), null, 0L);
-        when(threadLayer.status()).thenReturn(status);
+                        true,
+                        true,
+                        true,
+                        null,
+                        com.openmemind.ai.memory.core.data.enums.MemoryThreadProjectionState
+                                .AVAILABLE,
+                        2,
+                        0L,
+                        false,
+                        101L,
+                        "thread-core-v1",
+                        Instant.parse("2026-04-18T00:00:00Z"),
+                        null);
+        when(threadLayer.getThreadRuntimeStatus(memoryId)).thenReturn(status);
         var memory =
                 new DefaultMemory(
                         extractor,
@@ -676,7 +688,7 @@ class DefaultMemoryTest {
                         MemoryBuildOptions.defaults(),
                         threadLayer);
 
-        assertThat(memory.memoryThreadStatus()).isEqualTo(status);
+        assertThat(memory.getThreadRuntimeStatus(memoryId)).isEqualTo(status);
     }
 
     @Test

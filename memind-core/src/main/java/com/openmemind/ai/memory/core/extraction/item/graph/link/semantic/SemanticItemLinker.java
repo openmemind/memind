@@ -68,8 +68,16 @@ public class SemanticItemLinker {
     }
 
     public Mono<SemanticLinkingStats> link(MemoryId memoryId, List<MemoryItem> items) {
+        return plan(memoryId, items)
+                .flatMap(
+                        plan ->
+                                persistLinks(memoryId, plan.links())
+                                        .map(persistStats -> plan.withStats(persistStats).stats()));
+    }
+
+    public Mono<SemanticLinkingPlan> plan(MemoryId memoryId, List<MemoryItem> items) {
         if (!options.enabled() || items == null || items.isEmpty()) {
-            return Mono.just(SemanticLinkingStats.empty());
+            return Mono.just(SemanticLinkingPlan.empty());
         }
 
         var batchItems = List.copyOf(items);
@@ -99,7 +107,7 @@ public class SemanticItemLinker {
                                                         options.semanticSourceWindowSize()))
                                         .concatMap(
                                                 window ->
-                                                        linkWindow(
+                                                        planWindow(
                                                                         memoryId,
                                                                         batchItems,
                                                                         window,
@@ -108,12 +116,12 @@ public class SemanticItemLinker {
                                                                 .onErrorResume(
                                                                         error ->
                                                                                 Mono.just(
-                                                                                        SemanticLinkingStats
+                                                                                        SemanticLinkingPlan
                                                                                                 .windowFailure())))
                                         .reduce(
-                                                sameBatchState.baseStats(),
-                                                SemanticLinkingStats::plus)
-                                        .defaultIfEmpty(sameBatchState.baseStats()));
+                                                sameBatchState.basePlan(),
+                                                SemanticLinkingPlan::plus)
+                                        .defaultIfEmpty(sameBatchState.basePlan()));
     }
 
     private Mono<BatchEmbeddingCache> acquireBatchEmbeddingCache(List<MemoryItem> batchItems) {
@@ -192,7 +200,7 @@ public class SemanticItemLinker {
                         });
     }
 
-    private Mono<SemanticLinkingStats> linkWindow(
+    private Mono<SemanticLinkingPlan> planWindow(
             MemoryId memoryId,
             List<MemoryItem> fullBatch,
             List<MemoryItem> window,
@@ -221,29 +229,22 @@ public class SemanticItemLinker {
                                                                 sameBatchWindow
                                                                         .candidatesBySourceItemId(),
                                                                 batchVectorIds);
-                                                long upsertStartedAt = System.nanoTime();
-                                                return persistLinks(memoryId, normalized.links())
-                                                        .map(
-                                                                persistStats ->
-                                                                        sameBatchWindow
-                                                                                .stats()
-                                                                                .plus(
-                                                                                        searchOutcome
-                                                                                                .stats())
-                                                                                .plus(
-                                                                                        resolveOutcome
-                                                                                                .stats())
-                                                                                .plus(
-                                                                                        normalized
-                                                                                                .stats())
-                                                                                .plus(persistStats)
-                                                                                .plus(
-                                                                                        SemanticLinkingStats
-                                                                                                .windowProcessed(
-                                                                                                        searchDurationMs,
-                                                                                                        resolveDurationMs,
-                                                                                                        elapsedMillis(
-                                                                                                                upsertStartedAt))));
+                                                return Mono.just(
+                                                        new SemanticLinkingPlan(
+                                                                normalized.links(),
+                                                                sameBatchWindow
+                                                                        .stats()
+                                                                        .plus(searchOutcome.stats())
+                                                                        .plus(
+                                                                                resolveOutcome
+                                                                                        .stats())
+                                                                        .plus(normalized.stats())
+                                                                        .plus(
+                                                                                SemanticLinkingStats
+                                                                                        .windowProcessed(
+                                                                                                searchDurationMs,
+                                                                                                resolveDurationMs,
+                                                                                                0L))));
                                             });
                         });
     }
@@ -680,6 +681,10 @@ public class SemanticItemLinker {
                     false);
         }
 
+        SemanticLinkingPlan basePlan() {
+            return new SemanticLinkingPlan(List.of(), baseStats);
+        }
+
         SameBatchWindowOutcome computeWindowCandidatesSafely(
                 List<MemoryItem> fullBatch, List<MemoryItem> window, ItemGraphOptions options) {
             if (!enabled) {
@@ -1032,4 +1037,34 @@ public class SemanticItemLinker {
     private record CandidateHit(MemoryItem item, String vectorId, float score) {}
 
     private record WindowNormalization(List<ItemLink> links, SemanticLinkingStats stats) {}
+
+    public record SemanticLinkingPlan(List<ItemLink> links, SemanticLinkingStats stats) {
+
+        public SemanticLinkingPlan {
+            links = links == null ? List.of() : List.copyOf(links);
+            stats = stats == null ? SemanticLinkingStats.empty() : stats;
+        }
+
+        public static SemanticLinkingPlan empty() {
+            return new SemanticLinkingPlan(List.of(), SemanticLinkingStats.empty());
+        }
+
+        public static SemanticLinkingPlan windowFailure() {
+            return new SemanticLinkingPlan(List.of(), SemanticLinkingStats.windowFailure());
+        }
+
+        public static SemanticLinkingPlan stageFailure() {
+            return new SemanticLinkingPlan(List.of(), SemanticLinkingStats.stageFailure());
+        }
+
+        SemanticLinkingPlan plus(SemanticLinkingPlan other) {
+            var mergedLinks = new ArrayList<ItemLink>(links);
+            mergedLinks.addAll(other.links);
+            return new SemanticLinkingPlan(mergedLinks, stats.plus(other.stats));
+        }
+
+        SemanticLinkingPlan withStats(SemanticLinkingStats additionalStats) {
+            return new SemanticLinkingPlan(links, stats.plus(additionalStats));
+        }
+    }
 }

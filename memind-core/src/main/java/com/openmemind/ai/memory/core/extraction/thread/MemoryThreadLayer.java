@@ -15,13 +15,13 @@ package com.openmemind.ai.memory.core.extraction.thread;
 
 import com.openmemind.ai.memory.core.builder.MemoryThreadOptions;
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryThreadRuntimeStatus;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
-import com.openmemind.ai.memory.core.extraction.thread.scheduler.MemoryThreadBuildScheduler;
-import java.util.List;
+import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,15 +35,30 @@ public class MemoryThreadLayer implements MemoryItemExtractStep, AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(MemoryThreadLayer.class);
 
     private final MemoryItemExtractStep delegate;
-    private final MemoryThreadBuildScheduler scheduler;
+    private final ThreadProjectionStore store;
+    private final ThreadIntakeWorker worker;
+    private final ThreadProjectionRebuilder rebuilder;
     private final MemoryThreadOptions options;
+    private final ThreadMaterializationPolicy policy = ThreadMaterializationPolicy.v1();
 
     public MemoryThreadLayer(
             MemoryItemExtractStep delegate,
-            MemoryThreadBuildScheduler scheduler,
+            ThreadProjectionStore store,
+            ThreadIntakeWorker worker,
+            MemoryThreadOptions options) {
+        this(delegate, store, worker, null, options);
+    }
+
+    public MemoryThreadLayer(
+            MemoryItemExtractStep delegate,
+            ThreadProjectionStore store,
+            ThreadIntakeWorker worker,
+            ThreadProjectionRebuilder rebuilder,
             MemoryThreadOptions options) {
         this.delegate = Objects.requireNonNull(delegate, "delegate");
-        this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
+        this.store = Objects.requireNonNull(store, "store");
+        this.worker = worker;
+        this.rebuilder = rebuilder;
         this.options = Objects.requireNonNull(options, "options");
     }
 
@@ -51,35 +66,71 @@ public class MemoryThreadLayer implements MemoryItemExtractStep, AutoCloseable {
     public Mono<MemoryItemResult> extract(
             MemoryId memoryId, RawDataResult rawDataResult, ItemExtractionConfig config) {
         return delegate.extract(memoryId, rawDataResult, config)
-                .doOnNext(result -> scheduleDerivation(memoryId, result, config));
+                .doOnNext(result -> enqueueCommittedItems(memoryId, result));
     }
 
     public void flush(MemoryId memoryId) {
-        scheduler.flush(memoryId);
+        if (!options.enabled() || !options.derivation().enabled() || worker == null) {
+            return;
+        }
+        worker.wake(memoryId);
     }
 
     public void rebuild(MemoryId memoryId) {
-        scheduler.rebuild(memoryId);
+        if (!options.enabled() || rebuilder == null) {
+            return;
+        }
+        rebuilder.rebuild(memoryId);
+    }
+
+    public MemoryThreadRuntimeStatus getThreadRuntimeStatus(MemoryId memoryId) {
+        Objects.requireNonNull(memoryId, "memoryId");
+        if (!options.enabled()) {
+            return MemoryThreadRuntimeStatus.disabled("memoryThread disabled");
+        }
+        if (!options.derivation().enabled()) {
+            return MemoryThreadRuntimeStatus.disabled("memoryThread derivation disabled");
+        }
+        store.ensureRuntime(memoryId, policy.version());
+        return MemoryThreadRuntimeStatus.fromRuntimeState(
+                store.getRuntime(memoryId).orElse(null), true, true, null);
     }
 
     public MemoryThreadRuntimeStatus status() {
-        return scheduler.status();
+        if (!options.enabled()) {
+            return MemoryThreadRuntimeStatus.disabled("memoryThread disabled");
+        }
+        return MemoryThreadRuntimeStatus.disabled("memoryId required");
     }
 
     @Override
-    public void close() throws Exception {
-        scheduler.close();
-    }
+    public void close() {}
 
-    private void scheduleDerivation(
-            MemoryId memoryId, MemoryItemResult result, ItemExtractionConfig config) {
+    private void enqueueCommittedItems(MemoryId memoryId, MemoryItemResult result) {
         if (!options.enabled() || !options.derivation().enabled() || result.isEmpty()) {
             return;
         }
-        try {
-            scheduler.submitDerivation(memoryId, List.copyOf(result.newItems()), config);
-        } catch (RuntimeException e) {
-            log.warn("Failed to schedule memory-thread derivation for memoryId={}", memoryId, e);
+        boolean hasCommittedItems = false;
+        store.ensureRuntime(memoryId, policy.version());
+        for (MemoryItem item : result.newItems()) {
+            if (item == null || item.id() == null) {
+                continue;
+            }
+            hasCommittedItems = true;
+            try {
+                store.enqueue(memoryId, item.id());
+            } catch (RuntimeException e) {
+                store.markRebuildRequired(memoryId, "enqueue failure");
+                log.warn(
+                        "Failed to enqueue memory-thread intake for memoryId={} itemId={}",
+                        memoryId,
+                        item.id(),
+                        e);
+                return;
+            }
+        }
+        if (hasCommittedItems && worker != null) {
+            worker.wake(memoryId);
         }
     }
 }

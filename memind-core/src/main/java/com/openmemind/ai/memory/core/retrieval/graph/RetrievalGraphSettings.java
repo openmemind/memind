@@ -22,6 +22,8 @@ public interface RetrievalGraphSettings {
 
     boolean enabled();
 
+    RetrievalGraphMode mode();
+
     int maxSeedItems();
 
     int maxExpandedItems();

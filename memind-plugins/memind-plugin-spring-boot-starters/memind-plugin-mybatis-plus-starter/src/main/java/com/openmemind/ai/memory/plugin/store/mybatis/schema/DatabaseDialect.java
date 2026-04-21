@@ -25,7 +25,9 @@ public enum DatabaseDialect {
             "db/migration/sqlite/V6__graph_store.sql",
             "db/migration/sqlite/V7__memory_thread.sql",
             "db/migration/sqlite/V8__graph_entity_alias_store.sql",
-            "db/migration/sqlite/V9__item_temporal_lookup.sql"),
+            "db/migration/sqlite/V9__item_temporal_lookup.sql",
+            "db/migration/sqlite/V10__item_graph_evolution.sql",
+            "db/migration/sqlite/V11__simplified_thread_core_v1.sql"),
     MYSQL(
             "db/migration/mysql/V1__init_store.sql",
             "db/migration/mysql/V2__init_text_search.sql",
@@ -35,7 +37,9 @@ public enum DatabaseDialect {
             "db/migration/mysql/V6__graph_store.sql",
             "db/migration/mysql/V7__memory_thread.sql",
             "db/migration/mysql/V8__graph_entity_alias_store.sql",
-            "db/migration/mysql/V9__item_temporal_lookup.sql"),
+            "db/migration/mysql/V9__item_temporal_lookup.sql",
+            "db/migration/mysql/V10__item_graph_evolution.sql",
+            "db/migration/mysql/V11__simplified_thread_core_v1.sql"),
     POSTGRESQL(
             "db/migration/postgresql/V1__init_store.sql",
             "db/migration/postgresql/V2__init_text_search.sql",
@@ -45,7 +49,9 @@ public enum DatabaseDialect {
             "db/migration/postgresql/V6__graph_store.sql",
             "db/migration/postgresql/V7__memory_thread.sql",
             "db/migration/postgresql/V8__graph_entity_alias_store.sql",
-            "db/migration/postgresql/V9__item_temporal_lookup.sql");
+            "db/migration/postgresql/V9__item_temporal_lookup.sql",
+            "db/migration/postgresql/V10__item_graph_evolution.sql",
+            "db/migration/postgresql/V11__simplified_thread_core_v1.sql");
 
     private final List<String> scriptPaths;
 

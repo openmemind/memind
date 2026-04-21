@@ -14,6 +14,8 @@
 package com.openmemind.ai.memory.core.store.graph;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.extraction.item.graph.commit.ExtractionBatchId;
+import com.openmemind.ai.memory.core.extraction.item.graph.plan.ItemGraphWritePlan;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -28,6 +30,29 @@ import java.util.stream.Collectors;
  * Optional graph storage domain for item graph primitives.
  */
 public interface GraphOperations {
+
+    default void applyGraphWritePlan(
+            MemoryId memoryId, ExtractionBatchId extractionBatchId, ItemGraphWritePlan writePlan) {
+        throw new UnsupportedOperationException("graph write-plan apply not supported");
+    }
+
+    default CommittedGraphView previewPromotedBatch(
+            MemoryId memoryId, ExtractionBatchId extractionBatchId) {
+        throw new UnsupportedOperationException("graph batch preview not supported");
+    }
+
+    default void installCommittedBatch(
+            MemoryId memoryId,
+            ExtractionBatchId extractionBatchId,
+            CommittedGraphView committedGraphView) {
+        throw new UnsupportedOperationException("graph batch install not supported");
+    }
+
+    default void discardPendingBatch(MemoryId memoryId, ExtractionBatchId extractionBatchId) {}
+
+    default boolean supportsTransactionalBatchCommit() {
+        return false;
+    }
 
     void upsertEntities(MemoryId memoryId, List<GraphEntity> entities);
 

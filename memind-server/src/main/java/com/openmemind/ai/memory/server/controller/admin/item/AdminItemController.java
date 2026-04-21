@@ -19,7 +19,7 @@ import com.openmemind.ai.memory.server.domain.common.PageResult;
 import com.openmemind.ai.memory.server.domain.item.query.ItemPageQuery;
 import com.openmemind.ai.memory.server.domain.item.request.ItemDeleteRequest;
 import com.openmemind.ai.memory.server.domain.item.view.AdminItemView;
-import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadItemView;
+import com.openmemind.ai.memory.server.domain.memorythread.view.AdminItemMemoryThreadView;
 import com.openmemind.ai.memory.server.service.item.ItemDeleteService;
 import com.openmemind.ai.memory.server.service.item.ItemQueryService;
 import com.openmemind.ai.memory.server.service.memorythread.MemoryThreadQueryService;
@@ -76,9 +76,13 @@ public class AdminItemController {
         return ApiResult.success(queryService.getItem(itemId));
     }
 
-    @GetMapping("/{itemId}/memory-thread")
-    public ApiResult<AdminMemoryThreadItemView> memoryThread(@PathVariable Long itemId) {
-        return ApiResult.success(memoryThreadQueryService.getThreadByItemId(itemId));
+    @GetMapping("/{itemId}/memory-threads")
+    public ApiResult<java.util.List<AdminItemMemoryThreadView>> itemThreads(
+            @PathVariable Long itemId,
+            @RequestParam String userId,
+            @RequestParam(required = false) String agentId) {
+        return ApiResult.success(
+                memoryThreadQueryService.listThreadsByItemId(userId, agentId, itemId));
     }
 
     @DeleteMapping

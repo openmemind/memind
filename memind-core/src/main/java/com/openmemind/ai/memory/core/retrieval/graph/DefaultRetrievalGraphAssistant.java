@@ -17,7 +17,6 @@ import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.retrieval.ItemRetrievalGuard;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
-import com.openmemind.ai.memory.core.retrieval.scoring.ResultMerger;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.TimeDecay;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -114,26 +113,12 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
 
         var candidateBundle =
                 collectGraphCandidates(context, config, graphSettings, seeds, directIds);
-        var rankedGraph =
-                candidateBundle.candidates().values().stream()
-                        .sorted(Comparator.comparingDouble(GraphCandidate::score).reversed())
-                        .limit(graphSettings.maxExpandedItems())
-                        .map(GraphCandidate::toScoredResult)
-                        .toList();
-
-        int pinned = Math.min(graphSettings.protectDirectTopK(), directItems.size());
-        var pinnedPrefix = directItems.subList(0, pinned);
-        var directTail = directItems.subList(pinned, directItems.size());
-        var fusedTail =
-                rankedGraph.isEmpty()
-                        ? directTail
-                        : ResultMerger.merge(
-                                config.scoring(),
-                                List.of(directTail, rankedGraph),
-                                1.0d,
-                                graphSettings.graphChannelWeight());
-
-        var finalItems = Stream.concat(pinnedPrefix.stream(), fusedTail.stream()).toList();
+        var rankedGraph = rankGraphCandidates(candidateBundle.candidates());
+        var finalItems =
+                switch (graphSettings.mode()) {
+                    case ASSIST -> fuseAssistMode(graphSettings, directItems, rankedGraph);
+                    case EXPAND -> fuseExpandMode(graphSettings, directItems, rankedGraph);
+                };
         int admittedGraphCandidateCount =
                 (int)
                         finalItems.stream()
@@ -243,25 +228,25 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
                         Objects.equals(link.sourceItemId(), seed.item().id())
                                 ? link.targetItemId()
                                 : link.sourceItemId();
-                if (directIds.contains(String.valueOf(neighborItemId))) {
-                    overlapItemIds.add(neighborItemId);
-                    continue;
-                }
-
+                boolean overlap = directIds.contains(String.valueOf(neighborItemId));
                 var family = toRelationFamily(link.linkType());
-                int offered = perSeedRelationCounts.getOrDefault(family, 0);
-                if (offered >= maxNeighborsPerSeed(graphSettings, family)) {
-                    continue;
+                if (!overlap) {
+                    int offered = perSeedRelationCounts.getOrDefault(family, 0);
+                    if (offered >= maxNeighborsPerSeed(graphSettings, family)) {
+                        continue;
+                    }
+                    perSeedRelationCounts.put(family, offered + 1);
+                    linkExpansionCount++;
                 }
-                perSeedRelationCounts.put(family, offered + 1);
-                linkExpansionCount++;
-
                 rawCandidates
                         .computeIfAbsent(neighborItemId, GraphCandidateAccumulator::new)
                         .accept(
                                 family,
                                 seed.item().id(),
                                 baseScore(family, seed.seedRelevance(), link.strength()));
+                if (overlap) {
+                    overlapItemIds.add(neighborItemId);
+                }
             }
 
             int entitySiblingCount = 0;
@@ -282,16 +267,14 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
                     if (Objects.equals(mention.itemId(), seed.item().id())) {
                         continue;
                     }
-                    if (directIds.contains(String.valueOf(mention.itemId()))) {
-                        overlapItemIds.add(mention.itemId());
-                        continue;
+                    boolean overlap = directIds.contains(String.valueOf(mention.itemId()));
+                    if (!overlap) {
+                        if (entitySiblingCount >= graphSettings.maxEntitySiblingItemsPerSeed()) {
+                            break;
+                        }
+                        entitySiblingCount++;
+                        entityExpansionCount++;
                     }
-                    if (entitySiblingCount >= graphSettings.maxEntitySiblingItemsPerSeed()) {
-                        break;
-                    }
-                    entitySiblingCount++;
-                    entityExpansionCount++;
-
                     rawCandidates
                             .computeIfAbsent(mention.itemId(), GraphCandidateAccumulator::new)
                             .accept(
@@ -301,6 +284,9 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
                                             RelationFamily.ENTITY_SIBLING,
                                             seed.seedRelevance(),
                                             mention.confidence().doubleValue()));
+                    if (overlap) {
+                        overlapItemIds.add(mention.itemId());
+                    }
                 }
             }
         }
@@ -387,6 +373,156 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
         overFanoutEntityKeys.forEach(mentionsByEntityKey::remove);
         return new ReverseMentionBundle(
                 Map.copyOf(mentionsByEntityKey), Set.copyOf(overFanoutEntityKeys));
+    }
+
+    private List<ScoredResult> rankGraphCandidates(Map<Long, GraphCandidate> candidates) {
+        if (candidates.isEmpty()) {
+            return List.of();
+        }
+
+        var sorted =
+                candidates.values().stream()
+                        .sorted(
+                                Comparator.comparingDouble(GraphCandidate::score)
+                                        .reversed()
+                                        .thenComparingLong(GraphCandidate::itemId))
+                        .toList();
+        double maxGraphScore = sorted.getFirst().score();
+        double divisor = maxGraphScore > 0.0d ? maxGraphScore : 1.0d;
+        return sorted.stream()
+                .map(
+                        candidate ->
+                                new ScoredResult(
+                                        ScoredResult.SourceType.ITEM,
+                                        String.valueOf(candidate.itemId()),
+                                        candidate.content() == null ? "" : candidate.content(),
+                                        0f,
+                                        candidate.score() / divisor,
+                                        candidate.occurredAt()))
+                .toList();
+    }
+
+    private List<ScoredResult> fuseAssistMode(
+            RetrievalGraphSettings graphSettings,
+            List<ScoredResult> directItems,
+            List<ScoredResult> rankedGraph) {
+        int pinned = Math.min(graphSettings.protectDirectTopK(), directItems.size());
+        var pinnedPrefix = directItems.subList(0, pinned);
+        var pinnedIds =
+                pinnedPrefix.stream()
+                        .map(ScoredResult::sourceId)
+                        .collect(Collectors.toCollection(LinkedHashSet::new));
+        var directTail = directItems.subList(pinned, directItems.size());
+        var graphTail =
+                rankedGraph.stream()
+                        .filter(candidate -> !pinnedIds.contains(candidate.sourceId()))
+                        .limit(graphSettings.maxExpandedItems())
+                        .toList();
+        var fusedTail =
+                buildFusionCandidates(directTail, graphTail, graphSettings.graphChannelWeight())
+                        .values()
+                        .stream()
+                        .sorted(GraphFusionCandidate.ORDER)
+                        .map(GraphFusionCandidate::result)
+                        .toList();
+        return Stream.concat(pinnedPrefix.stream(), fusedTail.stream()).toList();
+    }
+
+    private List<ScoredResult> fuseExpandMode(
+            RetrievalGraphSettings graphSettings,
+            List<ScoredResult> directItems,
+            List<ScoredResult> rankedGraph) {
+        int expandLimit = Math.max(directItems.size(), graphSettings.maxExpandedItems());
+        return buildFusionCandidates(
+                        directItems,
+                        rankedGraph.stream().limit(graphSettings.maxExpandedItems()).toList(),
+                        graphSettings.graphChannelWeight())
+                .values()
+                .stream()
+                .sorted(GraphFusionCandidate.ORDER)
+                .limit(expandLimit)
+                .map(GraphFusionCandidate::result)
+                .toList();
+    }
+
+    private Map<Long, GraphFusionCandidate> buildFusionCandidates(
+            List<ScoredResult> directItems,
+            List<ScoredResult> rankedGraph,
+            double graphChannelWeight) {
+        Map<Long, GraphFusionCandidate> candidates = new LinkedHashMap<>();
+        for (int directRank = 0; directRank < directItems.size(); directRank++) {
+            var direct = directItems.get(directRank);
+            long itemId = requireItemId(direct.sourceId());
+            candidates.put(
+                    itemId,
+                    new GraphFusionCandidate(
+                            itemId, true, directRank, direct.finalScore(), 0.0d, direct));
+        }
+
+        for (ScoredResult graphCandidate : rankedGraph) {
+            long itemId = requireItemId(graphCandidate.sourceId());
+            double normalizedGraphScore = graphCandidate.finalScore();
+            var existing = candidates.get(itemId);
+            if (existing != null) {
+                double fusedScore =
+                        existing.result().finalScore()
+                                + boundedGraphBonus(
+                                        existing.result().finalScore(),
+                                        normalizedGraphScore,
+                                        graphChannelWeight);
+                candidates.put(
+                        itemId,
+                        new GraphFusionCandidate(
+                                itemId,
+                                true,
+                                existing.directRank(),
+                                fusedScore,
+                                normalizedGraphScore,
+                                rescore(existing.result(), fusedScore)));
+                continue;
+            }
+
+            double fusedScore = graphOnlyScore(normalizedGraphScore, graphChannelWeight);
+            candidates.put(
+                    itemId,
+                    new GraphFusionCandidate(
+                            itemId,
+                            false,
+                            Integer.MAX_VALUE,
+                            fusedScore,
+                            normalizedGraphScore,
+                            rescore(graphCandidate, fusedScore)));
+        }
+        return candidates;
+    }
+
+    private double boundedGraphBonus(
+            double directScore, double normalizedGraphScore, double graphChannelWeight) {
+        double ceiling = Math.max(0.0d, 1.0d - directScore);
+        return Math.min(
+                ceiling, ceiling * normalizedGraphScore * Math.max(0.0d, graphChannelWeight));
+    }
+
+    private double graphOnlyScore(double normalizedGraphScore, double graphChannelWeight) {
+        return normalizedGraphScore * Math.max(0.0d, Math.min(graphChannelWeight, 1.0d));
+    }
+
+    private long requireItemId(String sourceId) {
+        return parseItemId(sourceId)
+                .orElseThrow(
+                        () ->
+                                new IllegalArgumentException(
+                                        "graph assist requires numeric item ids: " + sourceId));
+    }
+
+    private ScoredResult rescore(ScoredResult result, double fusedScore) {
+        return new ScoredResult(
+                result.sourceType(),
+                result.sourceId(),
+                result.text(),
+                result.vectorScore(),
+                fusedScore,
+                result.occurredAt());
     }
 
     private int countDisplacedDirectItems(
@@ -502,18 +638,7 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
     }
 
     private record GraphCandidate(
-            long itemId, double score, String content, java.time.Instant occurredAt) {
-
-        private ScoredResult toScoredResult() {
-            return new ScoredResult(
-                    ScoredResult.SourceType.ITEM,
-                    String.valueOf(itemId),
-                    content == null ? "" : content,
-                    0f,
-                    score,
-                    occurredAt);
-        }
-    }
+            long itemId, double score, String content, java.time.Instant occurredAt) {}
 
     private enum RelationFamily {
         SEMANTIC,

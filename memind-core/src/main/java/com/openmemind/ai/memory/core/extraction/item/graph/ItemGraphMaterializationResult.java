@@ -21,7 +21,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Batch-level graph materialization outcome returned from the post-commit item graph stage.
+ * Batch-level item+graph materialization outcome returned from the commit-critical graph stage.
  */
 public record ItemGraphMaterializationResult(Stats stats) {
 
@@ -31,6 +31,10 @@ public record ItemGraphMaterializationResult(Stats stats) {
 
     public static ItemGraphMaterializationResult empty() {
         return new ItemGraphMaterializationResult(Stats.empty());
+    }
+
+    public ItemGraphMaterializationResult withDerivedMaintenanceDegraded() {
+        return new ItemGraphMaterializationResult(stats.withDerivedMaintenanceDegraded());
     }
 
     public record Stats(
@@ -84,7 +88,8 @@ public record ItemGraphMaterializationResult(Stats stats) {
             int droppedPronounLikeCount,
             int droppedTemporalCount,
             int droppedDateLikeCount,
-            int droppedReservedSpecialCollisionCount) {
+            int droppedReservedSpecialCollisionCount,
+            boolean derivedMaintenanceDegraded) {
 
         public Stats {
             resolutionCandidateSourceSummary =
@@ -178,7 +183,8 @@ public record ItemGraphMaterializationResult(Stats stats) {
                     droppedPronounLikeCount,
                     droppedTemporalCount,
                     droppedDateLikeCount,
-                    droppedReservedSpecialCollisionCount);
+                    droppedReservedSpecialCollisionCount,
+                    false);
         }
 
         public Stats(
@@ -270,7 +276,8 @@ public record ItemGraphMaterializationResult(Stats stats) {
                     droppedPronounLikeCount,
                     droppedTemporalCount,
                     droppedDateLikeCount,
-                    droppedReservedSpecialCollisionCount);
+                    droppedReservedSpecialCollisionCount,
+                    false);
         }
 
         public Stats(
@@ -366,7 +373,8 @@ public record ItemGraphMaterializationResult(Stats stats) {
                     droppedPronounLikeCount,
                     droppedTemporalCount,
                     droppedDateLikeCount,
-                    droppedReservedSpecialCollisionCount);
+                    droppedReservedSpecialCollisionCount,
+                    false);
         }
 
         public static Stats withTemporalAndSemantic(
@@ -447,7 +455,64 @@ public record ItemGraphMaterializationResult(Stats stats) {
                     droppedPronounLikeCount,
                     droppedTemporalCount,
                     droppedDateLikeCount,
-                    droppedReservedSpecialCollisionCount);
+                    droppedReservedSpecialCollisionCount,
+                    false);
+        }
+
+        public Stats withDerivedMaintenanceDegraded() {
+            return new Stats(
+                    entityCount,
+                    mentionCount,
+                    structuredItemLinkCount,
+                    temporalSourceCount,
+                    temporalHistoryQueryBatchCount,
+                    temporalHistoryCandidateCount,
+                    temporalIntraBatchCandidateCount,
+                    temporalSelectedPairCount,
+                    temporalCreatedLinkCount,
+                    temporalQueryDurationMs,
+                    temporalBuildDurationMs,
+                    temporalUpsertDurationMs,
+                    temporalDegraded,
+                    resolutionCandidateCount,
+                    resolutionCandidateSourceSummary,
+                    resolutionMergeScoreHistogramSummary,
+                    resolutionCandidateRejectedCount,
+                    resolutionMergeAcceptedCount,
+                    resolutionMergeRejectedCount,
+                    resolutionCreateNewCount,
+                    resolutionExactFallbackCount,
+                    resolutionCandidateCapHitCount,
+                    aliasEvidenceObservedCount,
+                    aliasEvidenceMergedCount,
+                    resolutionSpecialBypassCount,
+                    semanticSearchRequestCount,
+                    semanticSearchInvocationCount,
+                    semanticSearchHitCount,
+                    semanticResolvedCandidateCount,
+                    semanticLinkCount,
+                    semanticUpsertBatchCount,
+                    semanticSourceWindowCount,
+                    semanticFailedResolveChunkCount,
+                    semanticFailedWindowCount,
+                    semanticFailedUpsertBatchCount,
+                    semanticSameBatchHitCount,
+                    semanticSearchFallbackCount,
+                    semanticIntraBatchCandidateCount,
+                    semanticSearchPhaseDurationMs,
+                    semanticResolvePhaseDurationMs,
+                    semanticUpsertPhaseDurationMs,
+                    semanticIntraBatchPhaseDurationMs,
+                    semanticDegraded,
+                    typeFallbackToOtherCount,
+                    topUnresolvedTypeLabelsSummary,
+                    droppedBlankCount,
+                    droppedPunctuationOnlyCount,
+                    droppedPronounLikeCount,
+                    droppedTemporalCount,
+                    droppedDateLikeCount,
+                    droppedReservedSpecialCollisionCount,
+                    true);
         }
 
         public static Stats empty() {

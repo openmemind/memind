@@ -31,6 +31,8 @@ public class MemoryItemLinkDO extends BaseDO {
     private Long sourceItemId;
     private Long targetItemId;
     private String linkType;
+    private String relationCode;
+    private String evidenceSource;
     private Double strength;
 
     @TableField(typeHandler = Jackson3TypeHandler.class)
@@ -98,6 +100,22 @@ public class MemoryItemLinkDO extends BaseDO {
 
     public void setStrength(Double strength) {
         this.strength = strength;
+    }
+
+    public String getRelationCode() {
+        return relationCode;
+    }
+
+    public void setRelationCode(String relationCode) {
+        this.relationCode = relationCode;
+    }
+
+    public String getEvidenceSource() {
+        return evidenceSource;
+    }
+
+    public void setEvidenceSource(String evidenceSource) {
+        this.evidenceSource = evidenceSource;
     }
 
     public Map<String, Object> getMetadata() {

@@ -17,13 +17,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
-import com.openmemind.ai.memory.core.data.MemoryThread;
-import com.openmemind.ai.memory.core.data.MemoryThreadItem;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
-import com.openmemind.ai.memory.core.data.enums.MemoryThreadRole;
-import com.openmemind.ai.memory.core.data.enums.MemoryThreadStatus;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadLifecycleStatus;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadMembershipRole;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadObjectState;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadType;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadMembership;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadProjection;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
@@ -39,7 +41,7 @@ import reactor.test.StepVerifier;
 class DefaultMemoryThreadAssistantTest {
 
     @Test
-    void assistantSeedsFromDirectHitsAndKeepsWindowBounded() {
+    void assistantStaysDirectOnlyEvenWhenProjectionDataExists() {
         MemoryId memoryId = TestMemoryIds.userAgent();
         InMemoryMemoryStore store = new InMemoryMemoryStore();
         store.itemOperations()
@@ -51,14 +53,17 @@ class DefaultMemoryThreadAssistantTest {
                                 item(103L, "Third direct item"),
                                 item(201L, "Thread member one"),
                                 item(202L, "Thread member two")));
-        store.threadOperations().upsertThreads(memoryId, List.of(thread(memoryId, 501L)));
         store.threadOperations()
-                .upsertThreadItems(
+                .replaceProjection(
                         memoryId,
+                        List.of(projection(memoryId, "topic:conversation:recovery")),
+                        List.of(),
                         List.of(
-                                membership(memoryId, 601L, 501L, 101L, 1),
-                                membership(memoryId, 602L, 501L, 201L, 2),
-                                membership(memoryId, 603L, 501L, 202L, 3)));
+                                membership(memoryId, "topic:conversation:recovery", 101L),
+                                membership(memoryId, "topic:conversation:recovery", 201L),
+                                membership(memoryId, "topic:conversation:recovery", 202L)),
+                        null,
+                        Instant.parse("2026-04-18T00:00:00Z"));
 
         DefaultMemoryThreadAssistant assistant = new DefaultMemoryThreadAssistant(store);
         List<ScoredResult> directWindow =
@@ -75,9 +80,9 @@ class DefaultMemoryThreadAssistantTest {
                             assertThat(result.items()).hasSize(3);
                             assertThat(result.items())
                                     .extracting(ScoredResult::sourceId)
-                                    .containsExactly("101", "201", "202");
-                            assertThat(result.stats().seedThreadCount()).isEqualTo(1);
-                            assertThat(result.stats().admittedMemberCount()).isEqualTo(2);
+                                    .containsExactly("101", "102", "103");
+                            assertThat(result.stats().seedThreadCount()).isZero();
+                            assertThat(result.stats().admittedMemberCount()).isZero();
                         })
                 .verifyComplete();
     }
@@ -98,43 +103,40 @@ class DefaultMemoryThreadAssistantTest {
                 ScoredResult.SourceType.ITEM, sourceId, "item-" + sourceId, 0.8f, score);
     }
 
-    private static MemoryThread thread(MemoryId memoryId, long threadId) {
-        return new MemoryThread(
-                threadId,
+    private static MemoryThreadProjection projection(MemoryId memoryId, String threadKey) {
+        return new MemoryThreadProjection(
                 memoryId.toIdentifier(),
-                "ep:101",
-                "recovery",
+                threadKey,
+                MemoryThreadType.TOPIC,
+                "topic",
+                "conversation:recovery",
                 "Recovery Thread",
+                MemoryThreadLifecycleStatus.ACTIVE,
+                MemoryThreadObjectState.ONGOING,
                 "Seed summary",
-                MemoryThreadStatus.OPEN,
-                0.90d,
+                Map.of(),
+                1,
+                Instant.parse("2026-04-18T00:00:00Z"),
+                Instant.parse("2026-04-18T00:00:00Z"),
                 Instant.parse("2026-04-18T00:00:00Z"),
                 null,
-                Instant.parse("2026-04-18T00:00:00Z"),
-                101L,
-                101L,
                 1,
-                Map.of(),
+                3,
                 Instant.parse("2026-04-18T00:00:00Z"),
-                Instant.parse("2026-04-18T00:00:00Z"),
-                false);
+                Instant.parse("2026-04-18T00:00:00Z"));
     }
 
-    private static MemoryThreadItem membership(
-            MemoryId memoryId, long id, long threadId, long itemId, int sequenceHint) {
-        return new MemoryThreadItem(
-                id,
+    private static MemoryThreadMembership membership(
+            MemoryId memoryId, String threadKey, long itemId) {
+        return new MemoryThreadMembership(
                 memoryId.toIdentifier(),
-                threadId,
+                threadKey,
                 itemId,
+                MemoryThreadMembershipRole.CORE,
+                itemId == 101L,
                 0.95d,
-                MemoryThreadRole.CORE,
-                sequenceHint,
                 Instant.parse("2026-04-18T00:00:00Z"),
-                Map.of(),
-                Instant.parse("2026-04-18T00:00:00Z"),
-                Instant.parse("2026-04-18T00:00:00Z"),
-                false);
+                Instant.parse("2026-04-18T00:00:00Z"));
     }
 
     private static MemoryItem item(Long id, String content) {

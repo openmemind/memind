@@ -13,13 +13,16 @@
  */
 package com.openmemind.ai.memory.core.builder;
 
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphMode;
 import java.time.Duration;
+import java.util.Objects;
 
 /**
  * Builder-owned graph-assist options for deep retrieval.
  */
 public record DeepRetrievalGraphOptions(
         boolean enabled,
+        RetrievalGraphMode mode,
         int maxSeedItems,
         int maxExpandedItems,
         int maxSemanticNeighborsPerSeed,
@@ -35,6 +38,7 @@ public record DeepRetrievalGraphOptions(
         Duration timeout) {
 
     public DeepRetrievalGraphOptions {
+        Objects.requireNonNull(mode, "mode");
         SimpleRetrievalGraphOptions.validateGraphAssistShape(
                 maxSeedItems,
                 maxExpandedItems,
@@ -53,6 +57,115 @@ public record DeepRetrievalGraphOptions(
 
     public static DeepRetrievalGraphOptions defaults() {
         return new DeepRetrievalGraphOptions(
-                false, 8, 16, 2, 2, 2, 4, 8, 0.30d, 0.55d, 0.70f, 5, 0.5d, Duration.ofMillis(300));
+                false,
+                RetrievalGraphMode.ASSIST,
+                8,
+                16,
+                2,
+                2,
+                2,
+                4,
+                8,
+                0.30d,
+                0.55d,
+                0.70f,
+                5,
+                0.5d,
+                Duration.ofMillis(300));
+    }
+
+    public DeepRetrievalGraphOptions withEnabled(boolean enabled) {
+        return new DeepRetrievalGraphOptions(
+                enabled,
+                mode,
+                maxSeedItems,
+                maxExpandedItems,
+                maxSemanticNeighborsPerSeed,
+                maxTemporalNeighborsPerSeed,
+                maxCausalNeighborsPerSeed,
+                maxEntitySiblingItemsPerSeed,
+                maxItemsPerEntity,
+                graphChannelWeight,
+                minLinkStrength,
+                minMentionConfidence,
+                protectDirectTopK,
+                semanticEvidenceDecayFactor,
+                timeout);
+    }
+
+    public DeepRetrievalGraphOptions withMode(RetrievalGraphMode mode) {
+        return new DeepRetrievalGraphOptions(
+                enabled,
+                mode,
+                maxSeedItems,
+                maxExpandedItems,
+                maxSemanticNeighborsPerSeed,
+                maxTemporalNeighborsPerSeed,
+                maxCausalNeighborsPerSeed,
+                maxEntitySiblingItemsPerSeed,
+                maxItemsPerEntity,
+                graphChannelWeight,
+                minLinkStrength,
+                minMentionConfidence,
+                protectDirectTopK,
+                semanticEvidenceDecayFactor,
+                timeout);
+    }
+
+    public DeepRetrievalGraphOptions withMaxSeedItems(int maxSeedItems) {
+        return new DeepRetrievalGraphOptions(
+                enabled,
+                mode,
+                maxSeedItems,
+                maxExpandedItems,
+                maxSemanticNeighborsPerSeed,
+                maxTemporalNeighborsPerSeed,
+                maxCausalNeighborsPerSeed,
+                maxEntitySiblingItemsPerSeed,
+                maxItemsPerEntity,
+                graphChannelWeight,
+                minLinkStrength,
+                minMentionConfidence,
+                protectDirectTopK,
+                semanticEvidenceDecayFactor,
+                timeout);
+    }
+
+    public DeepRetrievalGraphOptions withProtectDirectTopK(int protectDirectTopK) {
+        return new DeepRetrievalGraphOptions(
+                enabled,
+                mode,
+                maxSeedItems,
+                maxExpandedItems,
+                maxSemanticNeighborsPerSeed,
+                maxTemporalNeighborsPerSeed,
+                maxCausalNeighborsPerSeed,
+                maxEntitySiblingItemsPerSeed,
+                maxItemsPerEntity,
+                graphChannelWeight,
+                minLinkStrength,
+                minMentionConfidence,
+                protectDirectTopK,
+                semanticEvidenceDecayFactor,
+                timeout);
+    }
+
+    public DeepRetrievalGraphOptions withTimeout(Duration timeout) {
+        return new DeepRetrievalGraphOptions(
+                enabled,
+                mode,
+                maxSeedItems,
+                maxExpandedItems,
+                maxSemanticNeighborsPerSeed,
+                maxTemporalNeighborsPerSeed,
+                maxCausalNeighborsPerSeed,
+                maxEntitySiblingItemsPerSeed,
+                maxItemsPerEntity,
+                graphChannelWeight,
+                minLinkStrength,
+                minMentionConfidence,
+                protectDirectTopK,
+                semanticEvidenceDecayFactor,
+                timeout);
     }
 }

@@ -136,7 +136,8 @@ class SemanticItemLinkerTest {
     }
 
     @Test
-    void linkProcessesWindowsSequentiallyAndBatchesResolveAndUpsertPerWindow() throws Exception {
+    void linkProcessesWindowsSequentiallyAndPersistsCombinedSemanticBatchAfterPlanning()
+            throws Exception {
         var graphOps = new RecordingGraphOperations();
         var itemOps = new RecordingItemOperations();
         itemOps.insertItems(
@@ -187,7 +188,7 @@ class SemanticItemLinkerTest {
                             assertThat(stats.resolvedCandidateCount()).isEqualTo(3);
                             assertThat(stats.createdLinkCount()).isEqualTo(3);
                             assertThat(stats.sourceWindowCount()).isEqualTo(2);
-                            assertThat(stats.upsertBatchCount()).isEqualTo(2);
+                            assertThat(stats.upsertBatchCount()).isEqualTo(1);
                             assertThat(stats.failedResolveChunkCount()).isZero();
                             assertThat(stats.failedWindowCount()).isZero();
                             assertThat(stats.failedUpsertBatchCount()).isZero();
@@ -197,7 +198,7 @@ class SemanticItemLinkerTest {
                 .verifyComplete();
 
         assertThat(itemOps.requestedVectorIds()).hasSize(2);
-        assertThat(graphOps.semanticWriteSizes()).containsExactly(2, 1);
+        assertThat(graphOps.semanticWriteSizes()).containsExactly(3);
         assertThat(vector.maxInFlight()).isEqualTo(2);
         assertThat(vector.startedQueries()).contains("first item", "second item", "third item");
     }

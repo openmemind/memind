@@ -15,17 +15,22 @@ package com.openmemind.ai.memory.plugin.store.mybatis.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryItemDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.sql.ItemGraphMutationSqlProvider;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.sql.MemoryItemQuerySqlProvider;
 import com.openmemind.ai.memory.plugin.store.mybatis.schema.DatabaseDialect;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import org.apache.ibatis.annotations.InsertProvider;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.SelectProvider;
 
 @Mapper
 public interface MemoryItemMapper extends BaseMapper<MemoryItemDO> {
+
+    @InsertProvider(type = ItemGraphMutationSqlProvider.class, method = "insertMemoryItems")
+    int insertBatch(@Param("items") List<MemoryItemDO> items);
 
     @SelectProvider(
             type = MemoryItemQuerySqlProvider.class,

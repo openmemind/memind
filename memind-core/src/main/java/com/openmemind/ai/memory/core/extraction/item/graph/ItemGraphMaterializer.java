@@ -20,7 +20,7 @@ import java.util.List;
 import reactor.core.publisher.Mono;
 
 /**
- * Post-commit graph materialization contract for newly persisted items.
+ * Commit-critical coordinator for newly extracted items and optional graph facts.
  */
 public interface ItemGraphMaterializer {
 

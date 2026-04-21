@@ -18,6 +18,7 @@ import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.extraction.item.graph.commit.ExtractionBatchId;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryItemDO;
 import java.time.Instant;
@@ -27,6 +28,11 @@ public final class ItemConverter {
     private ItemConverter() {}
 
     public static MemoryItemDO toDO(MemoryId memoryId, MemoryItem record) {
+        return toDO(memoryId, null, record);
+    }
+
+    public static MemoryItemDO toDO(
+            MemoryId memoryId, ExtractionBatchId extractionBatchId, MemoryItem record) {
         MemoryItemDO dataObject = new MemoryItemDO();
         dataObject.setBizId(record.id());
         dataObject.setUserId(memoryId.getAttribute("userId"));
@@ -51,6 +57,8 @@ public final class ItemConverter {
         dataObject.setUpdatedAt(Instant.now());
         dataObject.setType(
                 record.type() != null ? record.type().name() : MemoryItemType.FACT.name());
+        dataObject.setExtractionBatchId(
+                extractionBatchId != null ? extractionBatchId.value() : null);
         return dataObject;
     }
 

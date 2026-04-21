@@ -152,6 +152,7 @@ public final class MemoryItemUnifiedPrompts {
             - During rollout the parser still tolerates legacy `occurredAt`, but your response \
             should use `time`.
             {{GRAPH_HINT_RULES}}
+            {{THREAD_SEMANTICS_RULES}}
             """;
 
     private static final String OUTPUT =
@@ -171,6 +172,7 @@ public final class MemoryItemUnifiedPrompts {
                     "granularity": "point"
                   },
                   "insightTypes": ["Choose ONLY from the Available insightTypes listed under the assigned category"],
+            {{THREAD_SEMANTICS_OUTPUT_FIELDS}}
             {{GRAPH_OUTPUT_FIELDS}}
                   "category_reason": "CRITICAL: Briefly explain WHY this category was chosen based on the rules. This field is for reasoning only and will NOT be stored.",
                   "category": "<matched_category_from_list>"
@@ -532,9 +534,24 @@ public final class MemoryItemUnifiedPrompts {
                 .variable("SUBJECT_CONTEXT", buildSubjectClarityContext(userName))
                 .variable("TEMPORAL_CONTEXT", buildTimeContext(segmentText, referenceTime))
                 .variable("GRAPH_HINT_RULES", buildGraphHintRules(graphOptions))
+                .variable("THREAD_SEMANTICS_RULES", buildThreadSemanticsRules())
+                .variable("THREAD_SEMANTICS_OUTPUT_FIELDS", buildThreadSemanticsOutputFields())
                 .variable("GRAPH_OUTPUT_FIELDS", buildGraphOutputFields(graphOptions))
                 .variable("CONVERSATION", segmentText != null ? segmentText : "")
                 .build();
+    }
+
+    private static String buildThreadSemanticsRules() {
+        return """
+
+        ## threadSemantics
+        - Optional. Emit only when the item clearly contains durable thread-relevant meaning.
+        - If emitted, `threadSemantics.version` must be `1`.
+        - Use `threadSemantics.markers` for strong semantic events such as `STATE_CHANGE`, `BLOCKER_ADDED`, `DECISION_MADE`, `QUESTION_OPENED`, `MILESTONE_REACHED`, or `RESOLUTION_DECLARED`.
+        - Use `threadSemantics.canonicalRefs` for typed stable refs like `project`, `person`, `organization`, or `topic`.
+        - Use `threadSemantics.continuityLinks` only for explicit continuation evidence pointing to an earlier item.
+        - If unsure, omit `threadSemantics` entirely.
+        """;
     }
 
     private static String buildGraphHintRules(ItemGraphOptions graphOptions) {
@@ -558,6 +575,33 @@ public final class MemoryItemUnifiedPrompts {
                 .formatted(
                         graphOptions.maxEntitiesPerItem(),
                         graphOptions.maxCausalReferencesPerItem());
+    }
+
+    private static String buildThreadSemanticsOutputFields() {
+        return "      \"threadSemantics\": {\n"
+                + "        \"version\": 1,\n"
+                + "        \"markers\": [\n"
+                + "          {\n"
+                + "            \"type\": \"STATE_CHANGE\",\n"
+                + "            \"objectRef\": \"project:alpha\",\n"
+                + "            \"summary\": \"Project alpha moved into implementation\",\n"
+                + "            \"fromState\": \"planning\",\n"
+                + "            \"toState\": \"implementation\"\n"
+                + "          }\n"
+                + "        ],\n"
+                + "        \"canonicalRefs\": [\n"
+                + "          {\n"
+                + "            \"refType\": \"project\",\n"
+                + "            \"refKey\": \"alpha\"\n"
+                + "          }\n"
+                + "        ],\n"
+                + "        \"continuityLinks\": [\n"
+                + "          {\n"
+                + "            \"linkType\": \"CONTINUES\",\n"
+                + "            \"targetItemId\": 0\n"
+                + "          }\n"
+                + "        ]\n"
+                + "      },\n";
     }
 
     private static String buildGraphOutputFields(ItemGraphOptions graphOptions) {

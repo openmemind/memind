@@ -22,10 +22,13 @@ import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
+import com.openmemind.ai.memory.core.extraction.item.graph.commit.GraphWritePlanApplier;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.graph.GraphOperations;
 import com.openmemind.ai.memory.core.store.graph.GraphOperationsCapabilities;
+import com.openmemind.ai.memory.core.store.graph.ItemGraphCommitOperations;
+import com.openmemind.ai.memory.core.store.graph.NoOpItemGraphCommitOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
@@ -37,18 +40,24 @@ import com.openmemind.ai.memory.plugin.store.mybatis.initializer.MemoryStoreProp
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.ConversationBufferMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.InsightBufferMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryEntityCooccurrenceMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryGraphAliasBatchReceiptMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryGraphEntityAliasMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryGraphEntityMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightBubbleStateMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightTypeMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemEntityMentionMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemGraphBatchMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemLinkMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryRawDataMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryResourceMapper;
-import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadItemMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadEventMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadIntakeOutboxMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMembershipMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadProjectionMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadRuntimeMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.schema.DatabaseDialect;
 import com.openmemind.ai.memory.plugin.store.mybatis.schema.DatabaseDialectDetector;
 import com.openmemind.ai.memory.plugin.store.mybatis.textsearch.mysql.MysqlFulltextTextSearch;
@@ -68,6 +77,7 @@ import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.FullyQualifiedAnnotationBeanNameGenerator;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
 import tools.jackson.databind.ObjectMapper;
 
 @AutoConfiguration(
@@ -140,9 +150,14 @@ public class MemoryMybatisPlusAutoConfiguration {
             MemoryInsightMapper insightMapper,
             MemoryResourceMapper resourceMapper,
             MemoryThreadMapper threadMapper,
-            MemoryThreadItemMapper threadItemMapper,
+            MemoryThreadProjectionMapper threadProjectionMapper,
+            MemoryThreadEventMapper threadEventMapper,
+            MemoryThreadMembershipMapper threadMembershipMapper,
+            MemoryThreadIntakeOutboxMapper threadIntakeOutboxMapper,
+            MemoryThreadRuntimeMapper threadRuntimeMapper,
             GraphOperations graphOperations,
             ObjectProvider<GraphOperationsCapabilities> graphOperationsCapabilitiesProvider,
+            ObjectProvider<ItemGraphCommitOperations> itemGraphCommitOperationsProvider,
             ObjectProvider<ResourceStore> resourceStoreProvider,
             DataSource dataSource) {
         return new MybatisPlusMemoryStore(
@@ -157,7 +172,13 @@ public class MemoryMybatisPlusAutoConfiguration {
                 graphOperationsCapabilitiesProvider.getIfAvailable(
                         () -> GraphOperationsCapabilities.NONE),
                 threadMapper,
-                threadItemMapper);
+                threadProjectionMapper,
+                threadEventMapper,
+                threadMembershipMapper,
+                threadIntakeOutboxMapper,
+                threadRuntimeMapper,
+                itemGraphCommitOperationsProvider.getIfAvailable(
+                        () -> NoOpItemGraphCommitOperations.INSTANCE));
     }
 
     @Bean
@@ -168,6 +189,7 @@ public class MemoryMybatisPlusAutoConfiguration {
             MemoryItemLinkMapper itemLinkMapper,
             MemoryEntityCooccurrenceMapper entityCooccurrenceMapper,
             MemoryGraphEntityAliasMapper entityAliasMapper,
+            MemoryGraphAliasBatchReceiptMapper aliasBatchReceiptMapper,
             DataSource dataSource) {
         DatabaseDialect dialect = new DatabaseDialectDetector().detect(dataSource);
         return new MybatisGraphOperations(
@@ -176,7 +198,27 @@ public class MemoryMybatisPlusAutoConfiguration {
                 itemLinkMapper,
                 entityCooccurrenceMapper,
                 entityAliasMapper,
+                aliasBatchReceiptMapper,
                 dialect);
+    }
+
+    @Bean
+    @ConditionalOnBean(MybatisGraphOperations.class)
+    @ConditionalOnMissingBean(ItemGraphCommitOperations.class)
+    public ItemGraphCommitOperations itemGraphCommitOperations(
+            MemoryItemMapper itemMapper,
+            MemoryItemGraphBatchMapper itemGraphBatchMapper,
+            MybatisGraphOperations graphOperations,
+            ObjectProvider<PlatformTransactionManager> transactionManagerProvider) {
+        PlatformTransactionManager transactionManager = transactionManagerProvider.getIfAvailable();
+        if (transactionManager == null) {
+            return NoOpItemGraphCommitOperations.INSTANCE;
+        }
+        return new MybatisItemGraphCommitOperations(
+                itemMapper,
+                itemGraphBatchMapper,
+                new GraphWritePlanApplier(graphOperations),
+                transactionManager);
     }
 
     @Bean

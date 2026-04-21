@@ -31,6 +31,6 @@ public record MemoryThreadPageQuery(
                 userId,
                 agentId,
                 status,
-                List.of("last_activity_at DESC", "updated_at DESC", "biz_id DESC"));
+                List.of("last_event_at DESC", "updated_at DESC", "id DESC"));
     }
 }

@@ -27,6 +27,8 @@ import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.extraction.item.graph.commit.ExtractionBatchId;
+import com.openmemind.ai.memory.core.extraction.item.graph.plan.ItemGraphWritePlan;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
@@ -263,6 +265,35 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
                                     .isInstanceOf(Exception.class);
 
                             assertThat(itemOps.listItems(MEMORY_ID)).isEmpty();
+                        });
+    }
+
+    @Test
+    @DisplayName("transactional commit uses batch item persistence instead of row fallback")
+    void transactionalCommitUsesBatchItemPersistenceInsteadOfRowFallback() {
+        newContextRunner(tempDir.resolve("graph-commit-batch-discipline.db"))
+                .run(
+                        context -> {
+                            MemoryStore store = context.getBean(MemoryStore.class);
+                            MapperMethodCounter counter =
+                                    context.getBean(MapperMethodCounter.class);
+
+                            counter.reset();
+                            store.itemGraphCommitOperations()
+                                    .commit(
+                                            MEMORY_ID,
+                                            new ExtractionBatchId("batch-bulk"),
+                                            List.of(
+                                                    memoryItem(101L, "batch item 1"),
+                                                    memoryItem(102L, "batch item 2"),
+                                                    memoryItem(103L, "batch item 3")),
+                                            ItemGraphWritePlan.builder().build());
+
+                            assertThat(counter.count(MemoryItemMapper.class, "insertBatch"))
+                                    .isEqualTo(1);
+                            assertThat(counter.count(MemoryItemMapper.class, "insert")).isZero();
+                            assertThat(counter.count(MemoryItemMapper.class, "selectList"))
+                                    .isZero();
                         });
     }
 

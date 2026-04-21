@@ -22,10 +22,13 @@ import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildCo
 import com.openmemind.ai.memory.core.extraction.item.graph.AliasEvidenceMode;
 import com.openmemind.ai.memory.core.extraction.item.graph.CrossScriptMergePolicy;
 import com.openmemind.ai.memory.core.extraction.item.graph.EntityResolutionMode;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphMode;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoringConfig;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.graph.GraphOperations;
 import com.openmemind.ai.memory.core.store.graph.GraphOperationsCapabilities;
+import com.openmemind.ai.memory.core.store.graph.InMemoryGraphOperations;
 import com.openmemind.ai.memory.core.store.insight.InMemoryInsightOperations;
 import com.openmemind.ai.memory.core.store.item.InMemoryItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.InMemoryRawDataOperations;
@@ -158,13 +161,126 @@ class MemoryBuildOptionsTest {
         assertThat(result.options().memoryThread().derivation().enabled()).isFalse();
         assertThat(result.warnings())
                 .containsExactly(
-                        "memoryThread.derivation.enabled requires store-backed typed item graph"
-                                + " operations; derivation was force-disabled");
+                        "extraction.item.graph.enabled requires store-backed item graph commit"
+                                + " operations; item graph was force-disabled",
+                        "memoryThread.derivation.enabled requires extraction.item.graph.enabled;"
+                                + " derivation was force-disabled");
         assertThat(result.memoryThreadForcedDisableReason()).isPresent();
         assertThat(result.memoryThreadForcedDisableReason().orElseThrow())
-                .contains(
-                        "memoryThread.derivation.enabled requires store-backed typed item graph"
-                                + " operations");
+                .contains("memoryThread.derivation.enabled requires extraction.item.graph.enabled");
+    }
+
+    @Test
+    void sanitizerForceDisablesItemGraphWhenStoreHasNoCommitCoordinator() {
+        var requested =
+                MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults().withEnabled(true)),
+                                        InsightExtractionOptions.defaults()))
+                        .build();
+
+        MemoryStore unsupportedStore =
+                new MemoryStore() {
+                    @Override
+                    public com.openmemind.ai.memory.core.store.rawdata.RawDataOperations
+                            rawDataOperations() {
+                        return new InMemoryRawDataOperations();
+                    }
+
+                    @Override
+                    public com.openmemind.ai.memory.core.store.item.ItemOperations
+                            itemOperations() {
+                        return new InMemoryItemOperations();
+                    }
+
+                    @Override
+                    public com.openmemind.ai.memory.core.store.insight.InsightOperations
+                            insightOperations() {
+                        return new InMemoryInsightOperations();
+                    }
+
+                    @Override
+                    public GraphOperations graphOperations() {
+                        return new InMemoryGraphOperations();
+                    }
+                };
+
+        var result = new MemoryBuildOptionsSanitizer().sanitize(requested, unsupportedStore);
+
+        assertThat(result.options().extraction().item().graph().enabled()).isFalse();
+        assertThat(result.warnings())
+                .containsExactly(
+                        "extraction.item.graph.enabled requires store-backed item graph commit"
+                                + " operations; item graph was force-disabled");
+    }
+
+    @Test
+    void sanitizerForceDisablesDerivationWhenItemGraphWasDisabledByMissingCommitCoordinator() {
+        var requested =
+                MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults().withEnabled(true)),
+                                        InsightExtractionOptions.defaults()))
+                        .memoryThread(
+                                MemoryThreadOptions.defaults()
+                                        .withEnabled(true)
+                                        .withDerivation(
+                                                MemoryThreadDerivationOptions.defaults()
+                                                        .withEnabled(true)))
+                        .build();
+
+        MemoryStore unsupportedStore =
+                new MemoryStore() {
+                    @Override
+                    public com.openmemind.ai.memory.core.store.rawdata.RawDataOperations
+                            rawDataOperations() {
+                        return new InMemoryRawDataOperations();
+                    }
+
+                    @Override
+                    public com.openmemind.ai.memory.core.store.item.ItemOperations
+                            itemOperations() {
+                        return new InMemoryItemOperations();
+                    }
+
+                    @Override
+                    public com.openmemind.ai.memory.core.store.insight.InsightOperations
+                            insightOperations() {
+                        return new InMemoryInsightOperations();
+                    }
+
+                    @Override
+                    public GraphOperations graphOperations() {
+                        return new InMemoryGraphOperations();
+                    }
+                };
+
+        var result = new MemoryBuildOptionsSanitizer().sanitize(requested, unsupportedStore);
+
+        assertThat(result.options().extraction().item().graph().enabled()).isFalse();
+        assertThat(result.options().memoryThread().derivation().enabled()).isFalse();
+        assertThat(result.warnings())
+                .containsExactly(
+                        "extraction.item.graph.enabled requires store-backed item graph commit"
+                                + " operations; item graph was force-disabled",
+                        "memoryThread.derivation.enabled requires extraction.item.graph.enabled;"
+                                + " derivation was force-disabled");
+        assertThat(result.memoryThreadForcedDisableReason())
+                .hasValue(
+                        "memoryThread.derivation.enabled requires extraction.item.graph.enabled;"
+                                + " derivation was force-disabled");
     }
 
     @Test
@@ -189,10 +305,23 @@ class MemoryBuildOptionsTest {
                 new MemoryBuildOptionsSanitizer()
                         .sanitize(
                                 requested,
-                                MemoryStore.of(
-                                        new InMemoryRawDataOperations(),
-                                        new InMemoryItemOperations(),
-                                        new InMemoryInsightOperations()));
+                                new InMemoryMemoryStore() {
+                                    @Override
+                                    public GraphOperationsCapabilities
+                                            graphOperationsCapabilities() {
+                                        return new GraphOperationsCapabilities() {
+                                            @Override
+                                            public boolean supportsBoundedEntityKeyLookup() {
+                                                return false;
+                                            }
+
+                                            @Override
+                                            public boolean supportsHistoricalAliasLookup() {
+                                                return false;
+                                            }
+                                        };
+                                    }
+                                });
 
         assertThat(result.options().extraction().item().graph().resolutionMode())
                 .isEqualTo(EntityResolutionMode.EXACT);
@@ -222,25 +351,7 @@ class MemoryBuildOptionsTest {
                         .build();
 
         MemoryStore stageTwoOnlyStore =
-                new MemoryStore() {
-                    @Override
-                    public com.openmemind.ai.memory.core.store.rawdata.RawDataOperations
-                            rawDataOperations() {
-                        return new InMemoryRawDataOperations();
-                    }
-
-                    @Override
-                    public com.openmemind.ai.memory.core.store.item.ItemOperations
-                            itemOperations() {
-                        return new InMemoryItemOperations();
-                    }
-
-                    @Override
-                    public com.openmemind.ai.memory.core.store.insight.InsightOperations
-                            insightOperations() {
-                        return new InMemoryInsightOperations();
-                    }
-
+                new InMemoryMemoryStore() {
                     @Override
                     public GraphOperationsCapabilities graphOperationsCapabilities() {
                         return new GraphOperationsCapabilities() {
@@ -343,6 +454,7 @@ class MemoryBuildOptionsTest {
         var options = SimpleRetrievalGraphOptions.defaults();
 
         assertThat(options.enabled()).isFalse();
+        assertThat(options.mode()).isEqualTo(RetrievalGraphMode.ASSIST);
         assertThat(options.maxSeedItems()).isEqualTo(6);
         assertThat(options.maxExpandedItems()).isEqualTo(12);
         assertThat(options.maxSemanticNeighborsPerSeed()).isEqualTo(2);
@@ -370,6 +482,7 @@ class MemoryBuildOptionsTest {
         var options = DeepRetrievalGraphOptions.defaults();
 
         assertThat(options.enabled()).isFalse();
+        assertThat(options.mode()).isEqualTo(RetrievalGraphMode.ASSIST);
         assertThat(options.maxSeedItems()).isEqualTo(8);
         assertThat(options.maxExpandedItems()).isEqualTo(16);
         assertThat(options.maxSemanticNeighborsPerSeed()).isEqualTo(2);

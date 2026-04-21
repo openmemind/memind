@@ -14,10 +14,12 @@
 package com.openmemind.ai.memory.core.extraction.item;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -52,7 +54,7 @@ import reactor.test.StepVerifier;
 class MemoryItemLayerGraphTest {
 
     @Test
-    void extractShouldMaterializeGraphAfterStoreBatchAndItemInsert() {
+    void extractShouldDelegateCommittedItemBatchToGraphMaterializerAfterStoreBatch() {
         MemoryItemExtractor extractor = mock(MemoryItemExtractor.class);
         MemoryItemDeduplicator deduplicator = mock(MemoryItemDeduplicator.class);
         MemoryStore memoryStore = mock(MemoryStore.class);
@@ -131,9 +133,9 @@ class MemoryItemLayerGraphTest {
                 ArgumentCaptor.forClass(List.class);
         var inOrder = inOrder(vector, itemOperations, graphMaterializer);
         inOrder.verify(vector).storeBatch(eq(memoryId), anyList(), anyList());
-        inOrder.verify(itemOperations).insertItems(eq(memoryId), itemCaptor.capture());
         inOrder.verify(graphMaterializer)
-                .materialize(eq(memoryId), eq(itemCaptor.getValue()), eq(List.of(entry)));
+                .materialize(eq(memoryId), itemCaptor.capture(), eq(List.of(entry)));
+        verify(itemOperations, never()).insertItems(any(), anyList());
         verify(vector)
                 .storeBatch(
                         eq(memoryId), vectorTextCaptor.capture(), vectorMetadataCaptor.capture());
@@ -144,7 +146,7 @@ class MemoryItemLayerGraphTest {
     }
 
     @Test
-    void extractShouldKeepPersistenceSuccessfulWhenGraphMaterializerFails() {
+    void extractShouldDeleteStoredVectorsAndFailWhenGraphMaterializerFails() {
         MemoryItemExtractor extractor = mock(MemoryItemExtractor.class);
         MemoryItemDeduplicator deduplicator = mock(MemoryItemDeduplicator.class);
         MemoryStore memoryStore = mock(MemoryStore.class);
@@ -201,14 +203,19 @@ class MemoryItemLayerGraphTest {
                 .thenReturn(Mono.just(List.of("vec-1")));
         when(graphMaterializer.materialize(eq(memoryId), anyList(), eq(List.of(entry))))
                 .thenReturn(Mono.error(new IllegalStateException("graph failure")));
+        when(vector.deleteBatch(eq(memoryId), eq(List.of("vec-1")))).thenReturn(Mono.empty());
 
         StepVerifier.create(
                         layer.extract(
                                 memoryId,
                                 new RawDataResult(List.of(), List.of(segment), false),
                                 config))
-                .assertNext(result -> assertThat(result.newItems()).hasSize(1))
-                .verifyComplete();
+                .expectErrorSatisfies(
+                        error -> assertThat(error).hasMessageContaining("graph failure"))
+                .verify();
+
+        verify(itemOperations, never()).insertItems(any(), anyList());
+        verify(vector).deleteBatch(eq(memoryId), eq(List.of("vec-1")));
     }
 
     @Test
@@ -280,6 +287,8 @@ class MemoryItemLayerGraphTest {
                                 config))
                 .assertNext(result -> assertThat(result.newItems()).hasSize(1))
                 .verifyComplete();
+
+        verify(itemOperations, never()).insertItems(any(), anyList());
     }
 
     @Test
@@ -358,8 +367,10 @@ class MemoryItemLayerGraphTest {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<Map<String, Object>>> vectorMetadataCaptor =
                 ArgumentCaptor.forClass(List.class);
-        verify(itemOperations).insertItems(eq(memoryId), itemCaptor.capture());
+        verify(graphMaterializer)
+                .materialize(eq(memoryId), itemCaptor.capture(), eq(List.of(entry)));
         verify(vector).storeBatch(eq(memoryId), anyList(), vectorMetadataCaptor.capture());
+        verify(itemOperations, never()).insertItems(any(), anyList());
         assertThat(itemCaptor.getValue().getFirst().metadata())
                 .containsEntry("whenToUse", "Use when searching documentation");
         assertThat(vectorMetadataCaptor.getValue())

@@ -17,8 +17,17 @@ import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.item.graph.entity.normalize.EntityDropReason;
 import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.EntityResolutionDiagnostics;
 import com.openmemind.ai.memory.core.extraction.item.graph.pipeline.model.ResolvedGraphBatch;
+import com.openmemind.ai.memory.core.extraction.item.graph.plan.ItemGraphWritePlan;
+import com.openmemind.ai.memory.core.extraction.item.graph.relation.causal.CausalItemRelation;
+import com.openmemind.ai.memory.core.extraction.item.graph.relation.causal.CausalRelationCode;
+import com.openmemind.ai.memory.core.extraction.item.graph.relation.semantic.SemanticEvidenceSource;
+import com.openmemind.ai.memory.core.extraction.item.graph.relation.semantic.SemanticItemRelation;
+import com.openmemind.ai.memory.core.extraction.item.graph.relation.temporal.TemporalItemRelation;
+import com.openmemind.ai.memory.core.extraction.item.graph.relation.temporal.TemporalRelationCode;
 import com.openmemind.ai.memory.core.store.graph.GraphOperations;
 import com.openmemind.ai.memory.core.store.graph.ItemEntityMention;
+import com.openmemind.ai.memory.core.store.graph.ItemLink;
+import com.openmemind.ai.memory.core.store.graph.ItemLinkType;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +43,36 @@ public final class StructuredGraphPersister {
 
     public StructuredGraphPersister(GraphOperations graphOperations) {
         this.graphOperations = Objects.requireNonNull(graphOperations, "graphOperations");
+    }
+
+    ItemGraphWritePlan toWritePlan(ResolvedGraphBatch batch) {
+        var resolved = batch == null ? ResolvedGraphBatch.empty() : batch;
+        return ItemGraphWritePlan.builder()
+                .entities(resolved.entities())
+                .mentions(resolved.mentions())
+                .aliases(resolved.entityAliases())
+                .semanticRelations(
+                        resolved.itemLinks().stream()
+                                .filter(link -> link.linkType() == ItemLinkType.SEMANTIC)
+                                .map(StructuredGraphPersister::toSemanticRelation)
+                                .toList())
+                .temporalRelations(
+                        resolved.itemLinks().stream()
+                                .filter(link -> link.linkType() == ItemLinkType.TEMPORAL)
+                                .map(StructuredGraphPersister::toTemporalRelation)
+                                .toList())
+                .causalRelations(
+                        resolved.itemLinks().stream()
+                                .filter(link -> link.linkType() == ItemLinkType.CAUSAL)
+                                .map(StructuredGraphPersister::toCausalRelation)
+                                .toList())
+                .diagnostics(
+                        Map.of(
+                                "resolutionDiagnostics",
+                                resolved.resolutionDiagnostics(),
+                                "normalizationDiagnostics",
+                                resolved.diagnostics()))
+                .build();
     }
 
     StructuredGraphStats persistStructuredGraph(MemoryId memoryId, ResolvedGraphBatch batch) {
@@ -80,6 +119,33 @@ public final class StructuredGraphPersister {
                 .limit(maxEntries)
                 .map(entry -> entry.getKey() + "=" + entry.getValue())
                 .collect(Collectors.joining(", "));
+    }
+
+    private static SemanticItemRelation toSemanticRelation(ItemLink link) {
+        return new SemanticItemRelation(
+                link.sourceItemId(),
+                link.targetItemId(),
+                SemanticEvidenceSource.fromCode(
+                        link.evidenceSource() == null ? "vector_search" : link.evidenceSource()),
+                link.strength() == null ? 1.0d : link.strength());
+    }
+
+    private static TemporalItemRelation toTemporalRelation(ItemLink link) {
+        return new TemporalItemRelation(
+                link.sourceItemId(),
+                link.targetItemId(),
+                TemporalRelationCode.fromCode(
+                        link.relationCode() == null ? "before" : link.relationCode()),
+                link.strength() == null ? 1.0d : link.strength());
+    }
+
+    private static CausalItemRelation toCausalRelation(ItemLink link) {
+        return new CausalItemRelation(
+                link.sourceItemId(),
+                link.targetItemId(),
+                CausalRelationCode.fromCode(
+                        link.relationCode() == null ? "caused_by" : link.relationCode()),
+                link.strength() == null ? 1.0d : link.strength());
     }
 
     record StructuredGraphStats(

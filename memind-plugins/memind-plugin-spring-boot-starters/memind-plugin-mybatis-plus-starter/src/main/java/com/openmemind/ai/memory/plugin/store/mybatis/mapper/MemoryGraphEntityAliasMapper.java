@@ -16,7 +16,9 @@ package com.openmemind.ai.memory.plugin.store.mybatis.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryGraphEntityAliasDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.sql.GraphQuerySqlProvider;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.sql.ItemGraphMutationSqlProvider;
 import java.util.List;
+import org.apache.ibatis.annotations.InsertProvider;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.ResultMap;
@@ -24,6 +26,9 @@ import org.apache.ibatis.annotations.SelectProvider;
 
 @Mapper
 public interface MemoryGraphEntityAliasMapper extends BaseMapper<MemoryGraphEntityAliasDO> {
+
+    @InsertProvider(type = ItemGraphMutationSqlProvider.class, method = "insertEntityAliases")
+    int insertBatch(@Param("aliases") List<MemoryGraphEntityAliasDO> aliases);
 
     @SelectProvider(
             type = GraphQuerySqlProvider.class,

@@ -28,6 +28,8 @@ import com.openmemind.ai.memory.core.extraction.item.graph.EntityAliasObservatio
 import com.openmemind.ai.memory.core.extraction.item.graph.EntityResolutionMode;
 import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializationResult;
 import com.openmemind.ai.memory.core.extraction.item.graph.UserAliasDictionary;
+import com.openmemind.ai.memory.core.extraction.item.graph.commit.ItemGraphCommitReceipt;
+import com.openmemind.ai.memory.core.extraction.item.graph.derived.GraphDerivedMaintainer;
 import com.openmemind.ai.memory.core.extraction.item.graph.entity.alias.EntityAliasIndexPlanner;
 import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.ConservativeHeuristicEntityResolutionStrategy;
 import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.DefaultEntityCandidateRetriever;
@@ -36,12 +38,16 @@ import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.ExactC
 import com.openmemind.ai.memory.core.extraction.item.graph.link.semantic.SemanticItemLinker;
 import com.openmemind.ai.memory.core.extraction.item.graph.link.temporal.TemporalItemLinker;
 import com.openmemind.ai.memory.core.extraction.item.graph.link.temporal.TemporalRelationClassifier;
+import com.openmemind.ai.memory.core.extraction.item.graph.plan.DefaultItemGraphPlanner;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedGraphHints;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
+import com.openmemind.ai.memory.core.store.InMemoryExtractionCommitState;
 import com.openmemind.ai.memory.core.store.graph.EntityCooccurrence;
 import com.openmemind.ai.memory.core.store.graph.GraphEntityAlias;
 import com.openmemind.ai.memory.core.store.graph.GraphEntityType;
 import com.openmemind.ai.memory.core.store.graph.InMemoryGraphOperations;
+import com.openmemind.ai.memory.core.store.graph.InMemoryItemGraphCommitOperations;
+import com.openmemind.ai.memory.core.store.graph.ItemGraphCommitOperations;
 import com.openmemind.ai.memory.core.store.graph.ItemLink;
 import com.openmemind.ai.memory.core.store.graph.ItemLinkType;
 import com.openmemind.ai.memory.core.store.item.InMemoryItemOperations;
@@ -62,6 +68,93 @@ class DefaultItemGraphMaterializerTest {
     private static final Instant CREATED_AT = Instant.parse("2026-04-16T00:00:00Z");
 
     @Test
+    void materializeShouldCommitPlannedWritePlanThroughStoreOwnedCommitPath() {
+        var graphOps = new InMemoryGraphOperations();
+        var vector = new StubMemoryVector();
+        vector.register(
+                "User discussed OpenAI deployment",
+                new VectorSearchResult("vector-77", "existing note", 0.93f, Map.of()));
+        var itemOps = new InMemoryItemOperations();
+        itemOps.insertItems(
+                MEMORY_ID,
+                List.of(existingItem(77L, "vector-77", "Existing OpenAI deployment note")));
+        var commitOps =
+                new RecordingCommitOperations(
+                        new InMemoryItemGraphCommitOperations(
+                                new InMemoryExtractionCommitState(), itemOps, graphOps));
+
+        var materializer =
+                materializer(itemOps, graphOps, vector, commitOps, GraphDerivedMaintainer.noOp());
+
+        var item =
+                newItem(
+                        101L,
+                        "vector-101",
+                        "User discussed OpenAI deployment",
+                        Map.of("whenToUse", "Use when asked about OpenAI rollout"));
+
+        StepVerifier.create(materializer.materialize(MEMORY_ID, List.of(item), List.of(newEntry())))
+                .assertNext(result -> assertThat(result.stats().semanticLinkCount()).isEqualTo(1))
+                .verifyComplete();
+
+        assertThat(commitOps.lastWritePlan()).isNotNull();
+        assertThat(commitOps.lastWritePlan().semanticRelations())
+                .singleElement()
+                .extracting(
+                        com.openmemind.ai.memory.core.extraction.item.graph.relation.semantic
+                                        .SemanticItemRelation
+                                ::sourceItemId,
+                        com.openmemind.ai.memory.core.extraction.item.graph.relation.semantic
+                                        .SemanticItemRelation
+                                ::targetItemId)
+                .containsExactly(101L, 77L);
+        assertThat(graphOps.listItemLinks(MEMORY_ID))
+                .extracting(ItemLink::linkType, ItemLink::sourceItemId, ItemLink::targetItemId)
+                .contains(tuple(ItemLinkType.SEMANTIC, 101L, 77L));
+        assertThat(itemOps.listItems(MEMORY_ID)).extracting(MemoryItem::id).contains(77L, 101L);
+    }
+
+    @Test
+    void derivedMaintenanceFailureShouldDegradeDiagnosticsWithoutRollingBackCommittedSourceFacts() {
+        var graphOps = new InMemoryGraphOperations();
+        var itemOps = new InMemoryItemOperations();
+        var commitOps =
+                new InMemoryItemGraphCommitOperations(
+                        new InMemoryExtractionCommitState(), itemOps, graphOps);
+        var materializer =
+                materializer(
+                        itemOps,
+                        graphOps,
+                        new StubMemoryVector(),
+                        commitOps,
+                        (memoryId, affectedEntityKeys) -> {
+                            throw new IllegalStateException("derived failure");
+                        });
+
+        var items =
+                List.of(
+                        newItem(101L, "vector-101", "Cause item", Map.of()),
+                        newItem(102L, "vector-102", "Effect item", Map.of()));
+        var entries =
+                List.of(entryWithSharedEntities(), entryWithSharedEntitiesAndCausalReference());
+
+        StepVerifier.create(materializer.materialize(MEMORY_ID, items, entries))
+                .assertNext(
+                        result -> {
+                            assertThat(result.stats().derivedMaintenanceDegraded()).isTrue();
+                            assertThat(result.stats().mentionCount()).isEqualTo(4);
+                            assertThat(result.stats().structuredItemLinkCount()).isEqualTo(1);
+                        })
+                .verifyComplete();
+
+        assertThat(itemOps.listItems(MEMORY_ID)).extracting(MemoryItem::id).contains(101L, 102L);
+        assertThat(graphOps.listItemEntityMentions(MEMORY_ID)).hasSize(4);
+        assertThat(graphOps.listItemLinks(MEMORY_ID))
+                .filteredOn(link -> link.linkType() != ItemLinkType.SEMANTIC)
+                .isNotEmpty();
+    }
+
+    @Test
     void semanticLinksShouldUseSameEmbeddingTextRuleAsItemVectorization() {
         var graphOps = new InMemoryGraphOperations();
         var vector = new StubMemoryVector();
@@ -74,11 +167,10 @@ class DefaultItemGraphMaterializerTest {
                 List.of(existingItem(77L, "vector-77", "Existing OpenAI deployment note")));
 
         var materializer =
-                new DefaultItemGraphMaterializer(
-                        new GraphHintNormalizer(),
+                materializer(
                         new ExactCanonicalEntityResolutionStrategy(),
-                        new EntityAliasIndexPlanner(),
-                        new StructuredGraphPersister(graphOps),
+                        itemOps,
+                        graphOps,
                         new TemporalItemLinker(
                                 itemOps,
                                 graphOps,
@@ -124,29 +216,31 @@ class DefaultItemGraphMaterializerTest {
     @Test
     void materializeShouldPropagateStage3IntraBatchSemanticStats() {
         var graphOps = new InMemoryGraphOperations();
+        var itemOps = new InMemoryItemOperations();
         var materializer =
-                new DefaultItemGraphMaterializer(
-                        new GraphHintNormalizer(),
+                materializer(
                         new ExactCanonicalEntityResolutionStrategy(),
-                        new EntityAliasIndexPlanner(),
-                        new StructuredGraphPersister(graphOps),
+                        itemOps,
+                        graphOps,
                         new TemporalItemLinker(
-                                new InMemoryItemOperations(),
+                                itemOps,
                                 graphOps,
                                 new TemporalRelationClassifier(),
                                 ItemGraphOptions.defaults().withEnabled(true)),
                         new SemanticItemLinker(
-                                new InMemoryItemOperations(),
+                                itemOps,
                                 graphOps,
                                 new StubMemoryVector(),
                                 ItemGraphOptions.defaults().withEnabled(true)) {
                             @Override
-                            public Mono<SemanticLinkingStats> link(
+                            public Mono<SemanticLinkingPlan> plan(
                                     MemoryId memoryId, List<MemoryItem> items) {
                                 return Mono.just(
-                                        new SemanticLinkingStats(
-                                                4, 4, 8, 6, 5, 2, 2, 1, 1, 1, 3, 0, 4, 15L, 9L, 6L,
-                                                12L, true));
+                                        new SemanticLinkingPlan(
+                                                List.of(),
+                                                new SemanticLinkingStats(
+                                                        4, 4, 8, 6, 5, 2, 2, 1, 1, 1, 3, 0, 4, 15L,
+                                                        9L, 6L, 12L, true)));
                             }
                         },
                         ItemGraphOptions.defaults().withEnabled(true));
@@ -229,6 +323,7 @@ class DefaultItemGraphMaterializerTest {
     @Test
     void materializeShouldReportTemporalStatsSeparatelyFromStructuredLinks() {
         var graphOps = new InMemoryGraphOperations();
+        var itemOps = new InMemoryItemOperations();
         var items =
                 List.of(
                         newItem(101L, "vector-101", "Cause item", Map.of()),
@@ -236,36 +331,59 @@ class DefaultItemGraphMaterializerTest {
         var entries =
                 List.of(entryWithSharedEntities(), entryWithSharedEntitiesAndCausalReference());
         var materializer =
-                new DefaultItemGraphMaterializer(
-                        new GraphHintNormalizer(),
+                materializer(
                         new ExactCanonicalEntityResolutionStrategy(),
-                        new EntityAliasIndexPlanner(),
-                        new StructuredGraphPersister(graphOps),
+                        itemOps,
+                        graphOps,
                         new TemporalItemLinker(
-                                new InMemoryItemOperations(),
+                                itemOps,
                                 graphOps,
                                 new TemporalRelationClassifier(),
                                 ItemGraphOptions.defaults().withEnabled(true)) {
                             @Override
-                            public Mono<TemporalLinkingStats> link(
+                            public Mono<TemporalLinkingPlan> plan(
                                     MemoryId memoryId, List<MemoryItem> batchItems) {
                                 return Mono.just(
-                                        new TemporalLinkingStats(
-                                                2, 1, 3, 1, 1, 1, 4L, 3L, 2L, false));
+                                        new TemporalLinkingPlan(
+                                                List.of(
+                                                        new ItemLink(
+                                                                MEMORY_ID.toIdentifier(),
+                                                                101L,
+                                                                102L,
+                                                                ItemLinkType.TEMPORAL,
+                                                                "before",
+                                                                null,
+                                                                1.0d,
+                                                                Map.of(),
+                                                                CREATED_AT)),
+                                                new TemporalLinkingStats(
+                                                        2, 1, 3, 1, 1, 1, 4L, 3L, 0L, false)));
                             }
                         },
                         new SemanticItemLinker(
-                                new InMemoryItemOperations(),
+                                itemOps,
                                 graphOps,
                                 new StubMemoryVector(),
                                 ItemGraphOptions.defaults().withEnabled(true)) {
                             @Override
-                            public Mono<SemanticLinkingStats> link(
+                            public Mono<SemanticLinkingPlan> plan(
                                     MemoryId memoryId, List<MemoryItem> batchItems) {
                                 return Mono.just(
-                                        new SemanticLinkingStats(
-                                                1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 2L, 1L, 1L,
-                                                0L, false));
+                                        new SemanticLinkingPlan(
+                                                List.of(
+                                                        new ItemLink(
+                                                                MEMORY_ID.toIdentifier(),
+                                                                101L,
+                                                                102L,
+                                                                ItemLinkType.SEMANTIC,
+                                                                null,
+                                                                "vector_search",
+                                                                0.91d,
+                                                                Map.of(),
+                                                                CREATED_AT)),
+                                                new SemanticLinkingStats(
+                                                        1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 2L,
+                                                        1L, 1L, 0L, false)));
                             }
                         },
                         ItemGraphOptions.defaults().withEnabled(true));
@@ -283,14 +401,15 @@ class DefaultItemGraphMaterializerTest {
     @Test
     void temporalLinkerFailureStillReturnsStructuredStatsAndMarksTemporalDegraded() {
         var graphOps = new InMemoryGraphOperations();
+        var itemOps = new InMemoryItemOperations();
         var temporalItemLinker =
                 new TemporalItemLinker(
-                        new InMemoryItemOperations(),
+                        itemOps,
                         graphOps,
                         new TemporalRelationClassifier(),
                         ItemGraphOptions.defaults().withEnabled(true)) {
                     @Override
-                    public Mono<TemporalLinkingStats> link(
+                    public Mono<TemporalLinkingPlan> plan(
                             MemoryId memoryId, List<MemoryItem> items) {
                         return Mono.error(
                                 new IllegalStateException("simulated temporal linker failure"));
@@ -298,26 +417,37 @@ class DefaultItemGraphMaterializerTest {
                 };
         var semanticItemLinker =
                 new SemanticItemLinker(
-                        new InMemoryItemOperations(),
+                        itemOps,
                         graphOps,
                         new StubMemoryVector(),
                         ItemGraphOptions.defaults().withEnabled(true)) {
                     @Override
-                    public Mono<SemanticLinkingStats> link(
+                    public Mono<SemanticLinkingPlan> plan(
                             MemoryId memoryId, List<MemoryItem> items) {
                         return Mono.just(
-                                new SemanticLinkingStats(
-                                        1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 2L, 1L, 1L, 0L,
-                                        false));
+                                new SemanticLinkingPlan(
+                                        List.of(
+                                                new ItemLink(
+                                                        MEMORY_ID.toIdentifier(),
+                                                        101L,
+                                                        102L,
+                                                        ItemLinkType.SEMANTIC,
+                                                        null,
+                                                        "vector_search",
+                                                        0.91d,
+                                                        Map.of(),
+                                                        CREATED_AT)),
+                                        new SemanticLinkingStats(
+                                                1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 2L, 1L, 1L,
+                                                0L, false)));
                     }
                 };
 
         var materializer =
-                new DefaultItemGraphMaterializer(
-                        new GraphHintNormalizer(),
+                materializer(
                         new ExactCanonicalEntityResolutionStrategy(),
-                        new EntityAliasIndexPlanner(),
-                        new StructuredGraphPersister(graphOps),
+                        itemOps,
+                        graphOps,
                         temporalItemLinker,
                         semanticItemLinker,
                         ItemGraphOptions.defaults().withEnabled(true));
@@ -350,29 +480,20 @@ class DefaultItemGraphMaterializerTest {
                 List.of(
                         entity("organization:openai", "OpenAI"),
                         entity("organization:acme corp", "Acme Corp")));
+        var options =
+                ItemGraphOptions.defaults()
+                        .withEnabled(true)
+                        .withResolutionMode(EntityResolutionMode.CONSERVATIVE);
+        var itemOps = new InMemoryItemOperations();
         var materializer =
-                new DefaultItemGraphMaterializer(
-                        new GraphHintNormalizer(),
+                materializer(
                         conservativeResolutionStrategy(graphOps),
-                        new EntityAliasIndexPlanner(),
-                        new StructuredGraphPersister(graphOps),
+                        itemOps,
+                        graphOps,
                         new TemporalItemLinker(
-                                new InMemoryItemOperations(),
-                                graphOps,
-                                new TemporalRelationClassifier(),
-                                ItemGraphOptions.defaults()
-                                        .withEnabled(true)
-                                        .withResolutionMode(EntityResolutionMode.CONSERVATIVE)),
-                        new SemanticItemLinker(
-                                new InMemoryItemOperations(),
-                                graphOps,
-                                new StubMemoryVector(),
-                                ItemGraphOptions.defaults()
-                                        .withEnabled(true)
-                                        .withResolutionMode(EntityResolutionMode.CONSERVATIVE)),
-                        ItemGraphOptions.defaults()
-                                .withEnabled(true)
-                                .withResolutionMode(EntityResolutionMode.CONSERVATIVE));
+                                itemOps, graphOps, new TemporalRelationClassifier(), options),
+                        new SemanticItemLinker(itemOps, graphOps, new StubMemoryVector(), options),
+                        options);
 
         var items =
                 List.of(
@@ -421,22 +542,15 @@ class DefaultItemGraphMaterializerTest {
                                         Map.of(
                                                 "organization|openai china",
                                                 "organization:openai")));
+        var itemOps = new InMemoryItemOperations();
         var materializer =
-                new DefaultItemGraphMaterializer(
-                        new GraphHintNormalizer(),
+                materializer(
                         conservativeResolutionStrategy(graphOps),
-                        new EntityAliasIndexPlanner(),
-                        new StructuredGraphPersister(graphOps),
+                        itemOps,
+                        graphOps,
                         new TemporalItemLinker(
-                                new InMemoryItemOperations(),
-                                graphOps,
-                                new TemporalRelationClassifier(),
-                                options),
-                        new SemanticItemLinker(
-                                new InMemoryItemOperations(),
-                                graphOps,
-                                new StubMemoryVector(),
-                                options),
+                                itemOps, graphOps, new TemporalRelationClassifier(), options),
+                        new SemanticItemLinker(itemOps, graphOps, new StubMemoryVector(), options),
                         options);
 
         var items =
@@ -525,22 +639,15 @@ class DefaultItemGraphMaterializerTest {
                 ItemGraphOptions.defaults()
                         .withEnabled(true)
                         .withResolutionMode(EntityResolutionMode.CONSERVATIVE);
+        var itemOps = new InMemoryItemOperations();
         var materializer =
-                new DefaultItemGraphMaterializer(
-                        new GraphHintNormalizer(),
+                materializer(
                         conservativeResolutionStrategy(graphOps),
-                        new EntityAliasIndexPlanner(),
-                        new StructuredGraphPersister(graphOps),
+                        itemOps,
+                        graphOps,
                         new TemporalItemLinker(
-                                new InMemoryItemOperations(),
-                                graphOps,
-                                new TemporalRelationClassifier(),
-                                options),
-                        new SemanticItemLinker(
-                                new InMemoryItemOperations(),
-                                graphOps,
-                                new StubMemoryVector(),
-                                options),
+                                itemOps, graphOps, new TemporalRelationClassifier(), options),
+                        new SemanticItemLinker(itemOps, graphOps, new StubMemoryVector(), options),
                         options);
 
         StepVerifier.create(
@@ -659,87 +766,14 @@ class DefaultItemGraphMaterializerTest {
     }
 
     @Test
-    void semanticDegradationDoesNotBreakStructuredGraphPersistence() {
-        var graphOps = new SelectiveSemanticFailureGraphOperations();
-        var itemOps = new InMemoryItemOperations();
-        itemOps.insertItems(
-                MEMORY_ID,
-                List.of(
-                        newItem(101L, "vector-101", "Cause item", Map.of()),
-                        newItem(102L, "vector-102", "Effect item", Map.of()),
-                        newItem(201L, "vector-201", "Existing semantic neighbor", Map.of())));
-
-        var vector = new StubMemoryVector();
-        vector.register(
-                "Cause item",
-                new VectorSearchResult(
-                        "vector-201", "Existing semantic neighbor", 0.93f, Map.of()));
-
-        var materializer =
-                new DefaultItemGraphMaterializer(
-                        new GraphHintNormalizer(),
-                        new ExactCanonicalEntityResolutionStrategy(),
-                        new EntityAliasIndexPlanner(),
-                        new StructuredGraphPersister(graphOps),
-                        new TemporalItemLinker(
-                                itemOps,
-                                graphOps,
-                                new TemporalRelationClassifier(),
-                                ItemGraphOptions.defaults()
-                                        .withEnabled(true)
-                                        .withSemanticSourceWindowSize(1)),
-                        new SemanticItemLinker(
-                                itemOps,
-                                graphOps,
-                                vector,
-                                ItemGraphOptions.defaults()
-                                        .withEnabled(true)
-                                        .withSemanticSourceWindowSize(1)),
-                        ItemGraphOptions.defaults()
-                                .withEnabled(true)
-                                .withSemanticSourceWindowSize(1));
-
-        StepVerifier.create(
-                        materializer.materialize(
-                                MEMORY_ID,
-                                List.of(
-                                        newItem(101L, "vector-101", "Cause item", Map.of()),
-                                        newItem(102L, "vector-102", "Effect item", Map.of())),
-                                List.of(
-                                        entryWithSharedEntities(),
-                                        entryWithSharedEntitiesAndCausalReference())))
-                .assertNext(
-                        result -> {
-                            assertThat(result.stats().entityCount()).isEqualTo(2);
-                            assertThat(result.stats().mentionCount()).isEqualTo(4);
-                            assertThat(result.stats().structuredItemLinkCount()).isEqualTo(1);
-                            assertThat(result.stats().semanticSearchRequestCount()).isEqualTo(2);
-                            assertThat(result.stats().semanticLinkCount()).isEqualTo(1);
-                            assertThat(result.stats().semanticFailedUpsertBatchCount())
-                                    .isEqualTo(1);
-                            assertThat(result.stats().semanticDegraded()).isTrue();
-                        })
-                .verifyComplete();
-
-        assertThat(graphOps.listItemEntityMentions(MEMORY_ID)).hasSize(4);
-        assertThat(graphOps.listItemLinks(MEMORY_ID))
-                .filteredOn(link -> link.linkType() == ItemLinkType.CAUSAL)
-                .hasSize(1);
-    }
-
-    @Test
     void semanticLinkerFailureStillReturnsStructuredStatsAndMarksSemanticDegraded() {
         var graphOps = new InMemoryGraphOperations();
+        var itemOps = new InMemoryItemOperations();
+        var options = ItemGraphOptions.defaults().withEnabled(true).withSemanticSourceWindowSize(1);
         var semanticItemLinker =
-                new SemanticItemLinker(
-                        new InMemoryItemOperations(),
-                        graphOps,
-                        new StubMemoryVector(),
-                        ItemGraphOptions.defaults()
-                                .withEnabled(true)
-                                .withSemanticSourceWindowSize(1)) {
+                new SemanticItemLinker(itemOps, graphOps, new StubMemoryVector(), options) {
                     @Override
-                    public Mono<SemanticLinkingStats> link(
+                    public Mono<SemanticLinkingPlan> plan(
                             MemoryId memoryId, List<MemoryItem> items) {
                         return Mono.error(
                                 new IllegalStateException("simulated semantic linker failure"));
@@ -747,22 +781,14 @@ class DefaultItemGraphMaterializerTest {
                 };
 
         var materializer =
-                new DefaultItemGraphMaterializer(
-                        new GraphHintNormalizer(),
+                materializer(
                         new ExactCanonicalEntityResolutionStrategy(),
-                        new EntityAliasIndexPlanner(),
-                        new StructuredGraphPersister(graphOps),
+                        itemOps,
+                        graphOps,
                         new TemporalItemLinker(
-                                new InMemoryItemOperations(),
-                                graphOps,
-                                new TemporalRelationClassifier(),
-                                ItemGraphOptions.defaults()
-                                        .withEnabled(true)
-                                        .withSemanticSourceWindowSize(1)),
+                                itemOps, graphOps, new TemporalRelationClassifier(), options),
                         semanticItemLinker,
-                        ItemGraphOptions.defaults()
-                                .withEnabled(true)
-                                .withSemanticSourceWindowSize(1));
+                        options);
 
         var items =
                 List.of(
@@ -790,22 +816,81 @@ class DefaultItemGraphMaterializerTest {
     }
 
     private static DefaultItemGraphMaterializer materializer(InMemoryGraphOperations graphOps) {
-        return new DefaultItemGraphMaterializer(
-                new GraphHintNormalizer(),
+        var itemOps = new InMemoryItemOperations();
+        return materializer(
                 new ExactCanonicalEntityResolutionStrategy(),
-                new EntityAliasIndexPlanner(),
-                new StructuredGraphPersister(graphOps),
+                itemOps,
+                graphOps,
                 new TemporalItemLinker(
-                        new InMemoryItemOperations(),
+                        itemOps,
                         graphOps,
                         new TemporalRelationClassifier(),
                         ItemGraphOptions.defaults().withEnabled(true)),
                 new SemanticItemLinker(
-                        new InMemoryItemOperations(),
+                        itemOps,
                         graphOps,
                         new StubMemoryVector(),
                         ItemGraphOptions.defaults().withEnabled(true)),
                 ItemGraphOptions.defaults().withEnabled(true));
+    }
+
+    private static DefaultItemGraphMaterializer materializer(
+            InMemoryItemOperations itemOps,
+            InMemoryGraphOperations graphOps,
+            MemoryVector vector,
+            ItemGraphCommitOperations commitOperations,
+            GraphDerivedMaintainer derivedMaintainer) {
+        return new DefaultItemGraphMaterializer(
+                new DefaultItemGraphPlanner(
+                        new GraphHintNormalizer(),
+                        new ExactCanonicalEntityResolutionStrategy(),
+                        new EntityAliasIndexPlanner(),
+                        new TemporalItemLinker(
+                                itemOps,
+                                graphOps,
+                                new TemporalRelationClassifier(),
+                                ItemGraphOptions.defaults().withEnabled(true)),
+                        new SemanticItemLinker(
+                                itemOps,
+                                graphOps,
+                                vector,
+                                ItemGraphOptions.defaults().withEnabled(true)),
+                        ItemGraphOptions.defaults().withEnabled(true)),
+                commitOperations,
+                derivedMaintainer,
+                ItemGraphOptions.defaults().withEnabled(true));
+    }
+
+    private static DefaultItemGraphMaterializer materializer(
+            com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve
+                            .EntityResolutionStrategy
+                    resolutionStrategy,
+            InMemoryItemOperations itemOps,
+            InMemoryGraphOperations graphOps,
+            TemporalItemLinker temporalItemLinker,
+            SemanticItemLinker semanticItemLinker,
+            ItemGraphOptions options) {
+        return new DefaultItemGraphMaterializer(
+                new DefaultItemGraphPlanner(
+                        new GraphHintNormalizer(),
+                        resolutionStrategy,
+                        new EntityAliasIndexPlanner(),
+                        temporalItemLinker,
+                        semanticItemLinker,
+                        options),
+                new InMemoryItemGraphCommitOperations(
+                        new InMemoryExtractionCommitState(), itemOps, graphOps),
+                derivedMaintainer(graphOps),
+                options);
+    }
+
+    private static GraphDerivedMaintainer derivedMaintainer(InMemoryGraphOperations graphOps) {
+        return (memoryId, affectedEntityKeys) -> {
+            if (affectedEntityKeys == null || affectedEntityKeys.isEmpty()) {
+                return;
+            }
+            graphOps.rebuildEntityCooccurrences(memoryId, affectedEntityKeys);
+        };
     }
 
     private static ConservativeHeuristicEntityResolutionStrategy conservativeResolutionStrategy(
@@ -991,15 +1076,58 @@ class DefaultItemGraphMaterializerTest {
         }
     }
 
-    private static final class SelectiveSemanticFailureGraphOperations
-            extends InMemoryGraphOperations {
+    private static final class RecordingCommitOperations implements ItemGraphCommitOperations {
+
+        private final ItemGraphCommitOperations delegate;
+        private com.openmemind.ai.memory.core.extraction.item.graph.plan.ItemGraphWritePlan
+                lastWritePlan;
+
+        private RecordingCommitOperations(ItemGraphCommitOperations delegate) {
+            this.delegate = delegate;
+        }
 
         @Override
-        public void upsertItemLinks(MemoryId memoryId, List<ItemLink> links) {
-            if (links.stream().anyMatch(link -> link.linkType() == ItemLinkType.SEMANTIC)) {
-                throw new IllegalStateException("simulated semantic persistence failure");
-            }
-            super.upsertItemLinks(memoryId, links);
+        public ItemGraphCommitReceipt commit(
+                MemoryId memoryId,
+                com.openmemind.ai.memory.core.extraction.item.graph.commit.ExtractionBatchId
+                        extractionBatchId,
+                List<MemoryItem> items,
+                com.openmemind.ai.memory.core.extraction.item.graph.plan.ItemGraphWritePlan
+                        writePlan) {
+            lastWritePlan = writePlan;
+            return delegate.commit(memoryId, extractionBatchId, items, writePlan);
+        }
+
+        @Override
+        public java.util.Optional<
+                        com.openmemind.ai.memory.core.extraction.item.graph.commit
+                                .ExtractionBatchRecord>
+                getBatch(
+                        MemoryId memoryId,
+                        com.openmemind.ai.memory.core.extraction.item.graph.commit.ExtractionBatchId
+                                extractionBatchId) {
+            return delegate.getBatch(memoryId, extractionBatchId);
+        }
+
+        @Override
+        public void retryFailedBatchPromotion(
+                MemoryId memoryId,
+                com.openmemind.ai.memory.core.extraction.item.graph.commit.ExtractionBatchId
+                        extractionBatchId) {
+            delegate.retryFailedBatchPromotion(memoryId, extractionBatchId);
+        }
+
+        @Override
+        public void discardFailedBatch(
+                MemoryId memoryId,
+                com.openmemind.ai.memory.core.extraction.item.graph.commit.ExtractionBatchId
+                        extractionBatchId) {
+            delegate.discardFailedBatch(memoryId, extractionBatchId);
+        }
+
+        private com.openmemind.ai.memory.core.extraction.item.graph.plan.ItemGraphWritePlan
+                lastWritePlan() {
+            return lastWritePlan;
         }
     }
 }

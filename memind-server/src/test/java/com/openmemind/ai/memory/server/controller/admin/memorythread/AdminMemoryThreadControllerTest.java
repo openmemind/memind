@@ -62,52 +62,66 @@ class AdminMemoryThreadControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("success"))
                 .andExpect(jsonPath("$.data.total").value(1))
-                .andExpect(jsonPath("$.data.list[0].threadKey").value("mt:101"));
+                .andExpect(jsonPath("$.data.list[0].threadKey").value("topic:concept:travel"))
+                .andExpect(jsonPath("$.data.list[0].threadId").doesNotExist());
 
         assertThat(queryService.recordedQuery.pageNo()).isEqualTo(1);
         assertThat(queryService.recordedQuery.pageSize()).isEqualTo(20);
     }
 
     @Test
-    void detailEndpointReturnsMemoryThread() throws Exception {
-        mockMvc.perform(get("/admin/v1/memory-threads/{threadId}", 101L))
+    void detailEndpointUsesThreadKeyAsTheOnlyPublicIdentifier() throws Exception {
+        mockMvc.perform(
+                        get("/admin/v1/memory-threads/{threadKey}", "topic:concept:travel")
+                                .param("userId", "u1")
+                                .param("agentId", "a1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.data.threadKey").value("mt:101"));
+                .andExpect(jsonPath("$.data.threadKey").value("topic:concept:travel"))
+                .andExpect(jsonPath("$.data.threadId").doesNotExist());
     }
 
     @Test
-    void itemsEndpointReturnsThreadMembers() throws Exception {
-        mockMvc.perform(get("/admin/v1/memory-threads/{threadId}/items", 101L))
+    void threadMembersEndpointUsesThreadKeyAndDoesNotExposeThreadId() throws Exception {
+        mockMvc.perform(
+                        get("/admin/v1/memory-threads/{threadKey}/items", "topic:concept:travel")
+                                .param("userId", "u1")
+                                .param("agentId", "a1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.data[0].threadKey").value("topic:concept:travel"))
                 .andExpect(jsonPath("$.data[0].itemId").value(301))
-                .andExpect(jsonPath("$.data[0].role").value("core"));
+                .andExpect(jsonPath("$.data[0].role").value("core"))
+                .andExpect(jsonPath("$.data[0].threadId").doesNotExist());
     }
 
     @Test
-    void statusEndpointReturnsDerivationRuntimeState() throws Exception {
-        mockMvc.perform(get("/admin/v1/memory-threads/status"))
+    void statusEndpointIsMemoryScoped() throws Exception {
+        mockMvc.perform(
+                        get("/admin/v1/memory-threads/status")
+                                .param("userId", "u1")
+                                .param("agentId", "a1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.data.derivationAvailable").value(true))
-                .andExpect(jsonPath("$.data.queueDepth").value(2));
+                .andExpect(jsonPath("$.data.projectionState").value("available"))
+                .andExpect(jsonPath("$.data.pendingCount").value(0));
     }
 
     @Test
-    void rebuildEndpointTriggersSingleMemoryRebuild() throws Exception {
-        mockMvc.perform(post("/admin/v1/memory-threads/rebuild/{memoryId}", "u1:a1"))
+    void rebuildEndpointRequiresMemoryScope() throws Exception {
+        mockMvc.perform(
+                        post("/admin/v1/memory-threads/rebuild")
+                                .param("userId", "u1")
+                                .param("agentId", "a1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("success"))
                 .andExpect(jsonPath("$.data").value(1));
     }
 
     @Test
-    void rebuildAllEndpointTriggersGlobalBackfill() throws Exception {
+    void rebuildEndpointRejectsGlobalBackfillRequests() throws Exception {
         mockMvc.perform(post("/admin/v1/memory-threads/rebuild"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.data").value(7));
+                .andExpect(status().isBadRequest());
     }
 
     private static final class StubMemoryThreadQueryService extends MemoryThreadQueryService {
@@ -125,76 +139,77 @@ class AdminMemoryThreadControllerTest {
         }
 
         @Override
-        public AdminMemoryThreadView getThread(Long threadId) {
+        public AdminMemoryThreadView getThread(String userId, String agentId, String threadKey) {
             return threadView();
         }
 
         @Override
-        public List<AdminMemoryThreadItemView> listThreadItems(Long threadId) {
+        public List<AdminMemoryThreadItemView> listThreadItems(
+                String userId, String agentId, String threadKey) {
             return List.of(threadItemView());
         }
 
         @Override
-        public AdminMemoryThreadStatusView getStatus() {
+        public AdminMemoryThreadStatusView getStatus(String userId, String agentId) {
             return new AdminMemoryThreadStatusView(
-                    true, true, true, null, 2, Instant.parse("2026-04-17T10:00:00Z"), null, 0L);
+                    "available",
+                    0L,
+                    0L,
+                    false,
+                    301L,
+                    "thread-core-v1",
+                    Instant.parse("2026-04-17T10:00:00Z"),
+                    null);
         }
     }
 
     private static final class StubMemoryThreadRebuildService extends MemoryThreadRebuildService {
 
         private StubMemoryThreadRebuildService() {
-            super(null, null);
+            super(null);
         }
 
         @Override
-        public int rebuildMemory(String memoryIdText) {
+        public int rebuild(String userId, String agentId) {
             return 1;
-        }
-
-        @Override
-        public int rebuildAll() {
-            return 7;
         }
     }
 
     private static AdminMemoryThreadView threadView() {
         return new AdminMemoryThreadView(
-                101L,
                 "u1",
                 "a1",
                 "u1:a1",
-                "mt:101",
-                "conversation",
+                "topic:concept:travel",
+                "topic",
+                "concept",
+                "travel",
                 "Travel planning",
-                "Discussed a summer trip.",
-                "open",
-                0.88d,
+                "active",
+                "ongoing",
+                "Discussing a summer trip.",
+                Map.of("latestUpdate", "Booked flights"),
+                1,
                 Instant.parse("2026-03-31T09:00:00Z"),
                 Instant.parse("2026-03-31T10:00:00Z"),
                 Instant.parse("2026-03-31T10:00:00Z"),
-                301L,
-                301L,
-                1,
-                Map.of("source", "test"),
+                null,
+                3L,
+                2L,
                 Instant.parse("2026-03-31T10:00:01Z"),
                 Instant.parse("2026-03-31T10:00:02Z"));
     }
 
     private static AdminMemoryThreadItemView threadItemView() {
         return new AdminMemoryThreadItemView(
-                401L,
                 "u1",
                 "a1",
                 "u1:a1",
-                101L,
-                "mt:101",
+                "topic:concept:travel",
                 301L,
                 "core",
+                true,
                 0.91d,
-                1,
-                Instant.parse("2026-03-31T10:00:03Z"),
-                Map.of("source", "test"),
                 Instant.parse("2026-03-31T10:00:04Z"),
                 Instant.parse("2026-03-31T10:00:05Z"));
     }

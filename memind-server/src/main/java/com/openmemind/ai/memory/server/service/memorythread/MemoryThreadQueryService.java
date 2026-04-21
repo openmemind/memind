@@ -13,8 +13,10 @@
  */
 package com.openmemind.ai.memory.server.service.memorythread;
 
+import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.server.domain.common.PageResponse;
 import com.openmemind.ai.memory.server.domain.memorythread.query.MemoryThreadPageQuery;
+import com.openmemind.ai.memory.server.domain.memorythread.view.AdminItemMemoryThreadView;
 import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadItemView;
 import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadStatusView;
 import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadView;
@@ -40,34 +42,41 @@ public class MemoryThreadQueryService {
         return queryMapper.page(query);
     }
 
-    public AdminMemoryThreadView getThread(Long threadId) {
+    public AdminMemoryThreadView getThread(String userId, String agentId, String threadKey) {
+        String memoryId = toMemoryId(userId, agentId);
         return queryMapper
-                .findByBizId(threadId)
+                .findByThreadKey(memoryId, threadKey)
                 .orElseThrow(
-                        () -> new NoSuchElementException("Memory thread not found: " + threadId));
+                        () -> new NoSuchElementException("Memory thread not found: " + threadKey));
     }
 
-    public List<AdminMemoryThreadItemView> listThreadItems(Long threadId) {
-        List<AdminMemoryThreadItemView> items = queryMapper.findItemsByThreadId(threadId);
+    public List<AdminMemoryThreadItemView> listThreadItems(
+            String userId, String agentId, String threadKey) {
+        String memoryId = toMemoryId(userId, agentId);
+        List<AdminMemoryThreadItemView> items =
+                queryMapper.findItemsByThreadKey(memoryId, threadKey);
         if (!items.isEmpty()) {
             return items;
         }
-        getThread(threadId);
+        getThread(userId, agentId, threadKey);
         return List.of();
     }
 
-    public AdminMemoryThreadItemView getThreadByItemId(Long itemId) {
-        return queryMapper
-                .findByItemId(itemId)
-                .orElseThrow(
-                        () ->
-                                new NoSuchElementException(
-                                        "Memory thread not found for item: " + itemId));
+    public List<AdminItemMemoryThreadView> listThreadsByItemId(
+            String userId, String agentId, Long itemId) {
+        return queryMapper.findThreadsByItemId(toMemoryId(userId, agentId), itemId);
     }
 
-    public AdminMemoryThreadStatusView getStatus() {
+    public AdminMemoryThreadStatusView getStatus(String userId, String agentId) {
         try (var lease = runtimeManager.acquire()) {
-            return AdminMemoryThreadStatusView.from(lease.handle().memory().memoryThreadStatus());
+            return AdminMemoryThreadStatusView.from(
+                    lease.handle()
+                            .memory()
+                            .getThreadRuntimeStatus(DefaultMemoryId.of(userId, agentId)));
         }
+    }
+
+    private static String toMemoryId(String userId, String agentId) {
+        return DefaultMemoryId.of(userId, agentId).toIdentifier();
     }
 }

@@ -277,6 +277,27 @@ class MemoryItemUnifiedPromptsTest {
     }
 
     @Test
+    @DisplayName("Rendered prompt should describe optional versioned thread semantics output")
+    void shouldDescribeOptionalVersionedThreadSemanticsOutput() {
+        var result =
+                MemoryItemUnifiedPrompts.build(
+                                List.of(),
+                                "user: 项目 alpha 从规划阶段进入开发阶段",
+                                Instant.parse("2026-04-16T00:00:00Z"),
+                                null,
+                                Set.of(MemoryCategory.EVENT))
+                        .render("English");
+
+        assertThat(result.systemPrompt())
+                .contains("\"threadSemantics\"")
+                .contains("\"version\": 1")
+                .contains("\"markers\"")
+                .contains("\"canonicalRefs\"")
+                .contains("\"continuityLinks\"")
+                .contains("If unsure, omit `threadSemantics` entirely");
+    }
+
+    @Test
     @ResourceLock(Resources.SYSTEM_PROPERTIES)
     @DisplayName("Rendered prompt should resolve temporal context in system zone")
     void shouldRenderTemporalContextUsingSystemZone() {

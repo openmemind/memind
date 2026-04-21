@@ -28,7 +28,6 @@ import com.openmemind.ai.memory.core.retrieval.strategy.SimpleRetrievalStrategy;
 import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.sufficiency.LlmSufficiencyGate;
 import com.openmemind.ai.memory.core.retrieval.sufficiency.SufficiencyGate;
-import com.openmemind.ai.memory.core.retrieval.thread.DefaultMemoryThreadAssistant;
 import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistConfigMapper;
 import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistant;
 import com.openmemind.ai.memory.core.retrieval.thread.NoOpMemoryThreadAssistant;
@@ -36,7 +35,6 @@ import com.openmemind.ai.memory.core.retrieval.tier.InsightTierRetriever;
 import com.openmemind.ai.memory.core.retrieval.tier.InsightTypeRouter;
 import com.openmemind.ai.memory.core.retrieval.tier.ItemTierRetriever;
 import com.openmemind.ai.memory.core.retrieval.tier.LlmInsightTypeRouter;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryThreadAssistant;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingRetrievalGraphAssistant;
 
 final class MemoryRetrievalAssembler {
@@ -101,11 +99,7 @@ final class MemoryRetrievalAssembler {
     }
 
     private MemoryThreadAssistant buildMemoryThreadAssistant(MemoryAssemblyContext context) {
-        if (!context.options().memoryThread().enabled()) {
-            return NoOpMemoryThreadAssistant.INSTANCE;
-        }
-        return new TracingMemoryThreadAssistant(
-                new DefaultMemoryThreadAssistant(context.memoryStore()), context.memoryObserver());
+        return NoOpMemoryThreadAssistant.INSTANCE;
     }
 
     private SimpleStrategyConfig simpleStrategyConfig(MemoryBuildOptions options) {
@@ -114,6 +108,7 @@ final class MemoryRetrievalAssembler {
                 options.retrieval().simple().keywordSearchEnabled(),
                 new SimpleStrategyConfig.GraphAssistConfig(
                         graph.enabled(),
+                        graph.mode(),
                         graph.maxSeedItems(),
                         graph.maxExpandedItems(),
                         graph.maxSemanticNeighborsPerSeed(),
@@ -143,6 +138,7 @@ final class MemoryRetrievalAssembler {
                 base.minScore(),
                 new DeepStrategyConfig.GraphAssistConfig(
                         graph.enabled(),
+                        graph.mode(),
                         graph.maxSeedItems(),
                         graph.maxExpandedItems(),
                         graph.maxSemanticNeighborsPerSeed(),

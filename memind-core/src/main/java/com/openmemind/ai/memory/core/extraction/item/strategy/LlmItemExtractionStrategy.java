@@ -280,6 +280,9 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
         if (item.metadata() != null) {
             merged.putAll(item.metadata());
         }
+        if (item.threadSemantics() != null && !item.threadSemantics().isEmpty()) {
+            merged.put("threadSemantics", item.threadSemantics().toMetadataValue());
+        }
         if (temporal != null && temporal.expression() != null && !temporal.expression().isBlank()) {
             merged.put("timeExpression", temporal.expression());
         }
