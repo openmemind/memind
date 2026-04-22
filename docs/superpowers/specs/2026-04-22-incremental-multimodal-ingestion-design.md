@@ -214,8 +214,9 @@ The new ingestion flow is:
 6. emit `StandardSegment` batches incrementally
 7. pass those batches through a shared incremental raw-data pipeline
 8. update checkpoint and stats after each committed batch
-9. mark the run terminal
-10. trigger downstream item and insight extraction only after successful completion
+9. publish the generation and supersede the old one if necessary
+10. mark the run terminal
+11. trigger downstream item and insight extraction only after successful publication
 
 ### 7.2 New core components
 
@@ -346,6 +347,13 @@ It should continue to store stable metadata only:
 
 It should not become the run-state table.
 
+One narrow exception is justified:
+
+- `active_generation`
+- `published_run_id`
+
+These are not transient execution state. They are stable publication pointers for the currently visible derived output of the resource.
+
 ### 9.2 Keep `memory_raw_data`
 
 `memory_raw_data` remains the authoritative durable segment/output row.
@@ -353,6 +361,15 @@ It should not become the run-state table.
 It should continue to represent the final segment-level unit reused by downstream extraction.
 
 No modality-specific output tables are introduced.
+
+`memory_raw_data` does, however, need a few explicit publication and lineage columns in addition to metadata:
+
+- `resource_processing_run_id`
+- `resource_generation`
+- `published`
+- `published_at`
+
+These fields should be real columns rather than metadata-only projections because current query and text-search paths need a portable, indexed visibility filter across sqlite, mysql, and postgresql.
 
 ### 9.3 Add `resource_processing_run`
 
@@ -363,8 +380,12 @@ Add exactly one new coordination table:
 Recommended columns:
 
 - `id`
+- `biz_id`
+- `user_id`
+- `agent_id`
 - `memory_id`
 - `resource_id`
+- `generation`
 - `status`
 - `attempt`
 - `producer_id`
@@ -384,6 +405,8 @@ Recommended columns:
 - `updated_at`
 - `deleted`
 
+`id` should remain the internal database primary key. `biz_id` should be the stable external `runId`, following the existing `memind` persistence convention used by `memory_resource`, `memory_raw_data`, `memory_item`, and `memory_insight`.
+
 ### 9.4 Why one table is enough
 
 One run has exactly one active position at a time.
@@ -399,7 +422,23 @@ The system does not need:
 - the execution record
 - the durable queue row
 
-### 9.5 Checkpoint storage
+### 9.5 Run-table indexing and uniqueness
+
+The new run table should follow existing store conventions and define at least:
+
+- `uk_resource_processing_run_biz_id(user_id, agent_id, biz_id)`
+- `uk_resource_processing_run_generation(user_id, agent_id, resource_id, generation)`
+- `idx_run_resource_status(user_id, agent_id, resource_id, status, submitted_at)`
+- `idx_run_claim(status, next_retry_at, lease_until, updated_at)`
+
+Single-flight submission for a resource should be enforced by the submission service rather than by a cross-dialect partial unique index:
+
+- when a new request arrives, the service checks for active rows in `PENDING`, `RUNNING`, or `RETRY_WAITING`
+- if one exists for the same `(user_id, agent_id, resource_id)`, the service reuses that run unless the caller explicitly requests a new generation
+
+This keeps the semantics strict without depending on dialect-specific partial-index behavior.
+
+### 9.6 Checkpoint storage
 
 `checkpoint_json` stores modality-specific progress.
 
@@ -421,7 +460,7 @@ Examples:
 
 The checkpoint is intentionally JSON because producers have different durable cursors.
 
-### 9.6 Stats storage
+### 9.7 Stats storage
 
 `stats_json` is for operational statistics only:
 
@@ -432,6 +471,66 @@ The checkpoint is intentionally JSON because producers have different durable cu
 - `elapsedMs`
 
 It is not a correctness boundary.
+
+### 9.8 Published-state and generation model
+
+Each resource should have a monotonically increasing derived-output generation.
+
+The rules are:
+
+- `resource_processing_run.generation` identifies the candidate output generation for that run
+- only one generation for a resource may be `published` at a time
+- all `memory_raw_data` rows created by a run start as `published = false`
+- `memory_resource.active_generation` points to the currently visible generation
+- `memory_resource.published_run_id` points to the run that published it
+
+Submission behavior should distinguish two cases:
+
+- ordinary repeat submissions with the same durable resource identity and no explicit rerun intent should reuse the active successful generation or an already-active run
+- explicit rerun or forced reprocessing should allocate the next generation for that resource
+
+This avoids mixing "same work resumed" with "new output supersedes old output."
+
+### 9.9 Supersession and cleanup model
+
+Publishing a new generation must be a first-class phase, not an incidental side effect of `SUCCEEDED`.
+
+The publish sequence should be:
+
+1. serialize publication by resource
+2. identify the previously published generation for the resource, if any
+3. collect the superseded raw-data ids and their derived item ids
+4. in one relational publish transaction where possible:
+   - publish the new generation's `memory_raw_data` rows
+   - soft-delete or unpublish the old generation's raw-data rows
+   - advance `memory_resource.active_generation` and `published_run_id`
+5. delete items derived from those superseded raw-data rows
+6. delete insights for the affected memory
+7. schedule a rebuild from surviving items plus the new generation
+
+`SUCCEEDED` should only be written after this publish-and-cleanup phase completes.
+
+The intentionally coarse part is insight cleanup.
+
+Current `memind` store contracts already support deleting items and insights, but they do not provide precise stable provenance from insight back to a single resource generation. For correctness, the v1 supersession model should therefore prefer:
+
+- targeted item deletion by `raw_data_id`
+- memory-level insight delete-and-rebuild
+
+over a more fragile partial insight patching strategy.
+
+### 9.10 Store-contract implications
+
+To support publication and supersession cleanly, store contracts need to grow in a targeted way.
+
+Required additions include:
+
+- raw-data lookup and delete operations by `resource_id`, `resource_generation`, and `resource_processing_run_id`
+- raw-data listing APIs that default to `published = true`
+- item lookup helpers by `raw_data_id`
+- an orchestration path for memory-level insight delete-and-rebuild during resource supersession
+
+Without these additions, generation replacement remains underspecified and query visibility remains inconsistent.
 
 ## 10. Run State Model
 
@@ -451,7 +550,7 @@ It is not a correctness boundary.
 - `PENDING`: ready to be claimed
 - `RUNNING`: currently owned by a worker lease
 - `RETRY_WAITING`: failed transiently and will retry after `next_retry_at`
-- `SUCCEEDED`: all producer work and raw-data persistence completed
+- `SUCCEEDED`: all producer work, vector patching, and generation publication completed
 - `FAILED`: terminal failure
 - `CANCELLED`: user or operator requested cancellation
 
@@ -665,10 +764,12 @@ HTML should be treated as a document-like content kind, not as a special URL-onl
 Once a producer emits `StandardSegment`s, the shared pipeline should:
 
 1. normalize metadata
-2. generate captions where required
-3. vectorize captions or segment text
-4. build `MemoryRawData`
-5. upsert raw data idempotently
+2. materialize stable raw-data identities
+3. persist `MemoryRawData` rows as unpublished
+4. generate captions where required
+5. vectorize captions or segment text
+6. patch vector ids back onto the persisted raw-data rows
+7. leave publication to the terminal publish phase
 
 ### 13.2 Stable raw-data identity
 
@@ -691,14 +792,36 @@ Each persisted row should include enough metadata to trace back to the run:
 - `producerId`
 - producer-specific position metadata
 
-### 13.4 Batch commit rule
+### 13.4 Vector-consistency rule
+
+The incremental pipeline must not rely on the vector store and the relational store committing atomically.
+
+The new batch protocol should therefore be:
+
+1. persist raw-data rows first, unpublished and with stable `biz_id`
+2. vectorize using those stable raw-data identities as the canonical lineage anchor
+3. patch `caption_vector_id` back onto the raw-data rows
+4. only then advance the run checkpoint
+
+This uses the existing `updateRawDataVectorIds(...)` style of split persistence as a feature rather than treating vector generation as something that must happen before durable raw-data existence.
+
+The preferred long-term contract is for `MemoryVector` to support caller-supplied deterministic vector ids derived from `MemoryRawData.id`.
+
+That gives the new kernel:
+
+- idempotent vector upsert on retry
+- no duplicate vector documents on replay
+- no orphan-vector risk caused solely by process crash between vector write and raw-data patch
+
+### 13.5 Batch commit rule
 
 The system should commit work in small batches:
 
 1. producer emits a batch
-2. raw-data pipeline persists that batch
-3. run checkpoint and stats advance
-4. lease is renewed
+2. raw-data rows for that batch are inserted unpublished
+3. vector ids are patched onto those rows
+4. run checkpoint and stats advance
+5. lease is renewed
 
 This is the fundamental durability loop.
 
@@ -743,14 +866,16 @@ This does not need to be a complex public configuration surface in v1.
 
 The system should always:
 
-1. persist raw-data outputs for the batch
-2. then advance the checkpoint
+1. persist raw-data rows for the batch
+2. patch vector ids onto those rows
+3. then advance the checkpoint
 
 Preferably both happen in one transaction.
 
 If a crash occurs:
 
-- already-persisted segments will be upserted again harmlessly
+- already-persisted raw-data rows will be reused or upserted harmlessly
+- missing vector patches will be retried against stable raw-data identities
 - not-yet-persisted segments will be retried from the old checkpoint
 
 ### 14.6 Partial raw data during failed runs
@@ -760,19 +885,35 @@ Partial raw data may exist physically while a run is still `RUNNING`, `FAILED`, 
 That is acceptable in v1 because:
 
 - the system uses idempotent upsert
+- ordinary raw-data retrieval is gated by `published = true`
 - downstream item and insight extraction is gated on run success
 
 This avoids the complexity of a second staging store while keeping downstream semantics clean.
 
 ## 15. Downstream Triggering
 
-### 15.1 Trigger only after successful completion
+### 15.1 Raw-data visibility is gated by publication
+
+All standard raw-data query surfaces must expose only:
+
+- `deleted = false`
+- `published = true`
+
+This requirement applies to:
+
+- JDBC text-search implementations
+- MyBatis text-search implementations
+- raw-data listing APIs used by normal retrieval paths
+
+Admin and debugging tooling may expose unpublished rows explicitly, but unpublished multimodal rows must not leak into ordinary retrieval.
+
+### 15.2 Trigger only after successful publication
 
 Item extraction and insight building should not run continuously during a multimodal resource-processing run.
 
-They should run only after the run reaches `SUCCEEDED`.
+They should run only after the run reaches `SUCCEEDED` and its output generation is published.
 
-### 15.2 Why this is the right tradeoff
+### 15.3 Why this is the right tradeoff
 
 This avoids:
 
@@ -780,7 +921,7 @@ This avoids:
 - building insight from incomplete resources
 - coupling retry behavior across subsystems
 
-### 15.3 Existing conversation flow stays separate
+### 15.4 Existing conversation flow stays separate
 
 Conversation ingestion can continue to use its current direct segment path because it does not suffer from the same large-resource problem.
 
@@ -855,6 +996,22 @@ The new design requires:
 
 Even if some parser libraries are file-based rather than fully stream-native, `memind`'s own acquisition boundary must become incremental and resource-backed.
 
+### 18.4 `MemoryVector` must evolve
+
+Current `MemoryVector` contracts return backend-generated ids only.
+
+That is workable for the current synchronous shell, but it is not the right durability contract for incremental multimodal processing.
+
+The new kernel should evolve `MemoryVector` so that vector writes can be anchored to stable caller-supplied ids derived from `MemoryRawData.id`.
+
+If a backend cannot support that immediately, the transitional implementation must still preserve correctness by:
+
+- writing raw-data rows first
+- treating vector ids as a patch step
+- retrying patchable vector work without publishing the run
+
+The long-term target remains deterministic vector identity, not permanent dependence on compensating delete.
+
 ## 19. Migration Plan
 
 ### 19.1 Step 1: schema
@@ -865,6 +1022,15 @@ Add `resource_processing_run` migrations for:
 - mysql
 - postgresql
 
+Also extend existing multimodal tables with the minimal explicit publication fields needed by the new kernel:
+
+- `memory_resource.active_generation`
+- `memory_resource.published_run_id`
+- `memory_raw_data.resource_processing_run_id`
+- `memory_raw_data.resource_generation`
+- `memory_raw_data.published`
+- `memory_raw_data.published_at`
+
 ### 19.2 Step 2: domain and store contracts
 
 Add:
@@ -872,6 +1038,9 @@ Add:
 - `ResourceProcessingRun`
 - run persistence operations
 - claim and lease operations
+- generation-aware raw-data lookup and delete operations
+- item lookup by `raw_data_id`
+- publication and supersession orchestration contracts
 
 ### 19.3 Step 3: resource-first submission
 
@@ -883,13 +1052,22 @@ Introduce the new `SegmentProducer` registry and bootstrap document, audio, imag
 
 ### 19.5 Step 5: shared incremental raw-data pipeline
 
-Refactor multimodal raw-data persistence to consume emitted segments incrementally.
+Refactor multimodal raw-data persistence to consume emitted segments incrementally with:
 
-### 19.6 Step 6: downstream success gating
+- stable raw-data ids
+- unpublished initial writes
+- vector patching after raw-data persistence
+- checkpoint advancement only after the vector patch is durable
 
-Trigger item and insight extraction only when a run reaches `SUCCEEDED`.
+### 19.6 Step 6: publish and supersede
 
-### 19.7 Step 7: delete old multimodal kernel
+Publish a successful generation, retire the superseded generation, and clean up its derived outputs.
+
+### 19.7 Step 7: downstream success gating
+
+Trigger item and insight extraction only when a run reaches `SUCCEEDED` and its generation has been published.
+
+### 19.8 Step 8: delete old multimodal kernel
 
 Remove old multimodal reliance on:
 
@@ -904,10 +1082,12 @@ Remove old multimodal reliance on:
 Add unit coverage for:
 
 - run state transitions
+- generation allocation and single-flight reuse
 - retry classification
 - lease reclaim logic
 - checkpoint serialization
 - stable `segmentKey` and `MemoryRawData.id` generation
+- published-visibility state transitions
 - `hardMaxTokens` enforcement
 
 ### 20.2 Producer tests
@@ -925,6 +1105,8 @@ Add integration coverage for all supported stores to verify:
 
 - `resource_processing_run` schema
 - claim and lease semantics
+- published-row filtering on raw-data queries
+- generation publish and supersession behavior
 - retry scheduling
 - idempotent raw-data upsert under recovery
 
@@ -933,6 +1115,7 @@ Add integration coverage for all supported stores to verify:
 Add end-to-end failure injection for:
 
 - crash after raw-data persist but before checkpoint advance
+- crash after publish visibility flip but before terminal status update
 - crash after checkpoint advance
 - lease expiration and worker takeover
 - repeated replay without duplicate `memory_raw_data`
@@ -973,6 +1156,16 @@ This is a conscious v1 tradeoff that reduces complexity and improves recovery.
 Large multimodal ingestion becomes a run-driven process rather than a purely synchronous request-response action.
 
 That is the correct tradeoff for correctness and scalability.
+
+### 21.5 Supersession cleanup is intentionally correctness-first
+
+Deleting superseded items and rebuilding insights at memory scope is heavier than a fine-grained patch.
+
+That cost is acceptable in v1 because:
+
+- rerun and supersession are less frequent than ordinary ingestion
+- the current store contracts already support safe delete-and-rebuild primitives
+- correctness is more important than attempting fragile partial insight surgery
 
 ## 22. Final Recommendation
 
