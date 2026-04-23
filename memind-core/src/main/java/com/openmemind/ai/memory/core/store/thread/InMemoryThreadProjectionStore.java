@@ -17,6 +17,7 @@ import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadIntakeStatus;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadProjectionState;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadEvent;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadIntakeClaim;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadIntakeOutboxEntry;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadMembership;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadProjection;
@@ -43,21 +44,42 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
     public void ensureRuntime(MemoryId memoryId, String materializationPolicyVersion) {
         Objects.requireNonNull(memoryId, "memoryId");
         Objects.requireNonNull(materializationPolicyVersion, "materializationPolicyVersion");
-        state(memoryId).runtime =
-                state(memoryId).runtime == null
-                        ? new MemoryThreadRuntimeState(
-                                memoryId.toIdentifier(),
-                                MemoryThreadProjectionState.REBUILD_REQUIRED,
-                                0,
-                                0,
-                                null,
-                                null,
-                                false,
-                                null,
-                                materializationPolicyVersion,
-                                "runtime bootstrap",
-                                Instant.now())
-                        : state(memoryId).runtime;
+        MemoryState state = state(memoryId);
+        MemoryThreadRuntimeState current = state.runtime;
+        if (current == null) {
+            state.runtime =
+                    new MemoryThreadRuntimeState(
+                            memoryId.toIdentifier(),
+                            MemoryThreadProjectionState.REBUILD_REQUIRED,
+                            0,
+                            0,
+                            null,
+                            null,
+                            false,
+                            null,
+                            0L,
+                            materializationPolicyVersion,
+                            "runtime bootstrap",
+                            Instant.now());
+            return;
+        }
+        if (Objects.equals(current.materializationPolicyVersion(), materializationPolicyVersion)) {
+            return;
+        }
+        state.runtime =
+                new MemoryThreadRuntimeState(
+                        memoryId.toIdentifier(),
+                        MemoryThreadProjectionState.REBUILD_REQUIRED,
+                        pendingCount(state),
+                        failedCount(state),
+                        current.lastEnqueuedItemId(),
+                        current.lastProcessedItemId(),
+                        false,
+                        null,
+                        current.rebuildEpoch(),
+                        materializationPolicyVersion,
+                        "policy version changed",
+                        Instant.now());
     }
 
     @Override
@@ -107,21 +129,49 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
 
     @Override
     public void enqueue(MemoryId memoryId, long triggerItemId) {
+        enqueueInternal(memoryId, triggerItemId, false);
+    }
+
+    @Override
+    public void enqueueReplay(MemoryId memoryId, long replayCutoffItemId) {
+        enqueueInternal(memoryId, replayCutoffItemId, true);
+    }
+
+    private void enqueueInternal(MemoryId memoryId, long triggerItemId, boolean replayableExisting) {
         MemoryState state = state(memoryId);
-        state.outboxByTriggerItemId.computeIfAbsent(
-                triggerItemId,
-                ignored ->
-                        new MemoryThreadIntakeOutboxEntry(
-                                memoryId.toIdentifier(),
-                                triggerItemId,
-                                MemoryThreadIntakeStatus.PENDING,
-                                0,
-                                null,
-                                null,
-                                null,
-                                null,
-                                Instant.now(),
-                                null));
+        MemoryThreadIntakeOutboxEntry existing = state.outboxByTriggerItemId.get(triggerItemId);
+        Instant now = Instant.now();
+        if (existing == null) {
+            state.outboxByTriggerItemId.put(
+                    triggerItemId,
+                    new MemoryThreadIntakeOutboxEntry(
+                            memoryId.toIdentifier(),
+                            triggerItemId,
+                            1L,
+                            MemoryThreadIntakeStatus.PENDING,
+                            0,
+                            null,
+                            null,
+                            null,
+                            null,
+                            now,
+                            null));
+        } else if (replayableExisting && existing.status() != MemoryThreadIntakeStatus.PENDING) {
+            state.outboxByTriggerItemId.put(
+                    triggerItemId,
+                    new MemoryThreadIntakeOutboxEntry(
+                            existing.memoryId(),
+                            existing.triggerItemId(),
+                            existing.enqueueGeneration() + 1,
+                            MemoryThreadIntakeStatus.PENDING,
+                            existing.attemptCount(),
+                            null,
+                            null,
+                            null,
+                            existing.lastProcessedItemId(),
+                            now,
+                            null));
+        }
         if (state.runtime != null) {
             Long currentLastEnqueued = state.runtime.lastEnqueuedItemId();
             long nextLastEnqueued =
@@ -138,9 +188,10 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
                             state.runtime.lastProcessedItemId(),
                             state.runtime.rebuildInProgress(),
                             state.runtime.rebuildCutoffItemId(),
+                            state.runtime.rebuildEpoch(),
                             state.runtime.materializationPolicyVersion(),
                             state.runtime.invalidationReason(),
-                            Instant.now());
+                            now);
         }
         refreshRuntimeCounters(memoryId, state);
     }
@@ -153,10 +204,10 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
     }
 
     @Override
-    public List<MemoryThreadIntakeOutboxEntry> claimPending(
+    public List<MemoryThreadIntakeClaim> claimPending(
             MemoryId memoryId, Instant claimedAt, Instant leaseExpiresAt, int batchSize) {
         MemoryState state = state(memoryId);
-        List<MemoryThreadIntakeOutboxEntry> claimed = new ArrayList<>();
+        List<MemoryThreadIntakeClaim> claimed = new ArrayList<>();
         for (MemoryThreadIntakeOutboxEntry entry : listOutbox(memoryId)) {
             if (claimed.size() >= batchSize) {
                 break;
@@ -168,6 +219,7 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
                     new MemoryThreadIntakeOutboxEntry(
                             entry.memoryId(),
                             entry.triggerItemId(),
+                            entry.enqueueGeneration(),
                             MemoryThreadIntakeStatus.PROCESSING,
                             entry.attemptCount(),
                             claimedAt,
@@ -177,7 +229,7 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
                             entry.enqueuedAt(),
                             null);
             state.outboxByTriggerItemId.put(entry.triggerItemId(), processing);
-            claimed.add(processing);
+            claimed.add(toClaim(processing));
         }
         refreshRuntimeCounters(memoryId, state);
         return claimed;
@@ -202,6 +254,7 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
                     new MemoryThreadIntakeOutboxEntry(
                             entry.memoryId(),
                             entry.triggerItemId(),
+                            entry.enqueueGeneration(),
                             status,
                             nextAttempt,
                             null,
@@ -230,41 +283,13 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
                 new MemoryThreadIntakeOutboxEntry(
                         entry.memoryId(),
                         entry.triggerItemId(),
+                        entry.enqueueGeneration(),
                         MemoryThreadIntakeStatus.COMPLETED,
                         entry.attemptCount(),
                         entry.claimedAt(),
                         entry.leaseExpiresAt(),
                         null,
                         lastProcessedItemId,
-                        entry.enqueuedAt(),
-                        finalizedAt));
-        refreshRuntimeCounters(memoryId, state);
-    }
-
-    @Override
-    public void finalizeOutboxFailure(
-            MemoryId memoryId,
-            long triggerItemId,
-            String reason,
-            int maxAttempts,
-            Instant finalizedAt) {
-        MemoryState state = state(memoryId);
-        MemoryThreadIntakeOutboxEntry entry = state.outboxByTriggerItemId.get(triggerItemId);
-        if (entry == null) {
-            return;
-        }
-        int attempts = Math.max(entry.attemptCount() + 1, maxAttempts);
-        state.outboxByTriggerItemId.put(
-                triggerItemId,
-                new MemoryThreadIntakeOutboxEntry(
-                        entry.memoryId(),
-                        entry.triggerItemId(),
-                        MemoryThreadIntakeStatus.FAILED,
-                        attempts,
-                        entry.claimedAt(),
-                        entry.leaseExpiresAt(),
-                        reason,
-                        entry.lastProcessedItemId(),
                         entry.enqueuedAt(),
                         finalizedAt));
         refreshRuntimeCounters(memoryId, state);
@@ -283,6 +308,7 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
                     new MemoryThreadIntakeOutboxEntry(
                             entry.memoryId(),
                             entry.triggerItemId(),
+                            entry.enqueueGeneration(),
                             MemoryThreadIntakeStatus.SKIPPED,
                             entry.attemptCount(),
                             entry.claimedAt(),
@@ -309,6 +335,7 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
                         current != null ? current.lastProcessedItemId() : null,
                         current != null && current.rebuildInProgress(),
                         current != null ? current.rebuildCutoffItemId() : null,
+                        current != null ? current.rebuildEpoch() : 0L,
                         current != null ? current.materializationPolicyVersion() : "v1",
                         reason,
                         Instant.now());
@@ -322,6 +349,7 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
             return false;
         }
         MemoryThreadRuntimeState current = state.runtime;
+        long nextEpoch = current != null ? current.rebuildEpoch() + 1L : 1L;
         state.runtime =
                 new MemoryThreadRuntimeState(
                         memoryId.toIdentifier(),
@@ -334,10 +362,151 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
                         current != null ? current.lastProcessedItemId() : null,
                         true,
                         rebuildCutoffItemId,
+                        nextEpoch,
                         materializationPolicyVersion,
                         current != null ? current.invalidationReason() : "rebuild bootstrap",
                         Instant.now());
         return true;
+    }
+
+    @Override
+    public boolean commitClaimedIntakeReplaySuccess(
+            MemoryId memoryId,
+            List<MemoryThreadIntakeClaim> claimedEntries,
+            long replayCutoffItemId,
+            List<MemoryThreadProjection> threads,
+            List<MemoryThreadEvent> events,
+            List<MemoryThreadMembership> memberships,
+            MemoryThreadRuntimeState runtimeState,
+            Instant finalizedAt) {
+        MemoryState state = state(memoryId);
+        if (!claimsStillMatch(state, claimedEntries) || !rebuildEpochMatches(state, runtimeState)) {
+            return false;
+        }
+
+        Map<Long, MemoryThreadIntakeOutboxEntry> updatedOutbox =
+                new ConcurrentHashMap<>(state.outboxByTriggerItemId);
+        for (MemoryThreadIntakeClaim claim : claimedEntries) {
+            MemoryThreadIntakeOutboxEntry entry = updatedOutbox.get(claim.triggerItemId());
+            updatedOutbox.put(
+                    claim.triggerItemId(),
+                    new MemoryThreadIntakeOutboxEntry(
+                            entry.memoryId(),
+                            entry.triggerItemId(),
+                            entry.enqueueGeneration(),
+                            MemoryThreadIntakeStatus.COMPLETED,
+                            entry.attemptCount(),
+                            entry.claimedAt(),
+                            entry.leaseExpiresAt(),
+                            null,
+                            replayCutoffItemId,
+                            entry.enqueuedAt(),
+                            finalizedAt));
+        }
+
+        commitReplaySuccess(state, threads, events, memberships, runtimeState, finalizedAt, updatedOutbox);
+        return true;
+    }
+
+    @Override
+    public void finalizeClaimedIntakeFailure(
+            MemoryId memoryId,
+            List<MemoryThreadIntakeClaim> claimedEntries,
+            String reason,
+            int maxAttempts,
+            Instant finalizedAt) {
+        MemoryState state = state(memoryId);
+        boolean changed = false;
+        for (MemoryThreadIntakeClaim claim : claimedEntries) {
+            MemoryThreadIntakeOutboxEntry entry = state.outboxByTriggerItemId.get(claim.triggerItemId());
+            if (!matchesClaim(entry, claim)) {
+                continue;
+            }
+            int attempts = Math.max(entry.attemptCount() + 1, maxAttempts);
+            state.outboxByTriggerItemId.put(
+                    claim.triggerItemId(),
+                    new MemoryThreadIntakeOutboxEntry(
+                            entry.memoryId(),
+                            entry.triggerItemId(),
+                            entry.enqueueGeneration(),
+                            MemoryThreadIntakeStatus.FAILED,
+                            attempts,
+                            entry.claimedAt(),
+                            entry.leaseExpiresAt(),
+                            reason,
+                            entry.lastProcessedItemId(),
+                            entry.enqueuedAt(),
+                            finalizedAt));
+            changed = true;
+        }
+        if (changed) {
+            refreshRuntimeCounters(memoryId, state);
+        }
+    }
+
+    @Override
+    public void releaseClaims(MemoryId memoryId, List<MemoryThreadIntakeClaim> claimedEntries) {
+        MemoryState state = state(memoryId);
+        boolean changed = false;
+        for (MemoryThreadIntakeClaim claim : claimedEntries) {
+            MemoryThreadIntakeOutboxEntry entry = state.outboxByTriggerItemId.get(claim.triggerItemId());
+            if (!matchesClaim(entry, claim)) {
+                continue;
+            }
+            state.outboxByTriggerItemId.put(
+                    claim.triggerItemId(),
+                    new MemoryThreadIntakeOutboxEntry(
+                            entry.memoryId(),
+                            entry.triggerItemId(),
+                            entry.enqueueGeneration(),
+                            MemoryThreadIntakeStatus.PENDING,
+                            entry.attemptCount(),
+                            null,
+                            null,
+                            null,
+                            entry.lastProcessedItemId(),
+                            entry.enqueuedAt(),
+                            null));
+            changed = true;
+        }
+        if (changed) {
+            refreshRuntimeCounters(memoryId, state);
+        }
+    }
+
+    @Override
+    public void commitRebuildReplaySuccess(
+            MemoryId memoryId,
+            long rebuildCutoffItemId,
+            List<MemoryThreadProjection> threads,
+            List<MemoryThreadEvent> events,
+            List<MemoryThreadMembership> memberships,
+            MemoryThreadRuntimeState runtimeState,
+            Instant finalizedAt) {
+        MemoryState state = state(memoryId);
+        Map<Long, MemoryThreadIntakeOutboxEntry> updatedOutbox =
+                new ConcurrentHashMap<>(state.outboxByTriggerItemId);
+        for (MemoryThreadIntakeOutboxEntry entry : listOutbox(memoryId)) {
+            if (entry.triggerItemId() > rebuildCutoffItemId) {
+                continue;
+            }
+            updatedOutbox.put(
+                    entry.triggerItemId(),
+                    new MemoryThreadIntakeOutboxEntry(
+                            entry.memoryId(),
+                            entry.triggerItemId(),
+                            entry.enqueueGeneration(),
+                            MemoryThreadIntakeStatus.SKIPPED,
+                            entry.attemptCount(),
+                            entry.claimedAt(),
+                            entry.leaseExpiresAt(),
+                            entry.failureReason(),
+                            entry.lastProcessedItemId(),
+                            entry.enqueuedAt(),
+                            finalizedAt));
+        }
+
+        commitReplaySuccess(state, threads, events, memberships, runtimeState, finalizedAt, updatedOutbox);
     }
 
     @Override
@@ -364,6 +533,64 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
         state.threadKeysByItemId = membershipsByItemId(state.membershipsByThreadKey);
         state.runtime = runtimeState;
         refreshRuntimeCounters(memoryId, state);
+    }
+
+    protected void beforeAtomicReplayCommit() {}
+
+    private void commitReplaySuccess(
+            MemoryState state,
+            List<MemoryThreadProjection> threads,
+            List<MemoryThreadEvent> events,
+            List<MemoryThreadMembership> memberships,
+            MemoryThreadRuntimeState runtimeState,
+            Instant finalizedAt,
+            Map<Long, MemoryThreadIntakeOutboxEntry> updatedOutbox) {
+        Map<String, MemoryThreadProjection> updatedThreads =
+                threads == null
+                        ? new LinkedHashMap<>()
+                        : threads.stream()
+                                .collect(
+                                        Collectors.toMap(
+                                                MemoryThreadProjection::threadKey,
+                                                projection -> projection,
+                                                (left, right) -> right,
+                                                LinkedHashMap::new));
+        Map<String, List<MemoryThreadEvent>> updatedEvents = groupedEvents(events);
+        Map<String, List<MemoryThreadMembership>> updatedMemberships = groupedMemberships(memberships);
+        Map<Long, List<String>> updatedThreadKeysByItemId = membershipsByItemId(updatedMemberships);
+        MemoryThreadRuntimeState adjustedRuntime =
+                adjustedRuntime(runtimeState, finalizedAt, updatedOutbox);
+
+        beforeAtomicReplayCommit();
+
+        state.threadsByKey = updatedThreads;
+        state.eventsByThreadKey = updatedEvents;
+        state.membershipsByThreadKey = updatedMemberships;
+        state.threadKeysByItemId = updatedThreadKeysByItemId;
+        state.outboxByTriggerItemId = updatedOutbox;
+        state.runtime = adjustedRuntime;
+    }
+
+    private static MemoryThreadRuntimeState adjustedRuntime(
+            MemoryThreadRuntimeState runtimeState,
+            Instant finalizedAt,
+            Map<Long, MemoryThreadIntakeOutboxEntry> updatedOutbox) {
+        if (runtimeState == null) {
+            return null;
+        }
+        return new MemoryThreadRuntimeState(
+                runtimeState.memoryId(),
+                runtimeState.projectionState(),
+                pendingCount(updatedOutbox),
+                failedCount(updatedOutbox),
+                runtimeState.lastEnqueuedItemId(),
+                runtimeState.lastProcessedItemId(),
+                runtimeState.rebuildInProgress(),
+                runtimeState.rebuildCutoffItemId(),
+                runtimeState.rebuildEpoch(),
+                runtimeState.materializationPolicyVersion(),
+                runtimeState.invalidationReason(),
+                finalizedAt != null ? finalizedAt : runtimeState.updatedAt());
     }
 
     private static Map<String, List<MemoryThreadEvent>> groupedEvents(
@@ -419,19 +646,61 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
                         state.runtime.lastProcessedItemId(),
                         state.runtime.rebuildInProgress(),
                         state.runtime.rebuildCutoffItemId(),
+                        state.runtime.rebuildEpoch(),
                         state.runtime.materializationPolicyVersion(),
                         state.runtime.invalidationReason(),
                         state.runtime.updatedAt());
     }
 
+    private static MemoryThreadIntakeClaim toClaim(MemoryThreadIntakeOutboxEntry entry) {
+        return new MemoryThreadIntakeClaim(
+                entry.triggerItemId(),
+                entry.enqueueGeneration(),
+                entry.claimedAt(),
+                entry.leaseExpiresAt());
+    }
+
+    private static boolean claimsStillMatch(
+            MemoryState state, List<MemoryThreadIntakeClaim> claimedEntries) {
+        for (MemoryThreadIntakeClaim claim : claimedEntries) {
+            if (!matchesClaim(state.outboxByTriggerItemId.get(claim.triggerItemId()), claim)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean matchesClaim(
+            MemoryThreadIntakeOutboxEntry entry, MemoryThreadIntakeClaim claim) {
+        return entry != null
+                && entry.enqueueGeneration() == claim.enqueueGeneration()
+                && entry.status() == MemoryThreadIntakeStatus.PROCESSING;
+    }
+
+    private static boolean rebuildEpochMatches(
+            MemoryState state, MemoryThreadRuntimeState runtimeState) {
+        if (runtimeState == null) {
+            return state.runtime == null;
+        }
+        return state.runtime != null && state.runtime.rebuildEpoch() == runtimeState.rebuildEpoch();
+    }
+
     private static long pendingCount(MemoryState state) {
-        return state.outboxByTriggerItemId.values().stream()
+        return pendingCount(state.outboxByTriggerItemId);
+    }
+
+    private static long failedCount(MemoryState state) {
+        return failedCount(state.outboxByTriggerItemId);
+    }
+
+    private static long pendingCount(Map<Long, MemoryThreadIntakeOutboxEntry> outboxByTriggerItemId) {
+        return outboxByTriggerItemId.values().stream()
                 .filter(entry -> entry.status() == MemoryThreadIntakeStatus.PENDING)
                 .count();
     }
 
-    private static long failedCount(MemoryState state) {
-        return state.outboxByTriggerItemId.values().stream()
+    private static long failedCount(Map<Long, MemoryThreadIntakeOutboxEntry> outboxByTriggerItemId) {
+        return outboxByTriggerItemId.values().stream()
                 .filter(entry -> entry.status() == MemoryThreadIntakeStatus.FAILED)
                 .count();
     }
@@ -447,7 +716,7 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
         private Map<String, List<MemoryThreadMembership>> membershipsByThreadKey =
                 new LinkedHashMap<>();
         private Map<Long, List<String>> threadKeysByItemId = new LinkedHashMap<>();
-        private final Map<Long, MemoryThreadIntakeOutboxEntry> outboxByTriggerItemId =
+        private Map<Long, MemoryThreadIntakeOutboxEntry> outboxByTriggerItemId =
                 new ConcurrentHashMap<>();
         private MemoryThreadRuntimeState runtime;
     }

@@ -27,6 +27,8 @@ import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.store.thread.NoOpThreadProjectionStore;
+import com.openmemind.ai.memory.core.store.thread.NoOpThreadEnrichmentInputStore;
+import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentInputStore;
 import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -58,6 +60,10 @@ public interface MemoryStore extends AutoCloseable {
 
     default ThreadProjectionStore threadOperations() {
         return NoOpThreadProjectionStore.INSTANCE;
+    }
+
+    default ThreadEnrichmentInputStore threadEnrichmentInputStore() {
+        return NoOpThreadEnrichmentInputStore.INSTANCE;
     }
 
     default ResourceOperations resourceOperations() {

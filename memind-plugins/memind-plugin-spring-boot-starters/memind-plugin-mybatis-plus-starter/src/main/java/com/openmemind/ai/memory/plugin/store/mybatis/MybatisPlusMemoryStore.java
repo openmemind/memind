@@ -30,6 +30,8 @@ import com.openmemind.ai.memory.core.data.enums.MemoryThreadObjectState;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadProjectionState;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadType;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadEvent;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadEnrichmentInput;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadIntakeClaim;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadIntakeOutboxEntry;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadMembership;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadProjection;
@@ -47,8 +49,12 @@ import com.openmemind.ai.memory.core.store.item.TemporalCandidateMatch;
 import com.openmemind.ai.memory.core.store.item.TemporalCandidateRequest;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
+import com.openmemind.ai.memory.core.store.thread.NoOpThreadEnrichmentInputStore;
+import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentAppendResult;
+import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentInputStore;
 import com.openmemind.ai.memory.core.store.thread.NoOpThreadProjectionStore;
 import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
+import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.InsightConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.InsightTypeConverter;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.ItemConverter;
@@ -60,6 +66,7 @@ import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryItemDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryRawDataDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryResourceDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadEventDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadEnrichmentInputDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadIntakeOutboxDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadMembershipDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadProjectionDO;
@@ -70,6 +77,7 @@ import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryRawDataMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryResourceMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadEventMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadEnrichmentInputMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadIntakeOutboxMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMembershipMapper;
@@ -84,10 +92,12 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.SerializationFeature;
 
 public class MybatisPlusMemoryStore
         implements MemoryStore,
@@ -95,7 +105,8 @@ public class MybatisPlusMemoryStore
                 ItemOperations,
                 InsightOperations,
                 ResourceOperations,
-                ThreadProjectionStore {
+                ThreadProjectionStore,
+                ThreadEnrichmentInputStore {
 
     private final MemoryRawDataMapper rawDataMapper;
     private final MemoryItemMapper itemMapper;
@@ -109,6 +120,7 @@ public class MybatisPlusMemoryStore
     private final DatabaseDialect dialect;
     private final MemoryThreadProjectionMapper threadProjectionMapper;
     private final MemoryThreadEventMapper threadEventMapper;
+    private final MemoryThreadEnrichmentInputMapper threadEnrichmentInputMapper;
     private final MemoryThreadMembershipMapper threadMembershipMapper;
     private final MemoryThreadIntakeOutboxMapper threadIntakeOutboxMapper;
     private final MemoryThreadRuntimeMapper threadRuntimeMapper;
@@ -123,6 +135,7 @@ public class MybatisPlusMemoryStore
                 itemMapper,
                 insightTypeMapper,
                 insightMapper,
+                null,
                 null,
                 null,
                 null,
@@ -160,6 +173,7 @@ public class MybatisPlusMemoryStore
                 null,
                 null,
                 null,
+                null,
                 null);
     }
 
@@ -187,6 +201,7 @@ public class MybatisPlusMemoryStore
                 null,
                 null,
                 null,
+                null,
                 null);
     }
 
@@ -203,6 +218,7 @@ public class MybatisPlusMemoryStore
             MemoryThreadMapper threadMapper,
             MemoryThreadProjectionMapper threadProjectionMapper,
             MemoryThreadEventMapper threadEventMapper,
+            MemoryThreadEnrichmentInputMapper threadEnrichmentInputMapper,
             MemoryThreadMembershipMapper threadMembershipMapper,
             MemoryThreadIntakeOutboxMapper threadIntakeOutboxMapper,
             MemoryThreadRuntimeMapper threadRuntimeMapper,
@@ -226,6 +242,7 @@ public class MybatisPlusMemoryStore
                         : NoOpItemGraphCommitOperations.INSTANCE;
         this.threadProjectionMapper = threadProjectionMapper;
         this.threadEventMapper = threadEventMapper;
+        this.threadEnrichmentInputMapper = threadEnrichmentInputMapper;
         this.threadMembershipMapper = threadMembershipMapper;
         this.threadIntakeOutboxMapper = threadIntakeOutboxMapper;
         this.threadRuntimeMapper = threadRuntimeMapper;
@@ -280,6 +297,13 @@ public class MybatisPlusMemoryStore
                         && threadRuntimeMapper != null
                 ? this
                 : NoOpThreadProjectionStore.INSTANCE;
+    }
+
+    @Override
+    public ThreadEnrichmentInputStore threadEnrichmentInputStore() {
+        return threadEnrichmentInputMapper != null && threadIntakeOutboxMapper != null
+                ? this
+                : NoOpThreadEnrichmentInputStore.INSTANCE;
     }
 
     // ===== MemoryRawData =====
@@ -391,7 +415,9 @@ public class MybatisPlusMemoryStore
 
     @Override
     public List<MemoryRawData> listRawData(MemoryId id) {
-        return rawDataMapper.selectList(memoryQuery(id, MemoryRawDataDO.class)).stream()
+        return rawDataMapper
+                .selectList(memoryQuery(id, MemoryRawDataDO.class))
+                .stream()
                 .map(RawDataConverter::toRecord)
                 .toList();
     }
@@ -633,6 +659,7 @@ public class MybatisPlusMemoryStore
                         null,
                         false,
                         null,
+                        0L,
                         materializationPolicyVersion,
                         "runtime bootstrap",
                         Instant.now()));
@@ -739,29 +766,46 @@ public class MybatisPlusMemoryStore
     @Override
     @Transactional
     public void enqueue(MemoryId memoryId, long triggerItemId) {
+        enqueueInternal(memoryId, triggerItemId, false);
+    }
+
+    @Override
+    @Transactional
+    public void enqueueReplay(MemoryId memoryId, long replayCutoffItemId) {
+        enqueueInternal(memoryId, replayCutoffItemId, true);
+    }
+
+    private void enqueueInternal(MemoryId memoryId, long triggerItemId, boolean replayableExisting) {
         if (threadIntakeOutboxMapper == null) {
             return;
         }
         String memoryIdentifier = memoryId.toIdentifier();
-        MemoryThreadIntakeOutboxDO existing =
-                threadIntakeOutboxMapper.selectOne(
-                        threadMemoryQuery(memoryIdentifier, MemoryThreadIntakeOutboxDO.class)
-                                .eq("trigger_item_id", triggerItemId)
-                                .last("LIMIT 1"));
-        if (existing != null) {
-            return;
-        }
-
         Instant now = Instant.now();
-        MemoryThreadIntakeOutboxDO row = new MemoryThreadIntakeOutboxDO();
-        row.setMemoryId(memoryIdentifier);
-        row.setTriggerItemId(triggerItemId);
-        row.setStatus(MemoryThreadIntakeStatus.PENDING.name());
-        row.setAttemptCount(0);
-        row.setEnqueuedAt(now);
-        row.setCreatedAt(now);
-        row.setUpdatedAt(now);
-        threadIntakeOutboxMapper.insert(row);
+        MemoryThreadIntakeOutboxDO existing = outboxRow(memoryIdentifier, triggerItemId);
+        if (existing == null) {
+            MemoryThreadIntakeOutboxDO row = new MemoryThreadIntakeOutboxDO();
+            row.setMemoryId(memoryIdentifier);
+            row.setTriggerItemId(triggerItemId);
+            row.setEnqueueGeneration(1L);
+            row.setStatus(MemoryThreadIntakeStatus.PENDING.name());
+            row.setAttemptCount(0);
+            row.setEnqueuedAt(now);
+            row.setCreatedAt(now);
+            row.setUpdatedAt(now);
+            threadIntakeOutboxMapper.insert(row);
+        } else if (replayableExisting
+                && !Objects.equals(existing.getStatus(), MemoryThreadIntakeStatus.PENDING.name())) {
+            existing.setEnqueueGeneration(
+                    existing.getEnqueueGeneration() != null ? existing.getEnqueueGeneration() + 1L : 1L);
+            existing.setStatus(MemoryThreadIntakeStatus.PENDING.name());
+            existing.setClaimedAt(null);
+            existing.setLeaseExpiresAt(null);
+            existing.setFailureReason(null);
+            existing.setFinalizedAt(null);
+            existing.setEnqueuedAt(now);
+            existing.setUpdatedAt(now);
+            threadIntakeOutboxMapper.updateById(existing);
+        }
 
         MemoryThreadRuntimeDO runtime =
                 threadRuntimeMapper != null
@@ -775,6 +819,94 @@ public class MybatisPlusMemoryStore
             runtime.setUpdatedAt(now);
             refreshRuntimeCounters(memoryIdentifier, runtime);
         }
+    }
+
+    @Override
+    @Transactional
+    public ThreadEnrichmentAppendResult appendRunAndEnqueueReplay(
+            MemoryId memoryId,
+            long replayCutoffItemId,
+            List<MemoryThreadEnrichmentInput> runInputs) {
+        Objects.requireNonNull(memoryId, "memoryId");
+        if (replayCutoffItemId <= 0L) {
+            throw new IllegalArgumentException("replayCutoffItemId must be positive");
+        }
+        if (runInputs == null || runInputs.isEmpty()) {
+            throw new IllegalArgumentException("runInputs must not be empty");
+        }
+        if (threadEnrichmentInputMapper == null || threadIntakeOutboxMapper == null) {
+            return ThreadEnrichmentAppendResult.DUPLICATE_EQUIVALENT;
+        }
+
+        String memoryIdentifier = memoryId.toIdentifier();
+        LinkedHashSet<String> runKeys = new LinkedHashSet<>();
+        for (MemoryThreadEnrichmentInput input : runInputs) {
+            validateEnrichmentInput(memoryIdentifier, input);
+            runKeys.add(input.inputRunKey());
+        }
+
+        Map<String, MemoryThreadEnrichmentInputDO> existingByKey =
+                threadEnrichmentInputMapper
+                        .selectList(
+                                threadMemoryQuery(
+                                                memoryIdentifier, MemoryThreadEnrichmentInputDO.class)
+                                        .in("input_run_key", runKeys))
+                        .stream()
+                        .collect(
+                                Collectors.toMap(
+                                        dataObject ->
+                                                enrichmentInputKey(
+                                                        dataObject.getInputRunKey(),
+                                                        dataObject.getEntrySeq()),
+                                        Function.identity(),
+                                        (left, right) -> left));
+
+        List<MemoryThreadEnrichmentInput> toInsert = new ArrayList<>();
+        for (MemoryThreadEnrichmentInput input : runInputs) {
+            MemoryThreadEnrichmentInputDO existing =
+                    existingByKey.get(enrichmentInputKey(input.inputRunKey(), input.entrySeq()));
+            if (existing == null) {
+                toInsert.add(input);
+                continue;
+            }
+            if (!equivalent(existing, input)) {
+                throw new IllegalStateException("conflicting duplicate enrichment input");
+            }
+        }
+        if (toInsert.isEmpty()) {
+            return ThreadEnrichmentAppendResult.DUPLICATE_EQUIVALENT;
+        }
+
+        for (MemoryThreadEnrichmentInput input : toInsert) {
+            threadEnrichmentInputMapper.insert(toEnrichmentInputDO(input));
+        }
+        enqueueInternal(memoryId, replayCutoffItemId, true);
+        return ThreadEnrichmentAppendResult.INSERTED;
+    }
+
+    @Override
+    public List<MemoryThreadEnrichmentInput> listReplayable(
+            MemoryId memoryId, long cutoffItemId, String materializationPolicyVersion) {
+        Objects.requireNonNull(memoryId, "memoryId");
+        Objects.requireNonNull(materializationPolicyVersion, "materializationPolicyVersion");
+        if (cutoffItemId <= 0L || threadEnrichmentInputMapper == null) {
+            return List.of();
+        }
+        return threadEnrichmentInputMapper
+                .selectList(
+                        threadMemoryQuery(memoryId.toIdentifier(), MemoryThreadEnrichmentInputDO.class)
+                                .le("basis_cutoff_item_id", cutoffItemId)
+                                .eq(
+                                        "basis_materialization_policy_version",
+                                        materializationPolicyVersion)
+                                .orderByAsc(
+                                        "basis_cutoff_item_id",
+                                        "basis_meaningful_event_count",
+                                        "input_run_key",
+                                        "entry_seq"))
+                .stream()
+                .map(MybatisPlusMemoryStore::toEnrichmentInputRecord)
+                .toList();
     }
 
     @Override
@@ -793,7 +925,7 @@ public class MybatisPlusMemoryStore
 
     @Override
     @Transactional
-    public List<MemoryThreadIntakeOutboxEntry> claimPending(
+    public List<MemoryThreadIntakeClaim> claimPending(
             MemoryId memoryId, Instant claimedAt, Instant leaseExpiresAt, int batchSize) {
         if (threadIntakeOutboxMapper == null || batchSize <= 0) {
             return List.of();
@@ -823,7 +955,7 @@ public class MybatisPlusMemoryStore
         if (runtime != null) {
             refreshRuntimeCounters(memoryIdentifier, runtime);
         }
-        return claimedRows.stream().map(MybatisPlusMemoryStore::toOutboxRecord).toList();
+        return claimedRows.stream().map(MybatisPlusMemoryStore::toClaimRecord).toList();
     }
 
     @Override
@@ -899,42 +1031,6 @@ public class MybatisPlusMemoryStore
 
     @Override
     @Transactional
-    public void finalizeOutboxFailure(
-            MemoryId memoryId,
-            long triggerItemId,
-            String reason,
-            int maxAttempts,
-            Instant finalizedAt) {
-        if (threadIntakeOutboxMapper == null) {
-            return;
-        }
-        String memoryIdentifier = memoryId.toIdentifier();
-        MemoryThreadIntakeOutboxDO row = outboxRow(memoryIdentifier, triggerItemId);
-        if (row == null) {
-            return;
-        }
-        int attempts =
-                Math.max(
-                        (row.getAttemptCount() != null ? row.getAttemptCount() : 0) + 1,
-                        maxAttempts);
-        row.setStatus(MemoryThreadIntakeStatus.FAILED.name());
-        row.setAttemptCount(attempts);
-        row.setFailureReason(reason);
-        row.setFinalizedAt(finalizedAt);
-        row.setUpdatedAt(finalizedAt);
-        threadIntakeOutboxMapper.updateById(row);
-
-        MemoryThreadRuntimeDO runtime =
-                threadRuntimeMapper != null
-                        ? threadRuntimeMapper.selectById(memoryIdentifier)
-                        : null;
-        if (runtime != null) {
-            refreshRuntimeCounters(memoryIdentifier, runtime);
-        }
-    }
-
-    @Override
-    @Transactional
     public void finalizeOutboxSkippedPrefix(
             MemoryId memoryId, long rebuildCutoffItemId, Instant finalizedAt) {
         if (threadIntakeOutboxMapper == null) {
@@ -980,6 +1076,7 @@ public class MybatisPlusMemoryStore
                             null,
                             false,
                             null,
+                            0L,
                             "v1",
                             reason,
                             now));
@@ -1015,6 +1112,7 @@ public class MybatisPlusMemoryStore
                             null,
                             true,
                             rebuildCutoffItemId,
+                            1L,
                             materializationPolicyVersion,
                             "rebuild bootstrap",
                             now));
@@ -1024,10 +1122,134 @@ public class MybatisPlusMemoryStore
         runtime.setFailedCount(outboxCount(memoryIdentifier, MemoryThreadIntakeStatus.FAILED));
         runtime.setRebuildInProgress(true);
         runtime.setRebuildCutoffItemId(rebuildCutoffItemId);
+        runtime.setRebuildEpoch(
+                runtime.getRebuildEpoch() != null ? runtime.getRebuildEpoch() + 1L : 1L);
         runtime.setMaterializationPolicyVersion(materializationPolicyVersion);
         runtime.setUpdatedAt(now);
         threadRuntimeMapper.updateById(runtime);
         return true;
+    }
+
+    @Override
+    @Transactional
+    public boolean commitClaimedIntakeReplaySuccess(
+            MemoryId memoryId,
+            List<MemoryThreadIntakeClaim> claimedEntries,
+            long replayCutoffItemId,
+            List<MemoryThreadProjection> threads,
+            List<MemoryThreadEvent> events,
+            List<MemoryThreadMembership> memberships,
+            MemoryThreadRuntimeState runtimeState,
+            Instant finalizedAt) {
+        if (threadIntakeOutboxMapper == null || threadRuntimeMapper == null) {
+            return false;
+        }
+        String memoryIdentifier = memoryId.toIdentifier();
+        MemoryThreadRuntimeDO runtime = threadRuntimeMapper.selectById(memoryIdentifier);
+        if (runtime == null
+                || runtimeState == null
+                || !Objects.equals(runtime.getRebuildEpoch(), runtimeState.rebuildEpoch())) {
+            return false;
+        }
+        for (MemoryThreadIntakeClaim claim : claimedEntries) {
+            MemoryThreadIntakeOutboxDO row = outboxRow(memoryIdentifier, claim.triggerItemId());
+            if (!matchesClaim(row, claim)) {
+                return false;
+            }
+        }
+        for (MemoryThreadIntakeClaim claim : claimedEntries) {
+            MemoryThreadIntakeOutboxDO row = outboxRow(memoryIdentifier, claim.triggerItemId());
+            row.setStatus(MemoryThreadIntakeStatus.COMPLETED.name());
+            row.setFailureReason(null);
+            row.setLastProcessedItemId(replayCutoffItemId);
+            row.setFinalizedAt(finalizedAt);
+            row.setUpdatedAt(finalizedAt);
+            threadIntakeOutboxMapper.updateById(row);
+        }
+        replaceProjection(memoryId, threads, events, memberships, runtimeState, finalizedAt);
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public void finalizeClaimedIntakeFailure(
+            MemoryId memoryId,
+            List<MemoryThreadIntakeClaim> claimedEntries,
+            String reason,
+            int maxAttempts,
+            Instant finalizedAt) {
+        if (threadIntakeOutboxMapper == null) {
+            return;
+        }
+        String memoryIdentifier = memoryId.toIdentifier();
+        boolean changed = false;
+        for (MemoryThreadIntakeClaim claim : claimedEntries) {
+            MemoryThreadIntakeOutboxDO row = outboxRow(memoryIdentifier, claim.triggerItemId());
+            if (!matchesClaim(row, claim)) {
+                continue;
+            }
+            int attempts =
+                    Math.max(
+                            (row.getAttemptCount() != null ? row.getAttemptCount() : 0) + 1,
+                            maxAttempts);
+            row.setStatus(MemoryThreadIntakeStatus.FAILED.name());
+            row.setAttemptCount(attempts);
+            row.setFailureReason(reason);
+            row.setFinalizedAt(finalizedAt);
+            row.setUpdatedAt(finalizedAt);
+            threadIntakeOutboxMapper.updateById(row);
+            changed = true;
+        }
+        if (changed) {
+            MemoryThreadRuntimeDO runtime = threadRuntimeMapper.selectById(memoryIdentifier);
+            if (runtime != null) {
+                refreshRuntimeCounters(memoryIdentifier, runtime);
+            }
+        }
+    }
+
+    @Override
+    @Transactional
+    public void releaseClaims(MemoryId memoryId, List<MemoryThreadIntakeClaim> claimedEntries) {
+        if (threadIntakeOutboxMapper == null) {
+            return;
+        }
+        String memoryIdentifier = memoryId.toIdentifier();
+        boolean changed = false;
+        for (MemoryThreadIntakeClaim claim : claimedEntries) {
+            MemoryThreadIntakeOutboxDO row = outboxRow(memoryIdentifier, claim.triggerItemId());
+            if (!matchesClaim(row, claim)) {
+                continue;
+            }
+            row.setStatus(MemoryThreadIntakeStatus.PENDING.name());
+            row.setClaimedAt(null);
+            row.setLeaseExpiresAt(null);
+            row.setFailureReason(null);
+            row.setFinalizedAt(null);
+            row.setUpdatedAt(Instant.now());
+            threadIntakeOutboxMapper.updateById(row);
+            changed = true;
+        }
+        if (changed) {
+            MemoryThreadRuntimeDO runtime = threadRuntimeMapper.selectById(memoryIdentifier);
+            if (runtime != null) {
+                refreshRuntimeCounters(memoryIdentifier, runtime);
+            }
+        }
+    }
+
+    @Override
+    @Transactional
+    public void commitRebuildReplaySuccess(
+            MemoryId memoryId,
+            long rebuildCutoffItemId,
+            List<MemoryThreadProjection> threads,
+            List<MemoryThreadEvent> events,
+            List<MemoryThreadMembership> memberships,
+            MemoryThreadRuntimeState runtimeState,
+            Instant finalizedAt) {
+        finalizeOutboxSkippedPrefix(memoryId, rebuildCutoffItemId, finalizedAt);
+        replaceProjection(memoryId, threads, events, memberships, runtimeState, finalizedAt);
     }
 
     @Override
@@ -1077,6 +1299,7 @@ public class MybatisPlusMemoryStore
                         runtimeState.lastProcessedItemId(),
                         runtimeState.rebuildInProgress(),
                         runtimeState.rebuildCutoffItemId(),
+                        runtimeState.rebuildEpoch(),
                         runtimeState.materializationPolicyVersion(),
                         runtimeState.invalidationReason(),
                         finalizedAt != null ? finalizedAt : runtimeState.updatedAt());
@@ -1292,6 +1515,13 @@ public class MybatisPlusMemoryStore
         upsertRuntime(toRuntimeRecord(runtime));
     }
 
+    private static boolean matchesClaim(
+            MemoryThreadIntakeOutboxDO row, MemoryThreadIntakeClaim claim) {
+        return row != null
+                && Objects.equals(row.getEnqueueGeneration(), claim.enqueueGeneration())
+                && Objects.equals(row.getStatus(), MemoryThreadIntakeStatus.PROCESSING.name());
+    }
+
     private void upsertRuntime(MemoryThreadRuntimeState runtimeState) {
         if (threadRuntimeMapper == null) {
             return;
@@ -1384,6 +1614,39 @@ public class MybatisPlusMemoryStore
                 dataObject.getCreatedAt());
     }
 
+    private static MemoryThreadEnrichmentInputDO toEnrichmentInputDO(
+            MemoryThreadEnrichmentInput input) {
+        MemoryThreadEnrichmentInputDO dataObject = new MemoryThreadEnrichmentInputDO();
+        dataObject.setMemoryId(input.memoryId());
+        dataObject.setThreadKey(input.threadKey());
+        dataObject.setInputRunKey(input.inputRunKey());
+        dataObject.setEntrySeq(input.entrySeq());
+        dataObject.setBasisCutoffItemId(input.basisCutoffItemId());
+        dataObject.setBasisMeaningfulEventCount(input.basisMeaningfulEventCount());
+        dataObject.setBasisMaterializationPolicyVersion(input.basisMaterializationPolicyVersion());
+        dataObject.setPayloadJson(input.payloadJson());
+        dataObject.setProvenanceJson(input.provenanceJson());
+        dataObject.setCreatedAt(input.createdAt());
+        return dataObject;
+    }
+
+    private static MemoryThreadEnrichmentInput toEnrichmentInputRecord(
+            MemoryThreadEnrichmentInputDO dataObject) {
+        return new MemoryThreadEnrichmentInput(
+                dataObject.getMemoryId(),
+                dataObject.getThreadKey(),
+                dataObject.getInputRunKey(),
+                dataObject.getEntrySeq() != null ? dataObject.getEntrySeq() : 0,
+                dataObject.getBasisCutoffItemId() != null ? dataObject.getBasisCutoffItemId() : 0L,
+                dataObject.getBasisMeaningfulEventCount() != null
+                        ? dataObject.getBasisMeaningfulEventCount()
+                        : 0L,
+                dataObject.getBasisMaterializationPolicyVersion(),
+                dataObject.getPayloadJson(),
+                dataObject.getProvenanceJson(),
+                dataObject.getCreatedAt());
+    }
+
     private static MemoryThreadMembershipDO toMembershipDO(MemoryThreadMembership membership) {
         MemoryThreadMembershipDO dataObject = new MemoryThreadMembershipDO();
         dataObject.setMemoryId(membership.memoryId());
@@ -1414,6 +1677,7 @@ public class MybatisPlusMemoryStore
         return new MemoryThreadIntakeOutboxEntry(
                 dataObject.getMemoryId(),
                 dataObject.getTriggerItemId(),
+                dataObject.getEnqueueGeneration() != null ? dataObject.getEnqueueGeneration() : 1L,
                 MemoryThreadIntakeStatus.valueOf(dataObject.getStatus()),
                 dataObject.getAttemptCount() != null ? dataObject.getAttemptCount() : 0,
                 dataObject.getClaimedAt(),
@@ -1422,6 +1686,14 @@ public class MybatisPlusMemoryStore
                 dataObject.getLastProcessedItemId(),
                 dataObject.getEnqueuedAt(),
                 dataObject.getFinalizedAt());
+    }
+
+    private static MemoryThreadIntakeClaim toClaimRecord(MemoryThreadIntakeOutboxDO dataObject) {
+        return new MemoryThreadIntakeClaim(
+                dataObject.getTriggerItemId(),
+                dataObject.getEnqueueGeneration() != null ? dataObject.getEnqueueGeneration() : 1L,
+                dataObject.getClaimedAt(),
+                dataObject.getLeaseExpiresAt());
     }
 
     private static MemoryThreadRuntimeDO toRuntimeDO(MemoryThreadRuntimeState runtimeState) {
@@ -1434,6 +1706,7 @@ public class MybatisPlusMemoryStore
         dataObject.setLastProcessedItemId(runtimeState.lastProcessedItemId());
         dataObject.setRebuildInProgress(runtimeState.rebuildInProgress());
         dataObject.setRebuildCutoffItemId(runtimeState.rebuildCutoffItemId());
+        dataObject.setRebuildEpoch(runtimeState.rebuildEpoch());
         dataObject.setMaterializationPolicyVersion(runtimeState.materializationPolicyVersion());
         dataObject.setInvalidationReason(runtimeState.invalidationReason());
         dataObject.setUpdatedAt(runtimeState.updatedAt());
@@ -1450,8 +1723,55 @@ public class MybatisPlusMemoryStore
                 dataObject.getLastProcessedItemId(),
                 Boolean.TRUE.equals(dataObject.getRebuildInProgress()),
                 dataObject.getRebuildCutoffItemId(),
+                dataObject.getRebuildEpoch() != null ? dataObject.getRebuildEpoch() : 0L,
                 dataObject.getMaterializationPolicyVersion(),
                 dataObject.getInvalidationReason(),
                 dataObject.getUpdatedAt());
+    }
+
+    private static void validateEnrichmentInput(
+            String memoryIdentifier, MemoryThreadEnrichmentInput input) {
+        Objects.requireNonNull(input, "input");
+        if (!Objects.equals(memoryIdentifier, input.memoryId())) {
+            throw new IllegalArgumentException("runInputs memoryId must match append memoryId");
+        }
+    }
+
+    private static String enrichmentInputKey(String inputRunKey, Integer entrySeq) {
+        return inputRunKey + "#" + entrySeq;
+    }
+
+    private static String enrichmentInputKey(String inputRunKey, int entrySeq) {
+        return inputRunKey + "#" + entrySeq;
+    }
+
+    private static boolean equivalent(
+            MemoryThreadEnrichmentInputDO existing, MemoryThreadEnrichmentInput input) {
+        return Objects.equals(existing.getMemoryId(), input.memoryId())
+                && Objects.equals(existing.getThreadKey(), input.threadKey())
+                && Objects.equals(existing.getInputRunKey(), input.inputRunKey())
+                && Objects.equals(existing.getEntrySeq(), input.entrySeq())
+                && Objects.equals(existing.getBasisCutoffItemId(), input.basisCutoffItemId())
+                && Objects.equals(
+                        existing.getBasisMeaningfulEventCount(),
+                        input.basisMeaningfulEventCount())
+                && Objects.equals(
+                        existing.getBasisMaterializationPolicyVersion(),
+                        input.basisMaterializationPolicyVersion())
+                && Objects.equals(canonicalJson(existing.getPayloadJson()), canonicalJson(input.payloadJson()))
+                && Objects.equals(
+                        canonicalJson(existing.getProvenanceJson()),
+                        canonicalJson(input.provenanceJson()));
+    }
+
+    private static String canonicalJson(Map<String, Object> value) {
+        try {
+            return JsonUtils.newMapper()
+                    .writer()
+                    .with(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
+                    .writeValueAsString(value == null ? Map.of() : value);
+        } catch (tools.jackson.core.JacksonException error) {
+            throw new IllegalStateException("Failed to canonicalize enrichment input JSON", error);
+        }
     }
 }

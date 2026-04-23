@@ -317,6 +317,7 @@ class InMemoryMemoryStoreTest {
                 101L,
                 false,
                 null,
+                0L,
                 "v1",
                 null,
                 BASE_TIME);

@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.store.thread;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadEvent;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadIntakeClaim;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadIntakeOutboxEntry;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadMembership;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadProjection;
@@ -44,9 +45,11 @@ public interface ThreadProjectionStore {
 
     void enqueue(MemoryId memoryId, long triggerItemId);
 
+    void enqueueReplay(MemoryId memoryId, long replayCutoffItemId);
+
     List<MemoryThreadIntakeOutboxEntry> listOutbox(MemoryId memoryId);
 
-    List<MemoryThreadIntakeOutboxEntry> claimPending(
+    List<MemoryThreadIntakeClaim> claimPending(
             MemoryId memoryId, Instant claimedAt, Instant leaseExpiresAt, int batchSize);
 
     int recoverAbandoned(MemoryId memoryId, Instant now, int maxAttempts);
@@ -54,9 +57,9 @@ public interface ThreadProjectionStore {
     void finalizeOutboxSuccess(
             MemoryId memoryId, long triggerItemId, long lastProcessedItemId, Instant finalizedAt);
 
-    void finalizeOutboxFailure(
+    void finalizeClaimedIntakeFailure(
             MemoryId memoryId,
-            long triggerItemId,
+            List<MemoryThreadIntakeClaim> claimedEntries,
             String reason,
             int maxAttempts,
             Instant finalizedAt);
@@ -68,6 +71,27 @@ public interface ThreadProjectionStore {
 
     boolean beginRebuild(
             MemoryId memoryId, String materializationPolicyVersion, long rebuildCutoffItemId);
+
+    boolean commitClaimedIntakeReplaySuccess(
+            MemoryId memoryId,
+            List<MemoryThreadIntakeClaim> claimedEntries,
+            long replayCutoffItemId,
+            List<MemoryThreadProjection> threads,
+            List<MemoryThreadEvent> events,
+            List<MemoryThreadMembership> memberships,
+            MemoryThreadRuntimeState runtimeState,
+            Instant finalizedAt);
+
+    void releaseClaims(MemoryId memoryId, List<MemoryThreadIntakeClaim> claimedEntries);
+
+    void commitRebuildReplaySuccess(
+            MemoryId memoryId,
+            long rebuildCutoffItemId,
+            List<MemoryThreadProjection> threads,
+            List<MemoryThreadEvent> events,
+            List<MemoryThreadMembership> memberships,
+            MemoryThreadRuntimeState runtimeState,
+            Instant finalizedAt);
 
     void replaceProjection(
             MemoryId memoryId,

@@ -28,6 +28,7 @@ public class MemoryThreadIntakeOutboxDO {
 
     private String memoryId;
     private Long triggerItemId;
+    private Long enqueueGeneration;
     private String status;
     private Integer attemptCount;
 
@@ -82,6 +83,14 @@ public class MemoryThreadIntakeOutboxDO {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public Long getEnqueueGeneration() {
+        return enqueueGeneration;
+    }
+
+    public void setEnqueueGeneration(Long enqueueGeneration) {
+        this.enqueueGeneration = enqueueGeneration;
     }
 
     public Integer getAttemptCount() {

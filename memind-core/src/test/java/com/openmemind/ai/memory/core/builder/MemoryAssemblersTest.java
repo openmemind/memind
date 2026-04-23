@@ -40,7 +40,14 @@ import com.openmemind.ai.memory.core.extraction.item.graph.plan.DefaultItemGraph
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
+import com.openmemind.ai.memory.core.extraction.thread.CoalescingThreadWakeScheduler;
 import com.openmemind.ai.memory.core.extraction.thread.MemoryThreadLayer;
+import com.openmemind.ai.memory.core.extraction.thread.NoOpThreadDerivationMetrics;
+import com.openmemind.ai.memory.core.extraction.thread.ThreadIntakeWorker;
+import com.openmemind.ai.memory.core.extraction.thread.ThreadMaterializationPolicy;
+import com.openmemind.ai.memory.core.extraction.thread.ThreadMaterializationPolicyFactory;
+import com.openmemind.ai.memory.core.extraction.thread.ThreadProjectionRebuilder;
+import com.openmemind.ai.memory.core.extraction.thread.ThreadWakeScheduler;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
@@ -51,8 +58,10 @@ import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.retrieval.graph.NoOpRetrievalGraphAssistant;
+import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
-import com.openmemind.ai.memory.core.retrieval.thread.NoOpMemoryThreadAssistant;
+import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
+import com.openmemind.ai.memory.core.retrieval.thread.DefaultMemoryThreadAssistant;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.graph.GraphOperations;
@@ -67,6 +76,7 @@ import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingItemGraphMaterializer;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryThreadAssistant;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.lang.reflect.Proxy;
 import java.time.Duration;
@@ -215,7 +225,7 @@ class MemoryAssemblersTest {
     }
 
     @Test
-    void retrievalAssemblerUsesNoOpThreadAssistantDuringV1Rollout() {
+    void retrievalAssemblerWiresRuntimeThreadAssistantAndClampedCapsWhenEnabled() {
         var options =
                 MemoryBuildOptions.builder()
                         .memoryThread(
@@ -223,7 +233,7 @@ class MemoryAssemblersTest {
                                         .withEnabled(true)
                                         .withRule(
                                                 MemoryThreadRuleOptions.defaults()
-                                                        .withMaxRetrievalMembersPerThread(2)))
+                                                        .withMaxRetrievalMembersPerThread(1)))
                         .retrieval(
                                 new RetrievalOptions(
                                         RetrievalCommonOptions.defaults(),
@@ -257,9 +267,31 @@ class MemoryAssemblersTest {
         var deep = strategies.get(RetrievalStrategies.DEEP_RETRIEVAL);
 
         assertThat(readField(simple, "memoryThreadAssistant", Object.class))
-                .isSameAs(NoOpMemoryThreadAssistant.INSTANCE);
+                .isInstanceOf(TracingMemoryThreadAssistant.class);
         assertThat(readField(deep, "memoryThreadAssistant", Object.class))
-                .isSameAs(NoOpMemoryThreadAssistant.INSTANCE);
+                .isInstanceOf(TracingMemoryThreadAssistant.class);
+        assertThat(
+                        readField(
+                                readField(simple, "memoryThreadAssistant", Object.class),
+                                "delegate",
+                                Object.class))
+                .isInstanceOf(DefaultMemoryThreadAssistant.class);
+        assertThat(
+                        readField(
+                                readField(deep, "memoryThreadAssistant", Object.class),
+                                "delegate",
+                                Object.class))
+                .isInstanceOf(DefaultMemoryThreadAssistant.class);
+        assertThat(
+                        readField(simple, "defaultStrategyConfig", SimpleStrategyConfig.class)
+                                .memoryThreadAssist()
+                                .maxMembersPerThread())
+                .isEqualTo(1);
+        assertThat(
+                        readField(deep, "defaultStrategyConfig", DeepStrategyConfig.class)
+                                .memoryThreadAssist()
+                                .maxMembersPerThread())
+                .isEqualTo(1);
     }
 
     @Test
@@ -299,6 +331,92 @@ class MemoryAssemblersTest {
         assertThat(readField(extractor, "memoryItemStep", Object.class))
                 .isInstanceOf(MemoryThreadLayer.class);
         assertThat(assembly.memoryThreadLayer()).isNotNull();
+    }
+
+    @Test
+    void extractionAssemblerBuildsMemoryThreadPolicyFromPublicOptions() {
+        var options =
+                MemoryBuildOptions.builder()
+                        .memoryThread(
+                                MemoryThreadOptions.defaults()
+                                        .withEnabled(true)
+                                        .withDerivation(
+                                                MemoryThreadDerivationOptions.defaults()
+                                                        .withEnabled(true))
+                                        .withRule(
+                                                new MemoryThreadRuleOptions(0.82d, 0.74d, 5, 32, 6))
+                                        .withLifecycle(
+                                                new MemoryThreadLifecycleOptions(
+                                                        Duration.ofDays(9), Duration.ofDays(28))))
+                        .build();
+
+        var assembly = new MemoryExtractionAssembler().assemble(context(options, null, null));
+        var expectedPolicy = ThreadMaterializationPolicyFactory.from(options.memoryThread());
+        var actualPolicy =
+                readField(
+                        assembly.memoryThreadLayer(), "policy", ThreadMaterializationPolicy.class);
+
+        assertThat(actualPolicy).isEqualTo(expectedPolicy);
+    }
+
+    @Test
+    void extractionAssemblerWiresReplayableEnrichmentStoreIntoThreadMaterializersWhenEnabled() {
+        var store = new InMemoryMemoryStore();
+        var options =
+                MemoryBuildOptions.builder()
+                        .memoryThread(
+                                MemoryThreadOptions.defaults()
+                                        .withEnabled(true)
+                                        .withDerivation(
+                                                MemoryThreadDerivationOptions.defaults()
+                                                        .withEnabled(true))
+                                        .withEnrichment(
+                                                MemoryThreadEnrichmentOptions.defaults()
+                                                        .withEnabled(true)))
+                        .build();
+
+        var assembly =
+                new MemoryExtractionAssembler()
+                        .assemble(context(options, null, null, List.of(), store));
+        var layer = assembly.memoryThreadLayer();
+        var scheduler = readField(layer, "scheduler", ThreadWakeScheduler.class);
+        var worker = readField(scheduler, "worker", ThreadIntakeWorker.class);
+        var rebuilder = readField(layer, "rebuilder", ThreadProjectionRebuilder.class);
+        var workerMaterializer = readField(worker, "materializer", Object.class);
+        var rebuilderMaterializer = readField(rebuilder, "materializer", Object.class);
+
+        assertThat(scheduler).isInstanceOf(CoalescingThreadWakeScheduler.class);
+        assertThat(readField(workerMaterializer, "enrichmentInputStore", Object.class))
+                .isSameAs(store.threadEnrichmentInputStore());
+        assertThat(readField(rebuilderMaterializer, "enrichmentInputStore", Object.class))
+                .isSameAs(store.threadEnrichmentInputStore());
+    }
+
+    @Test
+    void extractionAssemblerWiresSharedNoOpThreadDerivationMetricsByDefault() {
+        var store = new InMemoryMemoryStore();
+        var options =
+                MemoryBuildOptions.builder()
+                        .memoryThread(
+                                MemoryThreadOptions.defaults()
+                                        .withEnabled(true)
+                                        .withDerivation(
+                                                MemoryThreadDerivationOptions.defaults()
+                                                        .withEnabled(true)))
+                        .build();
+
+        var assembly =
+                new MemoryExtractionAssembler()
+                        .assemble(context(options, null, null, List.of(), store));
+        var layer = assembly.memoryThreadLayer();
+        var scheduler = readField(layer, "scheduler", ThreadWakeScheduler.class);
+        var worker = readField(scheduler, "worker", ThreadIntakeWorker.class);
+        var rebuilder = readField(layer, "rebuilder", ThreadProjectionRebuilder.class);
+        var layerMetrics = readField(layer, "metrics", Object.class);
+
+        assertThat(layerMetrics).isInstanceOf(NoOpThreadDerivationMetrics.class);
+        assertThat(readField(worker, "metrics", Object.class)).isSameAs(layerMetrics);
+        assertThat(readField(rebuilder, "metrics", Object.class)).isSameAs(layerMetrics);
     }
 
     @Test
@@ -386,7 +504,12 @@ class MemoryAssemblersTest {
         var assembly =
                 new MemoryExtractionAssembler()
                         .assemble(
-                                context(options, null, null, List.of(), new InMemoryMemoryStore()));
+                                context(
+                                        options,
+                                        null,
+                                        null,
+                                        List.of(),
+                                        new InMemoryMemoryStore()));
         var extractor = (DefaultMemoryExtractor) assembly.pipeline();
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
         var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
@@ -533,7 +656,7 @@ class MemoryAssemblersTest {
                                                         InsightBuildConfig.defaults(),
                                                         InsightGraphAssistOptions.defaults()
                                                                 .withEnabled(true))))
-                                .build(),
+                        .build(),
                         CONTENT_PARSER_REGISTRY,
                         RESOURCE_FETCHER);
 
@@ -567,7 +690,7 @@ class MemoryAssemblersTest {
                                                         InsightBuildConfig.defaults(),
                                                         InsightGraphAssistOptions.defaults()
                                                                 .withEnabled(true))))
-                                .build(),
+                        .build(),
                         CONTENT_PARSER_REGISTRY,
                         RESOURCE_FETCHER);
 

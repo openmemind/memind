@@ -29,4 +29,5 @@ public enum ChatClientSlot {
     QUERY_EXPANDER,
     SUFFICIENCY_GATE,
     INSIGHT_TYPE_ROUTER,
+    THREAD_ENRICHMENT,
 }

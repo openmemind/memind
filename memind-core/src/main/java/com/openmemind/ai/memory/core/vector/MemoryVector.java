@@ -38,6 +38,17 @@ public interface MemoryVector {
     Mono<String> store(MemoryId memoryId, String text, Map<String, Object> metadata);
 
     /**
+     * Store text vector with a caller-supplied preferred vector id.
+     *
+     * <p>Backends that do not support deterministic ids may ignore the supplied id and return a
+     * backend-generated id instead.
+     */
+    default Mono<String> store(
+            MemoryId memoryId, String vectorId, String text, Map<String, Object> metadata) {
+        return store(memoryId, text, metadata);
+    }
+
+    /**
      * Batch store text vectors
      *
      * @param memoryId     Memory identifier
@@ -47,6 +58,24 @@ public interface MemoryVector {
      */
     Mono<List<String>> storeBatch(
             MemoryId memoryId, List<String> texts, List<Map<String, Object>> metadataList);
+
+    /**
+     * Batch store text vectors with caller-supplied preferred vector ids.
+     *
+     * <p>Backends that do not support deterministic ids may ignore the supplied ids and return
+     * backend-generated ids instead.
+     */
+    default Mono<List<String>> storeBatch(
+            MemoryId memoryId,
+            List<String> vectorIds,
+            List<String> texts,
+            List<Map<String, Object>> metadataList) {
+        Objects.requireNonNull(texts, "texts");
+        if (vectorIds != null && !vectorIds.isEmpty() && vectorIds.size() != texts.size()) {
+            throw new IllegalArgumentException("vectorIds must match texts size");
+        }
+        return storeBatch(memoryId, texts, metadataList);
+    }
 
     /**
      * Delete vector

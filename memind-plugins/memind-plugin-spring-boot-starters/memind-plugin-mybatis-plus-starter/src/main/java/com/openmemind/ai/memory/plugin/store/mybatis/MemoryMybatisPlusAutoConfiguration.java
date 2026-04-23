@@ -53,6 +53,7 @@ import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryRawDataMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryResourceMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadEventMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadEnrichmentInputMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadIntakeOutboxMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMembershipMapper;
@@ -152,6 +153,7 @@ public class MemoryMybatisPlusAutoConfiguration {
             MemoryThreadMapper threadMapper,
             MemoryThreadProjectionMapper threadProjectionMapper,
             MemoryThreadEventMapper threadEventMapper,
+            MemoryThreadEnrichmentInputMapper threadEnrichmentInputMapper,
             MemoryThreadMembershipMapper threadMembershipMapper,
             MemoryThreadIntakeOutboxMapper threadIntakeOutboxMapper,
             MemoryThreadRuntimeMapper threadRuntimeMapper,
@@ -174,6 +176,7 @@ public class MemoryMybatisPlusAutoConfiguration {
                 threadMapper,
                 threadProjectionMapper,
                 threadEventMapper,
+                threadEnrichmentInputMapper,
                 threadMembershipMapper,
                 threadIntakeOutboxMapper,
                 threadRuntimeMapper,

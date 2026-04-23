@@ -57,7 +57,7 @@ class MemoryStoreDdlTest {
     }
 
     @Test
-    @DisplayName("Load SQLite store scripts through V11 simplified thread core migration")
+    @DisplayName("Load SQLite store scripts through V14 memory thread rebuild epoch migration")
     void loadsSqliteScriptsThroughTemporalLookupMigration() {
         assertThat(
                         new MemoryStoreDdl(dataSource("SQLite", "jdbc:sqlite::memory:"), detector)
@@ -73,11 +73,14 @@ class MemoryStoreDdlTest {
                         "db/migration/sqlite/V8__graph_entity_alias_store.sql",
                         "db/migration/sqlite/V9__item_temporal_lookup.sql",
                         "db/migration/sqlite/V10__item_graph_evolution.sql",
-                        "db/migration/sqlite/V11__simplified_thread_core_v1.sql");
+                        "db/migration/sqlite/V11__simplified_thread_core_v1.sql",
+                        "db/migration/sqlite/V12__memory_thread_enrichment_input.sql",
+                        "db/migration/sqlite/V13__memory_thread_enqueue_generation.sql",
+                        "db/migration/sqlite/V14__memory_thread_rebuild_epoch.sql");
     }
 
     @Test
-    @DisplayName("Load MySQL store scripts through V11 simplified thread core migration")
+    @DisplayName("Load MySQL store scripts through V14 memory thread rebuild epoch migration")
     void loadsMysqlScriptsThroughTemporalLookupMigration() {
         assertThat(
                         new MemoryStoreDdl(
@@ -95,11 +98,14 @@ class MemoryStoreDdlTest {
                         "db/migration/mysql/V8__graph_entity_alias_store.sql",
                         "db/migration/mysql/V9__item_temporal_lookup.sql",
                         "db/migration/mysql/V10__item_graph_evolution.sql",
-                        "db/migration/mysql/V11__simplified_thread_core_v1.sql");
+                        "db/migration/mysql/V11__simplified_thread_core_v1.sql",
+                        "db/migration/mysql/V12__memory_thread_enrichment_input.sql",
+                        "db/migration/mysql/V13__memory_thread_enqueue_generation.sql",
+                        "db/migration/mysql/V14__memory_thread_rebuild_epoch.sql");
     }
 
     @Test
-    @DisplayName("Load PostgreSQL store scripts through V11 simplified thread core migration")
+    @DisplayName("Load PostgreSQL store scripts through V14 memory thread rebuild epoch migration")
     void loadsPostgresqlScriptsThroughTemporalLookupMigration() {
         assertThat(
                         new MemoryStoreDdl(
@@ -119,7 +125,10 @@ class MemoryStoreDdlTest {
                         "db/migration/postgresql/V8__graph_entity_alias_store.sql",
                         "db/migration/postgresql/V9__item_temporal_lookup.sql",
                         "db/migration/postgresql/V10__item_graph_evolution.sql",
-                        "db/migration/postgresql/V11__simplified_thread_core_v1.sql");
+                        "db/migration/postgresql/V11__simplified_thread_core_v1.sql",
+                        "db/migration/postgresql/V12__memory_thread_enrichment_input.sql",
+                        "db/migration/postgresql/V13__memory_thread_enqueue_generation.sql",
+                        "db/migration/postgresql/V14__memory_thread_rebuild_epoch.sql");
     }
 
     @Test

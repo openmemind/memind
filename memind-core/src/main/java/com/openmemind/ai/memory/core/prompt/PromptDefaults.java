@@ -25,6 +25,7 @@ import com.openmemind.ai.memory.core.prompt.extraction.item.ToolItemPrompts;
 import com.openmemind.ai.memory.core.prompt.extraction.rawdata.BoundaryDetectionPrompts;
 import com.openmemind.ai.memory.core.prompt.extraction.rawdata.CaptionPrompts;
 import com.openmemind.ai.memory.core.prompt.extraction.rawdata.ConversationSegmentationPrompts;
+import com.openmemind.ai.memory.core.prompt.extraction.thread.ThreadEnrichmentPrompts;
 import com.openmemind.ai.memory.core.prompt.retrieval.InsightTypeRoutingPrompts;
 import com.openmemind.ai.memory.core.prompt.retrieval.IntentRoutingPrompts;
 import com.openmemind.ai.memory.core.prompt.retrieval.QueryRewritePrompts;
@@ -117,6 +118,11 @@ final class PromptDefaults {
                 entry(
                         InteractionGuideSynthesisPrompts::buildDefault,
                         InteractionGuideSynthesisPrompts::buildPreview));
+        builders.put(
+                PromptType.THREAD_ENRICHMENT,
+                entry(
+                        ThreadEnrichmentPrompts::buildDefault,
+                        ThreadEnrichmentPrompts::buildPreview));
         validateExhaustive(builders);
         return builders;
     }

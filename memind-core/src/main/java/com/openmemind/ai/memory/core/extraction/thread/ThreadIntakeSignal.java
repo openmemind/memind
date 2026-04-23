@@ -122,7 +122,10 @@ public record ThreadIntakeSignal(
     }
 
     public record SemanticMarker(
-            MemoryThreadEventType eventType, String summary, Map<String, Object> attributes) {
+            MemoryThreadEventType eventType,
+            String objectRef,
+            String summary,
+            Map<String, Object> attributes) {
 
         public SemanticMarker {
             eventType = Objects.requireNonNull(eventType, "eventType");
@@ -131,7 +134,15 @@ public record ThreadIntakeSignal(
 
         public static SemanticMarker of(
                 MemoryThreadEventType eventType, String summary, Map<String, Object> attributes) {
-            return new SemanticMarker(eventType, summary, attributes);
+            return new SemanticMarker(eventType, null, summary, attributes);
+        }
+
+        public static SemanticMarker of(
+                MemoryThreadEventType eventType,
+                String objectRef,
+                String summary,
+                Map<String, Object> attributes) {
+            return new SemanticMarker(eventType, objectRef, summary, attributes);
         }
 
         public String attribute(String key) {

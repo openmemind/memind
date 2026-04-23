@@ -13,14 +13,18 @@
  */
 package com.openmemind.ai.memory.core.extraction.thread;
 
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadEnrichmentInput;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadEventType;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadType;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadEvent;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -40,8 +44,16 @@ public final class ThreadEventNormalizer {
                     MemoryThreadEventType.SETBACK);
 
     public List<MemoryThreadEvent> normalize(ThreadDecision decision, ThreadIntakeSignal signal) {
+        return normalize(decision, signal, ThreadAdmissionEvidence.none());
+    }
+
+    public List<MemoryThreadEvent> normalize(
+            ThreadDecision decision,
+            ThreadIntakeSignal signal,
+            ThreadAdmissionEvidence evidence) {
         Objects.requireNonNull(decision, "decision");
         Objects.requireNonNull(signal, "signal");
+        Objects.requireNonNull(evidence, "evidence");
         if (decision.action() == ThreadDecision.Action.IGNORE) {
             return List.of();
         }
@@ -53,13 +65,67 @@ public final class ThreadEventNormalizer {
                                 ThreadIntakeSignal.SemanticMarker.of(
                                         defaultEventType(signal), signal.content(), Map.of()));
 
-        return markers.stream().map(marker -> toEvent(decision, signal, marker)).toList();
+        return markers.stream().map(marker -> toEvent(decision, signal, marker, evidence)).toList();
+    }
+
+    public Optional<MemoryThreadEvent> normalizeEnrichment(
+            MemoryThreadEnrichmentInput input,
+            Map<String, MemoryThreadEvent> itemBackedEventsByKey,
+            Map<Long, Instant> itemBackedEventTimeByItemId) {
+        Objects.requireNonNull(input, "input");
+        Objects.requireNonNull(itemBackedEventsByKey, "itemBackedEventsByKey");
+        Objects.requireNonNull(itemBackedEventTimeByItemId, "itemBackedEventTimeByItemId");
+
+        String eventTypeText = stringValue(input.payloadJson().get("eventType"));
+        String basisEventKey = stringValue(input.payloadJson().get("basisEventKey"));
+        if (eventTypeText == null || basisEventKey == null) {
+            return Optional.empty();
+        }
+        MemoryThreadEvent basisEvent = itemBackedEventsByKey.get(basisEventKey);
+        if (basisEvent == null) {
+            return Optional.empty();
+        }
+        MemoryThreadEventType eventType = eventType(eventTypeText);
+        if (eventType == null) {
+            return Optional.empty();
+        }
+
+        List<Long> supportingItemIds = supportingItemIds(input.provenanceJson());
+        Instant eventTime = anchoredEventTime(supportingItemIds, itemBackedEventTimeByItemId);
+        if (eventTime == null) {
+            eventTime = basisEvent.eventTime();
+        }
+        if (eventTime == null) {
+            return Optional.empty();
+        }
+
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>(input.payloadJson());
+        payload.remove("eventType");
+        payload.remove("meaningful");
+        payload.put("basisEventKey", basisEventKey);
+        payload.put("enrichedAgainstMeaningfulEventCount", input.basisMeaningfulEventCount());
+        payload.put("provenance", provenance(input.provenanceJson(), supportingItemIds));
+
+        return Optional.of(
+                new MemoryThreadEvent(
+                        input.memoryId(),
+                        input.threadKey(),
+                        enrichmentEventKey(input),
+                        UNASSIGNED_EVENT_SEQ,
+                        eventType,
+                        eventTime,
+                        Map.copyOf(payload),
+                        1,
+                        booleanValue(input.payloadJson().get("meaningful")),
+                        null,
+                        input.createdAt()));
     }
 
     private MemoryThreadEvent toEvent(
             ThreadDecision decision,
             ThreadIntakeSignal signal,
-            ThreadIntakeSignal.SemanticMarker marker) {
+            ThreadIntakeSignal.SemanticMarker marker,
+            ThreadAdmissionEvidence evidence) {
         return new MemoryThreadEvent(
                 signal.memoryId(),
                 decision.threadKey(),
@@ -67,7 +133,7 @@ public final class ThreadEventNormalizer {
                 UNASSIGNED_EVENT_SEQ,
                 marker.eventType(),
                 signal.eventTime(),
-                payload(signal, marker),
+                payload(signal, marker, evidence),
                 1,
                 MEANINGFUL_TYPES.contains(marker.eventType()),
                 signal.confidence(),
@@ -96,7 +162,9 @@ public final class ThreadEventNormalizer {
     }
 
     private static Map<String, Object> payload(
-            ThreadIntakeSignal signal, ThreadIntakeSignal.SemanticMarker marker) {
+            ThreadIntakeSignal signal,
+            ThreadIntakeSignal.SemanticMarker marker,
+            ThreadAdmissionEvidence evidence) {
         LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
         String summary =
                 marker.summary() != null && !marker.summary().isBlank()
@@ -112,6 +180,15 @@ public final class ThreadEventNormalizer {
         copyIfPresent(payload, "questionKey", marker.attribute("questionKey"));
         copyIfPresent(payload, "milestoneKey", marker.attribute("milestoneKey"));
         copyIfPresent(payload, "resolutionKey", marker.attribute("resolutionKey"));
+        if (!evidence.isEmpty()) {
+            payload.put(
+                    "evidence",
+                    Map.of(
+                            "supportCount",
+                            evidence.supportCount(),
+                            "dominantFamilies",
+                            evidence.dominantFamilies()));
+        }
         payload.put(
                 "sources", List.of(Map.of("sourceType", "ITEM", "itemId", signal.triggerItemId())));
         return Map.copyOf(payload);
@@ -121,5 +198,83 @@ public final class ThreadEventNormalizer {
         if (value != null && !value.isBlank()) {
             payload.put(key, value);
         }
+    }
+
+    private static String enrichmentEventKey(MemoryThreadEnrichmentInput input) {
+        return input.threadKey() + ":enrichment:" + input.inputRunKey() + ":" + input.entrySeq();
+    }
+
+    private static MemoryThreadEventType eventType(String raw) {
+        try {
+            return MemoryThreadEventType.valueOf(raw.toUpperCase(Locale.ROOT));
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private static String stringValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isBlank() ? null : text;
+    }
+
+    private static boolean booleanValue(Object value) {
+        if (value instanceof Boolean flag) {
+            return flag;
+        }
+        if (value instanceof String text) {
+            return Boolean.parseBoolean(text);
+        }
+        return false;
+    }
+
+    private static List<Long> supportingItemIds(Map<String, Object> provenanceJson) {
+        Object supportingItemIds = provenanceJson == null ? null : provenanceJson.get("supportingItemIds");
+        if (!(supportingItemIds instanceof List<?> rawIds)) {
+            return List.of();
+        }
+        List<Long> normalized = new ArrayList<>();
+        for (Object rawId : rawIds) {
+            if (rawId instanceof Number number) {
+                normalized.add(number.longValue());
+                continue;
+            }
+            if (rawId instanceof String text && !text.isBlank()) {
+                try {
+                    normalized.add(Long.parseLong(text));
+                } catch (RuntimeException ignored) {
+                    // Ignore malformed supporting item ids rather than failing replay.
+                }
+            }
+        }
+        return List.copyOf(normalized);
+    }
+
+    private static Instant anchoredEventTime(
+            List<Long> supportingItemIds, Map<Long, Instant> itemBackedEventTimeByItemId) {
+        Instant anchored = null;
+        for (Long supportingItemId : supportingItemIds) {
+            Instant candidate = itemBackedEventTimeByItemId.get(supportingItemId);
+            if (candidate == null) {
+                continue;
+            }
+            if (anchored == null || candidate.isAfter(anchored)) {
+                anchored = candidate;
+            }
+        }
+        return anchored;
+    }
+
+    private static Map<String, Object> provenance(
+            Map<String, Object> provenanceJson, List<Long> supportingItemIds) {
+        LinkedHashMap<String, Object> provenance =
+                new LinkedHashMap<>(provenanceJson == null ? Map.of() : provenanceJson);
+        provenance.put("sourceType", "THREAD_LLM");
+        if (!supportingItemIds.isEmpty()) {
+            provenance.put("supportingItemIds", supportingItemIds);
+        }
+        return Map.copyOf(provenance);
     }
 }

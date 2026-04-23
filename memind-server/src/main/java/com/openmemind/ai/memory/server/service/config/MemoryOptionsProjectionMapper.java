@@ -346,6 +346,26 @@ public class MemoryOptionsProjectionMapper {
                             "How long a memory thread may stay inactive before entering closed"
                                     + " status."),
                     Map.entry(
+                            "memoryThread.enrichment.enabled",
+                            "Whether optional memory-thread enrichment may append replay-safe"
+                                    + " authoritative inputs after deterministic replay."),
+                    Map.entry(
+                            "memoryThread.enrichment.minimumEventCountForFirstEnrichment",
+                            "Minimum thread event count required before the first optional"
+                                    + " enrichment run is allowed."),
+                    Map.entry(
+                            "memoryThread.enrichment.minimumMeaningfulEventDeltaForReenrichment",
+                            "Minimum additional meaningful events required before an already"
+                                    + " enriched thread may run again."),
+                    Map.entry(
+                            "memoryThread.enrichment.minimumWallClockGapBetweenRuns",
+                            "Minimum wall-clock delay required between enrichment runs for the"
+                                    + " same memory thread."),
+                    Map.entry(
+                            "memoryThread.enrichment.timeout",
+                            "Maximum time budget reserved for a single optional memory-thread"
+                                    + " enrichment request before it fails open."),
+                    Map.entry(
                             "retrieval.advanced.rerank.mode",
                             "Reranking mode used when combining retrieval candidates."),
                     Map.entry(

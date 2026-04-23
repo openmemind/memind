@@ -209,6 +209,24 @@ class MemoryVectorDefaultBatchSearchTest {
                 .verify();
     }
 
+    @Test
+    void storeBatchWithCallerSuppliedVectorIdsFallsBackToLegacyBackendIdsWhenNotOverridden() {
+        var vector = new LegacyStoreBatchOnlyMemoryVector(List.of("generated-1", "generated-2"));
+
+        StepVerifier.create(
+                        vector.storeBatch(
+                                MEMORY_ID,
+                                List.of("requested-1", "requested-2"),
+                                List.of("alpha", "beta"),
+                                List.of(
+                                        Map.<String, Object>of("order", 1),
+                                        Map.<String, Object>of("order", 2))))
+                .assertNext(ids -> assertThat(ids).containsExactly("generated-1", "generated-2"))
+                .verifyComplete();
+
+        assertThat(vector.recordedTexts()).containsExactly("alpha", "beta");
+    }
+
     private static VectorSearchRequest request(String query) {
         return new VectorSearchRequest(query, 5, 0.0d, Map.of());
     }
@@ -373,6 +391,63 @@ class MemoryVectorDefaultBatchSearchTest {
                 return Flux.error(new IllegalStateException("simulated delegated search failure"));
             }
             return super.search(memoryId, query, topK, minScore, filter);
+        }
+    }
+
+    private static final class LegacyStoreBatchOnlyMemoryVector implements MemoryVector {
+
+        private final List<String> vectorIds;
+        private final List<String> recordedTexts = new CopyOnWriteArrayList<>();
+
+        private LegacyStoreBatchOnlyMemoryVector(List<String> vectorIds) {
+            this.vectorIds = List.copyOf(vectorIds);
+        }
+
+        @Override
+        public Mono<String> store(MemoryId memoryId, String text, Map<String, Object> metadata) {
+            return Mono.error(new UnsupportedOperationException());
+        }
+
+        @Override
+        public Mono<List<String>> storeBatch(
+                MemoryId memoryId, List<String> texts, List<Map<String, Object>> metadataList) {
+            recordedTexts.addAll(texts);
+            return Mono.just(vectorIds);
+        }
+
+        @Override
+        public Mono<Void> delete(MemoryId memoryId, String vectorId) {
+            return Mono.error(new UnsupportedOperationException());
+        }
+
+        @Override
+        public Mono<Void> deleteBatch(MemoryId memoryId, List<String> vectorIds) {
+            return Mono.error(new UnsupportedOperationException());
+        }
+
+        @Override
+        public Flux<VectorSearchResult> search(MemoryId memoryId, String query, int topK) {
+            return Flux.error(new UnsupportedOperationException());
+        }
+
+        @Override
+        public Flux<VectorSearchResult> search(
+                MemoryId memoryId, String query, int topK, Map<String, Object> filter) {
+            return Flux.error(new UnsupportedOperationException());
+        }
+
+        @Override
+        public Mono<List<Float>> embed(String text) {
+            return Mono.error(new UnsupportedOperationException());
+        }
+
+        @Override
+        public Mono<List<List<Float>>> embedAll(List<String> texts) {
+            return Mono.error(new UnsupportedOperationException());
+        }
+
+        private List<String> recordedTexts() {
+            return recordedTexts;
         }
     }
 }

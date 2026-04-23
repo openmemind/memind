@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.core.extraction.thread;
 
+import com.openmemind.ai.memory.core.builder.MemoryThreadOptions;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadType;
 import java.time.Duration;
 import java.util.Objects;
@@ -23,43 +24,46 @@ import java.util.Objects;
 public record ThreadMaterializationPolicy(
         String version,
         double matchThreshold,
-        double workCreateThreshold,
-        double caseCreateThreshold,
-        double relationshipCreateThreshold,
-        double topicCreateThreshold,
-        Duration dormantAfter) {
+        double minimumCreateScoreAfterTwoHit,
+        int maxCandidateThreads,
+        Duration dormantAfter,
+        Duration closeAfter) {
 
     public ThreadMaterializationPolicy {
         Objects.requireNonNull(version, "version");
         dormantAfter = Objects.requireNonNull(dormantAfter, "dormantAfter");
+        closeAfter = Objects.requireNonNull(closeAfter, "closeAfter");
         validateUnitInterval(matchThreshold, "matchThreshold");
-        validateUnitInterval(workCreateThreshold, "workCreateThreshold");
-        validateUnitInterval(caseCreateThreshold, "caseCreateThreshold");
-        validateUnitInterval(relationshipCreateThreshold, "relationshipCreateThreshold");
-        validateUnitInterval(topicCreateThreshold, "topicCreateThreshold");
+        validateUnitInterval(minimumCreateScoreAfterTwoHit, "minimumCreateScoreAfterTwoHit");
+        if (maxCandidateThreads <= 0) {
+            throw new IllegalArgumentException("maxCandidateThreads must be positive");
+        }
         if (dormantAfter.isNegative() || dormantAfter.isZero()) {
             throw new IllegalArgumentException("dormantAfter must be positive");
+        }
+        if (closeAfter.isNegative() || closeAfter.isZero()) {
+            throw new IllegalArgumentException("closeAfter must be positive");
+        }
+        if (closeAfter.compareTo(dormantAfter) < 0) {
+            throw new IllegalArgumentException("closeAfter must be >= dormantAfter");
         }
     }
 
     public static ThreadMaterializationPolicy v1() {
-        return new ThreadMaterializationPolicy(
-                "thread-core-v1", 0.78d, 0.72d, 0.74d, 0.75d, 0.70d, Duration.ofDays(14));
+        return ThreadMaterializationPolicyFactory.from(MemoryThreadOptions.defaults());
     }
 
-    public double creationThreshold(MemoryThreadType threadType) {
-        return switch (Objects.requireNonNull(threadType, "threadType")) {
-            case WORK -> workCreateThreshold;
-            case CASE -> caseCreateThreshold;
-            case RELATIONSHIP -> relationshipCreateThreshold;
-            case TOPIC -> topicCreateThreshold;
-        };
+    public double createScore(
+            MemoryThreadType threadType, ThreadIntakeSignal.ThreadEligibilityScore eligibility) {
+        Objects.requireNonNull(threadType, "threadType");
+        Objects.requireNonNull(eligibility, "eligibility");
+        return eligibility.scoreFor(threadType);
     }
 
     public boolean isEligible(ThreadIntakeSignal signal) {
         Objects.requireNonNull(signal, "signal");
-        return signal.eligibility().scoreFor(signal.threadType())
-                >= creationThreshold(signal.threadType());
+        return createScore(signal.threadType(), signal.eligibility())
+                >= minimumCreateScoreAfterTwoHit;
     }
 
     private static void validateUnitInterval(double value, String field) {

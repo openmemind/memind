@@ -15,11 +15,15 @@ package com.openmemind.ai.memory.core.extraction.thread;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadProjectionState;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadProjection;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadRuntimeState;
 import com.openmemind.ai.memory.core.store.graph.GraphOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
+import com.openmemind.ai.memory.core.store.thread.NoOpThreadEnrichmentInputStore;
+import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentInputStore;
 import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,17 +39,62 @@ public class ThreadProjectionRebuilder {
     private final ThreadMaterializationPolicy policy;
     private final ItemOperations itemOperations;
     private final ThreadProjectionMaterializer materializer;
+    private final ThreadReplaySuccessListener replaySuccessListener;
+    private final ThreadDerivationMetrics metrics;
 
     public ThreadProjectionRebuilder(
             ThreadProjectionStore store,
             ItemOperations itemOperations,
             GraphOperations graphOperations,
             ThreadMaterializationPolicy policy) {
+        this(
+                store,
+                itemOperations,
+                graphOperations,
+                NoOpThreadEnrichmentInputStore.INSTANCE,
+                policy,
+                ThreadReplaySuccessListener.NOOP,
+                ThreadDerivationMetrics.NOOP);
+    }
+
+    public ThreadProjectionRebuilder(
+            ThreadProjectionStore store,
+            ItemOperations itemOperations,
+            GraphOperations graphOperations,
+            ThreadEnrichmentInputStore enrichmentInputStore,
+            ThreadMaterializationPolicy policy,
+            ThreadReplaySuccessListener replaySuccessListener) {
+        this(
+                store,
+                itemOperations,
+                graphOperations,
+                enrichmentInputStore,
+                policy,
+                replaySuccessListener,
+                ThreadDerivationMetrics.NOOP);
+    }
+
+    public ThreadProjectionRebuilder(
+            ThreadProjectionStore store,
+            ItemOperations itemOperations,
+            GraphOperations graphOperations,
+            ThreadEnrichmentInputStore enrichmentInputStore,
+            ThreadMaterializationPolicy policy,
+            ThreadReplaySuccessListener replaySuccessListener,
+            ThreadDerivationMetrics metrics) {
         this.store = Objects.requireNonNull(store, "store");
         this.itemOperations = Objects.requireNonNull(itemOperations, "itemOperations");
         this.policy = Objects.requireNonNull(policy, "policy");
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.materializer =
-                new ThreadProjectionMaterializer(itemOperations, graphOperations, policy);
+                new ThreadProjectionMaterializer(
+                        itemOperations,
+                        Objects.requireNonNull(graphOperations, "graphOperations"),
+                        Objects.requireNonNull(enrichmentInputStore, "enrichmentInputStore"),
+                        policy,
+                        metrics);
+        this.replaySuccessListener =
+                Objects.requireNonNull(replaySuccessListener, "replaySuccessListener");
     }
 
     public void rebuild(MemoryId memoryId) {
@@ -66,23 +115,39 @@ public class ThreadProjectionRebuilder {
         if (!store.beginRebuild(memoryId, policy.version(), rebuildCutoffItemId)) {
             return;
         }
+        List<Long> coveredTriggerItemIds =
+                store.listOutbox(memoryId).stream()
+                        .map(entry -> entry.triggerItemId())
+                        .filter(triggerItemId -> triggerItemId <= rebuildCutoffItemId)
+                        .sorted()
+                        .toList();
 
         try {
             ThreadProjectionMaterializer.MaterializedProjection projection =
                     materializer.materializeUpTo(memoryId, rebuildCutoffItemId);
             Instant finalizedAt = Instant.now();
-            store.finalizeOutboxSkippedPrefix(memoryId, rebuildCutoffItemId, finalizedAt);
             MemoryThreadRuntimeState current = store.getRuntime(memoryId).orElse(null);
             Long lastProcessedItemId =
                     projection.lastProcessedItemId() != null
                             ? projection.lastProcessedItemId()
                             : (rebuildCutoffItemId > 0L ? rebuildCutoffItemId : null);
-            store.replaceProjection(
+            store.commitRebuildReplaySuccess(
                     memoryId,
+                    rebuildCutoffItemId,
                     projection.threads(),
                     projection.events(),
                     projection.memberships(),
                     availableRuntime(memoryId, current, lastProcessedItemId, finalizedAt),
+                    finalizedAt);
+            metrics.onReplayPublished(ThreadReplayOrigin.REBUILD);
+            if (containsGroupRelationshipThread(projection.threads())) {
+                metrics.onGroupRelationshipPublished();
+            }
+            notifyReplaySuccess(
+                    memoryId,
+                    coveredTriggerItemIds,
+                    projection,
+                    rebuildCutoffItemId,
                     finalizedAt);
         } catch (RuntimeException e) {
             log.warn(
@@ -109,8 +174,40 @@ public class ThreadProjectionRebuilder {
                 lastProcessedItemId,
                 false,
                 null,
+                current != null ? current.rebuildEpoch() : 0L,
                 policy.version(),
                 null,
                 updatedAt);
+    }
+
+    private void notifyReplaySuccess(
+            MemoryId memoryId,
+            List<Long> coveredTriggerItemIds,
+            ThreadProjectionMaterializer.MaterializedProjection projection,
+            long cutoffItemId,
+            Instant finalizedAt) {
+        try {
+            replaySuccessListener.afterSuccessfulReplay(
+                    new ThreadReplaySuccessContext(
+                            memoryId,
+                            ThreadReplayOrigin.REBUILD,
+                            cutoffItemId,
+                            coveredTriggerItemIds,
+                            projection.threads(),
+                            projection.events(),
+                            projection.memberships(),
+                            policy.version(),
+                            finalizedAt));
+        } catch (RuntimeException error) {
+            log.warn(
+                    "Thread replay success listener failed open for memoryId={} cutoff={}",
+                    memoryId,
+                    cutoffItemId,
+                    error);
+        }
+    }
+
+    private static boolean containsGroupRelationshipThread(List<MemoryThreadProjection> threads) {
+        return threads.stream().anyMatch(thread -> "relationship_group".equals(thread.anchorKind()));
     }
 }

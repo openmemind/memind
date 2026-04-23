@@ -21,7 +21,6 @@ import com.openmemind.ai.memory.core.data.thread.MemoryThreadMembership;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadProjection;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -44,14 +43,18 @@ public final class ThreadStructuralReducer {
             MemoryThreadProjection current,
             List<MemoryThreadEvent> orderedEvents,
             List<MemoryThreadMembership> memberships) {
+        return reduce(current, orderedEvents, memberships, Instant.now());
+    }
+
+    public MemoryThreadProjection reduce(
+            MemoryThreadProjection current,
+            List<MemoryThreadEvent> orderedEvents,
+            List<MemoryThreadMembership> memberships,
+            Instant now) {
         Objects.requireNonNull(current, "current");
+        Objects.requireNonNull(now, "now");
         List<MemoryThreadEvent> events =
-                (orderedEvents == null ? List.<MemoryThreadEvent>of() : orderedEvents)
-                        .stream()
-                                .sorted(
-                                        Comparator.comparing(MemoryThreadEvent::eventTime)
-                                                .thenComparing(MemoryThreadEvent::eventKey))
-                                .toList();
+                orderedEvents == null ? List.of() : List.copyOf(orderedEvents);
         List<MemoryThreadMembership> memberRows =
                 memberships == null ? List.of() : List.copyOf(memberships);
 
@@ -65,10 +68,15 @@ public final class ThreadStructuralReducer {
 
         MemoryThreadObjectState objectState = state.objectState();
         MemoryThreadLifecycleStatus lifecycleStatus =
-                state.lifecycleStatus(objectState, lastEventAt);
+                state.lifecycleStatus(objectState, lastEventAt, now, policy);
         Instant closedAt =
-                lifecycleStatus == MemoryThreadLifecycleStatus.CLOSED ? state.resolvedAt : null;
-        String headline = state.latestSummary(current.headline());
+                lifecycleStatus == MemoryThreadLifecycleStatus.CLOSED
+                        ? (state.resolvedAt != null ? state.resolvedAt : lastEventAt)
+                        : null;
+        String headline =
+                state.latestSummary(
+                        ThreadHeadlineFormatter.format(current.anchorKind(), current.anchorKey()),
+                        current.headline());
 
         return new MemoryThreadProjection(
                 current.memoryId(),
@@ -97,21 +105,27 @@ public final class ThreadStructuralReducer {
         private final List<String> salientFacts = new ArrayList<>();
         private final Set<String> openBlockers = new LinkedHashSet<>();
         private final MemoryThreadProjection current;
-        private String latestSummary;
+        private String latestSemanticSummary;
+        private String latestRawSummary;
         private Instant lastMeaningfulUpdateAt;
         private Instant resolvedAt;
         private boolean contradictedAfterResolution;
+        private Map<String, Object> latestEvidence;
+        private Map<String, Object> latestEnrichment;
 
         private ReducerState(MemoryThreadProjection current) {
             this.current = current;
-            this.latestSummary = current.headline();
+            this.latestRawSummary = current.headline();
         }
 
         private void apply(MemoryThreadEvent event) {
             String summary = summary(event);
             if (summary != null && !summary.isBlank()) {
-                latestSummary = summary;
-                if (salientFacts.size() < 5) {
+                latestRawSummary = summary;
+                if (isSemanticHeadline(event)) {
+                    latestSemanticSummary = summary;
+                }
+                if (!isHeadlineRefresh(event) && salientFacts.size() < 5) {
                     salientFacts.add(summary);
                 }
             }
@@ -121,6 +135,14 @@ public final class ThreadStructuralReducer {
                         && event.eventType() != MemoryThreadEventType.RESOLUTION_DECLARED) {
                     contradictedAfterResolution = true;
                 }
+            }
+            Map<String, Object> evidence = evidence(event);
+            if (evidence != null) {
+                latestEvidence = evidence;
+            }
+            Map<String, Object> enrichment = enrichment(event);
+            if (enrichment != null) {
+                latestEnrichment = enrichment;
             }
             switch (event.eventType()) {
                 case BLOCKER_ADDED -> openBlockers.add(key(event, "blockerKey"));
@@ -150,21 +172,38 @@ public final class ThreadStructuralReducer {
         }
 
         private MemoryThreadLifecycleStatus lifecycleStatus(
-                MemoryThreadObjectState objectState, Instant lastEventAt) {
+                MemoryThreadObjectState objectState,
+                Instant lastEventAt,
+                Instant now,
+                ThreadMaterializationPolicy policy) {
             if (objectState == MemoryThreadObjectState.RESOLVED) {
                 return MemoryThreadLifecycleStatus.CLOSED;
             }
-            if (lastMeaningfulUpdateAt != null) {
-                return MemoryThreadLifecycleStatus.ACTIVE;
+            if (lastEventAt == null) {
+                return current.lifecycleStatus();
             }
-            if (lastEventAt != null) {
+            Instant dormantCutoff = now.minus(policy.dormantAfter());
+            Instant closeCutoff = now.minus(policy.closeAfter());
+            if (lastEventAt.isBefore(closeCutoff)) {
+                return MemoryThreadLifecycleStatus.CLOSED;
+            }
+            if (lastEventAt.isBefore(dormantCutoff)) {
                 return MemoryThreadLifecycleStatus.DORMANT;
             }
-            return current.lifecycleStatus();
+            return MemoryThreadLifecycleStatus.ACTIVE;
         }
 
-        private String latestSummary(String fallback) {
-            return latestSummary != null && !latestSummary.isBlank() ? latestSummary : fallback;
+        private String latestSummary(String deterministicFallback, String rawFallback) {
+            if (latestSemanticSummary != null && !latestSemanticSummary.isBlank()) {
+                return latestSemanticSummary;
+            }
+            if (deterministicFallback != null && !deterministicFallback.isBlank()) {
+                return deterministicFallback;
+            }
+            if (latestRawSummary != null && !latestRawSummary.isBlank()) {
+                return latestRawSummary;
+            }
+            return rawFallback;
         }
 
         private Map<String, Object> snapshot(
@@ -172,6 +211,12 @@ public final class ThreadStructuralReducer {
             LinkedHashMap<String, Object> facets = new LinkedHashMap<>();
             if (!openBlockers.isEmpty()) {
                 facets.put("openBlockers", List.copyOf(openBlockers));
+            }
+            if (latestEvidence != null) {
+                facets.put("evidence", latestEvidence);
+            }
+            if (latestEnrichment != null) {
+                facets.put("enrichment", latestEnrichment);
             }
             facets.put("memberCount", memberCount);
 
@@ -191,6 +236,71 @@ public final class ThreadStructuralReducer {
         private static String summary(MemoryThreadEvent event) {
             Object value = event.eventPayloadJson().get("summary");
             return value == null ? null : String.valueOf(value);
+        }
+
+        private static Map<String, Object> evidence(MemoryThreadEvent event) {
+            Object value = event.eventPayloadJson().get("evidence");
+            if (!(value instanceof Map<?, ?> rawEvidence)) {
+                return null;
+            }
+            LinkedHashMap<String, Object> evidence = new LinkedHashMap<>();
+            Object supportCount = rawEvidence.get("supportCount");
+            if (supportCount instanceof Number number) {
+                evidence.put("supportCount", number.intValue());
+            }
+            Object dominantFamilies = rawEvidence.get("dominantFamilies");
+            if (dominantFamilies instanceof List<?> families) {
+                evidence.put(
+                        "dominantFamilies",
+                        families.stream().map(String::valueOf).toList());
+            }
+            return evidence.isEmpty() ? null : Map.copyOf(evidence);
+        }
+
+        private static boolean isHeadlineRefresh(MemoryThreadEvent event) {
+            Object value = event.eventPayloadJson().get("summaryRole");
+            return value != null && "HEADLINE_REFRESH".equals(String.valueOf(value));
+        }
+
+        private static boolean isSemanticHeadline(MemoryThreadEvent event) {
+            return isHeadlineRefresh(event)
+                    || event.meaningful()
+                    || hasSemanticField(event, "state")
+                    || hasSemanticField(event, "fromState")
+                    || hasSemanticField(event, "toState")
+                    || hasSemanticField(event, "blockerKey")
+                    || hasSemanticField(event, "decisionKey")
+                    || hasSemanticField(event, "questionKey")
+                    || hasSemanticField(event, "milestoneKey")
+                    || hasSemanticField(event, "resolutionKey");
+        }
+
+        private static boolean hasSemanticField(MemoryThreadEvent event, String field) {
+            Object value = event.eventPayloadJson().get(field);
+            return value != null && !String.valueOf(value).isBlank();
+        }
+
+        private static Map<String, Object> enrichment(MemoryThreadEvent event) {
+            Object provenanceValue = event.eventPayloadJson().get("provenance");
+            if (!(provenanceValue instanceof Map<?, ?> provenanceMap)) {
+                return null;
+            }
+            Object sourceType = provenanceMap.get("sourceType");
+            if (!"THREAD_LLM".equals(String.valueOf(sourceType))) {
+                return null;
+            }
+
+            LinkedHashMap<String, Object> enrichment = new LinkedHashMap<>();
+            Object meaningfulCount =
+                    event.eventPayloadJson().get("enrichedAgainstMeaningfulEventCount");
+            if (meaningfulCount instanceof Number number) {
+                enrichment.put("lastEnrichedMeaningfulEventCount", number.longValue());
+            }
+            if (event.createdAt() != null) {
+                enrichment.put("lastEnrichedAt", event.createdAt().toString());
+            }
+            enrichment.put("headlineSource", "THREAD_LLM");
+            return Map.copyOf(enrichment);
         }
     }
 }

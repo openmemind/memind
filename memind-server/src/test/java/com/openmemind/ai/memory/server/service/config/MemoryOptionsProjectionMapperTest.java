@@ -209,6 +209,47 @@ class MemoryOptionsProjectionMapperTest {
     }
 
     @Test
+    void projectionExposesMemoryThreadEnrichmentKeysAndRoundTripsValues() {
+        var projection = mapper.toProjection(MemoryBuildOptions.defaults());
+
+        assertThat(projection.get("memoryThread"))
+                .extracting(MemoryOptionItemView::key)
+                .contains(
+                        "memoryThread.enrichment.enabled",
+                        "memoryThread.enrichment.minimumEventCountForFirstEnrichment",
+                        "memoryThread.enrichment.minimumMeaningfulEventDeltaForReenrichment",
+                        "memoryThread.enrichment.minimumWallClockGapBetweenRuns",
+                        "memoryThread.enrichment.timeout");
+
+        updateValue(projection, "memoryThread.enrichment.enabled", true);
+        updateValue(projection, "memoryThread.enrichment.minimumEventCountForFirstEnrichment", 3);
+        updateValue(
+                projection,
+                "memoryThread.enrichment.minimumMeaningfulEventDeltaForReenrichment",
+                4);
+        updateValue(
+                projection,
+                "memoryThread.enrichment.minimumWallClockGapBetweenRuns",
+                "PT20M");
+        updateValue(projection, "memoryThread.enrichment.timeout", "PT7S");
+
+        var rebuilt = mapper.toOptions(projection);
+
+        assertThat(rebuilt.memoryThread().enrichment().enabled()).isTrue();
+        assertThat(rebuilt.memoryThread().enrichment().minimumEventCountForFirstEnrichment())
+                .isEqualTo(3);
+        assertThat(
+                        rebuilt.memoryThread()
+                                .enrichment()
+                                .minimumMeaningfulEventDeltaForReenrichment())
+                .isEqualTo(4);
+        assertThat(rebuilt.memoryThread().enrichment().minimumWallClockGapBetweenRuns())
+                .isEqualTo(java.time.Duration.ofMinutes(20));
+        assertThat(rebuilt.memoryThread().enrichment().timeout())
+                .isEqualTo(java.time.Duration.ofSeconds(7));
+    }
+
+    @Test
     void projectionUsesJsonFriendlyShapesForStructuredItemGraphValues() {
         var projection = mapper.toProjection(MemoryBuildOptions.defaults());
 

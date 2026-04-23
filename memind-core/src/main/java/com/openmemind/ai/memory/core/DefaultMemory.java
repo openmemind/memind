@@ -33,7 +33,7 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationCont
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.thread.MemoryThreadLayer;
-import com.openmemind.ai.memory.core.extraction.thread.ThreadMaterializationPolicy;
+import com.openmemind.ai.memory.core.extraction.thread.ThreadMaterializationPolicyFactory;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
@@ -512,7 +512,10 @@ public class DefaultMemory implements Memory {
         }
         memoryStore
                 .threadOperations()
-                .ensureRuntime(memoryId, ThreadMaterializationPolicy.v1().version());
+                .ensureRuntime(
+                        memoryId,
+                        ThreadMaterializationPolicyFactory.from(buildOptions.memoryThread())
+                                .version());
         return MemoryThreadRuntimeStatus.fromRuntimeState(
                 memoryStore.threadOperations().getRuntime(memoryId).orElse(null), true, true, null);
     }

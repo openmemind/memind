@@ -36,6 +36,7 @@ public class MemoryThreadRuntimeDO {
     private Boolean rebuildInProgress;
 
     private Long rebuildCutoffItemId;
+    private Long rebuildEpoch;
     private String materializationPolicyVersion;
     private String invalidationReason;
 
@@ -104,6 +105,14 @@ public class MemoryThreadRuntimeDO {
 
     public void setRebuildCutoffItemId(Long rebuildCutoffItemId) {
         this.rebuildCutoffItemId = rebuildCutoffItemId;
+    }
+
+    public Long getRebuildEpoch() {
+        return rebuildEpoch;
+    }
+
+    public void setRebuildEpoch(Long rebuildEpoch) {
+        this.rebuildEpoch = rebuildEpoch;
     }
 
     public String getMaterializationPolicyVersion() {

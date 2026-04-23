@@ -20,12 +20,14 @@ public record MemoryThreadOptions(
         boolean enabled,
         MemoryThreadDerivationOptions derivation,
         MemoryThreadRuleOptions rule,
-        MemoryThreadLifecycleOptions lifecycle) {
+        MemoryThreadLifecycleOptions lifecycle,
+        MemoryThreadEnrichmentOptions enrichment) {
 
     public MemoryThreadOptions {
         derivation = derivation != null ? derivation : MemoryThreadDerivationOptions.defaults();
         rule = rule != null ? rule : MemoryThreadRuleOptions.defaults();
         lifecycle = lifecycle != null ? lifecycle : MemoryThreadLifecycleOptions.defaults();
+        enrichment = enrichment != null ? enrichment : MemoryThreadEnrichmentOptions.defaults();
     }
 
     public static MemoryThreadOptions defaults() {
@@ -33,22 +35,35 @@ public record MemoryThreadOptions(
                 false,
                 MemoryThreadDerivationOptions.defaults(),
                 MemoryThreadRuleOptions.defaults(),
-                MemoryThreadLifecycleOptions.defaults());
+                MemoryThreadLifecycleOptions.defaults(),
+                MemoryThreadEnrichmentOptions.defaults());
+    }
+
+    public MemoryThreadOptions(
+            boolean enabled,
+            MemoryThreadDerivationOptions derivation,
+            MemoryThreadRuleOptions rule,
+            MemoryThreadLifecycleOptions lifecycle) {
+        this(enabled, derivation, rule, lifecycle, MemoryThreadEnrichmentOptions.defaults());
     }
 
     public MemoryThreadOptions withEnabled(boolean enabled) {
-        return new MemoryThreadOptions(enabled, derivation, rule, lifecycle);
+        return new MemoryThreadOptions(enabled, derivation, rule, lifecycle, enrichment);
     }
 
     public MemoryThreadOptions withDerivation(MemoryThreadDerivationOptions derivation) {
-        return new MemoryThreadOptions(enabled, derivation, rule, lifecycle);
+        return new MemoryThreadOptions(enabled, derivation, rule, lifecycle, enrichment);
     }
 
     public MemoryThreadOptions withRule(MemoryThreadRuleOptions rule) {
-        return new MemoryThreadOptions(enabled, derivation, rule, lifecycle);
+        return new MemoryThreadOptions(enabled, derivation, rule, lifecycle, enrichment);
     }
 
     public MemoryThreadOptions withLifecycle(MemoryThreadLifecycleOptions lifecycle) {
-        return new MemoryThreadOptions(enabled, derivation, rule, lifecycle);
+        return new MemoryThreadOptions(enabled, derivation, rule, lifecycle, enrichment);
+    }
+
+    public MemoryThreadOptions withEnrichment(MemoryThreadEnrichmentOptions enrichment) {
+        return new MemoryThreadOptions(enabled, derivation, rule, lifecycle, enrichment);
     }
 }

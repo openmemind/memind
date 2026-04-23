@@ -29,6 +29,7 @@ public record MemoryThreadRuntimeState(
         Long lastProcessedItemId,
         boolean rebuildInProgress,
         Long rebuildCutoffItemId,
+        long rebuildEpoch,
         String materializationPolicyVersion,
         String invalidationReason,
         Instant updatedAt) {
@@ -43,6 +44,9 @@ public record MemoryThreadRuntimeState(
         }
         if (failedCount < 0) {
             throw new IllegalArgumentException("failedCount must be non-negative");
+        }
+        if (rebuildEpoch < 0) {
+            throw new IllegalArgumentException("rebuildEpoch must be non-negative");
         }
     }
 }

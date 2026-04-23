@@ -23,6 +23,7 @@ import java.util.Objects;
 public record MemoryThreadIntakeOutboxEntry(
         String memoryId,
         long triggerItemId,
+        long enqueueGeneration,
         MemoryThreadIntakeStatus status,
         int attemptCount,
         Instant claimedAt,
@@ -37,6 +38,9 @@ public record MemoryThreadIntakeOutboxEntry(
         status = Objects.requireNonNull(status, "status");
         if (triggerItemId <= 0) {
             throw new IllegalArgumentException("triggerItemId must be positive");
+        }
+        if (enqueueGeneration <= 0) {
+            throw new IllegalArgumentException("enqueueGeneration must be positive");
         }
         if (attemptCount < 0) {
             throw new IllegalArgumentException("attemptCount must be non-negative");

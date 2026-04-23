@@ -13,11 +13,12 @@
  */
 package com.openmemind.ai.memory.core.extraction.thread;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.builder.MemoryThreadDerivationOptions;
@@ -42,11 +43,12 @@ import reactor.test.StepVerifier;
 class MemoryThreadLayerTest {
 
     @Test
-    void extractEnqueuesCommittedItemsAndWakesWorkerWithoutBlockingItemWrites() {
+    void extractEnqueuesCommittedItemsAndSchedulesWakeWithoutBlockingItemWrites() {
         MemoryItemExtractStep delegate = mock(MemoryItemExtractStep.class);
         ThreadProjectionStore store = mock(ThreadProjectionStore.class);
-        ThreadIntakeWorker worker = mock(ThreadIntakeWorker.class);
-        MemoryThreadLayer layer = new MemoryThreadLayer(delegate, store, worker, enabledOptions());
+        ThreadWakeScheduler scheduler = mock(ThreadWakeScheduler.class);
+        MemoryThreadLayer layer =
+                new MemoryThreadLayer(delegate, store, scheduler, null, enabledOptions());
         MemoryItem item = item(101L, "Started seeing friends again");
         MemoryItemResult result = new MemoryItemResult(List.of(item), List.of());
         when(delegate.extract(
@@ -63,17 +65,21 @@ class MemoryThreadLayerTest {
                 .expectNext(result)
                 .verifyComplete();
 
-        verify(store).ensureRuntime(TestMemoryIds.userAgent(), "thread-core-v1");
+        verify(store)
+                .ensureRuntime(
+                        TestMemoryIds.userAgent(),
+                        ThreadMaterializationPolicyFactory.from(enabledOptions()).version());
         verify(store).enqueue(TestMemoryIds.userAgent(), 101L);
-        verify(worker).wake(TestMemoryIds.userAgent());
+        verify(scheduler).schedule(TestMemoryIds.userAgent());
     }
 
     @Test
     void enqueueFailureMarksRuntimeRebuildRequiredWithoutFailingExtraction() {
         MemoryItemExtractStep delegate = mock(MemoryItemExtractStep.class);
         ThreadProjectionStore store = mock(ThreadProjectionStore.class);
-        ThreadIntakeWorker worker = mock(ThreadIntakeWorker.class);
-        MemoryThreadLayer layer = new MemoryThreadLayer(delegate, store, worker, enabledOptions());
+        ThreadWakeScheduler scheduler = mock(ThreadWakeScheduler.class);
+        MemoryThreadLayer layer =
+                new MemoryThreadLayer(delegate, store, scheduler, null, enabledOptions());
         MemoryItem item = item(201L, "Alice followed up again");
         MemoryItemResult result = new MemoryItemResult(List.of(item), List.of());
         when(delegate.extract(
@@ -94,7 +100,105 @@ class MemoryThreadLayerTest {
                 .verifyComplete();
 
         verify(store).markRebuildRequired(TestMemoryIds.userAgent(), "enqueue failure");
-        verify(worker, never()).wake(TestMemoryIds.userAgent());
+        verifyNoInteractions(scheduler);
+    }
+
+    @Test
+    void flushDelegatesToSchedulerWhenEnabled() {
+        MemoryItemExtractStep delegate = mock(MemoryItemExtractStep.class);
+        ThreadProjectionStore store = mock(ThreadProjectionStore.class);
+        ThreadWakeScheduler scheduler = mock(ThreadWakeScheduler.class);
+        MemoryThreadLayer layer =
+                new MemoryThreadLayer(delegate, store, scheduler, null, enabledOptions());
+
+        layer.flush(TestMemoryIds.userAgent());
+
+        verify(scheduler).flush(TestMemoryIds.userAgent());
+    }
+
+    @Test
+    void closeDelegatesSchedulerShutdown() {
+        MemoryItemExtractStep delegate = mock(MemoryItemExtractStep.class);
+        ThreadProjectionStore store = mock(ThreadProjectionStore.class);
+        ThreadWakeScheduler scheduler = mock(ThreadWakeScheduler.class);
+        MemoryThreadLayer layer =
+                new MemoryThreadLayer(delegate, store, scheduler, null, enabledOptions());
+
+        layer.close();
+        layer.close();
+
+        verify(scheduler).close();
+    }
+
+    @Test
+    void enqueueRecordsWakeScheduledMetric() {
+        MemoryItemExtractStep delegate = mock(MemoryItemExtractStep.class);
+        ThreadProjectionStore store = mock(ThreadProjectionStore.class);
+        ThreadWakeScheduler scheduler = mock(ThreadWakeScheduler.class);
+        RecordingThreadDerivationMetrics metrics = new RecordingThreadDerivationMetrics();
+        MemoryThreadLayer layer =
+                new MemoryThreadLayer(
+                        delegate,
+                        store,
+                        scheduler,
+                        null,
+                        enabledOptions(),
+                        ThreadMaterializationPolicyFactory.from(enabledOptions()),
+                        metrics);
+        MemoryItem item = item(301L, "Started seeing friends again");
+        MemoryItemResult result = new MemoryItemResult(List.of(item), List.of());
+        when(delegate.extract(
+                        eq(TestMemoryIds.userAgent()),
+                        eq(RawDataResult.empty()),
+                        eq(ItemExtractionConfig.defaults())))
+                .thenReturn(Mono.just(result));
+
+        StepVerifier.create(
+                        layer.extract(
+                                TestMemoryIds.userAgent(),
+                                RawDataResult.empty(),
+                                ItemExtractionConfig.defaults()))
+                .expectNext(result)
+                .verifyComplete();
+
+        assertThat(metrics.wakeScheduledCount()).isEqualTo(1);
+    }
+
+    @Test
+    void scheduleFailureRecordsWakeSubmissionFailureWithoutFailingExtraction() {
+        MemoryItemExtractStep delegate = mock(MemoryItemExtractStep.class);
+        ThreadProjectionStore store = mock(ThreadProjectionStore.class);
+        ThreadWakeScheduler scheduler = mock(ThreadWakeScheduler.class);
+        RecordingThreadDerivationMetrics metrics = new RecordingThreadDerivationMetrics();
+        MemoryThreadLayer layer =
+                new MemoryThreadLayer(
+                        delegate,
+                        store,
+                        scheduler,
+                        null,
+                        enabledOptions(),
+                        ThreadMaterializationPolicyFactory.from(enabledOptions()),
+                        metrics);
+        MemoryItem item = item(302L, "Started seeing friends again");
+        MemoryItemResult result = new MemoryItemResult(List.of(item), List.of());
+        when(delegate.extract(
+                        eq(TestMemoryIds.userAgent()),
+                        eq(RawDataResult.empty()),
+                        eq(ItemExtractionConfig.defaults())))
+                .thenReturn(Mono.just(result));
+        doThrow(new IllegalStateException("scheduler boom"))
+                .when(scheduler)
+                .schedule(TestMemoryIds.userAgent());
+
+        StepVerifier.create(
+                        layer.extract(
+                                TestMemoryIds.userAgent(),
+                                RawDataResult.empty(),
+                                ItemExtractionConfig.defaults()))
+                .expectNext(result)
+                .verifyComplete();
+
+        assertThat(metrics.wakeSubmissionFailedCount()).isEqualTo(1);
     }
 
     private static MemoryItem item(Long id, String content) {

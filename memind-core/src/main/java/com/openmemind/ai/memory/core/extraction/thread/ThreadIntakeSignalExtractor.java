@@ -14,27 +14,42 @@
 package com.openmemind.ai.memory.core.extraction.thread;
 
 import com.openmemind.ai.memory.core.data.MemoryItem;
-import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
-import com.openmemind.ai.memory.core.data.enums.MemoryThreadType;
+import com.openmemind.ai.memory.core.extraction.thread.marker.ThreadSemanticMarker;
+import com.openmemind.ai.memory.core.extraction.thread.marker.ThreadSemanticMarkerReader;
 import com.openmemind.ai.memory.core.store.graph.EntityCooccurrence;
 import com.openmemind.ai.memory.core.store.graph.ItemEntityMention;
 import com.openmemind.ai.memory.core.store.graph.ItemLink;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Pure signal extraction from committed item and graph evidence.
  */
 public final class ThreadIntakeSignalExtractor {
 
-    private final ThreadMaterializationPolicy policy;
+    private static final Logger log = LoggerFactory.getLogger(ThreadIntakeSignalExtractor.class);
+
+    private final List<ThreadAnchorProvider> providers;
+    private final ThreadDerivationMetrics metrics;
 
     public ThreadIntakeSignalExtractor(ThreadMaterializationPolicy policy) {
-        this.policy = Objects.requireNonNull(policy, "policy");
+        this(policy, ThreadDerivationMetrics.NOOP);
+    }
+
+    ThreadIntakeSignalExtractor(
+            ThreadMaterializationPolicy policy, ThreadDerivationMetrics metrics) {
+        Objects.requireNonNull(policy, "policy");
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.providers =
+                List.of(
+                        new RelationshipAnchorProvider(),
+                        new GroupRelationshipAnchorProvider(),
+                        new TopicAnchorProvider(),
+                        new MetadataCanonicalRefAnchorProvider());
     }
 
     public List<ThreadIntakeSignal> extract(
@@ -47,149 +62,51 @@ public final class ThreadIntakeSignalExtractor {
         List<ItemLink> linkRows = adjacentLinks == null ? List.of() : List.copyOf(adjacentLinks);
         List<EntityCooccurrence> cooccurrenceRows =
                 cooccurrences == null ? List.of() : List.copyOf(cooccurrences);
+        ThreadSemanticMarker.SemanticsEnvelope semantics =
+                ThreadSemanticMarkerReader.read(triggerItem.metadata());
 
-        Set<String> entityKeys = new LinkedHashSet<>();
-        for (ItemEntityMention mention : mentionRows) {
-            if (Objects.equals(triggerItem.id(), mention.itemId())) {
-                entityKeys.add(mention.entityKey());
+        Instant semanticTime = ThreadEventTimeResolver.resolve(triggerItem);
+        if (semanticTime == null) {
+            log.warn(
+                    "Skipping thread signal extraction because item lacks authoritative time:"
+                            + " memoryId={} itemId={}",
+                    triggerItem.memoryId(),
+                    triggerItem.id());
+            return List.of();
+        }
+        ThreadAnchorContext context =
+                new ThreadAnchorContext(
+                        triggerItem,
+                        mentionRows,
+                        linkRows,
+                        cooccurrenceRows,
+                        semantics,
+                        semanticTime);
+        ArrayList<ThreadIntakeSignal> signals = new ArrayList<>();
+        for (ThreadAnchorProvider provider : providers) {
+            List<ThreadIntakeSignal> emitted = provider.extract(context);
+            if (!emitted.isEmpty()) {
+                metrics.onProviderHit(providerName(provider));
+                signals.addAll(emitted);
             }
         }
-
-        Instant semanticTime = semanticTime(triggerItem);
-        ArrayList<ThreadIntakeSignal> signals = new ArrayList<>();
-
-        List<String> relationshipParticipants =
-                entityKeys.stream()
-                        .filter(ThreadIntakeSignalExtractor::isRelationshipParticipant)
-                        .sorted()
-                        .toList();
-        if (validRelationshipPair(relationshipParticipants)) {
-            signals.add(
-                    new ThreadIntakeSignal(
-                            triggerItem.memoryId(),
-                            triggerItem.id(),
-                            triggerItem.content(),
-                            semanticTime,
-                            MemoryThreadType.RELATIONSHIP,
-                            List.of(
-                                    new ThreadIntakeSignal.AnchorCandidate(
-                                            "relationship", null, relationshipParticipants, 1.0d)),
-                            new ThreadIntakeSignal.ThreadEligibilityScore(
-                                    1.0d,
-                                    relationshipContinuity(
-                                            relationshipParticipants, linkRows, cooccurrenceRows),
-                                    statefulness(triggerItem)),
-                            List.of(triggerItem.id()),
-                            List.of(),
-                            List.of(),
-                            0.95d));
-        }
-
-        entityKeys.stream()
-                .filter(entityKey -> entityKey.startsWith("concept:"))
-                .sorted()
-                .findFirst()
-                .ifPresent(
-                        conceptKey ->
-                                signals.add(
-                                        new ThreadIntakeSignal(
-                                                triggerItem.memoryId(),
-                                                triggerItem.id(),
-                                                triggerItem.content(),
-                                                semanticTime,
-                                                MemoryThreadType.TOPIC,
-                                                List.of(
-                                                        new ThreadIntakeSignal.AnchorCandidate(
-                                                                "topic",
-                                                                conceptKey,
-                                                                List.of(),
-                                                                0.80d)),
-                                                new ThreadIntakeSignal.ThreadEligibilityScore(
-                                                        0.72d,
-                                                        topicContinuity(linkRows, cooccurrenceRows),
-                                                        statefulness(triggerItem)),
-                                                List.of(triggerItem.id()),
-                                                List.of(),
-                                                List.of(),
-                                                0.88d)));
 
         return List.copyOf(signals);
     }
 
-    private double relationshipContinuity(
-            List<String> participants,
-            List<ItemLink> adjacentLinks,
-            List<EntityCooccurrence> cooccurrences) {
-        double linkStrength =
-                adjacentLinks.stream()
-                        .map(ItemLink::strength)
-                        .filter(Objects::nonNull)
-                        .mapToDouble(Double::doubleValue)
-                        .max()
-                        .orElse(0.0d);
-        double cooccurrenceStrength =
-                cooccurrences.stream()
-                        .filter(
-                                row ->
-                                        participants.contains(row.leftEntityKey())
-                                                && participants.contains(row.rightEntityKey()))
-                        .mapToInt(EntityCooccurrence::cooccurrenceCount)
-                        .max()
-                        .orElse(0);
-        double normalizedCooccurrence = Math.min(1.0d, cooccurrenceStrength / 3.0d);
-        return Math.max(0.85d, Math.max(linkStrength, normalizedCooccurrence));
-    }
-
-    private double topicContinuity(
-            List<ItemLink> adjacentLinks, List<EntityCooccurrence> cooccurrences) {
-        double linkStrength =
-                adjacentLinks.stream()
-                        .map(ItemLink::strength)
-                        .filter(Objects::nonNull)
-                        .mapToDouble(Double::doubleValue)
-                        .max()
-                        .orElse(0.0d);
-        int cooccurrenceStrength =
-                cooccurrences.stream()
-                        .mapToInt(EntityCooccurrence::cooccurrenceCount)
-                        .max()
-                        .orElse(0);
-        return Math.max(0.75d, Math.max(linkStrength, Math.min(1.0d, cooccurrenceStrength / 4.0d)));
-    }
-
-    private static double statefulness(MemoryItem item) {
-        return item.category() == MemoryCategory.EVENT ? 0.90d : 0.20d;
-    }
-
-    private static boolean isRelationshipParticipant(String entityKey) {
-        return entityKey != null
-                && (entityKey.startsWith("person:") || entityKey.startsWith("special:"));
-    }
-
-    private static boolean validRelationshipPair(List<String> participants) {
-        if (participants.size() != 2) {
-            return false;
+    private static String providerName(ThreadAnchorProvider provider) {
+        if (provider instanceof RelationshipAnchorProvider) {
+            return "relationship";
         }
-        long personCount =
-                participants.stream().filter(token -> token.startsWith("person:")).count();
-        long specialCount =
-                participants.stream().filter(token -> token.startsWith("special:")).count();
-        return personCount >= 1 && specialCount < 2;
-    }
-
-    private static Instant semanticTime(MemoryItem item) {
-        if (item.occurredAt() != null) {
-            return item.occurredAt();
+        if (provider instanceof GroupRelationshipAnchorProvider) {
+            return "relationship_group";
         }
-        if (item.occurredStart() != null) {
-            return item.occurredStart();
+        if (provider instanceof TopicAnchorProvider) {
+            return "topic";
         }
-        if (item.observedAt() != null) {
-            return item.observedAt();
+        if (provider instanceof MetadataCanonicalRefAnchorProvider) {
+            return "metadata_canonical_ref";
         }
-        if (item.createdAt() != null) {
-            return item.createdAt();
-        }
-        return Instant.EPOCH;
+        return provider.getClass().getSimpleName();
     }
 }

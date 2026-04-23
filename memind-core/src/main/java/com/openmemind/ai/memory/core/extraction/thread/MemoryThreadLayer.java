@@ -23,6 +23,7 @@ import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -36,30 +37,69 @@ public class MemoryThreadLayer implements MemoryItemExtractStep, AutoCloseable {
 
     private final MemoryItemExtractStep delegate;
     private final ThreadProjectionStore store;
-    private final ThreadIntakeWorker worker;
+    private final ThreadWakeScheduler scheduler;
     private final ThreadProjectionRebuilder rebuilder;
     private final MemoryThreadOptions options;
-    private final ThreadMaterializationPolicy policy = ThreadMaterializationPolicy.v1();
+    private final ThreadMaterializationPolicy policy;
+    private final ThreadDerivationMetrics metrics;
+    private final AtomicBoolean closed = new AtomicBoolean();
 
     public MemoryThreadLayer(
             MemoryItemExtractStep delegate,
             ThreadProjectionStore store,
-            ThreadIntakeWorker worker,
+            ThreadWakeScheduler scheduler,
             MemoryThreadOptions options) {
-        this(delegate, store, worker, null, options);
+        this(
+                delegate,
+                store,
+                scheduler,
+                null,
+                options,
+                ThreadMaterializationPolicyFactory.from(options),
+                ThreadDerivationMetrics.NOOP);
     }
 
     public MemoryThreadLayer(
             MemoryItemExtractStep delegate,
             ThreadProjectionStore store,
-            ThreadIntakeWorker worker,
+            ThreadWakeScheduler scheduler,
             ThreadProjectionRebuilder rebuilder,
             MemoryThreadOptions options) {
+        this(
+                delegate,
+                store,
+                scheduler,
+                rebuilder,
+                options,
+                ThreadMaterializationPolicyFactory.from(options),
+                ThreadDerivationMetrics.NOOP);
+    }
+
+    public MemoryThreadLayer(
+            MemoryItemExtractStep delegate,
+            ThreadProjectionStore store,
+            ThreadWakeScheduler scheduler,
+            ThreadProjectionRebuilder rebuilder,
+            MemoryThreadOptions options,
+            ThreadMaterializationPolicy policy) {
+        this(delegate, store, scheduler, rebuilder, options, policy, ThreadDerivationMetrics.NOOP);
+    }
+
+    public MemoryThreadLayer(
+            MemoryItemExtractStep delegate,
+            ThreadProjectionStore store,
+            ThreadWakeScheduler scheduler,
+            ThreadProjectionRebuilder rebuilder,
+            MemoryThreadOptions options,
+            ThreadMaterializationPolicy policy,
+            ThreadDerivationMetrics metrics) {
         this.delegate = Objects.requireNonNull(delegate, "delegate");
         this.store = Objects.requireNonNull(store, "store");
-        this.worker = worker;
+        this.scheduler = scheduler;
         this.rebuilder = rebuilder;
         this.options = Objects.requireNonNull(options, "options");
+        this.policy = Objects.requireNonNull(policy, "policy");
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
     }
 
     @Override
@@ -70,10 +110,10 @@ public class MemoryThreadLayer implements MemoryItemExtractStep, AutoCloseable {
     }
 
     public void flush(MemoryId memoryId) {
-        if (!options.enabled() || !options.derivation().enabled() || worker == null) {
+        if (!options.enabled() || !options.derivation().enabled() || scheduler == null) {
             return;
         }
-        worker.wake(memoryId);
+        scheduler.flush(memoryId);
     }
 
     public void rebuild(MemoryId memoryId) {
@@ -104,7 +144,12 @@ public class MemoryThreadLayer implements MemoryItemExtractStep, AutoCloseable {
     }
 
     @Override
-    public void close() {}
+    public void close() {
+        if (!closed.compareAndSet(false, true) || scheduler == null) {
+            return;
+        }
+        scheduler.close();
+    }
 
     private void enqueueCommittedItems(MemoryId memoryId, MemoryItemResult result) {
         if (!options.enabled() || !options.derivation().enabled() || result.isEmpty()) {
@@ -129,8 +174,14 @@ public class MemoryThreadLayer implements MemoryItemExtractStep, AutoCloseable {
                 return;
             }
         }
-        if (hasCommittedItems && worker != null) {
-            worker.wake(memoryId);
+        if (hasCommittedItems && scheduler != null) {
+            metrics.onWakeScheduled();
+            try {
+                scheduler.schedule(memoryId);
+            } catch (RuntimeException error) {
+                metrics.onWakeSubmissionFailed();
+                log.warn("Failed to schedule memory-thread wake for memoryId={}", memoryId, error);
+            }
         }
     }
 }

@@ -28,6 +28,8 @@ import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.InMemoryResourceOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.store.thread.InMemoryThreadProjectionStore;
+import com.openmemind.ai.memory.core.store.thread.InMemoryThreadEnrichmentInputStore;
+import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentInputStore;
 import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 
 /**
@@ -45,6 +47,8 @@ public class InMemoryMemoryStore implements MemoryStore {
             new InMemoryItemGraphCommitOperations(
                     extractionCommitState, itemOperations, graphOperations);
     private final ThreadProjectionStore threadOperations = new InMemoryThreadProjectionStore();
+    private final ThreadEnrichmentInputStore threadEnrichmentInputStore =
+            new InMemoryThreadEnrichmentInputStore(threadOperations);
     private final ResourceOperations resourceOperations = new InMemoryResourceOperations();
 
     public InMemoryMemoryStore() {
@@ -104,6 +108,11 @@ public class InMemoryMemoryStore implements MemoryStore {
     @Override
     public ThreadProjectionStore threadOperations() {
         return threadOperations;
+    }
+
+    @Override
+    public ThreadEnrichmentInputStore threadEnrichmentInputStore() {
+        return threadEnrichmentInputStore;
     }
 
     @Override

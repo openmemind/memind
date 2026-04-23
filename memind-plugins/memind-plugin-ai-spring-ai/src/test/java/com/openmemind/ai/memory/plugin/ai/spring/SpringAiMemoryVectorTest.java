@@ -128,6 +128,31 @@ class SpringAiMemoryVectorTest {
         }
 
         @Test
+        @DisplayName("storeBatch should honor caller supplied vector ids when provided")
+        void storeBatchShouldHonorCallerSuppliedVectorIdsWhenProvided() {
+            var requestedVectorIds = List.of("rawdata:alpha", "rawdata:beta");
+
+            StepVerifier.create(
+                            memoryVector.storeBatch(
+                                    memoryId,
+                                    requestedVectorIds,
+                                    List.of("alpha note", "beta note"),
+                                    List.of(
+                                            Map.<String, Object>of("kind", "alpha"),
+                                            Map.<String, Object>of("kind", "beta"))))
+                    .assertNext(ids -> assertThat(ids).containsExactlyElementsOf(requestedVectorIds))
+                    .verifyComplete();
+
+            StepVerifier.create(memoryVector.search(memoryId, "alpha note", 10).collectList())
+                    .assertNext(
+                            results ->
+                                    assertThat(results)
+                                            .extracting(VectorSearchResult::vectorId)
+                                            .contains("rawdata:alpha"))
+                    .verifyComplete();
+        }
+
+        @Test
         @DisplayName("should be able to search after storing")
         void shouldFindStoredDocument() {
             var vectorId = memoryVector.store(memoryId, "hello world", Map.of()).block();

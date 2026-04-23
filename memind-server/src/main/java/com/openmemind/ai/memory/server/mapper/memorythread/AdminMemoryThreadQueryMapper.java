@@ -99,6 +99,7 @@ final class MybatisAdminMemoryThreadQueryMapper implements AdminMemoryThreadQuer
                         .eq(MemoryThreadMembershipDO::getMemoryId, memoryId)
                         .eq(MemoryThreadMembershipDO::getThreadKey, threadKey)
                         .orderByDesc(MemoryThreadMembershipDO::getPrimary)
+                        .orderByDesc(MemoryThreadMembershipDO::getRelevanceWeight)
                         .orderByAsc(
                                 MemoryThreadMembershipDO::getItemId,
                                 MemoryThreadMembershipDO::getId);

@@ -15,13 +15,17 @@ package com.openmemind.ai.memory.core.store.thread;
 
 import static com.openmemind.ai.memory.core.data.enums.MemoryThreadProjectionState.AVAILABLE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadLifecycleStatus;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadIntakeStatus;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadMembershipRole;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadObjectState;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadType;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadIntakeClaim;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadIntakeOutboxEntry;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadMembership;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadProjection;
@@ -32,6 +36,129 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class InMemoryThreadProjectionStoreTest {
+
+    @Test
+    void replayCommitFinalizesOnlyTheClaimedGeneration() {
+        var store = new InMemoryThreadProjectionStore();
+        var memoryId = DefaultMemoryId.of("u1", "a1");
+        store.ensureRuntime(memoryId, "thread-core-v2");
+
+        store.enqueue(memoryId, 301L);
+        MemoryThreadIntakeClaim firstClaim =
+                store.claimPending(
+                                memoryId,
+                                Instant.parse("2026-04-23T01:00:00Z"),
+                                Instant.parse("2026-04-23T01:00:30Z"),
+                                1)
+                        .getFirst();
+        store.enqueueReplay(memoryId, 301L);
+
+        store.commitClaimedIntakeReplaySuccess(
+                memoryId,
+                List.of(firstClaim),
+                301L,
+                List.of(),
+                List.of(),
+                List.of(),
+                runtime(memoryId, AVAILABLE, 301L, 1, 0, false, 0L),
+                Instant.parse("2026-04-23T01:01:00Z"));
+
+        assertThat(store.listOutbox(memoryId))
+                .extracting(
+                        MemoryThreadIntakeOutboxEntry::triggerItemId,
+                        MemoryThreadIntakeOutboxEntry::enqueueGeneration,
+                        MemoryThreadIntakeOutboxEntry::status)
+                .containsExactly(tuple(301L, 2L, MemoryThreadIntakeStatus.PENDING));
+    }
+
+    @Test
+    void intakeCommitFailsOpenWhenRebuildEpochAdvancedAfterClaim() {
+        var store = new InMemoryThreadProjectionStore();
+        var memoryId = DefaultMemoryId.of("u1", "a1");
+        store.ensureRuntime(memoryId, "thread-core-v2");
+        store.enqueue(memoryId, 401L);
+
+        MemoryThreadIntakeClaim claim =
+                store.claimPending(
+                                memoryId,
+                                Instant.parse("2026-04-23T02:00:00Z"),
+                                Instant.parse("2026-04-23T02:00:30Z"),
+                                1)
+                        .getFirst();
+        long observedRebuildEpoch = store.getRuntime(memoryId).orElseThrow().rebuildEpoch();
+        assertThat(store.beginRebuild(memoryId, "thread-core-v2", 401L)).isTrue();
+
+        boolean committed =
+                store.commitClaimedIntakeReplaySuccess(
+                        memoryId,
+                        List.of(claim),
+                        401L,
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        runtime(memoryId, AVAILABLE, 401L, 0, 0, false, observedRebuildEpoch),
+                        Instant.parse("2026-04-23T02:01:00Z"));
+
+        assertThat(committed).isFalse();
+        assertThat(store.getRuntime(memoryId))
+                .get()
+                .extracting(MemoryThreadRuntimeState::rebuildInProgress)
+                .isEqualTo(true);
+    }
+
+    @Test
+    void commitIntakeReplaySuccessKeepsClaimedStateWhenAtomicCommitFailsBeforeSwap() {
+        var store = new FailingAtomicReplayStore();
+        var memoryId = DefaultMemoryId.of("u1", "a1");
+
+        store.ensureRuntime(memoryId, "v1");
+        store.replaceProjection(
+                memoryId,
+                List.of(projection(memoryId, "topic:topic:concept:travel")),
+                List.of(),
+                List.of(membership(memoryId, "topic:topic:concept:travel", 301L)),
+                runtime(memoryId, AVAILABLE, 301L, 0, 0, false, 0L),
+                Instant.parse("2026-04-20T00:00:00Z"));
+        store.enqueue(memoryId, 302L);
+        var claim =
+                store.claimPending(
+                                memoryId,
+                                Instant.parse("2026-04-20T00:59:00Z"),
+                                Instant.parse("2026-04-20T00:59:30Z"),
+                                1)
+                        .getFirst();
+
+        assertThatThrownBy(
+                        () ->
+                                store.commitClaimedIntakeReplaySuccess(
+                                        memoryId,
+                                        List.of(claim),
+                                        302L,
+                                        List.of(projection(memoryId, "topic:topic:concept:japan")),
+                                        List.of(),
+                                        List.of(
+                                                membership(
+                                                        memoryId,
+                                                        "topic:topic:concept:japan",
+                                                        302L)),
+                                        runtime(memoryId, AVAILABLE, 302L, 0, 0, false, 0L),
+                                        Instant.parse("2026-04-20T01:00:00Z")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("boom");
+
+        assertThat(store.listThreads(memoryId))
+                .extracting(MemoryThreadProjection::threadKey)
+                .containsExactly("topic:topic:concept:travel");
+        assertThat(store.listOutbox(memoryId))
+                .filteredOn(entry -> entry.triggerItemId() == 302L)
+                .singleElement()
+                .extracting(MemoryThreadIntakeOutboxEntry::status)
+                .isEqualTo(MemoryThreadIntakeStatus.PROCESSING);
+        assertThat(store.getRuntime(memoryId))
+                .get()
+                .extracting(MemoryThreadRuntimeState::lastProcessedItemId)
+                .isEqualTo(301L);
+    }
 
     @Test
     void supportsManyToManyMembershipAndRuntimeState() {
@@ -50,7 +177,7 @@ class InMemoryThreadProjectionStoreTest {
                                 "relationship:relationship:person:alice|person:bob",
                                 301L),
                         membership(memoryId, "topic:topic:concept:travel", 301L)),
-                runtime(memoryId, AVAILABLE, 301L, 0, 0, false),
+                runtime(memoryId, AVAILABLE, 301L, 0, 0, false, 0L),
                 Instant.parse("2026-04-20T00:00:00Z"));
 
         assertThat(store.listThreadsByItemId(memoryId, 301L))
@@ -119,7 +246,8 @@ class InMemoryThreadProjectionStoreTest {
             long lastProcessedItemId,
             long pendingCount,
             long failedCount,
-            boolean rebuildInProgress) {
+            boolean rebuildInProgress,
+            long rebuildEpoch) {
         return new MemoryThreadRuntimeState(
                 memoryId.toIdentifier(),
                 projectionState,
@@ -129,8 +257,17 @@ class InMemoryThreadProjectionStoreTest {
                 lastProcessedItemId,
                 rebuildInProgress,
                 null,
+                rebuildEpoch,
                 "v1",
                 null,
                 Instant.parse("2026-04-20T00:00:00Z"));
+    }
+
+    private static final class FailingAtomicReplayStore extends InMemoryThreadProjectionStore {
+
+        @Override
+        protected void beforeAtomicReplayCommit() {
+            throw new IllegalStateException("boom");
+        }
     }
 }

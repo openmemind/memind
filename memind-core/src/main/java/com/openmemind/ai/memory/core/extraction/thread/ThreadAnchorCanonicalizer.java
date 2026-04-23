@@ -32,7 +32,7 @@ public final class ThreadAnchorCanonicalizer {
                 .flatMap(candidate -> canonicalize(signal.threadType(), candidate));
     }
 
-    private Optional<CanonicalThreadAnchor> canonicalize(
+    Optional<CanonicalThreadAnchor> canonicalize(
             MemoryThreadType threadType, ThreadIntakeSignal.AnchorCandidate candidate) {
         return switch (threadType) {
             case RELATIONSHIP -> canonicalizeRelationship(candidate);
@@ -42,13 +42,28 @@ public final class ThreadAnchorCanonicalizer {
 
     private Optional<CanonicalThreadAnchor> canonicalizeRelationship(
             ThreadIntakeSignal.AnchorCandidate candidate) {
-        List<String> participants =
-                candidate.participants().stream()
-                        .map(ThreadAnchorCanonicalizer::normalizeRelationshipParticipant)
-                        .filter(token -> token != null && !token.isBlank())
-                        .distinct()
-                        .sorted(ThreadAnchorCanonicalizer::compareRelationshipParticipants)
-                        .toList();
+        String anchorKind = normalizeToken(candidate.anchorKind());
+        if ("relationship_group".equals(anchorKind)) {
+            return canonicalizeRelationshipGroup(candidate);
+        }
+        if ("relationship".equals(anchorKind)) {
+            return canonicalizeRelationshipDyad(candidate);
+        }
+        return Optional.empty();
+    }
+
+    private List<String> normalizeRelationshipParticipants(ThreadIntakeSignal.AnchorCandidate candidate) {
+        return candidate.participants().stream()
+                .map(ThreadAnchorCanonicalizer::normalizeRelationshipParticipant)
+                .filter(token -> token != null && !token.isBlank())
+                .distinct()
+                .sorted(ThreadAnchorCanonicalizer::compareRelationshipParticipants)
+                .toList();
+    }
+
+    private Optional<CanonicalThreadAnchor> canonicalizeRelationshipDyad(
+            ThreadIntakeSignal.AnchorCandidate candidate) {
+        List<String> participants = normalizeRelationshipParticipants(candidate);
         if (participants.size() != 2) {
             return Optional.empty();
         }
@@ -70,6 +85,31 @@ public final class ThreadAnchorCanonicalizer {
                         "relationship",
                         anchorKey,
                         threadKey(MemoryThreadType.RELATIONSHIP, "relationship", anchorKey)));
+    }
+
+    private Optional<CanonicalThreadAnchor> canonicalizeRelationshipGroup(
+            ThreadIntakeSignal.AnchorCandidate candidate) {
+        List<String> participants = normalizeRelationshipParticipants(candidate);
+        if (participants.size() < 3 || participants.size() > 5) {
+            return Optional.empty();
+        }
+        long personCount =
+                participants.stream()
+                        .filter(participant -> participant.startsWith("person:"))
+                        .count();
+        if (personCount < 2) {
+            return Optional.empty();
+        }
+        String anchorKey = String.join("|", participants);
+        return Optional.of(
+                new CanonicalThreadAnchor(
+                        MemoryThreadType.RELATIONSHIP,
+                        "relationship_group",
+                        anchorKey,
+                        threadKey(
+                                MemoryThreadType.RELATIONSHIP,
+                                "relationship_group",
+                                anchorKey)));
     }
 
     private Optional<CanonicalThreadAnchor> canonicalizeSimple(
@@ -100,7 +140,7 @@ public final class ThreadAnchorCanonicalizer {
         return normalized;
     }
 
-    private static String normalizeToken(String value) {
+    static String normalizeToken(String value) {
         if (value == null) {
             return null;
         }
