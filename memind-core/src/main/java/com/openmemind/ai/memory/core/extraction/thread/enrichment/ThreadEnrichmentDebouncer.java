@@ -34,8 +34,10 @@ public final class ThreadEnrichmentDebouncer {
         Objects.requireNonNull(thread, "thread");
         Objects.requireNonNull(now, "now");
         Objects.requireNonNull(options, "options");
-        List<MemoryThreadEvent> events = itemBackedEvents == null ? List.of() : List.copyOf(itemBackedEvents);
-        long meaningfulCount = events.stream().filter(ThreadEnrichmentDebouncer::isItemBackedMeaningful).count();
+        List<MemoryThreadEvent> events =
+                itemBackedEvents == null ? List.of() : List.copyOf(itemBackedEvents);
+        long meaningfulCount =
+                events.stream().filter(ThreadEnrichmentDebouncer::isItemBackedMeaningful).count();
 
         Baseline baseline = baseline(thread);
         if (baseline == null) {
@@ -52,7 +54,11 @@ public final class ThreadEnrichmentDebouncer {
         boolean eligible =
                 gapSatisfied
                         && meaningfulDelta >= options.minimumMeaningfulEventDeltaForReenrichment();
-        return new Evaluation(eligible, meaningfulCount, baseline.lastEnrichedAt(), baseline.lastMeaningfulEventCount());
+        return new Evaluation(
+                eligible,
+                meaningfulCount,
+                baseline.lastEnrichedAt(),
+                baseline.lastMeaningfulEventCount());
     }
 
     static boolean isItemBackedMeaningful(MemoryThreadEvent event) {

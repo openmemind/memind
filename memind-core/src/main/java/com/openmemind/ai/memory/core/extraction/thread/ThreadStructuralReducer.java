@@ -250,9 +250,7 @@ public final class ThreadStructuralReducer {
             }
             Object dominantFamilies = rawEvidence.get("dominantFamilies");
             if (dominantFamilies instanceof List<?> families) {
-                evidence.put(
-                        "dominantFamilies",
-                        families.stream().map(String::valueOf).toList());
+                evidence.put("dominantFamilies", families.stream().map(String::valueOf).toList());
             }
             return evidence.isEmpty() ? null : Map.copyOf(evidence);
         }

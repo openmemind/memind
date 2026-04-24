@@ -40,6 +40,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -52,6 +54,8 @@ import reactor.util.retry.Retry;
  * from parsed conversation segments using the framework-neutral LLM SPI.
  */
 public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
+
+    private static final Logger log = LoggerFactory.getLogger(LlmItemExtractionStrategy.class);
 
     private final StructuredChatClient structuredChatClient;
     private final PromptRegistry promptRegistry;
@@ -128,15 +132,138 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
 
     private Mono<List<ExtractedMemoryEntry>> callLlmForItems(
             PromptResult prompt, ParsedSegment segment, Instant referenceTime) {
+        logGraphPromptSummary(prompt);
         var messages = ChatMessages.systemUser(prompt.systemPrompt(), prompt.userPrompt());
         return structuredChatClient
                 .call(messages, MemoryItemExtractionResponse.class)
-                .map(response -> toFactEntries(response, segment, referenceTime))
+                .doOnNext(LlmItemExtractionStrategy::logRawGraphHints)
+                .map(
+                        response -> {
+                            var entries = toFactEntries(response, segment, referenceTime);
+                            logExtractedGraphHints(entries);
+                            return entries;
+                        })
                 .switchIfEmpty(Mono.just(List.of()))
                 .subscribeOn(Schedulers.boundedElastic())
                 .retryWhen(
                         Retry.backoff(2, Duration.ofSeconds(1)).maxBackoff(Duration.ofSeconds(5)))
                 .onErrorResume(e -> Mono.just(List.of()));
+    }
+
+    private static void logGraphPromptSummary(PromptResult prompt) {
+        String rendered =
+                (prompt.systemPrompt() == null ? "" : prompt.systemPrompt())
+                        + "\n"
+                        + (prompt.userPrompt() == null ? "" : prompt.userPrompt());
+        boolean graphHintsEnabled = rendered.contains("## Graph Hints");
+        if (!graphHintsEnabled) {
+            return;
+        }
+        log.info(
+                "Item graph prompt: enabled={} causeIndex={} effectIndex={} goodEntities={}"
+                        + " badCausal={}",
+                true,
+                rendered.contains("causeIndex"),
+                rendered.contains("effectIndex"),
+                rendered.contains("Good entities"),
+                rendered.contains("Bad causal relation"));
+    }
+
+    private static void logRawGraphHints(MemoryItemExtractionResponse response) {
+        if (response == null || response.items() == null || response.items().isEmpty()) {
+            log.info("Item graph raw response: no items");
+            return;
+        }
+        for (int index = 0; index < response.items().size(); index++) {
+            int itemIndex = index;
+            var item = response.items().get(itemIndex);
+            int entityCount = item.entities() == null ? 0 : item.entities().size();
+            int causalCount = item.causalRelations() == null ? 0 : item.causalRelations().size();
+            log.info(
+                    "Item graph raw response item[{}]: content='{}' entities={} causalRelations={}",
+                    itemIndex,
+                    abbreviate(item.content()),
+                    entityCount,
+                    causalCount);
+            if (item.entities() != null) {
+                item.entities()
+                        .forEach(
+                                entity ->
+                                        log.info(
+                                                "  raw entity item[{}]: name='{}' type={}"
+                                                        + " salience={} aliases={}",
+                                                itemIndex,
+                                                entity.name(),
+                                                entity.entityType(),
+                                                entity.salience(),
+                                                entity.aliasObservations() == null
+                                                        ? 0
+                                                        : entity.aliasObservations().size()));
+            }
+            if (item.causalRelations() != null) {
+                item.causalRelations()
+                        .forEach(
+                                relation ->
+                                        log.info(
+                                                "  raw causal item[{}]: causeIndex={}"
+                                                    + " effectIndex={} relationType={} strength={}",
+                                                itemIndex,
+                                                relation.causeIndex(),
+                                                relation.effectIndex(),
+                                                relation.relationType(),
+                                                relation.strength()));
+            }
+        }
+    }
+
+    private static void logExtractedGraphHints(List<ExtractedMemoryEntry> entries) {
+        if (entries == null || entries.isEmpty()) {
+            log.info("Item graph extracted entries: no items");
+            return;
+        }
+        for (int index = 0; index < entries.size(); index++) {
+            int entryIndex = index;
+            var entry = entries.get(entryIndex);
+            var graphHints = entry.graphHints();
+            log.info(
+                    "Item graph extracted entry[{}]: content='{}' entities={} causalRelations={}",
+                    entryIndex,
+                    abbreviate(entry.content()),
+                    graphHints.entities().size(),
+                    graphHints.causalRelations().size());
+            graphHints
+                    .entities()
+                    .forEach(
+                            entity ->
+                                    log.info(
+                                            "  extracted entity entry[{}]: name='{}' type={}"
+                                                    + " salience={} aliases={}",
+                                            entryIndex,
+                                            entity.name(),
+                                            entity.entityType(),
+                                            entity.salience(),
+                                            entity.aliasObservations().size()));
+            graphHints
+                    .causalRelations()
+                    .forEach(
+                            relation ->
+                                    log.info(
+                                            "  extracted causal entry[{}]: causeIndex={}"
+                                                    + " effectIndex={} relationType={} strength={}",
+                                            entryIndex,
+                                            relation.causeIndex(),
+                                            relation.effectIndex(),
+                                            relation.relationType(),
+                                            relation.strength()));
+        }
+    }
+
+    private static String abbreviate(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.replaceAll("\\s+", " ").trim();
+        return normalized.length() <= 160 ? normalized : normalized.substring(0, 157) + "...";
     }
 
     static List<ExtractedMemoryEntry> toFactEntries(
@@ -344,11 +471,16 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
             return List.of();
         }
         return causalRelations.stream()
-                .filter(relation -> relation != null && relation.targetIndex() != null)
+                .filter(
+                        relation ->
+                                relation != null
+                                        && relation.causeIndex() != null
+                                        && relation.effectIndex() != null)
                 .map(
                         relation ->
                                 new ExtractedGraphHints.ExtractedCausalRelationHint(
-                                        relation.targetIndex(),
+                                        relation.causeIndex(),
+                                        relation.effectIndex(),
                                         relation.relationType(),
                                         clampNullable(relation.strength())))
                 .toList();

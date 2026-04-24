@@ -123,7 +123,7 @@ class ItemGraphWritePlanTest {
         assertThat(plan.semanticRelations())
                 .singleElement()
                 .extracting(SemanticItemRelation::evidenceSource, SemanticItemRelation::strength)
-                .containsExactly(SemanticEvidenceSource.VECTOR_SEARCH, 1.0d);
+                .containsExactly(SemanticEvidenceSource.VECTOR_SEARCH, 0.81d);
 
         assertThat(plan.toPersistedLinks(MEMORY_ID))
                 .extracting(
@@ -134,7 +134,7 @@ class ItemGraphWritePlanTest {
                         ItemLink::evidenceSource,
                         ItemLink::strength)
                 .containsExactly(
-                        tuple(101L, 202L, ItemLinkType.SEMANTIC, null, "vector_search", 1.0d),
+                        tuple(101L, 202L, ItemLinkType.SEMANTIC, null, "vector_search", 0.81d),
                         tuple(101L, 303L, ItemLinkType.TEMPORAL, "nearby", null, 1.0d),
                         tuple(404L, 505L, ItemLinkType.CAUSAL, "motivated_by", null, 0.0d));
     }

@@ -368,8 +368,12 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                                                     vector.deleteBatch(memoryId, vectorIds)
                                                             .onErrorResume(ignore -> Mono.empty())
                                                             .then(Mono.error(error)))
-                                    .thenReturn(
-                                            new MemoryItemResult(newItems, resolvedInsightTypes));
+                                    .map(
+                                            graphResult ->
+                                                    new MemoryItemResult(
+                                                            newItems,
+                                                            resolvedInsightTypes,
+                                                            graphResult));
                         });
     }
 

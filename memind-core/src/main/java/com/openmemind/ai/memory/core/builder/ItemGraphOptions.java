@@ -31,6 +31,11 @@ public record ItemGraphOptions(
         int semanticSearchHeadroom,
         int semanticLinkConcurrency,
         int semanticSourceWindowSize,
+        boolean entityOverlapSemanticLinksEnabled,
+        int minSharedEntitiesForSemanticLink,
+        int maxEntityOverlapLinksPerItem,
+        int maxItemsPerEntityForSemanticLink,
+        float entityOverlapMinMentionConfidence,
         EntityResolutionMode resolutionMode,
         int maxResolutionCandidatesPerMention,
         double resolutionMergeThreshold,
@@ -63,6 +68,19 @@ public record ItemGraphOptions(
         }
         if (semanticSourceWindowSize <= 0) {
             throw new IllegalArgumentException("semanticSourceWindowSize must be positive");
+        }
+        if (minSharedEntitiesForSemanticLink <= 0) {
+            throw new IllegalArgumentException("minSharedEntitiesForSemanticLink must be positive");
+        }
+        if (maxEntityOverlapLinksPerItem <= 0) {
+            throw new IllegalArgumentException("maxEntityOverlapLinksPerItem must be positive");
+        }
+        if (maxItemsPerEntityForSemanticLink <= 0) {
+            throw new IllegalArgumentException("maxItemsPerEntityForSemanticLink must be positive");
+        }
+        if (entityOverlapMinMentionConfidence < 0.0f || entityOverlapMinMentionConfidence > 1.0f) {
+            throw new IllegalArgumentException(
+                    "entityOverlapMinMentionConfidence must be in [0,1]");
         }
         if (maxResolutionCandidatesPerMention <= 0) {
             throw new IllegalArgumentException(
@@ -107,6 +125,11 @@ public record ItemGraphOptions(
                 semanticSearchHeadroom,
                 semanticLinkConcurrency,
                 semanticSourceWindowSize,
+                true,
+                2,
+                maxSemanticLinksPerItem,
+                12,
+                0.5f,
                 EntityResolutionMode.EXACT,
                 8,
                 0.85d,
@@ -174,6 +197,11 @@ public record ItemGraphOptions(
         private int semanticSearchHeadroom;
         private int semanticLinkConcurrency;
         private int semanticSourceWindowSize;
+        private boolean entityOverlapSemanticLinksEnabled;
+        private int minSharedEntitiesForSemanticLink;
+        private int maxEntityOverlapLinksPerItem;
+        private int maxItemsPerEntityForSemanticLink;
+        private float entityOverlapMinMentionConfidence;
         private EntityResolutionMode resolutionMode;
         private int maxResolutionCandidatesPerMention;
         private double resolutionMergeThreshold;
@@ -196,6 +224,11 @@ public record ItemGraphOptions(
             this.semanticSearchHeadroom = options.semanticSearchHeadroom();
             this.semanticLinkConcurrency = options.semanticLinkConcurrency();
             this.semanticSourceWindowSize = options.semanticSourceWindowSize();
+            this.entityOverlapSemanticLinksEnabled = options.entityOverlapSemanticLinksEnabled();
+            this.minSharedEntitiesForSemanticLink = options.minSharedEntitiesForSemanticLink();
+            this.maxEntityOverlapLinksPerItem = options.maxEntityOverlapLinksPerItem();
+            this.maxItemsPerEntityForSemanticLink = options.maxItemsPerEntityForSemanticLink();
+            this.entityOverlapMinMentionConfidence = options.entityOverlapMinMentionConfidence();
             this.resolutionMode = options.resolutionMode();
             this.maxResolutionCandidatesPerMention = options.maxResolutionCandidatesPerMention();
             this.resolutionMergeThreshold = options.resolutionMergeThreshold();
@@ -250,6 +283,32 @@ public record ItemGraphOptions(
             return this;
         }
 
+        public Builder entityOverlapSemanticLinksEnabled(
+                boolean entityOverlapSemanticLinksEnabled) {
+            this.entityOverlapSemanticLinksEnabled = entityOverlapSemanticLinksEnabled;
+            return this;
+        }
+
+        public Builder minSharedEntitiesForSemanticLink(int minSharedEntitiesForSemanticLink) {
+            this.minSharedEntitiesForSemanticLink = minSharedEntitiesForSemanticLink;
+            return this;
+        }
+
+        public Builder maxEntityOverlapLinksPerItem(int maxEntityOverlapLinksPerItem) {
+            this.maxEntityOverlapLinksPerItem = maxEntityOverlapLinksPerItem;
+            return this;
+        }
+
+        public Builder maxItemsPerEntityForSemanticLink(int maxItemsPerEntityForSemanticLink) {
+            this.maxItemsPerEntityForSemanticLink = maxItemsPerEntityForSemanticLink;
+            return this;
+        }
+
+        public Builder entityOverlapMinMentionConfidence(float entityOverlapMinMentionConfidence) {
+            this.entityOverlapMinMentionConfidence = entityOverlapMinMentionConfidence;
+            return this;
+        }
+
         public Builder resolutionMode(EntityResolutionMode resolutionMode) {
             this.resolutionMode = resolutionMode;
             return this;
@@ -296,6 +355,11 @@ public record ItemGraphOptions(
                     semanticSearchHeadroom,
                     semanticLinkConcurrency,
                     semanticSourceWindowSize,
+                    entityOverlapSemanticLinksEnabled,
+                    minSharedEntitiesForSemanticLink,
+                    maxEntityOverlapLinksPerItem,
+                    maxItemsPerEntityForSemanticLink,
+                    entityOverlapMinMentionConfidence,
                     resolutionMode,
                     maxResolutionCandidatesPerMention,
                     resolutionMergeThreshold,

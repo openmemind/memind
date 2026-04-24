@@ -260,8 +260,7 @@ public final class TracingItemGraphMaterializer extends TracingSupport
                                                 .EXTRACTION_GRAPH_DROPPED_RESERVED_SPECIAL_COLLISION_COUNT,
                                         result.stats().droppedReservedSpecialCollisionCount()),
                                 Map.entry(
-                                        MemoryAttributes
-                                                .EXTRACTION_GRAPH_STRUCTURED_BATCH_DEGRADED,
+                                        MemoryAttributes.EXTRACTION_GRAPH_STRUCTURED_BATCH_DEGRADED,
                                         result.stats().structuredBatchDegraded())),
                 () -> delegate.materialize(memoryId, items, sourceEntries));
     }

@@ -46,8 +46,7 @@ class DatabaseDialectScriptResourceTest {
 
     @ParameterizedTest(name = "{0} squashed script should contain required schema")
     @EnumSource(DatabaseDialect.class)
-    void eachDialectSquashedScriptContainsRequiredSchema(DatabaseDialect dialect)
-            throws Exception {
+    void eachDialectSquashedScriptContainsRequiredSchema(DatabaseDialect dialect) throws Exception {
         ClassPathResource resource = new ClassPathResource(dialect.scriptPaths().getFirst());
         String sql = resource.getContentAsString(StandardCharsets.UTF_8);
 

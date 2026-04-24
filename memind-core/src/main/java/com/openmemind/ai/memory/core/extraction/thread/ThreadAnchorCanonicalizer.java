@@ -52,7 +52,8 @@ public final class ThreadAnchorCanonicalizer {
         return Optional.empty();
     }
 
-    private List<String> normalizeRelationshipParticipants(ThreadIntakeSignal.AnchorCandidate candidate) {
+    private List<String> normalizeRelationshipParticipants(
+            ThreadIntakeSignal.AnchorCandidate candidate) {
         return candidate.participants().stream()
                 .map(ThreadAnchorCanonicalizer::normalizeRelationshipParticipant)
                 .filter(token -> token != null && !token.isBlank())
@@ -106,10 +107,7 @@ public final class ThreadAnchorCanonicalizer {
                         MemoryThreadType.RELATIONSHIP,
                         "relationship_group",
                         anchorKey,
-                        threadKey(
-                                MemoryThreadType.RELATIONSHIP,
-                                "relationship_group",
-                                anchorKey)));
+                        threadKey(MemoryThreadType.RELATIONSHIP, "relationship_group", anchorKey)));
     }
 
     private Optional<CanonicalThreadAnchor> canonicalizeSimple(

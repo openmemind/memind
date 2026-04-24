@@ -38,7 +38,7 @@ class CausalHintNormalizerTest {
     private static final Instant CREATED_AT = Instant.parse("2026-04-16T00:00:00Z");
 
     @Test
-    void normalizeShouldKeepOnlyBackwardLinksWithSupportedRelationTypes() {
+    void normalizeShouldKeepOnlyExplicitCauseEffectLinksWithSupportedRelationTypes() {
         var items = List.of(item(101L, "Cause"), item(102L, "Effect"), item(103L, "Future target"));
         var entries =
                 List.of(
@@ -46,11 +46,11 @@ class CausalHintNormalizerTest {
                         entry(
                                 "Effect",
                                 List.of(
-                                        causalHint(0, "CAUSED_BY", 0.95f),
-                                        causalHint(1, "caused_by", 0.99f),
-                                        causalHint(2, "caused_by", 0.98f),
-                                        causalHint(0, "related_to", 0.97f),
-                                        causalHint(0, null, 0.96f))),
+                                        causalHint(0, 1, "CAUSED_BY", 0.95f),
+                                        causalHint(1, 1, "caused_by", 0.99f),
+                                        causalHint(0, 3, "caused_by", 0.98f),
+                                        causalHint(0, 1, "related_to", 0.97f),
+                                        causalHint(0, 1, null, 0.96f))),
                         entry("Future target", List.of()));
 
         var links =
@@ -82,10 +82,10 @@ class CausalHintNormalizerTest {
         var entries =
                 List.of(
                         entry("Shared cause", List.of()),
-                        entry("Weaker effect", List.of(causalHint(0, "enabled_by", 0.61f))),
-                        entry("Stronger effect", List.of(causalHint(0, "motivated_by", 0.91f))),
+                        entry("Weaker effect", List.of(causalHint(0, 1, "enabled_by", 0.61f))),
+                        entry("Stronger effect", List.of(causalHint(0, 2, "motivated_by", 0.91f))),
                         entry("Second cause", List.of()),
-                        entry("Independent effect", List.of(causalHint(3, "caused_by", 0.75f))));
+                        entry("Independent effect", List.of(causalHint(3, 4, "caused_by", 0.75f))));
 
         var options = new ItemGraphOptions(true, 8, 1, 10, 5, 0.82d, 4, 1, 128);
         var links = new CausalHintNormalizer().normalize(MEMORY_ID, items, entries, options);
@@ -116,11 +116,11 @@ class CausalHintNormalizerTest {
                         entry(
                                 "Dropped effect",
                                 List.of(
-                                        causalHint(0, "caused_by", null),
-                                        causalHint(0, "caused_by", 0.49f))),
-                        entry("Boundary effect", List.of(causalHint(0, "enabled_by", 0.50f))),
+                                        causalHint(0, 1, "caused_by", null),
+                                        causalHint(0, 1, "caused_by", 0.49f))),
+                        entry("Boundary effect", List.of(causalHint(0, 2, "enabled_by", 0.50f))),
                         entry("Secondary cause", List.of()),
-                        entry("Strong effect", List.of(causalHint(3, "motivated_by", 0.91f))));
+                        entry("Strong effect", List.of(causalHint(3, 4, "motivated_by", 0.91f))));
 
         var links =
                 new CausalHintNormalizer()
@@ -179,8 +179,8 @@ class CausalHintNormalizerTest {
     }
 
     private static ExtractedGraphHints.ExtractedCausalRelationHint causalHint(
-            Integer targetIndex, String relationType, Float strength) {
+            Integer causeIndex, Integer effectIndex, String relationType, Float strength) {
         return new ExtractedGraphHints.ExtractedCausalRelationHint(
-                targetIndex, relationType, strength);
+                causeIndex, effectIndex, relationType, strength);
     }
 }

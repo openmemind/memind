@@ -45,9 +45,11 @@ class ThreadProjectionRebuilderTest {
     void rebuildSuccessPublishesProjectionAndSkippedPrefixAtomically() {
         MemoryId memoryId = TestMemoryIds.userAgent();
         InMemoryMemoryStore backingStore = new InMemoryMemoryStore();
-        backingStore.itemOperations()
+        backingStore
+                .itemOperations()
                 .insertItems(memoryId, List.of(item(301L, "The user planned a trip.")));
-        backingStore.graphOperations()
+        backingStore
+                .graphOperations()
                 .upsertItemEntityMentions(
                         memoryId, List.of(mention(memoryId, 301L, "concept:travel")));
         InMemoryThreadProjectionStore projectionStore = spy(new InMemoryThreadProjectionStore());
@@ -65,13 +67,7 @@ class ThreadProjectionRebuilderTest {
 
         verify(projectionStore)
                 .commitRebuildReplaySuccess(
-                        eq(memoryId),
-                        eq(301L),
-                        anyList(),
-                        anyList(),
-                        anyList(),
-                        any(),
-                        any());
+                        eq(memoryId), eq(301L), anyList(), anyList(), anyList(), any(), any());
         verify(projectionStore, never()).finalizeOutboxSkippedPrefix(any(), anyLong(), any());
         verify(projectionStore, never())
                 .replaceProjection(any(), anyList(), anyList(), anyList(), any(), any());

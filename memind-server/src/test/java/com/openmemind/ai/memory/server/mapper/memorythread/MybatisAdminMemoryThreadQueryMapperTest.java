@@ -41,11 +41,13 @@ class MybatisAdminMemoryThreadQueryMapperTest {
     void findItemsByThreadKeyOrdersByPrimaryThenWeightThenItemId() {
         CapturingMembershipMapper membershipMapper = new CapturingMembershipMapper();
         MybatisAdminMemoryThreadQueryMapper mapper =
-                new MybatisAdminMemoryThreadQueryMapper(noopProjectionMapper(), membershipMapper.proxy());
+                new MybatisAdminMemoryThreadQueryMapper(
+                        noopProjectionMapper(), membershipMapper.proxy());
 
         mapper.findItemsByThreadKey("u1:a1", "topic:topic:concept:travel");
 
-        String sqlSegment = membershipMapper.capturedWrapper().getSqlSegment().toLowerCase(Locale.ROOT);
+        String sqlSegment =
+                membershipMapper.capturedWrapper().getSqlSegment().toLowerCase(Locale.ROOT);
         String orderBySegment = sqlSegment.substring(sqlSegment.indexOf("order by"));
 
         assertThat(orderBySegment).contains("order by");
@@ -82,7 +84,8 @@ class MybatisAdminMemoryThreadQueryMapperTest {
                             new Class<?>[] {MemoryThreadMembershipMapper.class},
                             (proxy, method, args) -> {
                                 if ("selectList".equals(method.getName())) {
-                                    capturedWrapper = (LambdaQueryWrapper<MemoryThreadMembershipDO>) args[0];
+                                    capturedWrapper =
+                                            (LambdaQueryWrapper<MemoryThreadMembershipDO>) args[0];
                                     return List.of();
                                 }
                                 throw new UnsupportedOperationException(method.getName());

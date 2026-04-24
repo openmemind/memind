@@ -72,7 +72,8 @@ final class ThreadCandidateScorer {
 
         exactAnchorMatches.sort(
                 Comparator.comparing(
-                                (ThreadCandidateScore score) -> score.candidate().thread().lastEventAt(),
+                                (ThreadCandidateScore score) ->
+                                        score.candidate().thread().lastEventAt(),
                                 Comparator.nullsLast(Comparator.reverseOrder()))
                         .thenComparing(score -> score.candidate().thread().threadKey()));
         discoveredCandidates.sort(resolutionOrder());
@@ -93,11 +94,14 @@ final class ThreadCandidateScorer {
         double explicitContinuityScore =
                 candidate.explicitContinuityMatch() ? EXPLICIT_CONTINUITY_SCORE : 0.0d;
         double causalScore =
-                strongestLinkStrength(adjacentLinks, candidate.memberItemIds(), ItemLinkType.CAUSAL);
+                strongestLinkStrength(
+                        adjacentLinks, candidate.memberItemIds(), ItemLinkType.CAUSAL);
         double temporalScore =
-                strongestLinkStrength(adjacentLinks, candidate.memberItemIds(), ItemLinkType.TEMPORAL);
+                strongestLinkStrength(
+                        adjacentLinks, candidate.memberItemIds(), ItemLinkType.TEMPORAL);
         double semanticScore =
-                strongestLinkStrength(adjacentLinks, candidate.memberItemIds(), ItemLinkType.SEMANTIC);
+                strongestLinkStrength(
+                        adjacentLinks, candidate.memberItemIds(), ItemLinkType.SEMANTIC);
         double entityScore =
                 entitySupportScore(
                         triggerEntities, candidate.memberItemIds(), durableEntityKeysByItemId);
@@ -133,8 +137,7 @@ final class ThreadCandidateScorer {
 
     private static Comparator<ThreadCandidateScore> resolutionOrder() {
         return Comparator.comparingInt(ThreadCandidateScore::dominantFamilyRank)
-                .thenComparing(
-                        ThreadCandidateScore::dominantFamilyScore, Comparator.reverseOrder())
+                .thenComparing(ThreadCandidateScore::dominantFamilyScore, Comparator.reverseOrder())
                 .thenComparing(ThreadCandidateScore::finalScore, Comparator.reverseOrder())
                 .thenComparing(
                         score -> score.candidate().thread().lastEventAt(),

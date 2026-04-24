@@ -65,11 +65,11 @@ public record MemoryItemExtractionResponse(List<ExtractedItem> items) {
     }
 
     /**
-     * Structured causal hint referencing an earlier item in the same response.
+     * Structured causal hint referencing explicit cause/effect items in the same response.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record ExtractedCausalRelation(
-            Integer targetIndex, String relationType, Float strength) {}
+            Integer causeIndex, Integer effectIndex, String relationType, Float strength) {}
 
     /**
      * Thread-specific semantic extraction payload to be merged into item metadata.

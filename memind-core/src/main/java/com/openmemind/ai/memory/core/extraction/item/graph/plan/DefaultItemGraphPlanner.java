@@ -20,6 +20,7 @@ import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializat
 import com.openmemind.ai.memory.core.extraction.item.graph.entity.alias.EntityAliasIndexPlanner;
 import com.openmemind.ai.memory.core.extraction.item.graph.entity.normalize.EntityDropReason;
 import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.EntityResolutionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.graph.link.semantic.EntityOverlapItemLinker;
 import com.openmemind.ai.memory.core.extraction.item.graph.link.semantic.SemanticItemLinker;
 import com.openmemind.ai.memory.core.extraction.item.graph.link.temporal.TemporalItemLinker;
 import com.openmemind.ai.memory.core.extraction.item.graph.pipeline.GraphHintNormalizer;
@@ -34,6 +35,7 @@ import com.openmemind.ai.memory.core.extraction.item.graph.relation.temporal.Tem
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
 import com.openmemind.ai.memory.core.store.graph.ItemLink;
 import com.openmemind.ai.memory.core.store.graph.ItemLinkType;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -54,6 +56,7 @@ public final class DefaultItemGraphPlanner {
     private final EntityAliasIndexPlanner aliasPlanner;
     private final TemporalItemLinker temporalItemLinker;
     private final SemanticItemLinker semanticItemLinker;
+    private final EntityOverlapItemLinker entityOverlapItemLinker;
     private final ItemGraphOptions options;
 
     public DefaultItemGraphPlanner(
@@ -63,11 +66,31 @@ public final class DefaultItemGraphPlanner {
             TemporalItemLinker temporalItemLinker,
             SemanticItemLinker semanticItemLinker,
             ItemGraphOptions options) {
+        this(
+                normalizer,
+                resolutionStrategy,
+                aliasPlanner,
+                temporalItemLinker,
+                semanticItemLinker,
+                new EntityOverlapItemLinker(),
+                options);
+    }
+
+    DefaultItemGraphPlanner(
+            GraphHintNormalizer normalizer,
+            EntityResolutionStrategy resolutionStrategy,
+            EntityAliasIndexPlanner aliasPlanner,
+            TemporalItemLinker temporalItemLinker,
+            SemanticItemLinker semanticItemLinker,
+            EntityOverlapItemLinker entityOverlapItemLinker,
+            ItemGraphOptions options) {
         this.normalizer = Objects.requireNonNull(normalizer, "normalizer");
         this.resolutionStrategy = Objects.requireNonNull(resolutionStrategy, "resolutionStrategy");
         this.aliasPlanner = Objects.requireNonNull(aliasPlanner, "aliasPlanner");
         this.temporalItemLinker = Objects.requireNonNull(temporalItemLinker, "temporalItemLinker");
         this.semanticItemLinker = Objects.requireNonNull(semanticItemLinker, "semanticItemLinker");
+        this.entityOverlapItemLinker =
+                Objects.requireNonNull(entityOverlapItemLinker, "entityOverlapItemLinker");
         this.options = Objects.requireNonNull(options, "options");
     }
 
@@ -86,18 +109,30 @@ public final class DefaultItemGraphPlanner {
         Mono<TemporalItemLinker.TemporalLinkingPlan> temporalPlan =
                 Mono.defer(() -> temporalItemLinker.plan(memoryId, batchItems))
                         .subscribeOn(Schedulers.boundedElastic())
-                .onErrorReturn(TemporalItemLinker.TemporalLinkingPlan.stageFailure())
-                ;
+                        .onErrorReturn(TemporalItemLinker.TemporalLinkingPlan.stageFailure());
         Mono<SemanticItemLinker.SemanticLinkingPlan> semanticPlan =
                 Mono.defer(() -> semanticItemLinker.plan(memoryId, batchItems))
                         .subscribeOn(Schedulers.boundedElastic())
                         .onErrorReturn(SemanticItemLinker.SemanticLinkingPlan.stageFailure());
+        Mono<EntityOverlapItemLinker.EntityOverlapLinkingPlan> entityOverlapPlan =
+                Mono.fromSupplier(
+                                () ->
+                                        entityOverlapItemLinker.plan(
+                                                memoryId,
+                                                batchItems,
+                                                structuredBatchResult.resolvedBatch().mentions(),
+                                                options))
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .onErrorReturn(EntityOverlapItemLinker.EntityOverlapLinkingPlan.empty());
 
-        return Mono.zip(temporalPlan, semanticPlan)
+        return Mono.zip(temporalPlan, semanticPlan, entityOverlapPlan)
                 .map(
                         tuple ->
                                 assemblePlanningResult(
-                                        structuredBatchResult, tuple.getT1(), tuple.getT2()));
+                                        structuredBatchResult,
+                                        tuple.getT1(),
+                                        tuple.getT2(),
+                                        tuple.getT3()));
     }
 
     private StructuredBatchResolutionResult resolveStructuredBatch(
@@ -119,21 +154,29 @@ public final class DefaultItemGraphPlanner {
     private PlanningResult assemblePlanningResult(
             StructuredBatchResolutionResult structuredBatchResult,
             TemporalItemLinker.TemporalLinkingPlan temporalPlan,
-            SemanticItemLinker.SemanticLinkingPlan semanticPlan) {
+            SemanticItemLinker.SemanticLinkingPlan semanticPlan,
+            EntityOverlapItemLinker.EntityOverlapLinkingPlan entityOverlapPlan) {
         ResolvedGraphBatch resolvedBatch = structuredBatchResult.resolvedBatch();
         var diagnostics = resolvedBatch.diagnostics();
         var droppedEntityCounts = diagnostics.droppedEntityCounts();
+
+        var semanticRelations = new ArrayList<SemanticItemRelation>();
+        semanticRelations.addAll(structuredSemanticRelations(resolvedBatch));
+        semanticRelations.addAll(toSemanticRelations(semanticPlan.links()));
+        semanticRelations.addAll(toSemanticRelations(entityOverlapPlan.links()));
+        var temporalRelations = new ArrayList<TemporalItemRelation>();
+        temporalRelations.addAll(structuredTemporalRelations(resolvedBatch));
+        temporalRelations.addAll(toTemporalRelations(temporalPlan.links()));
+        var causalRelations = structuredCausalRelations(resolvedBatch);
 
         var writePlan =
                 ItemGraphWritePlan.builder()
                         .entities(resolvedBatch.entities())
                         .mentions(resolvedBatch.mentions())
                         .aliases(resolvedBatch.entityAliases())
-                        .semanticRelations(structuredSemanticRelations(resolvedBatch))
-                        .semanticRelations(toSemanticRelations(semanticPlan.links()))
-                        .temporalRelations(structuredTemporalRelations(resolvedBatch))
-                        .temporalRelations(toTemporalRelations(temporalPlan.links()))
-                        .causalRelations(structuredCausalRelations(resolvedBatch))
+                        .semanticRelations(semanticRelations)
+                        .temporalRelations(temporalRelations)
+                        .causalRelations(causalRelations)
                         .diagnostics(
                                 Map.of(
                                         "resolutionDiagnostics",
@@ -144,33 +187,53 @@ public final class DefaultItemGraphPlanner {
 
         var stats =
                 ItemGraphMaterializationResult.Stats.withTemporalAndSemantic(
-                        resolvedBatch.entities().size(),
-                        resolvedBatch.mentions().size(),
-                        resolvedBatch.itemLinks().size(),
-                        temporalPlan.stats(),
-                        resolvedBatch.resolutionDiagnostics(),
-                        semanticPlan.stats(),
-                        diagnostics.typeFallbackToOtherCount(),
-                        diagnostics.topUnresolvedTypeLabels().isEmpty()
-                                ? ""
-                                : diagnostics.topUnresolvedTypeLabels().entrySet().stream()
-                                        .sorted(
-                                                Map.Entry.<String, Integer>comparingByValue()
-                                                        .reversed()
-                                                        .thenComparing(Map.Entry::getKey))
-                                        .limit(5)
-                                        .map(entry -> entry.getKey() + "=" + entry.getValue())
-                                        .reduce((left, right) -> left + ", " + right)
-                                        .orElse(""),
-                        droppedEntityCounts.getOrDefault(EntityDropReason.BLANK, 0),
-                        droppedEntityCounts.getOrDefault(EntityDropReason.PUNCTUATION_ONLY, 0),
-                        droppedEntityCounts.getOrDefault(EntityDropReason.PRONOUN_LIKE, 0),
-                        droppedEntityCounts.getOrDefault(EntityDropReason.TEMPORAL, 0),
-                        droppedEntityCounts.getOrDefault(EntityDropReason.DATE_LIKE, 0),
-                        droppedEntityCounts.getOrDefault(
-                                EntityDropReason.RESERVED_SPECIAL_COLLISION, 0))
+                                resolvedBatch.entities().size(),
+                                resolvedBatch.mentions().size(),
+                                resolvedBatch.itemLinks().size(),
+                                temporalPlan.stats(),
+                                resolvedBatch.resolutionDiagnostics(),
+                                semanticPlan.stats(),
+                                diagnostics.typeFallbackToOtherCount(),
+                                diagnostics.topUnresolvedTypeLabels().isEmpty()
+                                        ? ""
+                                        : diagnostics.topUnresolvedTypeLabels().entrySet().stream()
+                                                .sorted(
+                                                        Map.Entry
+                                                                .<String, Integer>comparingByValue()
+                                                                .reversed()
+                                                                .thenComparing(Map.Entry::getKey))
+                                                .limit(5)
+                                                .map(
+                                                        entry ->
+                                                                entry.getKey()
+                                                                        + "="
+                                                                        + entry.getValue())
+                                                .reduce((left, right) -> left + ", " + right)
+                                                .orElse(""),
+                                droppedEntityCounts.getOrDefault(EntityDropReason.BLANK, 0),
+                                droppedEntityCounts.getOrDefault(
+                                        EntityDropReason.PUNCTUATION_ONLY, 0),
+                                droppedEntityCounts.getOrDefault(EntityDropReason.PRONOUN_LIKE, 0),
+                                droppedEntityCounts.getOrDefault(EntityDropReason.TEMPORAL, 0),
+                                droppedEntityCounts.getOrDefault(EntityDropReason.DATE_LIKE, 0),
+                                droppedEntityCounts.getOrDefault(
+                                        EntityDropReason.RESERVED_SPECIAL_COLLISION, 0))
                         .withStructuredBatchDegraded(
-                                structuredBatchResult.structuredBatchDegraded());
+                                structuredBatchResult.structuredBatchDegraded())
+                        .withFinalRelationStats(
+                                new ItemGraphMaterializationResult.Stats.FinalRelationStats(
+                                        writePlan.semanticRelations().size(),
+                                        writePlan.temporalRelations().size(),
+                                        writePlan.causalRelations().size(),
+                                        writePlan.semanticRelations().size()
+                                                + writePlan.temporalRelations().size()
+                                                + writePlan.causalRelations().size()))
+                        .withEntityOverlapStats(
+                                new ItemGraphMaterializationResult.Stats.EntityOverlapStats(
+                                        entityOverlapPlan.stats().candidatePairCount(),
+                                        entityOverlapPlan.stats().createdLinkCount(),
+                                        entityOverlapPlan.stats().skippedFanoutEntityCount(),
+                                        entityOverlapPlan.stats().duplicateSuppressedCount()));
         return new PlanningResult(writePlan, stats);
     }
 

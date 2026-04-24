@@ -43,8 +43,7 @@ final class ThreadAnchorProviderSupport {
                     MemoryThreadEventType.RESOLUTION_DECLARED,
                     MemoryThreadEventType.SETBACK);
 
-    private static final ThreadAnchorCanonicalizer CANONICALIZER =
-            new ThreadAnchorCanonicalizer();
+    private static final ThreadAnchorCanonicalizer CANONICALIZER = new ThreadAnchorCanonicalizer();
 
     private ThreadAnchorProviderSupport() {}
 
@@ -213,7 +212,10 @@ final class ThreadAnchorProviderSupport {
                         .max()
                         .orElse(0.0d);
         int cooccurrenceStrength =
-                cooccurrences.stream().mapToInt(EntityCooccurrence::cooccurrenceCount).max().orElse(0);
+                cooccurrences.stream()
+                        .mapToInt(EntityCooccurrence::cooccurrenceCount)
+                        .max()
+                        .orElse(0);
         return Math.max(0.75d, Math.max(linkStrength, Math.min(1.0d, cooccurrenceStrength / 4.0d)));
     }
 
@@ -224,8 +226,7 @@ final class ThreadAnchorProviderSupport {
     static boolean hasEventLikeSignal(
             MemoryItem item, List<ThreadIntakeSignal.SemanticMarker> markers) {
         Objects.requireNonNull(item, "item");
-        List<ThreadIntakeSignal.SemanticMarker> markerList =
-                markers == null ? List.of() : markers;
+        List<ThreadIntakeSignal.SemanticMarker> markerList = markers == null ? List.of() : markers;
         return item.category() == MemoryCategory.EVENT
                 || markerList.stream()
                         .map(ThreadIntakeSignal.SemanticMarker::eventType)

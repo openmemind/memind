@@ -51,8 +51,8 @@ public record ExtractedGraphHints(
     }
 
     /**
-     * Raw backward-looking causal hint emitted by the extraction model.
+     * Raw explicit cause/effect causal hint emitted by the extraction model.
      */
     public record ExtractedCausalRelationHint(
-            Integer targetIndex, String relationType, Float strength) {}
+            Integer causeIndex, Integer effectIndex, String relationType, Float strength) {}
 }

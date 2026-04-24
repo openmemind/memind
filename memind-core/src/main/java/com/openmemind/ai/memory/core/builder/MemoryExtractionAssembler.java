@@ -65,8 +65,8 @@ import com.openmemind.ai.memory.core.extraction.rawdata.caption.LlmConversationC
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.ConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.chunk.LlmConversationChunker;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
-import com.openmemind.ai.memory.core.extraction.thread.CoalescingThreadWakeScheduler;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
+import com.openmemind.ai.memory.core.extraction.thread.CoalescingThreadWakeScheduler;
 import com.openmemind.ai.memory.core.extraction.thread.MemoryThreadLayer;
 import com.openmemind.ai.memory.core.extraction.thread.NoOpThreadDerivationMetrics;
 import com.openmemind.ai.memory.core.extraction.thread.ThreadDerivationMetrics;
@@ -77,10 +77,10 @@ import com.openmemind.ai.memory.core.extraction.thread.ThreadProjectionRebuilder
 import com.openmemind.ai.memory.core.extraction.thread.ThreadReplaySuccessListener;
 import com.openmemind.ai.memory.core.extraction.thread.ThreadWakeScheduler;
 import com.openmemind.ai.memory.core.extraction.thread.enrichment.DefaultThreadEnrichmentAssistant;
+import com.openmemind.ai.memory.core.extraction.thread.enrichment.StoreBackedThreadReplayScheduler;
 import com.openmemind.ai.memory.core.extraction.thread.enrichment.ThreadEnrichmentAssistant;
 import com.openmemind.ai.memory.core.extraction.thread.enrichment.ThreadEnrichmentCoordinator;
 import com.openmemind.ai.memory.core.extraction.thread.enrichment.ThreadReplayScheduler;
-import com.openmemind.ai.memory.core.extraction.thread.enrichment.StoreBackedThreadReplayScheduler;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicy;
@@ -257,8 +257,7 @@ final class MemoryExtractionAssembler {
                                 replaySuccessListener,
                                 derivationMetrics);
                 threadWakeScheduler =
-                        new CoalescingThreadWakeScheduler(
-                                threadIntakeWorker, derivationMetrics);
+                        new CoalescingThreadWakeScheduler(threadIntakeWorker, derivationMetrics);
                 ThreadEnrichmentAssistant enrichmentAssistant =
                         new DefaultThreadEnrichmentAssistant(
                                 registry.resolve(ChatClientSlot.THREAD_ENRICHMENT),
@@ -292,8 +291,7 @@ final class MemoryExtractionAssembler {
                                 replaySuccessListener,
                                 derivationMetrics);
                 threadWakeScheduler =
-                        new CoalescingThreadWakeScheduler(
-                                threadIntakeWorker, derivationMetrics);
+                        new CoalescingThreadWakeScheduler(threadIntakeWorker, derivationMetrics);
             }
             memoryThreadLayer =
                     new MemoryThreadLayer(
@@ -324,10 +322,7 @@ final class MemoryExtractionAssembler {
                         context.options().extraction().rawdata(),
                         context.options().extraction().item());
         return new MemoryExtractionAssembly(
-                pipeline,
-                insightLayer,
-                extractionLifecycle,
-                memoryThreadLayer);
+                pipeline, insightLayer, extractionLifecycle, memoryThreadLayer);
     }
 
     private ResourceFetcher resolveResourceFetcher(ResourceFetcher runtimeFetcher) {

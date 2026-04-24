@@ -18,4 +18,5 @@ import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadEnri
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface MemoryThreadEnrichmentInputMapper extends BaseMapper<MemoryThreadEnrichmentInputDO> {}
+public interface MemoryThreadEnrichmentInputMapper
+        extends BaseMapper<MemoryThreadEnrichmentInputDO> {}

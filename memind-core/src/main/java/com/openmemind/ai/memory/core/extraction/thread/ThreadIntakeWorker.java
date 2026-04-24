@@ -105,12 +105,7 @@ public class ThreadIntakeWorker {
             ThreadProjectionMaterializer materializer,
             ThreadMaterializationPolicy policy,
             ThreadReplaySuccessListener replaySuccessListener) {
-        this(
-                store,
-                materializer,
-                policy,
-                replaySuccessListener,
-                ThreadDerivationMetrics.NOOP);
+        this(store, materializer, policy, replaySuccessListener, ThreadDerivationMetrics.NOOP);
     }
 
     ThreadIntakeWorker(
@@ -136,7 +131,8 @@ public class ThreadIntakeWorker {
 
         while (true) {
             MemoryThreadRuntimeState observedRuntime = store.getRuntime(memoryId).orElse(null);
-            long observedRebuildEpoch = observedRuntime != null ? observedRuntime.rebuildEpoch() : 0L;
+            long observedRebuildEpoch =
+                    observedRuntime != null ? observedRuntime.rebuildEpoch() : 0L;
             Instant claimedAt = Instant.now();
             List<MemoryThreadIntakeClaim> claimed =
                     store.claimPending(
@@ -154,7 +150,10 @@ public class ThreadIntakeWorker {
     private boolean processBatch(
             MemoryId memoryId, List<MemoryThreadIntakeClaim> claimed, long observedRebuildEpoch) {
         long replayCutoffItemId =
-                claimed.stream().mapToLong(MemoryThreadIntakeClaim::triggerItemId).max().orElseThrow();
+                claimed.stream()
+                        .mapToLong(MemoryThreadIntakeClaim::triggerItemId)
+                        .max()
+                        .orElseThrow();
         try {
             ThreadProjectionMaterializer.MaterializedProjection projection =
                     materializer.materializeUpTo(memoryId, replayCutoffItemId);
@@ -191,11 +190,7 @@ public class ThreadIntakeWorker {
                     replayCutoffItemId,
                     e);
             store.finalizeClaimedIntakeFailure(
-                    memoryId,
-                    claimed,
-                    failureReason(e),
-                    DEFAULT_MAX_ATTEMPTS,
-                    failedAt);
+                    memoryId, claimed, failureReason(e), DEFAULT_MAX_ATTEMPTS, failedAt);
             store.markRebuildRequired(memoryId, "intake failure");
             return false;
         }
@@ -266,6 +261,7 @@ public class ThreadIntakeWorker {
     }
 
     private static boolean containsGroupRelationshipThread(List<MemoryThreadProjection> threads) {
-        return threads.stream().anyMatch(thread -> "relationship_group".equals(thread.anchorKind()));
+        return threads.stream()
+                .anyMatch(thread -> "relationship_group".equals(thread.anchorKind()));
     }
 }

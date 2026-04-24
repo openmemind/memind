@@ -15,7 +15,6 @@ package com.openmemind.ai.memory.core.extraction.item.graph.plan;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.extraction.item.graph.relation.causal.CausalItemRelation;
-import com.openmemind.ai.memory.core.extraction.item.graph.relation.semantic.SemanticEvidenceSource;
 import com.openmemind.ai.memory.core.extraction.item.graph.relation.semantic.SemanticItemRelation;
 import com.openmemind.ai.memory.core.extraction.item.graph.relation.temporal.TemporalItemRelation;
 import com.openmemind.ai.memory.core.store.graph.GraphEntity;
@@ -402,16 +401,24 @@ public record ItemGraphWritePlan(
 
         private static SemanticItemRelation mergeSemanticRelation(
                 SemanticItemRelation left, SemanticItemRelation right) {
+            SemanticItemRelation preferred = preferSemanticRelation(left, right);
             return new SemanticItemRelation(
-                    left.sourceItemId(),
-                    left.targetItemId(),
-                    preferEvidence(left.evidenceSource(), right.evidenceSource()),
-                    Math.max(left.strength(), right.strength()));
+                    preferred.sourceItemId(),
+                    preferred.targetItemId(),
+                    preferred.evidenceSource(),
+                    preferred.strength());
         }
 
-        private static SemanticEvidenceSource preferEvidence(
-                SemanticEvidenceSource left, SemanticEvidenceSource right) {
-            return left.precedence() >= right.precedence() ? left : right;
+        private static SemanticItemRelation preferSemanticRelation(
+                SemanticItemRelation left, SemanticItemRelation right) {
+            int precedenceCompare =
+                    Integer.compare(
+                            left.evidenceSource().precedence(),
+                            right.evidenceSource().precedence());
+            if (precedenceCompare != 0) {
+                return precedenceCompare >= 0 ? left : right;
+            }
+            return left.strength() >= right.strength() ? left : right;
         }
 
         private static TemporalItemRelation mergeTemporalRelation(

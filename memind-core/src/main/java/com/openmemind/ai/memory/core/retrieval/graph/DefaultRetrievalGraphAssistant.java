@@ -53,7 +53,8 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
     private static final List<ItemLinkType> SUPPORTED_LINK_TYPES =
             List.of(ItemLinkType.SEMANTIC, ItemLinkType.TEMPORAL, ItemLinkType.CAUSAL);
     private static final Comparator<SeedAdjacentLink> SEED_ADJACENT_LINK_ORDER =
-            Comparator.comparing(SeedAdjacentLink::overlap).reversed()
+            Comparator.comparing(SeedAdjacentLink::overlap)
+                    .reversed()
                     .thenComparing(SeedAdjacentLink::family, relationFamilyOrder())
                     .thenComparing(SeedAdjacentLink::strength, Comparator.reverseOrder())
                     .thenComparingLong(SeedAdjacentLink::neighborItemId)
@@ -344,12 +345,16 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
             if (seedIdSet.contains(link.sourceItemId())) {
                 long neighborItemId = link.targetItemId();
                 buckets.get(link.sourceItemId())
-                        .add(seedAdjacentLink(link, link.sourceItemId(), neighborItemId, directIds));
+                        .add(
+                                seedAdjacentLink(
+                                        link, link.sourceItemId(), neighborItemId, directIds));
             }
             if (seedIdSet.contains(link.targetItemId())) {
                 long neighborItemId = link.sourceItemId();
                 buckets.get(link.targetItemId())
-                        .add(seedAdjacentLink(link, link.targetItemId(), neighborItemId, directIds));
+                        .add(
+                                seedAdjacentLink(
+                                        link, link.targetItemId(), neighborItemId, directIds));
             }
         }
         return buckets.entrySet().stream()

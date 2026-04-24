@@ -114,17 +114,22 @@ public final class ThreadEnrichmentPrompts {
         if (thread == null) {
             throw new IllegalArgumentException("thread must not be null");
         }
-        List<MemoryThreadEvent> events = itemBackedEvents == null ? List.of() : List.copyOf(itemBackedEvents);
+        List<MemoryThreadEvent> events =
+                itemBackedEvents == null ? List.of() : List.copyOf(itemBackedEvents);
 
         PromptTemplate.Builder builder =
                 registry.hasOverride(PromptType.THREAD_ENRICHMENT)
                         ? PromptTemplate.builder("ThreadEnrichment")
-                                .section("system", registry.getOverride(PromptType.THREAD_ENRICHMENT))
+                                .section(
+                                        "system",
+                                        registry.getOverride(PromptType.THREAD_ENRICHMENT))
                         : defaultBuilder();
 
         return builder.userPrompt(USER_PROMPT_TEMPLATE)
                 .variable("thread_json", toJson(threadView(thread)))
-                .variable("events_json", toJson(events.stream().map(ThreadEnrichmentPrompts::eventView).toList()))
+                .variable(
+                        "events_json",
+                        toJson(events.stream().map(ThreadEnrichmentPrompts::eventView).toList()))
                 .build();
     }
 
@@ -164,7 +169,8 @@ public final class ThreadEnrichmentPrompts {
         try {
             return JsonUtils.newMapper().writerWithDefaultPrettyPrinter().writeValueAsString(value);
         } catch (tools.jackson.core.JacksonException error) {
-            throw new IllegalStateException("Failed to serialize thread enrichment prompt input", error);
+            throw new IllegalStateException(
+                    "Failed to serialize thread enrichment prompt input", error);
         }
     }
 }

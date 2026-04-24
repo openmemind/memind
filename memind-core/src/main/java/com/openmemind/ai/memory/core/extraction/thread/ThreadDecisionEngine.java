@@ -86,7 +86,8 @@ public final class ThreadDecisionEngine {
             ThreadCandidateScore exactAnchorMatch = exactAnchorMatches.getFirst();
             return attachOutcome(
                     item.id(),
-                    representativeSignal(signals, exactAnchorMatch.candidate().thread().threadKey()),
+                    representativeSignal(
+                            signals, exactAnchorMatch.candidate().thread().threadKey()),
                     exactAnchorMatch.candidate().thread(),
                     1.0d,
                     ThreadAdmissionEvidence.exactAnchor(),

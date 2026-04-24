@@ -564,13 +564,17 @@ public final class MemoryItemUnifiedPrompts {
         - Include `"entities"` only for concrete, high-value named entities; keep at most %d per item.
         - Allowed `"entityType"` values are `person`, `organization`, `place`, `object`, `concept`, and `special`.
         - Use "special" only for conversational role anchors such as self, user, or assistant; do not label arbitrary nouns as special.
-        - Include `"causalRelations"` only for strong backward-looking links; keep at most %d per item.
+        - Good entities: named people, organizations, places, durable objects, and durable concepts central to the item.
+        - Bad entities: pronouns, generic nouns, dates, categories, vague topics, or entities not grounded in the source.
+        - Include `"causalRelations"` only for strong explicit cause/effect links inside this response; keep at most %d per item.
+        - Good causal relation: one item states a cause, trigger, enabler, or motivation for another item.
+        - Bad causal relation: not for topical similarity, not for ownership or dependency, and not for simple co-occurrence.
         - `"entities"` uses objects with `"name"`, `"entityType"`, optional `"salience"`, and optional `"aliasObservations"`.
         - Each `"aliasObservations"` entry uses `"aliasSurface"`, `"aliasClass"`, optional `"evidenceSource"`, and optional `"confidence"`.
         - Allowed `"aliasClass"` values are `case_only`, `punctuation`, `spacing`, `org_suffix`, `explicit_parenthetical`, `explicit_slash_apposition`, and `user_dictionary`.
-        - `"causalRelations"` uses objects with `"targetIndex"`, `"relationType"`, and `"strength"` in [0,1].
+        - `"causalRelations"` uses objects with `"causeIndex"`, `"effectIndex"`, `"relationType"`, and `"strength"` in [0,1].
         - If you emit a causal relation, include an explicit strength in [0,1]; otherwise omit the relation.
-        - targetIndex must reference an earlier item in the same response.
+        - causeIndex and effectIndex must reference different items in the same response.
         - Prefer omission to hallucinated graph structure.
         """
                 .formatted(
@@ -626,7 +630,8 @@ public final class MemoryItemUnifiedPrompts {
                 + "      ],\n"
                 + "      \"causalRelations\": [\n"
                 + "        {\n"
-                + "          \"targetIndex\": 0,\n"
+                + "          \"causeIndex\": 0,\n"
+                + "          \"effectIndex\": 1,\n"
                 + "          \"relationType\": \"caused_by\",\n"
                 + "          \"strength\": 0.88\n"
                 + "        }\n"

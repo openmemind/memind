@@ -71,7 +71,8 @@ final class ThreadCreationGate {
         }
 
         static GateEvaluation rejected(String failureReason) {
-            return new GateEvaluation(null, Objects.requireNonNull(failureReason, "failureReason"), true);
+            return new GateEvaluation(
+                    null, Objects.requireNonNull(failureReason, "failureReason"), true);
         }
 
         boolean admitted() {

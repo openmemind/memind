@@ -227,10 +227,7 @@ class MemoryOptionsProjectionMapperTest {
                 projection,
                 "memoryThread.enrichment.minimumMeaningfulEventDeltaForReenrichment",
                 4);
-        updateValue(
-                projection,
-                "memoryThread.enrichment.minimumWallClockGapBetweenRuns",
-                "PT20M");
+        updateValue(projection, "memoryThread.enrichment.minimumWallClockGapBetweenRuns", "PT20M");
         updateValue(projection, "memoryThread.enrichment.timeout", "PT7S");
 
         var rebuilt = mapper.toOptions(projection);
@@ -238,10 +235,7 @@ class MemoryOptionsProjectionMapperTest {
         assertThat(rebuilt.memoryThread().enrichment().enabled()).isTrue();
         assertThat(rebuilt.memoryThread().enrichment().minimumEventCountForFirstEnrichment())
                 .isEqualTo(3);
-        assertThat(
-                        rebuilt.memoryThread()
-                                .enrichment()
-                                .minimumMeaningfulEventDeltaForReenrichment())
+        assertThat(rebuilt.memoryThread().enrichment().minimumMeaningfulEventDeltaForReenrichment())
                 .isEqualTo(4);
         assertThat(rebuilt.memoryThread().enrichment().minimumWallClockGapBetweenRuns())
                 .isEqualTo(java.time.Duration.ofMinutes(20));

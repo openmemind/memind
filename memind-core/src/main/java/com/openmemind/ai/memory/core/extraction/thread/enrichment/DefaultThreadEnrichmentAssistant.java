@@ -54,7 +54,8 @@ public final class DefaultThreadEnrichmentAssistant implements ThreadEnrichmentA
     public Mono<List<ThreadEnrichmentResult>> enrich(
             MemoryThreadProjection thread, List<MemoryThreadEvent> itemBackedEvents) {
         var prompt =
-                ThreadEnrichmentPrompts.build(promptRegistry, thread, itemBackedEvents).render(null);
+                ThreadEnrichmentPrompts.build(promptRegistry, thread, itemBackedEvents)
+                        .render(null);
         var messages = ChatMessages.systemUser(prompt.systemPrompt(), prompt.userPrompt());
         return structuredChatClient
                 .call(messages, LlmResponse.class)
@@ -85,7 +86,9 @@ public final class DefaultThreadEnrichmentAssistant implements ThreadEnrichmentA
                                         event.eventType(),
                                         Boolean.TRUE.equals(event.meaningful()),
                                         event.basisEventKey(),
-                                        event.payloadJson() == null ? Map.of() : event.payloadJson()))
+                                        event.payloadJson() == null
+                                                ? Map.of()
+                                                : event.payloadJson()))
                 .toList();
     }
 

@@ -82,13 +82,16 @@ class ThreadEnrichmentCoordinatorTest {
         coordinator.afterSuccessfulReplay(
                 new com.openmemind.ai.memory.core.extraction.thread.ThreadReplaySuccessContext(
                         MEMORY_ID,
-                        com.openmemind.ai.memory.core.extraction.thread.ThreadReplayOrigin.INTAKE_BATCH,
+                        com.openmemind.ai.memory.core.extraction.thread.ThreadReplayOrigin
+                                .INTAKE_BATCH,
                         401L,
                         List.of(401L),
                         List.of(thread("topic:travel")),
                         List.of(
-                                itemBackedEvent("topic:travel", "topic:travel:update:301", 1L, true),
-                                itemBackedEvent("topic:travel", "topic:travel:update:401", 2L, true)),
+                                itemBackedEvent(
+                                        "topic:travel", "topic:travel:update:301", 1L, true),
+                                itemBackedEvent(
+                                        "topic:travel", "topic:travel:update:401", 2L, true)),
                         List.of(),
                         POLICY_VERSION,
                         BASE_TIME));
@@ -104,7 +107,9 @@ class ThreadEnrichmentCoordinatorTest {
         assertThat(projectionStore.listOutbox(MEMORY_ID))
                 .singleElement()
                 .extracting(entry -> entry.triggerItemId(), entry -> entry.status())
-                .containsExactly(401L, com.openmemind.ai.memory.core.data.enums.MemoryThreadIntakeStatus.PENDING);
+                .containsExactly(
+                        401L,
+                        com.openmemind.ai.memory.core.data.enums.MemoryThreadIntakeStatus.PENDING);
         assertThat(replayScheduler.scheduledCutoffs()).containsExactly(401L);
     }
 
@@ -121,8 +126,7 @@ class ThreadEnrichmentCoordinatorTest {
 
         assertThat(inputStore.appendRunAndEnqueueReplay(MEMORY_ID, 401L, runInputs))
                 .isEqualTo(ThreadEnrichmentAppendResult.INSERTED);
-        projectionStore.finalizeOutboxSuccess(
-                MEMORY_ID, 401L, 401L, BASE_TIME.plusSeconds(1));
+        projectionStore.finalizeOutboxSuccess(MEMORY_ID, 401L, 401L, BASE_TIME.plusSeconds(1));
 
         assertThat(inputStore.appendRunAndEnqueueReplay(MEMORY_ID, 401L, runInputs))
                 .isEqualTo(ThreadEnrichmentAppendResult.DUPLICATE_EQUIVALENT);
@@ -130,7 +134,9 @@ class ThreadEnrichmentCoordinatorTest {
         assertThat(projectionStore.listOutbox(MEMORY_ID))
                 .singleElement()
                 .extracting(entry -> entry.status())
-                .isEqualTo(com.openmemind.ai.memory.core.data.enums.MemoryThreadIntakeStatus.COMPLETED);
+                .isEqualTo(
+                        com.openmemind.ai.memory.core.data.enums.MemoryThreadIntakeStatus
+                                .COMPLETED);
     }
 
     @Test
@@ -164,13 +170,16 @@ class ThreadEnrichmentCoordinatorTest {
         coordinator.afterSuccessfulReplay(
                 new com.openmemind.ai.memory.core.extraction.thread.ThreadReplaySuccessContext(
                         MEMORY_ID,
-                        com.openmemind.ai.memory.core.extraction.thread.ThreadReplayOrigin.INTAKE_BATCH,
+                        com.openmemind.ai.memory.core.extraction.thread.ThreadReplayOrigin
+                                .INTAKE_BATCH,
                         401L,
                         List.of(401L),
                         List.of(thread("topic:travel")),
                         List.of(
-                                itemBackedEvent("topic:travel", "topic:travel:update:301", 1L, true),
-                                itemBackedEvent("topic:travel", "topic:travel:update:401", 2L, true)),
+                                itemBackedEvent(
+                                        "topic:travel", "topic:travel:update:301", 1L, true),
+                                itemBackedEvent(
+                                        "topic:travel", "topic:travel:update:401", 2L, true)),
                         List.of(),
                         POLICY_VERSION,
                         BASE_TIME));
@@ -188,7 +197,9 @@ class ThreadEnrichmentCoordinatorTest {
 
         InMemoryThreadEnrichmentInputStore inputStore =
                 new InMemoryThreadEnrichmentInputStore(projectionStore);
-        assertThat(inputStore.appendRunAndEnqueueReplay(MEMORY_ID, 401L, List.of(enrichmentInput("topic:travel", 0))))
+        assertThat(
+                        inputStore.appendRunAndEnqueueReplay(
+                                MEMORY_ID, 401L, List.of(enrichmentInput("topic:travel", 0))))
                 .isEqualTo(ThreadEnrichmentAppendResult.INSERTED);
 
         MemoryThreadEnrichmentInput conflicting =
@@ -324,5 +335,4 @@ class ThreadEnrichmentCoordinatorTest {
             return List.copyOf(scheduledCutoffs);
         }
     }
-
 }

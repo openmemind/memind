@@ -142,20 +142,7 @@ class TracingItemGraphMaterializerTest {
                         2,
                         1,
                         new TemporalItemLinker.TemporalLinkingStats(
-                                2,
-                                1,
-                                3,
-                                1,
-                                1,
-                                1,
-                                4L,
-                                3L,
-                                2L,
-                                0,
-                                0.75d,
-                                0.75d,
-                                "0.75-0.89=1",
-                                true),
+                                2, 1, 3, 1, 1, 1, 4L, 3L, 2L, 0, 0.75d, 0.75d, "0.75-0.89=1", true),
                         EntityResolutionDiagnostics.empty(),
                         new SemanticItemLinker.SemanticLinkingStats(
                                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0L, 0L, 0L, 0L, false),
@@ -225,9 +212,7 @@ class TracingItemGraphMaterializerTest {
                         .resultExtractor()
                         .extract(new ItemGraphMaterializationResult(stats));
         assertThat(resultAttributes)
-                .containsEntry(
-                        MemoryAttributes.EXTRACTION_GRAPH_STRUCTURED_BATCH_DEGRADED,
-                        true);
+                .containsEntry(MemoryAttributes.EXTRACTION_GRAPH_STRUCTURED_BATCH_DEGRADED, true);
     }
 
     @Test

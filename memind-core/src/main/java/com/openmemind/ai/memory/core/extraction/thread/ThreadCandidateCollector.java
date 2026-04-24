@@ -54,7 +54,8 @@ final class ThreadCandidateCollector {
                         .collect(Collectors.toCollection(LinkedHashSet::new));
 
         for (CanonicalizedSignal canonicalSignal : canonicalSignals) {
-            MemoryThreadProjection projection = projectionsByKey.get(canonicalSignal.anchor().threadKey());
+            MemoryThreadProjection projection =
+                    projectionsByKey.get(canonicalSignal.anchor().threadKey());
             if (projection != null && projection.threadType() == threadType) {
                 candidateThreadKeys.add(projection.threadKey());
                 exactAnchorThreadKeys.add(projection.threadKey());
@@ -93,7 +94,9 @@ final class ThreadCandidateCollector {
                                 return null;
                             }
                             Set<Long> memberItemIds =
-                                    membershipsByThreadKey.getOrDefault(threadKey, List.of()).stream()
+                                    membershipsByThreadKey
+                                            .getOrDefault(threadKey, List.of())
+                                            .stream()
                                             .map(MemoryThreadMembership::itemId)
                                             .collect(Collectors.toCollection(LinkedHashSet::new));
                             boolean explicitContinuityMatch =

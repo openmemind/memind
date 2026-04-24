@@ -20,8 +20,8 @@ import static org.assertj.core.groups.Tuple.tuple;
 
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
-import com.openmemind.ai.memory.core.data.enums.MemoryThreadLifecycleStatus;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadIntakeStatus;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadLifecycleStatus;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadMembershipRole;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadObjectState;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadType;

@@ -33,8 +33,7 @@ class ThreadHeadlineFormatterTest {
     void relationshipGroupHeadlineIsDeterministicWithoutEnrichment() {
         assertThat(
                         ThreadHeadlineFormatter.format(
-                                "relationship_group",
-                                "person:alice|person:bob|person:carol"))
+                                "relationship_group", "person:alice|person:bob|person:carol"))
                 .isEqualTo("Alice, Bob, and Carol");
     }
 
@@ -63,7 +62,8 @@ class ThreadHeadlineFormatterTest {
                                         Instant.parse("2026-04-20T09:00:00Z"),
                                         Map.of(
                                                 "summary",
-                                                "Alice, Bob, and Carol planned the launch together."),
+                                                "Alice, Bob, and Carol planned the launch"
+                                                        + " together."),
                                         1,
                                         false,
                                         1.0d,

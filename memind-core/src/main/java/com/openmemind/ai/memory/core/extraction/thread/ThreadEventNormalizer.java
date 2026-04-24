@@ -13,9 +13,9 @@
  */
 package com.openmemind.ai.memory.core.extraction.thread;
 
-import com.openmemind.ai.memory.core.data.thread.MemoryThreadEnrichmentInput;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadEventType;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadType;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadEnrichmentInput;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadEvent;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -48,9 +48,7 @@ public final class ThreadEventNormalizer {
     }
 
     public List<MemoryThreadEvent> normalize(
-            ThreadDecision decision,
-            ThreadIntakeSignal signal,
-            ThreadAdmissionEvidence evidence) {
+            ThreadDecision decision, ThreadIntakeSignal signal, ThreadAdmissionEvidence evidence) {
         Objects.requireNonNull(decision, "decision");
         Objects.requireNonNull(signal, "signal");
         Objects.requireNonNull(evidence, "evidence");
@@ -231,7 +229,8 @@ public final class ThreadEventNormalizer {
     }
 
     private static List<Long> supportingItemIds(Map<String, Object> provenanceJson) {
-        Object supportingItemIds = provenanceJson == null ? null : provenanceJson.get("supportingItemIds");
+        Object supportingItemIds =
+                provenanceJson == null ? null : provenanceJson.get("supportingItemIds");
         if (!(supportingItemIds instanceof List<?> rawIds)) {
             return List.of();
         }

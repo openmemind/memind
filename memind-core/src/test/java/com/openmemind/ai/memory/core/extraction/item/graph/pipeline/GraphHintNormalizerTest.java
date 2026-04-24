@@ -54,8 +54,8 @@ class GraphHintNormalizerTest {
                                         entityHint("用户", "special", 0.90f),
                                         entityHint("今天", "concept", 0.70f)),
                                 List.of(
-                                        causalHint(0, "CAUSED_BY", 0.95f),
-                                        causalHint(1, "caused_by", 0.99f))));
+                                        causalHint(0, 1, "CAUSED_BY", 0.95f),
+                                        causalHint(1, 1, "caused_by", 0.99f))));
 
         var batch =
                 new GraphHintNormalizer()
@@ -126,8 +126,8 @@ class GraphHintNormalizerTest {
     }
 
     private static ExtractedGraphHints.ExtractedCausalRelationHint causalHint(
-            Integer targetIndex, String relationType, Float strength) {
+            Integer causeIndex, Integer effectIndex, String relationType, Float strength) {
         return new ExtractedGraphHints.ExtractedCausalRelationHint(
-                targetIndex, relationType, strength);
+                causeIndex, effectIndex, relationType, strength);
     }
 }

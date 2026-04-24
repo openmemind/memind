@@ -95,22 +95,14 @@ class DefaultMemoryThreadAssistantTest {
                                 null,
                                 2)),
                 List.of(
-                        eventWithItemSource(
-                                "topic:alpha", 1L, 101L, BASE_TIME.plusSeconds(10)),
-                        eventWithItemSource(
-                                "topic:alpha", 2L, 201L, BASE_TIME.plusSeconds(15)),
-                        eventWithItemSource(
-                                "topic:beta", 1L, 102L, BASE_TIME.plusSeconds(20)),
-                        eventWithItemSource(
-                                "topic:beta", 2L, 301L, BASE_TIME.plusSeconds(25)),
-                        eventWithItemSource(
-                                "topic:gamma", 1L, 103L, BASE_TIME.plusSeconds(30)),
-                        eventWithItemSource(
-                                "topic:gamma", 2L, 401L, BASE_TIME.plusSeconds(35)),
-                        eventWithItemSource(
-                                "topic:omega", 1L, 104L, BASE_TIME.plusSeconds(40)),
-                        eventWithItemSource(
-                                "topic:omega", 2L, 501L, BASE_TIME.plusSeconds(45))),
+                        eventWithItemSource("topic:alpha", 1L, 101L, BASE_TIME.plusSeconds(10)),
+                        eventWithItemSource("topic:alpha", 2L, 201L, BASE_TIME.plusSeconds(15)),
+                        eventWithItemSource("topic:beta", 1L, 102L, BASE_TIME.plusSeconds(20)),
+                        eventWithItemSource("topic:beta", 2L, 301L, BASE_TIME.plusSeconds(25)),
+                        eventWithItemSource("topic:gamma", 1L, 103L, BASE_TIME.plusSeconds(30)),
+                        eventWithItemSource("topic:gamma", 2L, 401L, BASE_TIME.plusSeconds(35)),
+                        eventWithItemSource("topic:omega", 1L, 104L, BASE_TIME.plusSeconds(40)),
+                        eventWithItemSource("topic:omega", 2L, 501L, BASE_TIME.plusSeconds(45))),
                 List.of(
                         membership("topic:alpha", 101L, true, 1.0d),
                         membership("topic:alpha", 201L, false, 0.81d),
@@ -184,12 +176,9 @@ class DefaultMemoryThreadAssistantTest {
                                 BASE_TIME.plusSeconds(36),
                                 2)),
                 List.of(
-                        eventWithItemSource(
-                                "topic:coverage", 1L, 101L, BASE_TIME.plusSeconds(10)),
-                        eventWithItemSource(
-                                "topic:coverage", 2L, 102L, BASE_TIME.plusSeconds(20)),
-                        eventWithItemSource(
-                                "topic:coverage", 3L, 201L, BASE_TIME.plusSeconds(25)),
+                        eventWithItemSource("topic:coverage", 1L, 101L, BASE_TIME.plusSeconds(10)),
+                        eventWithItemSource("topic:coverage", 2L, 102L, BASE_TIME.plusSeconds(20)),
+                        eventWithItemSource("topic:coverage", 3L, 201L, BASE_TIME.plusSeconds(25)),
                         eventWithItemSource(
                                 "topic:state-active", 1L, 103L, BASE_TIME.plusSeconds(30)),
                         eventWithItemSource(
@@ -251,14 +240,10 @@ class DefaultMemoryThreadAssistantTest {
                                 null,
                                 2)),
                 List.of(
-                        eventWithItemSource(
-                                "topic:alpha", 1L, 101L, BASE_TIME.plusSeconds(10)),
-                        eventWithItemSource(
-                                "topic:alpha", 2L, 201L, BASE_TIME.plusSeconds(20)),
-                        eventWithItemSource(
-                                "topic:beta", 1L, 101L, BASE_TIME.plusSeconds(10)),
-                        eventWithItemSource(
-                                "topic:beta", 2L, 301L, BASE_TIME.plusSeconds(20))),
+                        eventWithItemSource("topic:alpha", 1L, 101L, BASE_TIME.plusSeconds(10)),
+                        eventWithItemSource("topic:alpha", 2L, 201L, BASE_TIME.plusSeconds(20)),
+                        eventWithItemSource("topic:beta", 1L, 101L, BASE_TIME.plusSeconds(10)),
+                        eventWithItemSource("topic:beta", 2L, 301L, BASE_TIME.plusSeconds(20))),
                 List.of(
                         membership("topic:alpha", 101L, true, 1.0d),
                         membership("topic:alpha", 201L, false, 0.80d),
@@ -309,20 +294,13 @@ class DefaultMemoryThreadAssistantTest {
                                 null,
                                 3)),
                 List.of(
-                        eventWithItemSource(
-                                "topic:zeta", 1L, 101L, BASE_TIME.plusSeconds(10)),
-                        eventWithItemSource(
-                                "topic:zeta", 2L, 201L, BASE_TIME.plusSeconds(20)),
-                        eventWithItemSource(
-                                "topic:zeta", 3L, 202L, BASE_TIME.plusSeconds(21)),
-                        eventWithItemSource(
-                                "topic:zeta", 4L, 203L, BASE_TIME.plusSeconds(22)),
-                        eventWithItemSource(
-                                "topic:alpha", 1L, 101L, BASE_TIME.plusSeconds(10)),
-                        eventWithItemSource(
-                                "topic:alpha", 2L, 301L, BASE_TIME.plusSeconds(20)),
-                        eventWithItemSource(
-                                "topic:alpha", 3L, 302L, BASE_TIME.plusSeconds(21))),
+                        eventWithItemSource("topic:zeta", 1L, 101L, BASE_TIME.plusSeconds(10)),
+                        eventWithItemSource("topic:zeta", 2L, 201L, BASE_TIME.plusSeconds(20)),
+                        eventWithItemSource("topic:zeta", 3L, 202L, BASE_TIME.plusSeconds(21)),
+                        eventWithItemSource("topic:zeta", 4L, 203L, BASE_TIME.plusSeconds(22)),
+                        eventWithItemSource("topic:alpha", 1L, 101L, BASE_TIME.plusSeconds(10)),
+                        eventWithItemSource("topic:alpha", 2L, 301L, BASE_TIME.plusSeconds(20)),
+                        eventWithItemSource("topic:alpha", 3L, 302L, BASE_TIME.plusSeconds(21))),
                 List.of(
                         membership("topic:zeta", 101L, true, 1.0d),
                         membership("topic:zeta", 201L, false, 0.82d),
@@ -380,13 +358,9 @@ class DefaultMemoryThreadAssistantTest {
                                 2L,
                                 201L,
                                 FIXED_NOW.minus(Duration.ofDays(1))),
+                        eventWithItemSource("topic:dormant", 1L, 101L, BASE_TIME.plusSeconds(10)),
                         eventWithItemSource(
-                                "topic:dormant", 1L, 101L, BASE_TIME.plusSeconds(10)),
-                        eventWithItemSource(
-                                "topic:dormant",
-                                2L,
-                                301L,
-                                FIXED_NOW.minus(Duration.ofDays(1)))),
+                                "topic:dormant", 2L, 301L, FIXED_NOW.minus(Duration.ofDays(1)))),
                 List.of(
                         membership("topic:resolved-recent", 101L, true, 1.0d),
                         membership("topic:resolved-recent", 201L, false, 0.80d),
@@ -429,16 +403,11 @@ class DefaultMemoryThreadAssistantTest {
                                 null,
                                 5)),
                 List.of(
-                        eventWithItemSource(
-                                "topic:ranking", 5L, 101L, BASE_TIME.plusSeconds(10)),
-                        eventWithItemSource(
-                                "topic:ranking", 10L, 201L, BASE_TIME.plusSeconds(100)),
-                        eventWithItemSource(
-                                "topic:ranking", 6L, 202L, BASE_TIME.plusSeconds(80)),
-                        eventWithItemSource(
-                                "topic:ranking", 6L, 203L, BASE_TIME.plusSeconds(60)),
-                        eventWithItemSource(
-                                "topic:ranking", 6L, 204L, BASE_TIME.plusSeconds(60))),
+                        eventWithItemSource("topic:ranking", 5L, 101L, BASE_TIME.plusSeconds(10)),
+                        eventWithItemSource("topic:ranking", 10L, 201L, BASE_TIME.plusSeconds(100)),
+                        eventWithItemSource("topic:ranking", 6L, 202L, BASE_TIME.plusSeconds(80)),
+                        eventWithItemSource("topic:ranking", 6L, 203L, BASE_TIME.plusSeconds(60)),
+                        eventWithItemSource("topic:ranking", 6L, 204L, BASE_TIME.plusSeconds(60))),
                 List.of(
                         membership("topic:ranking", 101L, true, 1.0d),
                         membership("topic:ranking", 201L, false, 0.95d),
@@ -485,10 +454,8 @@ class DefaultMemoryThreadAssistantTest {
                                 null,
                                 4)),
                 List.of(
-                        eventWithoutItemSource(
-                                "topic:recency", 1L, BASE_TIME.plusSeconds(10)),
-                        eventWithoutItemSource(
-                                "topic:recency", 2L, BASE_TIME.plusSeconds(20))),
+                        eventWithoutItemSource("topic:recency", 1L, BASE_TIME.plusSeconds(10)),
+                        eventWithoutItemSource("topic:recency", 2L, BASE_TIME.plusSeconds(20))),
                 List.of(
                         membership("topic:recency", 101L, true, 1.0d),
                         membership("topic:recency", 201L, false, 0.80d),
@@ -561,13 +528,14 @@ class DefaultMemoryThreadAssistantTest {
     @Test
     void timeoutOrFailureFallsBackToDirectOnlyAndMarksStatsDegraded() {
         InMemoryMemoryStore store = new InMemoryMemoryStore();
-        insertItems(store, item(101L, BASE_TIME.plusSeconds(10)), item(102L, BASE_TIME.plusSeconds(20)));
+        insertItems(
+                store,
+                item(101L, BASE_TIME.plusSeconds(10)),
+                item(102L, BASE_TIME.plusSeconds(20)));
         List<ScoredResult> directWindow = List.of(scored("101", 0.95d), scored("102", 0.90d));
 
         StepVerifier.create(
-                        assistant(
-                                        store,
-                                        new SlowThreadRanker(store, DORMANT_AFTER, FIXED_CLOCK))
+                        assistant(store, new SlowThreadRanker(store, DORMANT_AFTER, FIXED_CLOCK))
                                 .assist(
                                         context(),
                                         RetrievalConfig.simple(),
@@ -831,8 +799,7 @@ class DefaultMemoryThreadAssistantTest {
 
     private static final class SlowThreadRanker extends ThreadAssistThreadRanker {
 
-        private SlowThreadRanker(
-                InMemoryMemoryStore store, Duration dormantAfter, Clock clock) {
+        private SlowThreadRanker(InMemoryMemoryStore store, Duration dormantAfter, Clock clock) {
             super(store, dormantAfter, clock);
         }
 

@@ -76,7 +76,12 @@ class ThreadProjectionMaterializer {
             GraphOperations graphOperations,
             ThreadEnrichmentInputStore enrichmentInputStore,
             ThreadMaterializationPolicy policy) {
-        this(itemOperations, graphOperations, enrichmentInputStore, policy, ThreadDerivationMetrics.NOOP);
+        this(
+                itemOperations,
+                graphOperations,
+                enrichmentInputStore,
+                policy,
+                ThreadDerivationMetrics.NOOP);
     }
 
     ThreadProjectionMaterializer(
@@ -90,8 +95,7 @@ class ThreadProjectionMaterializer {
         this.enrichmentInputStore =
                 Objects.requireNonNull(enrichmentInputStore, "enrichmentInputStore");
         this.policy = Objects.requireNonNull(policy, "policy");
-        ThreadDerivationMetrics derivationMetrics =
-                Objects.requireNonNull(metrics, "metrics");
+        ThreadDerivationMetrics derivationMetrics = Objects.requireNonNull(metrics, "metrics");
         this.signalExtractor = new ThreadIntakeSignalExtractor(policy, derivationMetrics);
         this.eventNormalizer = new ThreadEventNormalizer();
         this.structuralReducer = new ThreadStructuralReducer(policy);
@@ -302,7 +306,10 @@ class ThreadProjectionMaterializer {
         projectionsByKey.put(
                 input.threadKey(),
                 structuralReducer.reduce(
-                        currentProjection, List.copyOf(eventRows), List.copyOf(membershipRows), reductionNow));
+                        currentProjection,
+                        List.copyOf(eventRows),
+                        List.copyOf(membershipRows),
+                        reductionNow));
     }
 
     private void accumulateCreationSupport(

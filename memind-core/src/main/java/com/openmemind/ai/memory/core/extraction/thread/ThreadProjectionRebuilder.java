@@ -144,11 +144,7 @@ public class ThreadProjectionRebuilder {
                 metrics.onGroupRelationshipPublished();
             }
             notifyReplaySuccess(
-                    memoryId,
-                    coveredTriggerItemIds,
-                    projection,
-                    rebuildCutoffItemId,
-                    finalizedAt);
+                    memoryId, coveredTriggerItemIds, projection, rebuildCutoffItemId, finalizedAt);
         } catch (RuntimeException e) {
             log.warn(
                     "Thread projection rebuild failed for memoryId={} cutoff={}",
@@ -208,6 +204,7 @@ public class ThreadProjectionRebuilder {
     }
 
     private static boolean containsGroupRelationshipThread(List<MemoryThreadProjection> threads) {
-        return threads.stream().anyMatch(thread -> "relationship_group".equals(thread.anchorKind()));
+        return threads.stream()
+                .anyMatch(thread -> "relationship_group".equals(thread.anchorKind()));
     }
 }

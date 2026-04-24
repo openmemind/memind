@@ -504,12 +504,7 @@ class MemoryAssemblersTest {
         var assembly =
                 new MemoryExtractionAssembler()
                         .assemble(
-                                context(
-                                        options,
-                                        null,
-                                        null,
-                                        List.of(),
-                                        new InMemoryMemoryStore()));
+                                context(options, null, null, List.of(), new InMemoryMemoryStore()));
         var extractor = (DefaultMemoryExtractor) assembly.pipeline();
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
         var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
@@ -656,7 +651,7 @@ class MemoryAssemblersTest {
                                                         InsightBuildConfig.defaults(),
                                                         InsightGraphAssistOptions.defaults()
                                                                 .withEnabled(true))))
-                        .build(),
+                                .build(),
                         CONTENT_PARSER_REGISTRY,
                         RESOURCE_FETCHER);
 
@@ -690,7 +685,7 @@ class MemoryAssemblersTest {
                                                         InsightBuildConfig.defaults(),
                                                         InsightGraphAssistOptions.defaults()
                                                                 .withEnabled(true))))
-                        .build(),
+                                .build(),
                         CONTENT_PARSER_REGISTRY,
                         RESOURCE_FETCHER);
 

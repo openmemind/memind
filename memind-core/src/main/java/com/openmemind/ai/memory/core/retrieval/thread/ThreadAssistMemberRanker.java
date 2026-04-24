@@ -93,7 +93,9 @@ final class ThreadAssistMemberRanker {
                 threadStore.listEvents(context.memoryId(), rankedThread.thread().threadKey());
         Map<Long, ItemEventStats> eventStatsByItemId = itemEventStats(events);
         Map<Long, MemoryItem> seedItemsById =
-                itemStore.getItemsByIds(context.memoryId(), rankedThread.coveredSeedItemIds()).stream()
+                itemStore
+                        .getItemsByIds(context.memoryId(), rankedThread.coveredSeedItemIds())
+                        .stream()
                         .collect(
                                 LinkedHashMap::new,
                                 (map, item) -> map.put(item.id(), item),
@@ -222,7 +224,8 @@ final class ThreadAssistMemberRanker {
         if (!memberTimes.isEmpty()) {
             for (Long seedItemId : seedItemIds) {
                 List<Instant> seedTimes =
-                        eventTimesOrFallback(eventStatsByItemId.get(seedItemId), seedItemsById.get(seedItemId));
+                        eventTimesOrFallback(
+                                eventStatsByItemId.get(seedItemId), seedItemsById.get(seedItemId));
                 for (Instant memberTime : memberTimes) {
                     for (Instant seedTime : seedTimes) {
                         long candidate =
@@ -270,8 +273,12 @@ final class ThreadAssistMemberRanker {
                 if (itemId == null) {
                     continue;
                 }
-                eventSeqsByItemId.computeIfAbsent(itemId, ignored -> new ArrayList<>()).add(event.eventSeq());
-                eventTimesByItemId.computeIfAbsent(itemId, ignored -> new ArrayList<>()).add(event.eventTime());
+                eventSeqsByItemId
+                        .computeIfAbsent(itemId, ignored -> new ArrayList<>())
+                        .add(event.eventSeq());
+                eventTimesByItemId
+                        .computeIfAbsent(itemId, ignored -> new ArrayList<>())
+                        .add(event.eventTime());
             }
         }
         Map<Long, ItemEventStats> statsByItemId = new LinkedHashMap<>();

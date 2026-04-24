@@ -137,7 +137,8 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
         enqueueInternal(memoryId, replayCutoffItemId, true);
     }
 
-    private void enqueueInternal(MemoryId memoryId, long triggerItemId, boolean replayableExisting) {
+    private void enqueueInternal(
+            MemoryId memoryId, long triggerItemId, boolean replayableExisting) {
         MemoryState state = state(memoryId);
         MemoryThreadIntakeOutboxEntry existing = state.outboxByTriggerItemId.get(triggerItemId);
         Instant now = Instant.now();
@@ -404,7 +405,8 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
                             finalizedAt));
         }
 
-        commitReplaySuccess(state, threads, events, memberships, runtimeState, finalizedAt, updatedOutbox);
+        commitReplaySuccess(
+                state, threads, events, memberships, runtimeState, finalizedAt, updatedOutbox);
         return true;
     }
 
@@ -418,7 +420,8 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
         MemoryState state = state(memoryId);
         boolean changed = false;
         for (MemoryThreadIntakeClaim claim : claimedEntries) {
-            MemoryThreadIntakeOutboxEntry entry = state.outboxByTriggerItemId.get(claim.triggerItemId());
+            MemoryThreadIntakeOutboxEntry entry =
+                    state.outboxByTriggerItemId.get(claim.triggerItemId());
             if (!matchesClaim(entry, claim)) {
                 continue;
             }
@@ -449,7 +452,8 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
         MemoryState state = state(memoryId);
         boolean changed = false;
         for (MemoryThreadIntakeClaim claim : claimedEntries) {
-            MemoryThreadIntakeOutboxEntry entry = state.outboxByTriggerItemId.get(claim.triggerItemId());
+            MemoryThreadIntakeOutboxEntry entry =
+                    state.outboxByTriggerItemId.get(claim.triggerItemId());
             if (!matchesClaim(entry, claim)) {
                 continue;
             }
@@ -506,7 +510,8 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
                             finalizedAt));
         }
 
-        commitReplaySuccess(state, threads, events, memberships, runtimeState, finalizedAt, updatedOutbox);
+        commitReplaySuccess(
+                state, threads, events, memberships, runtimeState, finalizedAt, updatedOutbox);
     }
 
     @Override
@@ -556,7 +561,8 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
                                                 (left, right) -> right,
                                                 LinkedHashMap::new));
         Map<String, List<MemoryThreadEvent>> updatedEvents = groupedEvents(events);
-        Map<String, List<MemoryThreadMembership>> updatedMemberships = groupedMemberships(memberships);
+        Map<String, List<MemoryThreadMembership>> updatedMemberships =
+                groupedMemberships(memberships);
         Map<Long, List<String>> updatedThreadKeysByItemId = membershipsByItemId(updatedMemberships);
         MemoryThreadRuntimeState adjustedRuntime =
                 adjustedRuntime(runtimeState, finalizedAt, updatedOutbox);
@@ -693,13 +699,15 @@ public class InMemoryThreadProjectionStore implements ThreadProjectionStore {
         return failedCount(state.outboxByTriggerItemId);
     }
 
-    private static long pendingCount(Map<Long, MemoryThreadIntakeOutboxEntry> outboxByTriggerItemId) {
+    private static long pendingCount(
+            Map<Long, MemoryThreadIntakeOutboxEntry> outboxByTriggerItemId) {
         return outboxByTriggerItemId.values().stream()
                 .filter(entry -> entry.status() == MemoryThreadIntakeStatus.PENDING)
                 .count();
     }
 
-    private static long failedCount(Map<Long, MemoryThreadIntakeOutboxEntry> outboxByTriggerItemId) {
+    private static long failedCount(
+            Map<Long, MemoryThreadIntakeOutboxEntry> outboxByTriggerItemId) {
         return outboxByTriggerItemId.values().stream()
                 .filter(entry -> entry.status() == MemoryThreadIntakeStatus.FAILED)
                 .count();

@@ -27,8 +27,8 @@ import com.openmemind.ai.memory.core.store.rawdata.InMemoryRawDataOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.InMemoryResourceOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
-import com.openmemind.ai.memory.core.store.thread.InMemoryThreadProjectionStore;
 import com.openmemind.ai.memory.core.store.thread.InMemoryThreadEnrichmentInputStore;
+import com.openmemind.ai.memory.core.store.thread.InMemoryThreadProjectionStore;
 import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentInputStore;
 import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 

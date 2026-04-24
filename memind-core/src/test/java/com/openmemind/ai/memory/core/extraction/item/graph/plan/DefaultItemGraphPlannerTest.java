@@ -92,7 +92,8 @@ class DefaultItemGraphPlannerTest {
     }
 
     @Test
-    void plannerMarksStructuredBatchDegradedWhenStructuredResolutionThrowsButStillReturnsOtherFamilies() {
+    void
+            plannerMarksStructuredBatchDegradedWhenStructuredResolutionThrowsButStillReturnsOtherFamilies() {
         var resolutionStrategy = mock(EntityResolutionStrategy.class);
         when(resolutionStrategy.resolve(eq(MEMORY_ID), any(), any()))
                 .thenThrow(new IllegalStateException("structured stage failed"));
@@ -295,7 +296,7 @@ class DefaultItemGraphPlannerTest {
                                         "OpenAI", "organization", 0.95f)),
                         List.of(
                                 new ExtractedGraphHints.ExtractedCausalRelationHint(
-                                        0, "caused_by", 0.92f))));
+                                        0, 1, "caused_by", 0.92f))));
     }
 
     private static MemoryItem item(Long id, String content) {

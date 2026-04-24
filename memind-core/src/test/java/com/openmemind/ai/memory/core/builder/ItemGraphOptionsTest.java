@@ -76,12 +76,18 @@ class ItemGraphOptionsTest {
                 5,
                 2,
                 64,
+                true,
+                2,
+                6,
+                12,
+                0.5f,
                 EntityResolutionMode.CONSERVATIVE,
                 10,
                 0.90d,
                 new LinkedHashSet<>(List.of("en", "zh", "ja")),
                 CrossScriptMergePolicy.OFF,
                 AliasEvidenceMode.METADATA,
-                new UserAliasDictionary(true, Map.of("organization|openai", "organization:openai")));
+                new UserAliasDictionary(
+                        true, Map.of("organization|openai", "organization:openai")));
     }
 }

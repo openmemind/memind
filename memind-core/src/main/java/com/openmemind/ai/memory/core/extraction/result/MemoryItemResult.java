@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.extraction.result;
 
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
+import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializationResult;
 import java.util.List;
 
 /**
@@ -24,7 +25,24 @@ import java.util.List;
  * @param resolvedInsightTypes Resolved insight types (used to pass to InsightLayer)
  */
 public record MemoryItemResult(
-        List<MemoryItem> newItems, List<MemoryInsightType> resolvedInsightTypes) {
+        List<MemoryItem> newItems,
+        List<MemoryInsightType> resolvedInsightTypes,
+        ItemGraphMaterializationResult graphMaterializationResult) {
+
+    public MemoryItemResult(
+            List<MemoryItem> newItems, List<MemoryInsightType> resolvedInsightTypes) {
+        this(newItems, resolvedInsightTypes, ItemGraphMaterializationResult.empty());
+    }
+
+    public MemoryItemResult {
+        newItems = newItems == null ? List.of() : List.copyOf(newItems);
+        resolvedInsightTypes =
+                resolvedInsightTypes == null ? List.of() : List.copyOf(resolvedInsightTypes);
+        graphMaterializationResult =
+                graphMaterializationResult == null
+                        ? ItemGraphMaterializationResult.empty()
+                        : graphMaterializationResult;
+    }
 
     /**
      * Create empty result

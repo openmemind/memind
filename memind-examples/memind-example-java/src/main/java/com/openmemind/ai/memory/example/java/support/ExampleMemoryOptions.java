@@ -17,9 +17,12 @@ import com.openmemind.ai.memory.core.builder.ExtractionCommonOptions;
 import com.openmemind.ai.memory.core.builder.ExtractionOptions;
 import com.openmemind.ai.memory.core.builder.InsightExtractionOptions;
 import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
+import com.openmemind.ai.memory.core.builder.ItemGraphOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalOptions;
+import com.openmemind.ai.memory.core.builder.SimpleRetrievalGraphOptions;
+import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
 
 public final class ExampleMemoryOptions {
@@ -36,6 +39,43 @@ public final class ExampleMemoryOptions {
 
     public static MemoryBuildOptions agentScopeOptions() {
         return buildInsightPreset();
+    }
+
+    public static MemoryBuildOptions graphOptions() {
+        var defaults = MemoryBuildOptions.defaults();
+        var extraction = defaults.extraction();
+        var item = extraction.item();
+        var retrieval = defaults.retrieval();
+        var simple = retrieval.simple();
+
+        return MemoryBuildOptions.builder()
+                .extraction(
+                        new ExtractionOptions(
+                                extraction.common(),
+                                extraction.rawdata(),
+                                new ItemExtractionOptions(
+                                        item.foresightEnabled(),
+                                        item.promptBudget(),
+                                        ItemGraphOptions.defaults().withEnabled(true)),
+                                new InsightExtractionOptions(
+                                        false,
+                                        extraction.insight().build(),
+                                        extraction.insight().graphAssist())))
+                .retrieval(
+                        new RetrievalOptions(
+                                retrieval.common(),
+                                new SimpleRetrievalOptions(
+                                        simple.timeout(),
+                                        simple.insightTopK(),
+                                        simple.itemTopK(),
+                                        simple.rawDataTopK(),
+                                        simple.keywordSearchEnabled(),
+                                        SimpleRetrievalGraphOptions.defaults().withEnabled(true),
+                                        simple.memoryThreadAssist()),
+                                retrieval.deep(),
+                                retrieval.advanced()))
+                .memoryThread(defaults.memoryThread())
+                .build();
     }
 
     private static MemoryBuildOptions buildInsightPreset() {

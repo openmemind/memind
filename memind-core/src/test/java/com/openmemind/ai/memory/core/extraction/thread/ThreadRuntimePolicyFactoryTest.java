@@ -17,12 +17,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import com.openmemind.ai.memory.core.builder.MemoryThreadDerivationOptions;
+import com.openmemind.ai.memory.core.builder.MemoryThreadLifecycleOptions;
 import com.openmemind.ai.memory.core.builder.MemoryThreadOptions;
+import com.openmemind.ai.memory.core.builder.MemoryThreadRuleOptions;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadProjectionState;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
-import com.openmemind.ai.memory.core.builder.MemoryThreadLifecycleOptions;
-import com.openmemind.ai.memory.core.builder.MemoryThreadRuleOptions;
 import com.openmemind.ai.memory.core.store.thread.InMemoryThreadProjectionStore;
 import com.openmemind.ai.memory.core.support.TestMemoryIds;
 import java.time.Duration;
@@ -81,7 +81,9 @@ class ThreadRuntimePolicyFactoryTest {
                         Duration.ofDays(30));
 
         InMemoryMemoryStore layerStore = new InMemoryMemoryStore();
-        layerStore.threadOperations().ensureRuntime(TestMemoryIds.userAgent(), "thread-core-v2:alpha");
+        layerStore
+                .threadOperations()
+                .ensureRuntime(TestMemoryIds.userAgent(), "thread-core-v2:alpha");
         MemoryThreadLayer layer =
                 new MemoryThreadLayer(
                         mock(MemoryItemExtractStep.class),
@@ -105,7 +107,9 @@ class ThreadRuntimePolicyFactoryTest {
                         "policy version changed");
 
         InMemoryMemoryStore workerStore = new InMemoryMemoryStore();
-        workerStore.threadOperations().ensureRuntime(TestMemoryIds.userAgent(), "thread-core-v2:alpha");
+        workerStore
+                .threadOperations()
+                .ensureRuntime(TestMemoryIds.userAgent(), "thread-core-v2:alpha");
         ThreadIntakeWorker worker =
                 new ThreadIntakeWorker(
                         workerStore.threadOperations(),
@@ -127,7 +131,9 @@ class ThreadRuntimePolicyFactoryTest {
                         "policy version changed");
 
         InMemoryMemoryStore rebuildStore = new InMemoryMemoryStore();
-        rebuildStore.threadOperations().ensureRuntime(TestMemoryIds.userAgent(), "thread-core-v2:alpha");
+        rebuildStore
+                .threadOperations()
+                .ensureRuntime(TestMemoryIds.userAgent(), "thread-core-v2:alpha");
         ThreadProjectionRebuilder rebuilder =
                 new ThreadProjectionRebuilder(
                         rebuildStore.threadOperations(),
@@ -144,8 +150,6 @@ class ThreadRuntimePolicyFactoryTest {
                         runtime -> runtime.materializationPolicyVersion(),
                         runtime -> runtime.invalidationReason())
                 .containsExactly(
-                        MemoryThreadProjectionState.AVAILABLE,
-                        "thread-core-v2:beta",
-                        null);
+                        MemoryThreadProjectionState.AVAILABLE, "thread-core-v2:beta", null);
     }
 }

@@ -306,18 +306,20 @@ public class TemporalItemLinker {
             String relationType, TemporalWindow earlier, TemporalWindow later) {
         return switch (relationType) {
             case "overlap" -> 1.0d;
-            case "nearby" -> linearDecay(
-                    Duration.between(earlier.anchor(), later.anchor()).abs(),
-                    Duration.ZERO,
-                    TemporalRelationClassifier.NEARBY_THRESHOLD,
-                    0.95d,
-                    NEARBY_FLOOR);
-            case "before" -> linearDecay(
-                    Duration.between(earlier.endOrAnchor(), later.start()).abs(),
-                    Duration.ZERO,
-                    BEFORE_DECAY_CAP,
-                    0.85d,
-                    BEFORE_FLOOR);
+            case "nearby" ->
+                    linearDecay(
+                            Duration.between(earlier.anchor(), later.anchor()).abs(),
+                            Duration.ZERO,
+                            TemporalRelationClassifier.NEARBY_THRESHOLD,
+                            0.95d,
+                            NEARBY_FLOOR);
+            case "before" ->
+                    linearDecay(
+                            Duration.between(earlier.endOrAnchor(), later.start()).abs(),
+                            Duration.ZERO,
+                            BEFORE_DECAY_CAP,
+                            0.85d,
+                            BEFORE_FLOOR);
             default -> 1.0d;
         };
     }
@@ -335,7 +337,8 @@ public class TemporalItemLinker {
             return floorValue;
         }
         double ratio =
-                (double) (gap.minus(minGap).toMillis()) / (double) (maxGap.minus(minGap).toMillis());
+                (double) (gap.minus(minGap).toMillis())
+                        / (double) (maxGap.minus(minGap).toMillis());
         return strongestValue - ((strongestValue - floorValue) * ratio);
     }
 

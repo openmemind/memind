@@ -98,7 +98,8 @@ class SimpleRetrievalStrategyMemoryThreadAssistTest {
     }
 
     @Test
-    @DisplayName("preserves protectDirectTopK before graph assist when thread members backfill tail")
+    @DisplayName(
+            "preserves protectDirectTopK before graph assist when thread members backfill tail")
     void simpleStrategyPreservesProtectDirectTopKWhenAssistAddsThreadMembers() {
         var config =
                 RetrievalConfig.simple(
@@ -137,8 +138,7 @@ class SimpleRetrievalStrategyMemoryThreadAssistTest {
                                                 scored("102", 0.90d),
                                                 scored("201", 0.84d),
                                                 scored("202", 0.83d)),
-                                        MemoryThreadAssistResult.Stats.success(
-                                                1, 1, 2, false))));
+                                        MemoryThreadAssistResult.Stats.success(1, 1, 2, false))));
         when(graphAssistant.assist(any(), any(), any(), any()))
                 .thenAnswer(
                         invocation -> {

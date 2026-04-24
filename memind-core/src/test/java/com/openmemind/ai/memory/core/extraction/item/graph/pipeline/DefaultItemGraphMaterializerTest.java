@@ -171,18 +171,19 @@ class DefaultItemGraphMaterializerTest {
                                 List.of(),
                                 List.of(
                                         new ExtractedGraphHints.ExtractedCausalRelationHint(
-                                                0, "caused_by", null),
+                                                0, 1, "caused_by", null),
                                         new ExtractedGraphHints.ExtractedCausalRelationHint(
-                                                0, "caused_by", 0.49f))),
+                                                0, 1, "caused_by", 0.49f))),
                         entry(
                                 "Boundary effect",
                                 List.of(),
                                 List.of(
                                         new ExtractedGraphHints.ExtractedCausalRelationHint(
-                                                0, "enabled_by", 0.50f))));
+                                                0, 2, "enabled_by", 0.50f))));
 
         StepVerifier.create(materializer.materialize(MEMORY_ID, items, entries))
-                .assertNext(result -> assertThat(result.stats().structuredItemLinkCount()).isEqualTo(1))
+                .assertNext(
+                        result -> assertThat(result.stats().structuredItemLinkCount()).isEqualTo(1))
                 .verifyComplete();
 
         assertThat(graphOps.listItemLinks(MEMORY_ID))
@@ -1115,7 +1116,7 @@ class DefaultItemGraphMaterializerTest {
                                         "Sam Altman", "person", 0.88f)),
                         List.of(
                                 new ExtractedGraphHints.ExtractedCausalRelationHint(
-                                        0, "caused_by", 0.91f))));
+                                        0, 1, "caused_by", 0.91f))));
     }
 
     private static final class StubMemoryVector implements MemoryVector {

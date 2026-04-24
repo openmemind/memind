@@ -109,8 +109,12 @@ class MemoryItemLayerGraphTest {
         when(deduplicator.spanName()).thenReturn("test");
         when(vector.storeBatch(eq(memoryId), anyList(), anyList()))
                 .thenReturn(Mono.just(List.of("vec-1")));
+        var graphResult =
+                new ItemGraphMaterializationResult(
+                        ItemGraphMaterializationResult.Stats.withTemporalAndSemantic(
+                                1, 0, 0, null, null, null, 0, "", 0, 0, 0, 0, 0, 0));
         when(graphMaterializer.materialize(eq(memoryId), anyList(), eq(List.of(entry))))
-                .thenReturn(Mono.just(ItemGraphMaterializationResult.empty()));
+                .thenReturn(Mono.just(graphResult));
 
         StepVerifier.create(
                         layer.extract(
@@ -121,6 +125,9 @@ class MemoryItemLayerGraphTest {
                         result -> {
                             assertThat(result.newItems()).hasSize(1);
                             assertThat(result.newItems().getFirst().vectorId()).isEqualTo("vec-1");
+                            assertThat(result.graphMaterializationResult()).isSameAs(graphResult);
+                            assertThat(result.graphMaterializationResult().stats().entityCount())
+                                    .isEqualTo(1);
                         })
                 .verifyComplete();
 

@@ -48,7 +48,8 @@ public final class CoalescingThreadWakeScheduler implements ThreadWakeScheduler 
         this(worker, createExecutor(), null, metrics);
     }
 
-    CoalescingThreadWakeScheduler(ThreadIntakeWorker worker, Executor executor, Runnable closeAction) {
+    CoalescingThreadWakeScheduler(
+            ThreadIntakeWorker worker, Executor executor, Runnable closeAction) {
         this(worker, executor, closeAction, ThreadDerivationMetrics.NOOP);
     }
 

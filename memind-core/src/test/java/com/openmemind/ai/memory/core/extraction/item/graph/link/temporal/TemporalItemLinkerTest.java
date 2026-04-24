@@ -168,14 +168,11 @@ class TemporalItemLinkerTest {
         assertThat(stats.belowRetrievalFloorCount()).isEqualTo(0);
         assertThat(stats.minStrength()).isEqualTo(0.60d);
         assertThat(stats.maxStrength()).isEqualTo(1.0d);
-        assertThat(stats.strengthBucketSummary())
-                .isEqualTo("0.60-0.74=1,0.75-0.89=1,0.90-1.00=1");
+        assertThat(stats.strengthBucketSummary()).isEqualTo("0.60-0.74=1,0.75-0.89=1,0.90-1.00=1");
         assertThat(graphOps.listItemLinks(MEMORY_ID))
                 .extracting(link -> link.metadata().get("relationType"), ItemLink::strength)
                 .containsExactly(
-                        tuple("overlap", 1.0d),
-                        tuple("nearby", 0.75d),
-                        tuple("before", 0.60d));
+                        tuple("overlap", 1.0d), tuple("nearby", 0.75d), tuple("before", 0.60d));
     }
 
     @Test

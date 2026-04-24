@@ -59,7 +59,8 @@ public class InMemoryThreadEnrichmentInputStore implements ThreadEnrichmentInput
 
         String memoryIdentifier = memoryId.toIdentifier();
         Map<String, MemoryThreadEnrichmentInput> inputs =
-                inputsByMemoryId.computeIfAbsent(memoryIdentifier, ignored -> new LinkedHashMap<>());
+                inputsByMemoryId.computeIfAbsent(
+                        memoryIdentifier, ignored -> new LinkedHashMap<>());
         List<MemoryThreadEnrichmentInput> toInsert = new ArrayList<>();
         for (MemoryThreadEnrichmentInput input : runInputs) {
             validateInput(memoryIdentifier, input);
@@ -99,10 +100,7 @@ public class InMemoryThreadEnrichmentInputStore implements ThreadEnrichmentInput
         if (cutoffItemId <= 0L) {
             return List.of();
         }
-        return inputsByMemoryId
-                .getOrDefault(memoryId.toIdentifier(), Map.of())
-                .values()
-                .stream()
+        return inputsByMemoryId.getOrDefault(memoryId.toIdentifier(), Map.of()).values().stream()
                 .filter(input -> input.basisCutoffItemId() <= cutoffItemId)
                 .filter(
                         input ->
@@ -135,9 +133,11 @@ public class InMemoryThreadEnrichmentInputStore implements ThreadEnrichmentInput
                 && Objects.equals(
                         left.basisMaterializationPolicyVersion(),
                         right.basisMaterializationPolicyVersion())
-                && Objects.equals(canonicalJson(left.payloadJson()), canonicalJson(right.payloadJson()))
                 && Objects.equals(
-                        canonicalJson(left.provenanceJson()), canonicalJson(right.provenanceJson()));
+                        canonicalJson(left.payloadJson()), canonicalJson(right.payloadJson()))
+                && Objects.equals(
+                        canonicalJson(left.provenanceJson()),
+                        canonicalJson(right.provenanceJson()));
     }
 
     private static String canonicalJson(Map<String, Object> value) {

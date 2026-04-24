@@ -94,7 +94,9 @@ public record ItemGraphMaterializationResult(Stats stats) {
             int droppedDateLikeCount,
             int droppedReservedSpecialCollisionCount,
             boolean structuredBatchDegraded,
-            boolean derivedMaintenanceDegraded) {
+            boolean derivedMaintenanceDegraded,
+            FinalRelationStats finalRelationStats,
+            EntityOverlapStats entityOverlapStats) {
 
         public Stats {
             temporalStrengthBucketSummary =
@@ -109,6 +111,32 @@ public record ItemGraphMaterializationResult(Stats stats) {
                             : resolutionMergeScoreHistogramSummary;
             topUnresolvedTypeLabelsSummary =
                     topUnresolvedTypeLabelsSummary == null ? "" : topUnresolvedTypeLabelsSummary;
+            finalRelationStats =
+                    finalRelationStats == null ? FinalRelationStats.empty() : finalRelationStats;
+            entityOverlapStats =
+                    entityOverlapStats == null ? EntityOverlapStats.empty() : entityOverlapStats;
+        }
+
+        public record FinalRelationStats(
+                int semanticRelationCount,
+                int temporalRelationCount,
+                int causalRelationCount,
+                int itemLinkCount) {
+
+            public static FinalRelationStats empty() {
+                return new FinalRelationStats(0, 0, 0, 0);
+            }
+        }
+
+        public record EntityOverlapStats(
+                int candidatePairCount,
+                int createdLinkCount,
+                int skippedFanoutEntityCount,
+                int duplicateSuppressedCount) {
+
+            public static EntityOverlapStats empty() {
+                return new EntityOverlapStats(0, 0, 0, 0);
+            }
         }
 
         public Stats(
@@ -196,7 +224,9 @@ public record ItemGraphMaterializationResult(Stats stats) {
                     droppedDateLikeCount,
                     droppedReservedSpecialCollisionCount,
                     false,
-                    false);
+                    false,
+                    FinalRelationStats.empty(),
+                    EntityOverlapStats.empty());
         }
 
         public Stats(
@@ -294,7 +324,9 @@ public record ItemGraphMaterializationResult(Stats stats) {
                     droppedDateLikeCount,
                     droppedReservedSpecialCollisionCount,
                     false,
-                    false);
+                    false,
+                    FinalRelationStats.empty(),
+                    EntityOverlapStats.empty());
         }
 
         public Stats(
@@ -396,7 +428,9 @@ public record ItemGraphMaterializationResult(Stats stats) {
                     droppedDateLikeCount,
                     droppedReservedSpecialCollisionCount,
                     false,
-                    false);
+                    false,
+                    FinalRelationStats.empty(),
+                    EntityOverlapStats.empty());
         }
 
         public static Stats withTemporalAndSemantic(
@@ -483,7 +517,9 @@ public record ItemGraphMaterializationResult(Stats stats) {
                     droppedDateLikeCount,
                     droppedReservedSpecialCollisionCount,
                     false,
-                    false);
+                    false,
+                    FinalRelationStats.empty(),
+                    EntityOverlapStats.empty());
         }
 
         Builder toBuilder() {
@@ -496,6 +532,14 @@ public record ItemGraphMaterializationResult(Stats stats) {
 
         public Stats withDerivedMaintenanceDegraded() {
             return toBuilder().derivedMaintenanceDegraded(true).build();
+        }
+
+        public Stats withFinalRelationStats(FinalRelationStats finalRelationStats) {
+            return toBuilder().finalRelationStats(finalRelationStats).build();
+        }
+
+        public Stats withEntityOverlapStats(EntityOverlapStats entityOverlapStats) {
+            return toBuilder().entityOverlapStats(entityOverlapStats).build();
         }
 
         public static Stats empty() {
@@ -596,6 +640,8 @@ public record ItemGraphMaterializationResult(Stats stats) {
             private int droppedReservedSpecialCollisionCount;
             private boolean structuredBatchDegraded;
             private boolean derivedMaintenanceDegraded;
+            private FinalRelationStats finalRelationStats = FinalRelationStats.empty();
+            private EntityOverlapStats entityOverlapStats = EntityOverlapStats.empty();
 
             private Builder(Stats stats) {
                 this.entityCount = stats.entityCount();
@@ -610,8 +656,7 @@ public record ItemGraphMaterializationResult(Stats stats) {
                 this.temporalQueryDurationMs = stats.temporalQueryDurationMs();
                 this.temporalBuildDurationMs = stats.temporalBuildDurationMs();
                 this.temporalUpsertDurationMs = stats.temporalUpsertDurationMs();
-                this.temporalBelowRetrievalFloorCount =
-                        stats.temporalBelowRetrievalFloorCount();
+                this.temporalBelowRetrievalFloorCount = stats.temporalBelowRetrievalFloorCount();
                 this.temporalMinStrength = stats.temporalMinStrength();
                 this.temporalMaxStrength = stats.temporalMaxStrength();
                 this.temporalStrengthBucketSummary = stats.temporalStrengthBucketSummary();
@@ -645,8 +690,7 @@ public record ItemGraphMaterializationResult(Stats stats) {
                 this.semanticSearchPhaseDurationMs = stats.semanticSearchPhaseDurationMs();
                 this.semanticResolvePhaseDurationMs = stats.semanticResolvePhaseDurationMs();
                 this.semanticUpsertPhaseDurationMs = stats.semanticUpsertPhaseDurationMs();
-                this.semanticIntraBatchPhaseDurationMs =
-                        stats.semanticIntraBatchPhaseDurationMs();
+                this.semanticIntraBatchPhaseDurationMs = stats.semanticIntraBatchPhaseDurationMs();
                 this.semanticDegraded = stats.semanticDegraded();
                 this.typeFallbackToOtherCount = stats.typeFallbackToOtherCount();
                 this.topUnresolvedTypeLabelsSummary = stats.topUnresolvedTypeLabelsSummary();
@@ -659,6 +703,8 @@ public record ItemGraphMaterializationResult(Stats stats) {
                         stats.droppedReservedSpecialCollisionCount();
                 this.structuredBatchDegraded = stats.structuredBatchDegraded();
                 this.derivedMaintenanceDegraded = stats.derivedMaintenanceDegraded();
+                this.finalRelationStats = stats.finalRelationStats();
+                this.entityOverlapStats = stats.entityOverlapStats();
             }
 
             Builder structuredBatchDegraded(boolean structuredBatchDegraded) {
@@ -668,6 +714,22 @@ public record ItemGraphMaterializationResult(Stats stats) {
 
             Builder derivedMaintenanceDegraded(boolean derivedMaintenanceDegraded) {
                 this.derivedMaintenanceDegraded = derivedMaintenanceDegraded;
+                return this;
+            }
+
+            Builder finalRelationStats(FinalRelationStats finalRelationStats) {
+                this.finalRelationStats =
+                        finalRelationStats == null
+                                ? FinalRelationStats.empty()
+                                : finalRelationStats;
+                return this;
+            }
+
+            Builder entityOverlapStats(EntityOverlapStats entityOverlapStats) {
+                this.entityOverlapStats =
+                        entityOverlapStats == null
+                                ? EntityOverlapStats.empty()
+                                : entityOverlapStats;
                 return this;
             }
 
@@ -729,7 +791,9 @@ public record ItemGraphMaterializationResult(Stats stats) {
                         droppedDateLikeCount,
                         droppedReservedSpecialCollisionCount,
                         structuredBatchDegraded,
-                        derivedMaintenanceDegraded);
+                        derivedMaintenanceDegraded,
+                        finalRelationStats,
+                        entityOverlapStats);
             }
         }
     }

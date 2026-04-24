@@ -31,11 +31,14 @@ final class MetadataCanonicalRefAnchorProvider implements ThreadAnchorProvider {
                 .stream()
                 .sorted(
                         Comparator.comparing(
-                                        ThreadAnchorProviderSupport.MetadataAnchorCandidate::threadType)
+                                        ThreadAnchorProviderSupport.MetadataAnchorCandidate
+                                                ::threadType)
                                 .thenComparing(
-                                        ThreadAnchorProviderSupport.MetadataAnchorCandidate::anchorKind)
+                                        ThreadAnchorProviderSupport.MetadataAnchorCandidate
+                                                ::anchorKind)
                                 .thenComparing(
-                                        ThreadAnchorProviderSupport.MetadataAnchorCandidate::anchorKey))
+                                        ThreadAnchorProviderSupport.MetadataAnchorCandidate
+                                                ::anchorKey))
                 .forEach(
                         candidate -> {
                             List<ThreadIntakeSignal.SemanticMarker> relevantMarkers =

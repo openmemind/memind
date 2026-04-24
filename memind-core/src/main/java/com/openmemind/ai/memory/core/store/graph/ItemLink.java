@@ -39,7 +39,11 @@ public record ItemLink(
     private static final Set<String> CAUSAL_RELATION_CODES =
             Set.of("caused_by", "enabled_by", "motivated_by");
     private static final Set<String> SEMANTIC_EVIDENCE_SOURCES =
-            Set.of("vector_search", "same_batch_vector", "vector_search_fallback");
+            Set.of(
+                    "vector_search",
+                    "same_batch_vector",
+                    "vector_search_fallback",
+                    "entity_overlap");
 
     public ItemLink {
         Objects.requireNonNull(memoryId, "memoryId");

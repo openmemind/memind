@@ -121,8 +121,12 @@ public final class DefaultMemoryThreadAssistant implements MemoryThreadAssistant
         }
 
         List<ThreadAssistThreadRanker.RankedThread> selectedThreads =
-                rankOutcome.rankedThreads().subList(
-                        0, Math.min(settings.maxThreads(), rankOutcome.rankedThreads().size()));
+                rankOutcome
+                        .rankedThreads()
+                        .subList(
+                                0,
+                                Math.min(
+                                        settings.maxThreads(), rankOutcome.rankedThreads().size()));
         List<ScoredResult> admittedMembers =
                 selectedThreads.stream()
                         .flatMap(
@@ -137,7 +141,8 @@ public final class DefaultMemoryThreadAssistant implements MemoryThreadAssistant
                         .toList();
 
         int pinned = Math.min(settings.protectDirectTopK(), directWindow.size());
-        List<ScoredResult> combined = new java.util.ArrayList<>(directWindow.size() + admittedMembers.size());
+        List<ScoredResult> combined =
+                new java.util.ArrayList<>(directWindow.size() + admittedMembers.size());
         Set<String> usedKeys = new LinkedHashSet<>();
         for (ScoredResult pinnedDirect : directWindow.subList(0, pinned)) {
             combined.add(pinnedDirect);
@@ -163,5 +168,4 @@ public final class DefaultMemoryThreadAssistant implements MemoryThreadAssistant
                                 false))
                 .reboundTo(directWindow.size(), pinned);
     }
-
 }

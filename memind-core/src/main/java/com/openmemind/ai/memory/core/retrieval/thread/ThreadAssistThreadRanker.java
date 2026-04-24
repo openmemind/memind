@@ -121,8 +121,7 @@ class ThreadAssistThreadRanker {
             if (compareCoverage != 0) {
                 return compareCoverage;
             }
-            int compareBestSeed =
-                    Double.compare(right.bestDirectScore(), left.bestDirectScore());
+            int compareBestSeed = Double.compare(right.bestDirectScore(), left.bestDirectScore());
             if (compareBestSeed != 0) {
                 return compareBestSeed;
             }

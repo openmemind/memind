@@ -25,7 +25,8 @@ import org.slf4j.LoggerFactory;
  */
 public final class StoreBackedThreadReplayScheduler implements ThreadReplayScheduler {
 
-    private static final Logger log = LoggerFactory.getLogger(StoreBackedThreadReplayScheduler.class);
+    private static final Logger log =
+            LoggerFactory.getLogger(StoreBackedThreadReplayScheduler.class);
 
     private final ThreadProjectionStore projectionStore;
     private final ThreadWakeScheduler wakeScheduler;

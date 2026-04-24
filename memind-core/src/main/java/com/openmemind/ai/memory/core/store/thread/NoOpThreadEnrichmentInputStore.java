@@ -22,13 +22,16 @@ import java.util.List;
  */
 public final class NoOpThreadEnrichmentInputStore implements ThreadEnrichmentInputStore {
 
-    public static final NoOpThreadEnrichmentInputStore INSTANCE = new NoOpThreadEnrichmentInputStore();
+    public static final NoOpThreadEnrichmentInputStore INSTANCE =
+            new NoOpThreadEnrichmentInputStore();
 
     private NoOpThreadEnrichmentInputStore() {}
 
     @Override
     public ThreadEnrichmentAppendResult appendRunAndEnqueueReplay(
-            MemoryId memoryId, long replayCutoffItemId, List<MemoryThreadEnrichmentInput> runInputs) {
+            MemoryId memoryId,
+            long replayCutoffItemId,
+            List<MemoryThreadEnrichmentInput> runInputs) {
         return ThreadEnrichmentAppendResult.DUPLICATE_EQUIVALENT;
     }
 

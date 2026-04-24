@@ -140,7 +140,8 @@ class SpringAiMemoryVectorTest {
                                     List.of(
                                             Map.<String, Object>of("kind", "alpha"),
                                             Map.<String, Object>of("kind", "beta"))))
-                    .assertNext(ids -> assertThat(ids).containsExactlyElementsOf(requestedVectorIds))
+                    .assertNext(
+                            ids -> assertThat(ids).containsExactlyElementsOf(requestedVectorIds))
                     .verifyComplete();
 
             StepVerifier.create(memoryVector.search(memoryId, "alpha note", 10).collectList())

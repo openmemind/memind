@@ -36,7 +36,8 @@ public record MemoryThreadEnrichmentInput(
         Objects.requireNonNull(memoryId, "memoryId");
         Objects.requireNonNull(threadKey, "threadKey");
         Objects.requireNonNull(inputRunKey, "inputRunKey");
-        Objects.requireNonNull(basisMaterializationPolicyVersion, "basisMaterializationPolicyVersion");
+        Objects.requireNonNull(
+                basisMaterializationPolicyVersion, "basisMaterializationPolicyVersion");
         payloadJson = payloadJson == null ? Map.of() : Map.copyOf(payloadJson);
         provenanceJson = provenanceJson == null ? Map.of() : Map.copyOf(provenanceJson);
         createdAt = Objects.requireNonNull(createdAt, "createdAt");

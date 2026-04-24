@@ -173,12 +173,14 @@ class MybatisPlusMemoryThreadStoreTest {
         newContextRunner(tempDir.resolve("thread-v2-exact-claim.db"))
                 .run(
                         context -> {
-                            var projectionStore = context.getBean(MemoryStore.class).threadOperations();
+                            var projectionStore =
+                                    context.getBean(MemoryStore.class).threadOperations();
                             projectionStore.ensureRuntime(MEMORY_ID, "thread-core-v2");
                             projectionStore.enqueue(MEMORY_ID, 301L);
 
                             MemoryThreadIntakeClaim firstClaim =
-                                    projectionStore.claimPending(
+                                    projectionStore
+                                            .claimPending(
                                                     MEMORY_ID,
                                                     Instant.parse("2026-04-23T01:00:00Z"),
                                                     Instant.parse("2026-04-23T01:00:30Z"),
@@ -201,7 +203,8 @@ class MybatisPlusMemoryThreadStoreTest {
                                             entry -> entry.triggerItemId(),
                                             entry -> entry.enqueueGeneration(),
                                             entry -> entry.status())
-                                    .containsExactly(tuple(301L, 2L, MemoryThreadIntakeStatus.PENDING));
+                                    .containsExactly(
+                                            tuple(301L, 2L, MemoryThreadIntakeStatus.PENDING));
                         });
     }
 
@@ -543,11 +546,7 @@ class MybatisPlusMemoryThreadStoreTest {
                         "Travel headline refresh " + entrySeq,
                         "summaryRole",
                         "HEADLINE_REFRESH"),
-                Map.of(
-                        "sourceType",
-                        "THREAD_LLM",
-                        "supportingItemIds",
-                        List.of(basisCutoffItemId)),
+                Map.of("sourceType", "THREAD_LLM", "supportingItemIds", List.of(basisCutoffItemId)),
                 createdAt);
     }
 

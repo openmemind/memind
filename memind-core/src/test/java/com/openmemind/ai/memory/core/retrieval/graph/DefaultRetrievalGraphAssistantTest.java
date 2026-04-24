@@ -236,8 +236,7 @@ class DefaultRetrievalGraphAssistantTest {
     void graphAssistReadsAdjacentLinksOnceForAllSeeds() {
         var recordingGraphOperations = new RecordingGraphOperations();
         recordingGraphOperations.upsertItemLinks(
-                MEMORY_ID,
-                List.of(link(101L, 201L, ItemLinkType.CAUSAL, 0.95d)));
+                MEMORY_ID, List.of(link(101L, 201L, ItemLinkType.CAUSAL, 0.95d)));
         lenient().when(store.graphOperations()).thenReturn(recordingGraphOperations);
         assistant = new DefaultRetrievalGraphAssistant(store);
 
@@ -304,7 +303,10 @@ class DefaultRetrievalGraphAssistantTest {
     void defaultRetrievalFloorStillAdmitsLegacyAndFirstRolloutTemporalLinks() {
         itemsById.put(
                 801L,
-                item(801L, "legacy temporal link candidate", Instant.parse("2026-04-16T12:00:00Z")));
+                item(
+                        801L,
+                        "legacy temporal link candidate",
+                        Instant.parse("2026-04-16T12:00:00Z")));
         itemsById.put(
                 802L,
                 item(

@@ -164,8 +164,7 @@ class DeepRetrievalStrategyMemoryThreadAssistTest {
                                                 scored("102", 0.89d),
                                                 scored("201", 0.88d),
                                                 scored("103", 0.87d)),
-                                        MemoryThreadAssistResult.Stats.success(
-                                                1, 1, 2, false))));
+                                        MemoryThreadAssistResult.Stats.success(1, 1, 2, false))));
         when(reranker.rerank(anyString(), any(), anyInt()))
                 .thenAnswer(
                         invocation -> {

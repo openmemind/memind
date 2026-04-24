@@ -29,8 +29,8 @@ import com.openmemind.ai.memory.core.data.enums.MemoryThreadMembershipRole;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadObjectState;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadProjectionState;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadType;
-import com.openmemind.ai.memory.core.data.thread.MemoryThreadEvent;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadEnrichmentInput;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadEvent;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadIntakeClaim;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadIntakeOutboxEntry;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadMembership;
@@ -50,9 +50,9 @@ import com.openmemind.ai.memory.core.store.item.TemporalCandidateRequest;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.store.thread.NoOpThreadEnrichmentInputStore;
+import com.openmemind.ai.memory.core.store.thread.NoOpThreadProjectionStore;
 import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentAppendResult;
 import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentInputStore;
-import com.openmemind.ai.memory.core.store.thread.NoOpThreadProjectionStore;
 import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.plugin.store.mybatis.converter.InsightConverter;
@@ -65,8 +65,8 @@ import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryInsightTyp
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryItemDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryRawDataDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryResourceDO;
-import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadEventDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadEnrichmentInputDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadEventDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadIntakeOutboxDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadMembershipDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadProjectionDO;
@@ -76,8 +76,8 @@ import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryInsightTypeMap
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryRawDataMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryResourceMapper;
-import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadEventMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadEnrichmentInputMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadEventMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadIntakeOutboxMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMembershipMapper;
@@ -415,9 +415,7 @@ public class MybatisPlusMemoryStore
 
     @Override
     public List<MemoryRawData> listRawData(MemoryId id) {
-        return rawDataMapper
-                .selectList(memoryQuery(id, MemoryRawDataDO.class))
-                .stream()
+        return rawDataMapper.selectList(memoryQuery(id, MemoryRawDataDO.class)).stream()
                 .map(RawDataConverter::toRecord)
                 .toList();
     }
@@ -775,7 +773,8 @@ public class MybatisPlusMemoryStore
         enqueueInternal(memoryId, replayCutoffItemId, true);
     }
 
-    private void enqueueInternal(MemoryId memoryId, long triggerItemId, boolean replayableExisting) {
+    private void enqueueInternal(
+            MemoryId memoryId, long triggerItemId, boolean replayableExisting) {
         if (threadIntakeOutboxMapper == null) {
             return;
         }
@@ -796,7 +795,9 @@ public class MybatisPlusMemoryStore
         } else if (replayableExisting
                 && !Objects.equals(existing.getStatus(), MemoryThreadIntakeStatus.PENDING.name())) {
             existing.setEnqueueGeneration(
-                    existing.getEnqueueGeneration() != null ? existing.getEnqueueGeneration() + 1L : 1L);
+                    existing.getEnqueueGeneration() != null
+                            ? existing.getEnqueueGeneration() + 1L
+                            : 1L);
             existing.setStatus(MemoryThreadIntakeStatus.PENDING.name());
             existing.setClaimedAt(null);
             existing.setLeaseExpiresAt(null);
@@ -849,7 +850,8 @@ public class MybatisPlusMemoryStore
                 threadEnrichmentInputMapper
                         .selectList(
                                 threadMemoryQuery(
-                                                memoryIdentifier, MemoryThreadEnrichmentInputDO.class)
+                                                memoryIdentifier,
+                                                MemoryThreadEnrichmentInputDO.class)
                                         .in("input_run_key", runKeys))
                         .stream()
                         .collect(
@@ -894,7 +896,9 @@ public class MybatisPlusMemoryStore
         }
         return threadEnrichmentInputMapper
                 .selectList(
-                        threadMemoryQuery(memoryId.toIdentifier(), MemoryThreadEnrichmentInputDO.class)
+                        threadMemoryQuery(
+                                        memoryId.toIdentifier(),
+                                        MemoryThreadEnrichmentInputDO.class)
                                 .le("basis_cutoff_item_id", cutoffItemId)
                                 .eq(
                                         "basis_materialization_policy_version",
@@ -1753,12 +1757,13 @@ public class MybatisPlusMemoryStore
                 && Objects.equals(existing.getEntrySeq(), input.entrySeq())
                 && Objects.equals(existing.getBasisCutoffItemId(), input.basisCutoffItemId())
                 && Objects.equals(
-                        existing.getBasisMeaningfulEventCount(),
-                        input.basisMeaningfulEventCount())
+                        existing.getBasisMeaningfulEventCount(), input.basisMeaningfulEventCount())
                 && Objects.equals(
                         existing.getBasisMaterializationPolicyVersion(),
                         input.basisMaterializationPolicyVersion())
-                && Objects.equals(canonicalJson(existing.getPayloadJson()), canonicalJson(input.payloadJson()))
+                && Objects.equals(
+                        canonicalJson(existing.getPayloadJson()),
+                        canonicalJson(input.payloadJson()))
                 && Objects.equals(
                         canonicalJson(existing.getProvenanceJson()),
                         canonicalJson(input.provenanceJson()));

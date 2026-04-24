@@ -56,9 +56,11 @@ class ThreadIntakeWorkerTest {
     void intakeSuccessPublishesProjectionAndOutboxCompletionAtomically() {
         MemoryId memoryId = TestMemoryIds.userAgent();
         InMemoryMemoryStore backingStore = new InMemoryMemoryStore();
-        backingStore.itemOperations()
+        backingStore
+                .itemOperations()
                 .insertItems(memoryId, List.of(item(300L, "The user planned more travel.")));
-        backingStore.graphOperations()
+        backingStore
+                .graphOperations()
                 .upsertItemEntityMentions(
                         memoryId, List.of(mention(memoryId, 300L, "concept:travel")));
         InMemoryThreadProjectionStore projectionStore = spy(new InMemoryThreadProjectionStore());
@@ -84,8 +86,7 @@ class ThreadIntakeWorkerTest {
                         anyList(),
                         any(),
                         any());
-        verify(projectionStore, never())
-                .finalizeOutboxSuccess(any(), eq(300L), eq(300L), any());
+        verify(projectionStore, never()).finalizeOutboxSuccess(any(), eq(300L), eq(300L), any());
         verify(projectionStore, never())
                 .replaceProjection(any(), anyList(), anyList(), anyList(), any(), any());
     }
@@ -132,11 +133,7 @@ class ThreadIntakeWorkerTest {
         RecordingThreadDerivationMetrics metrics = new RecordingThreadDerivationMetrics();
         ThreadIntakeWorker worker =
                 new ThreadIntakeWorker(
-                        store,
-                        materializer,
-                        policy,
-                        ThreadReplaySuccessListener.NOOP,
-                        metrics);
+                        store, materializer, policy, ThreadReplaySuccessListener.NOOP, metrics);
 
         worker.wake(memoryId);
 

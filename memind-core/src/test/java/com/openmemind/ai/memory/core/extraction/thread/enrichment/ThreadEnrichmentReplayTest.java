@@ -83,10 +83,7 @@ class ThreadEnrichmentReplayTest {
 
         ThreadProjectionMaterializer materializer =
                 new ThreadProjectionMaterializer(
-                        store.itemOperations(),
-                        store.graphOperations(),
-                        inputStore,
-                        policy);
+                        store.itemOperations(), store.graphOperations(), inputStore, policy);
 
         ThreadProjectionMaterializer.MaterializedProjection projection =
                 materializer.materializeUpTo(memoryId, 303L);
@@ -195,11 +192,7 @@ class ThreadEnrichmentReplayTest {
                         summary,
                         "summaryRole",
                         "HEADLINE_REFRESH"),
-                Map.of(
-                        "sourceType",
-                        "THREAD_LLM",
-                        "supportingItemIds",
-                        List.of(basisCutoffItemId)),
+                Map.of("sourceType", "THREAD_LLM", "supportingItemIds", List.of(basisCutoffItemId)),
                 createdAt);
     }
 

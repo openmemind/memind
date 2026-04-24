@@ -21,9 +21,10 @@ import java.util.Objects;
  * Canonical semantic evidence channels ordered by persistence precedence.
  */
 public enum SemanticEvidenceSource {
-    VECTOR_SEARCH("vector_search", 3),
-    SAME_BATCH_VECTOR("same_batch_vector", 2),
-    VECTOR_SEARCH_FALLBACK("vector_search_fallback", 1);
+    VECTOR_SEARCH("vector_search", 4),
+    SAME_BATCH_VECTOR("same_batch_vector", 3),
+    VECTOR_SEARCH_FALLBACK("vector_search_fallback", 2),
+    ENTITY_OVERLAP("entity_overlap", 1);
 
     private final String code;
     private final int precedence;

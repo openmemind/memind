@@ -35,7 +35,8 @@ public record ThreadReplaySuccessContext(
     public ThreadReplaySuccessContext {
         Objects.requireNonNull(memoryId, "memoryId");
         Objects.requireNonNull(replayOrigin, "replayOrigin");
-        coveredTriggerItemIds = List.copyOf(Objects.requireNonNull(coveredTriggerItemIds, "coveredTriggerItemIds"));
+        coveredTriggerItemIds =
+                List.copyOf(Objects.requireNonNull(coveredTriggerItemIds, "coveredTriggerItemIds"));
         threads = List.copyOf(Objects.requireNonNull(threads, "threads"));
         events = List.copyOf(Objects.requireNonNull(events, "events"));
         memberships = List.copyOf(Objects.requireNonNull(memberships, "memberships"));

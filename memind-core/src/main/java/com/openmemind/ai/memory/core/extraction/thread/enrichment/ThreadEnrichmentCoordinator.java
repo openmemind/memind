@@ -93,7 +93,8 @@ public final class ThreadEnrichmentCoordinator {
         MemoryId memoryId = context.memoryId();
         List<MemoryThreadProjection> threads = context.threads();
         long cutoffItemId = context.replayCutoffItemId();
-        Instant effectiveNow = context.finalizedAt() != null ? context.finalizedAt() : clock.instant();
+        Instant effectiveNow =
+                context.finalizedAt() != null ? context.finalizedAt() : clock.instant();
         if (!options.enabled() || cutoffItemId <= 0L || threads == null || threads.isEmpty()) {
             return;
         }
@@ -112,7 +113,8 @@ public final class ThreadEnrichmentCoordinator {
                         ignored -> {},
                         error ->
                                 log.warn(
-                                        "Thread enrichment coordinator failed open for memoryId={} cutoff={}",
+                                        "Thread enrichment coordinator failed open for memoryId={}"
+                                                + " cutoff={}",
                                         memoryId,
                                         context.replayCutoffItemId(),
                                         error));
@@ -126,13 +128,14 @@ public final class ThreadEnrichmentCoordinator {
             String materializationPolicyVersion,
             Instant now) {
         Map<String, List<MemoryThreadEvent>> eventsByThreadKey =
-                (itemBackedEvents == null ? List.<MemoryThreadEvent>of() : itemBackedEvents).stream()
-                        .filter(ThreadEnrichmentDebouncer::isItemBacked)
-                        .collect(
-                                Collectors.groupingBy(
-                                        MemoryThreadEvent::threadKey,
-                                        LinkedHashMap::new,
-                                        Collectors.toList()));
+                (itemBackedEvents == null ? List.<MemoryThreadEvent>of() : itemBackedEvents)
+                        .stream()
+                                .filter(ThreadEnrichmentDebouncer::isItemBacked)
+                                .collect(
+                                        Collectors.groupingBy(
+                                                MemoryThreadEvent::threadKey,
+                                                LinkedHashMap::new,
+                                                Collectors.toList()));
 
         for (MemoryThreadProjection thread : threads) {
             List<MemoryThreadEvent> threadEvents =
@@ -147,17 +150,18 @@ public final class ThreadEnrichmentCoordinator {
                 continue;
             }
 
-            Mono<List<ThreadEnrichmentResult>> enrichment =
-                    assistant.enrich(thread, threadEvents);
+            Mono<List<ThreadEnrichmentResult>> enrichment = assistant.enrich(thread, threadEvents);
             if (hasPositiveTimeout(options.timeout())) {
                 enrichment = enrichment.timeout(options.timeout(), Mono.just(List.of()));
             }
 
             List<ThreadEnrichmentResult> proposed =
-                    enrichment.onErrorResume(
+                    enrichment
+                            .onErrorResume(
                                     error -> {
                                         log.warn(
-                                                "Thread enrichment assistant failed open for memoryId={} threadKey={}",
+                                                "Thread enrichment assistant failed open for"
+                                                        + " memoryId={} threadKey={}",
                                                 memoryId,
                                                 thread.threadKey(),
                                                 error);
@@ -191,7 +195,8 @@ public final class ThreadEnrichmentCoordinator {
                 }
             } catch (RuntimeException error) {
                 log.warn(
-                        "Thread enrichment acceptance failed open for memoryId={} threadKey={} cutoff={}",
+                        "Thread enrichment acceptance failed open for memoryId={} threadKey={}"
+                                + " cutoff={}",
                         memoryId,
                         thread.threadKey(),
                         cutoffItemId,
@@ -210,7 +215,9 @@ public final class ThreadEnrichmentCoordinator {
             Instant now,
             List<ThreadEnrichmentResult> proposedResults) {
         Set<String> itemBackedEventKeys =
-                itemBackedEvents.stream().map(MemoryThreadEvent::eventKey).collect(Collectors.toSet());
+                itemBackedEvents.stream()
+                        .map(MemoryThreadEvent::eventKey)
+                        .collect(Collectors.toSet());
         String inputRunKey =
                 deterministicRunKey(
                         thread.threadKey(),
@@ -223,10 +230,14 @@ public final class ThreadEnrichmentCoordinator {
         java.util.ArrayList<MemoryThreadEnrichmentInput> inputs = new java.util.ArrayList<>();
         int entrySeq = 0;
         for (ThreadEnrichmentResult result : ordered) {
-            MemoryThreadEvent basisEvent = itemBackedEvents.stream()
-                    .filter(event -> Objects.equals(event.eventKey(), result.basisEventKey()))
-                    .findFirst()
-                    .orElse(null);
+            MemoryThreadEvent basisEvent =
+                    itemBackedEvents.stream()
+                            .filter(
+                                    event ->
+                                            Objects.equals(
+                                                    event.eventKey(), result.basisEventKey()))
+                            .findFirst()
+                            .orElse(null);
             if (!itemBackedEventKeys.contains(result.basisEventKey()) || basisEvent == null) {
                 continue;
             }
@@ -305,7 +316,8 @@ public final class ThreadEnrichmentCoordinator {
                     .with(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
                     .writeValueAsString(value == null ? Map.of() : value);
         } catch (tools.jackson.core.JacksonException error) {
-            throw new IllegalStateException("Failed to canonicalize enrichment payload JSON", error);
+            throw new IllegalStateException(
+                    "Failed to canonicalize enrichment payload JSON", error);
         }
     }
 }

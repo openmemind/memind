@@ -20,7 +20,10 @@ import java.util.Objects;
  * One normalized enrichment output proposed for authoritative replay.
  */
 public record ThreadEnrichmentResult(
-        String eventType, boolean meaningful, String basisEventKey, Map<String, Object> payloadJson) {
+        String eventType,
+        boolean meaningful,
+        String basisEventKey,
+        Map<String, Object> payloadJson) {
 
     public ThreadEnrichmentResult {
         Objects.requireNonNull(eventType, "eventType");

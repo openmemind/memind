@@ -23,7 +23,8 @@ import reactor.core.publisher.Mono;
  */
 public final class NoOpThreadEnrichmentAssistant implements ThreadEnrichmentAssistant {
 
-    public static final NoOpThreadEnrichmentAssistant INSTANCE = new NoOpThreadEnrichmentAssistant();
+    public static final NoOpThreadEnrichmentAssistant INSTANCE =
+            new NoOpThreadEnrichmentAssistant();
 
     private NoOpThreadEnrichmentAssistant() {}
 

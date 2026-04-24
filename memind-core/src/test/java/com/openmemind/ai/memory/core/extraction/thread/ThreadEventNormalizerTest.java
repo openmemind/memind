@@ -187,10 +187,9 @@ class ThreadEventNormalizerTest {
                         MemoryThreadEventType.BLOCKER_ADDED,
                         Map.of(
                                 "summary",
-                                        "Legacy auth is blocking rollout again after the"
-                                                + " resolution.",
+                                "Legacy auth is blocking rollout again after the" + " resolution.",
                                 "blockerKey",
-                                        "legacy-auth"));
+                                "legacy-auth"));
 
         MemoryThreadProjection projection =
                 reducer.reduce(
@@ -281,15 +280,13 @@ class ThreadEventNormalizerTest {
                         Instant.parse("2026-04-20T10:00:00Z"),
                         Map.of(
                                 "summary",
-                                        "The user continued the rollout with linked supporting evidence.",
+                                "The user continued the rollout with linked supporting evidence.",
                                 "evidence",
-                                        Map.of(
-                                                "supportCount",
-                                                2,
-                                                "dominantFamilies",
-                                                        List.of(
-                                                                "explicit_continuity",
-                                                                "entity_support"))),
+                                Map.of(
+                                        "supportCount",
+                                        2,
+                                        "dominantFamilies",
+                                        List.of("explicit_continuity", "entity_support"))),
                         1,
                         false,
                         0.90d,
@@ -305,8 +302,7 @@ class ThreadEventNormalizerTest {
         assertThat(evidence)
                 .containsEntry("supportCount", 2)
                 .containsEntry(
-                        "dominantFamilies",
-                        List.of("explicit_continuity", "entity_support"));
+                        "dominantFamilies", List.of("explicit_continuity", "entity_support"));
     }
 
     @Test

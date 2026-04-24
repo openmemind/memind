@@ -34,7 +34,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.AbstractDataSource;
 import org.sqlite.SQLiteDataSource;
@@ -222,7 +221,6 @@ class MemoryStoreDdlTest {
         assertThat(columnExists(dataSource, "memory_insight", "confidence")).isFalse();
     }
 
-
     private void createLegacyTemporalStoreSchema(DataSource dataSource) {
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
         jdbcTemplate.execute(
@@ -253,7 +251,6 @@ class MemoryStoreDdlTest {
                 )
                 """);
     }
-
 
     private void executeSqlResource(DataSource dataSource, String classpathResource) {
         String script = loadSqlResource(classpathResource);

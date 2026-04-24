@@ -31,7 +31,8 @@ import org.junit.jupiter.api.Test;
 
 class ThreadAnchorProviderTest {
 
-    private final RelationshipAnchorProvider relationshipProvider = new RelationshipAnchorProvider();
+    private final RelationshipAnchorProvider relationshipProvider =
+            new RelationshipAnchorProvider();
     private final GroupRelationshipAnchorProvider groupRelationshipProvider =
             new GroupRelationshipAnchorProvider();
     private final TopicAnchorProvider topicProvider = new TopicAnchorProvider();
@@ -47,7 +48,9 @@ class ThreadAnchorProviderTest {
                 relationshipProvider.extract(
                         context(
                                 item,
-                                List.of(mention(401L, "special:user"), mention(401L, "person:alice")),
+                                List.of(
+                                        mention(401L, "special:user"),
+                                        mention(401L, "person:alice")),
                                 List.of(),
                                 List.of()));
 
@@ -55,7 +58,11 @@ class ThreadAnchorProviderTest {
                 .singleElement()
                 .satisfies(
                         signal ->
-                                assertThat(canonicalizer.canonicalize(signal).orElseThrow().threadKey())
+                                assertThat(
+                                                canonicalizer
+                                                        .canonicalize(signal)
+                                                        .orElseThrow()
+                                                        .threadKey())
                                         .isEqualTo(
                                                 "relationship:relationship:special:self|person:alice"));
     }
@@ -135,8 +142,7 @@ class ThreadAnchorProviderTest {
                 .extracting(
                         ThreadAnchorCanonicalizer.CanonicalThreadAnchor::anchorKind,
                         ThreadAnchorCanonicalizer.CanonicalThreadAnchor::anchorKey)
-                .containsExactly(
-                        "relationship_group", "person:alice|person:bob|person:carol");
+                .containsExactly("relationship_group", "person:alice|person:bob|person:carol");
     }
 
     @Test
@@ -190,7 +196,8 @@ class ThreadAnchorProviderTest {
                         Instant.parse("2026-04-20T12:00:00Z"),
                         MemoryItemType.FACT);
 
-        List<ThreadIntakeSignal> signals = metadataProvider.extract(context(item, List.of(), List.of(), List.of()));
+        List<ThreadIntakeSignal> signals =
+                metadataProvider.extract(context(item, List.of(), List.of(), List.of()));
 
         assertThat(signals)
                 .extracting(
@@ -249,7 +256,8 @@ class ThreadAnchorProviderTest {
                         Instant.parse("2026-04-20T12:30:00Z"),
                         MemoryItemType.FACT);
 
-        List<ThreadIntakeSignal> signals = metadataProvider.extract(context(item, List.of(), List.of(), List.of()));
+        List<ThreadIntakeSignal> signals =
+                metadataProvider.extract(context(item, List.of(), List.of(), List.of()));
 
         assertThat(signals)
                 .filteredOn(

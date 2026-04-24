@@ -32,7 +32,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Normalizes extracted causal hints into bounded backward item links.
+ * Normalizes extracted causal hints into bounded cause/effect item links.
  */
 public final class CausalHintNormalizer {
 
@@ -58,12 +58,7 @@ public final class CausalHintNormalizer {
         List<ItemLink> causalCandidates = new ArrayList<>();
         for (int index = 0; index < entryCount; index++) {
             collectCausalLinks(
-                    memoryId,
-                    persistedItems,
-                    sourceEntries.get(index),
-                    index,
-                    options,
-                    causalCandidates);
+                    memoryId, persistedItems, sourceEntries.get(index), options, causalCandidates);
         }
         return trimLinksBySource(causalCandidates, options.maxCausalReferencesPerItem());
     }
@@ -72,15 +67,22 @@ public final class CausalHintNormalizer {
             MemoryId memoryId,
             List<MemoryItem> items,
             ExtractedMemoryEntry entry,
-            int currentIndex,
             ItemGraphOptions options,
             List<ItemLink> links) {
+        int itemCount = items.size();
         List<ExtractedGraphHints.ExtractedCausalRelationHint> retained =
                 entry.graphHints().causalRelations().stream()
                         .filter(Objects::nonNull)
-                        .filter(relation -> relation.targetIndex() != null)
-                        .filter(relation -> relation.targetIndex() >= 0)
-                        .filter(relation -> relation.targetIndex() < currentIndex)
+                        .filter(relation -> relation.causeIndex() != null)
+                        .filter(relation -> relation.effectIndex() != null)
+                        .filter(relation -> relation.causeIndex() >= 0)
+                        .filter(relation -> relation.effectIndex() >= 0)
+                        .filter(relation -> relation.causeIndex() < itemCount)
+                        .filter(relation -> relation.effectIndex() < itemCount)
+                        .filter(
+                                relation ->
+                                        !Objects.equals(
+                                                relation.causeIndex(), relation.effectIndex()))
                         .filter(relation -> isValidCausalRelationType(relation.relationType()))
                         .filter(relation -> normalizedStrength(relation.strength()) != null)
                         .filter(
@@ -91,21 +93,25 @@ public final class CausalHintNormalizer {
                                 Comparator
                                         .<ExtractedGraphHints.ExtractedCausalRelationHint, Float>
                                                 comparing(
-                                                relation ->
-                                                        normalizedStrength(relation.strength()),
-                                                Comparator.reverseOrder())
+                                                        relation ->
+                                                                normalizedStrength(
+                                                                        relation.strength()),
+                                                        Comparator.reverseOrder())
                                         .thenComparing(
                                                 ExtractedGraphHints.ExtractedCausalRelationHint
-                                                        ::targetIndex))
+                                                        ::causeIndex)
+                                        .thenComparing(
+                                                ExtractedGraphHints.ExtractedCausalRelationHint
+                                                        ::effectIndex))
                         .limit(options.maxCausalReferencesPerItem())
                         .toList();
 
-        MemoryItem effectItem = items.get(currentIndex);
         String memoryKey = memoryId.toIdentifier();
-        Instant createdAt = resolveGraphTimestamp(effectItem);
         retained.forEach(
                 relation -> {
-                    MemoryItem causeItem = items.get(relation.targetIndex());
+                    MemoryItem causeItem = items.get(relation.causeIndex());
+                    MemoryItem effectItem = items.get(relation.effectIndex());
+                    Instant createdAt = resolveGraphTimestamp(effectItem);
                     links.add(
                             new ItemLink(
                                     memoryKey,

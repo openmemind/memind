@@ -71,8 +71,7 @@ class ThreadCandidateScorerTest {
                 List.of(candidate("topic:topic:concept:passport", Set.of(820L), false, false));
         List<ItemLink> adjacentLinks = List.of(semanticLink(item.id(), 820L, 1.0d));
 
-        List<ThreadCandidateScore> scored =
-                scorer.score(item, candidates, adjacentLinks, Map.of());
+        List<ThreadCandidateScore> scored = scorer.score(item, candidates, adjacentLinks, Map.of());
 
         assertThat(scored)
                 .singleElement()

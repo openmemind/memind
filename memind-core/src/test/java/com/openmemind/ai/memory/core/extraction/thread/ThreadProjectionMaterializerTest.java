@@ -23,10 +23,10 @@ import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadMembershipRole;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadEnrichmentInput;
+import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.graph.EntityCooccurrence;
 import com.openmemind.ai.memory.core.store.graph.InMemoryGraphOperations;
 import com.openmemind.ai.memory.core.store.graph.ItemEntityMention;
-import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.item.InMemoryItemOperations;
 import com.openmemind.ai.memory.core.support.TestMemoryIds;
 import java.time.Duration;
@@ -43,7 +43,8 @@ class ThreadProjectionMaterializerTest {
         InMemoryMemoryStore store = new InMemoryMemoryStore();
         ThreadProjectionMaterializer materializer = materializer(store);
 
-        store.itemOperations().insertItems(memoryId, List.of(item(301L, "The user planned a trip.")));
+        store.itemOperations()
+                .insertItems(memoryId, List.of(item(301L, "The user planned a trip.")));
         store.graphOperations()
                 .upsertItemEntityMentions(
                         memoryId, List.of(mention(memoryId, 301L, "concept:travel")));
@@ -53,7 +54,8 @@ class ThreadProjectionMaterializerTest {
 
         assertThat(firstProjection.threads()).isEmpty();
 
-        store.itemOperations().insertItems(memoryId, List.of(item(302L, "The user booked the trip.")));
+        store.itemOperations()
+                .insertItems(memoryId, List.of(item(302L, "The user booked the trip.")));
         store.graphOperations()
                 .upsertItemEntityMentions(
                         memoryId, List.of(mention(memoryId, 302L, "concept:travel")));
@@ -66,7 +68,8 @@ class ThreadProjectionMaterializerTest {
                 .extracting(thread -> thread.threadKey(), thread -> thread.memberCount())
                 .containsExactly("topic:topic:concept:travel", 2L);
         assertThat(secondProjection.memberships())
-                .filteredOn(membership -> membership.threadKey().equals("topic:topic:concept:travel"))
+                .filteredOn(
+                        membership -> membership.threadKey().equals("topic:topic:concept:travel"))
                 .extracting(membership -> membership.itemId())
                 .containsExactly(301L, 302L);
     }
@@ -94,7 +97,8 @@ class ThreadProjectionMaterializerTest {
                 materializer.materializeUpTo(memoryId, 312L);
 
         assertThat(projection.memberships())
-                .filteredOn(membership -> membership.threadKey().equals("topic:topic:concept:travel"))
+                .filteredOn(
+                        membership -> membership.threadKey().equals("topic:topic:concept:travel"))
                 .extracting(
                         membership -> membership.itemId(),
                         membership -> membership.role(),
@@ -138,7 +142,8 @@ class ThreadProjectionMaterializerTest {
                 .extracting(thread -> thread.threadKey(), thread -> thread.memberCount())
                 .containsExactly("topic:topic:concept:travel", 3L);
         assertThat(projection.memberships())
-                .filteredOn(membership -> membership.threadKey().equals("topic:topic:concept:travel"))
+                .filteredOn(
+                        membership -> membership.threadKey().equals("topic:topic:concept:travel"))
                 .extracting(membership -> membership.itemId())
                 .containsExactly(321L, 322L, 323L);
     }
@@ -230,8 +235,7 @@ class ThreadProjectionMaterializerTest {
                                     .containsEntry("supportCount", 2)
                                     .containsEntry(
                                             "dominantFamilies",
-                                            List.of(
-                                                    "explicit_continuity", "entity_support"));
+                                            List.of("explicit_continuity", "entity_support"));
                         });
     }
 
@@ -245,7 +249,12 @@ class ThreadProjectionMaterializerTest {
                 .insertItems(
                         memoryId,
                         List.of(
-                                metadataItem(331L, "Project Alpha was mentioned.", "project", "alpha", List.of()),
+                                metadataItem(
+                                        331L,
+                                        "Project Alpha was mentioned.",
+                                        "project",
+                                        "alpha",
+                                        List.of()),
                                 metadataItem(
                                         332L,
                                         "Project Alpha was mentioned again.",
@@ -288,7 +297,8 @@ class ThreadProjectionMaterializerTest {
                 .extracting(thread -> thread.threadKey(), thread -> thread.memberCount())
                 .containsExactly("work:project:project:alpha", 3L);
         assertThat(boundMarkerProjection.memberships())
-                .filteredOn(membership -> membership.threadKey().equals("work:project:project:alpha"))
+                .filteredOn(
+                        membership -> membership.threadKey().equals("work:project:project:alpha"))
                 .extracting(membership -> membership.itemId())
                 .containsExactly(331L, 332L, 333L);
     }
@@ -344,8 +354,7 @@ class ThreadProjectionMaterializerTest {
         store.itemOperations()
                 .insertItems(
                         memoryId,
-                        List.of(
-                                item(3451L, "Alice, Bob, and Carol planned the launch together.")));
+                        List.of(item(3451L, "Alice, Bob, and Carol planned the launch together.")));
         store.graphOperations()
                 .upsertItemEntityMentions(
                         memoryId,
@@ -362,8 +371,7 @@ class ThreadProjectionMaterializerTest {
         store.itemOperations()
                 .insertItems(
                         memoryId,
-                        List.of(
-                                item(3452L, "Alice, Bob, and Carol reviewed the launch plan.")));
+                        List.of(item(3452L, "Alice, Bob, and Carol reviewed the launch plan.")));
         store.graphOperations()
                 .upsertItemEntityMentions(
                         memoryId,
@@ -379,12 +387,12 @@ class ThreadProjectionMaterializerTest {
                 .singleElement()
                 .extracting(thread -> thread.threadKey(), thread -> thread.memberCount())
                 .containsExactly(
-                        "relationship:relationship_group:person:alice|person:bob|person:carol",
-                        2L);
+                        "relationship:relationship_group:person:alice|person:bob|person:carol", 2L);
         assertThat(secondProjection.memberships())
                 .filteredOn(
                         membership ->
-                                membership.threadKey()
+                                membership
+                                        .threadKey()
                                         .equals(
                                                 "relationship:relationship_group:person:alice|person:bob|person:carol"))
                 .extracting(membership -> membership.itemId())
@@ -509,7 +517,8 @@ class ThreadProjectionMaterializerTest {
                         tuple("topic:topic:concept:travel", 3L),
                         tuple("topic:topic:concept:japan", 2L));
         assertThat(projection.memberships())
-                .filteredOn(membership -> membership.threadKey().equals("topic:topic:concept:travel"))
+                .filteredOn(
+                        membership -> membership.threadKey().equals("topic:topic:concept:travel"))
                 .extracting(membership -> membership.itemId())
                 .containsExactly(511L, 512L, 515L);
     }
@@ -649,8 +658,7 @@ class ThreadProjectionMaterializerTest {
                             Map<String, Object> enrichment =
                                     (Map<String, Object>) facets.get("enrichment");
                             assertThat(enrichment)
-                                    .containsEntry(
-                                            "lastEnrichedMeaningfulEventCount", 2L)
+                                    .containsEntry("lastEnrichedMeaningfulEventCount", 2L)
                                     .containsEntry("headlineSource", "THREAD_LLM");
                         });
     }
@@ -833,11 +841,7 @@ class ThreadProjectionMaterializerTest {
                         summary,
                         "summaryRole",
                         "HEADLINE_REFRESH"),
-                Map.of(
-                        "sourceType",
-                        "THREAD_LLM",
-                        "supportingItemIds",
-                        List.of(basisCutoffItemId)),
+                Map.of("sourceType", "THREAD_LLM", "supportingItemIds", List.of(basisCutoffItemId)),
                 Instant.parse("2026-04-22T10:30:00Z"));
     }
 

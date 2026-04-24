@@ -38,7 +38,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -305,11 +304,15 @@ class MybatisGraphReadParityTest {
         for (ItemLink link : adjacentLinks) {
             if (seedIdSet.contains(link.sourceItemId())) {
                 buckets.get(link.sourceItemId())
-                        .add(seedAdjacentProjection(link, link.sourceItemId(), link.targetItemId(), directIds));
+                        .add(
+                                seedAdjacentProjection(
+                                        link, link.sourceItemId(), link.targetItemId(), directIds));
             }
             if (seedIdSet.contains(link.targetItemId())) {
                 buckets.get(link.targetItemId())
-                        .add(seedAdjacentProjection(link, link.targetItemId(), link.sourceItemId(), directIds));
+                        .add(
+                                seedAdjacentProjection(
+                                        link, link.targetItemId(), link.sourceItemId(), directIds));
             }
         }
         return buckets.entrySet().stream()

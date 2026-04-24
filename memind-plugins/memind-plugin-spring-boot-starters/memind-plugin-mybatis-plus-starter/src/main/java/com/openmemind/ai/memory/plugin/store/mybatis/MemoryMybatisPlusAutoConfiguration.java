@@ -52,8 +52,8 @@ import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemLinkMapper
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryRawDataMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryResourceMapper;
-import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadEventMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadEnrichmentInputMapper;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadEventMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadIntakeOutboxMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMembershipMapper;

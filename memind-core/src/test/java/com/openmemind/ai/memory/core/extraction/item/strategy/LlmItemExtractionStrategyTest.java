@@ -67,7 +67,7 @@ class LlmItemExtractionStrategyTest {
                                         List.of(
                                                 new MemoryItemExtractionResponse
                                                         .ExtractedCausalRelation(
-                                                        0, "enabled_by", 0.88f)))));
+                                                        0, 1, "enabled_by", 0.88f)))));
 
         var entries =
                 LlmItemExtractionStrategy.toFactEntries(

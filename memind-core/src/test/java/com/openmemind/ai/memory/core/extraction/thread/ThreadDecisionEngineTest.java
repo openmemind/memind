@@ -16,8 +16,8 @@ package com.openmemind.ai.memory.core.extraction.thread;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadLifecycleStatus;
-import com.openmemind.ai.memory.core.data.enums.MemoryThreadObjectState;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadMembershipRole;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadObjectState;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadType;
 import com.openmemind.ai.memory.core.data.thread.MemoryThreadProjection;
 import java.lang.reflect.Method;
@@ -47,7 +47,8 @@ class ThreadDecisionEngineTest {
                         new CreationSupportState());
 
         assertThat(outcome.decision().action()).isEqualTo(ThreadDecision.Action.IGNORE);
-        assertThat(outcome.nonAdmissionDisposition()).isEqualTo(ThreadNonAdmissionDisposition.NO_SIGNAL);
+        assertThat(outcome.nonAdmissionDisposition())
+                .isEqualTo(ThreadNonAdmissionDisposition.NO_SIGNAL);
         assertThat(outcome.primaryReason()).isEqualTo("no canonical signals");
         assertThat(outcome.ambiguityBlocked()).isFalse();
         assertThat(outcome.supportBelowGate()).isFalse();
@@ -62,7 +63,12 @@ class ThreadDecisionEngineTest {
         ThreadDecisionEngine engine =
                 new ThreadDecisionEngine(ThreadMaterializationPolicy.v1(), metrics);
 
-        engine.resolve(item(3001L), MemoryThreadType.TOPIC, List.of(), List.of(), new CreationSupportState());
+        engine.resolve(
+                item(3001L),
+                MemoryThreadType.TOPIC,
+                List.of(),
+                List.of(),
+                new CreationSupportState());
 
         assertThat(metrics.nonAdmissions()).containsExactly("NO_SIGNAL:no canonical signals");
     }
@@ -85,7 +91,10 @@ class ThreadDecisionEngineTest {
                         List.of(canonicalSignal(signal)),
                         List.of(),
                         creationSupport(
-                                "relationship:relationship:special:self|person:alice", 301L, 2, 1.0d));
+                                "relationship:relationship:special:self|person:alice",
+                                301L,
+                                2,
+                                1.0d));
 
         assertThat(outcome.decision().threadKey())
                 .isEqualTo("relationship:relationship:special:self|person:alice");
@@ -152,7 +161,8 @@ class ThreadDecisionEngineTest {
         assertThat(outcome.decision().action()).isEqualTo(ThreadDecision.Action.IGNORE);
         assertThat(outcome.decision().reason()).contains("create score below gate");
         assertThat(outcome.evidence().isEmpty()).isTrue();
-        assertThat(outcome.nonAdmissionDisposition()).isEqualTo(ThreadNonAdmissionDisposition.DEFER);
+        assertThat(outcome.nonAdmissionDisposition())
+                .isEqualTo(ThreadNonAdmissionDisposition.DEFER);
         assertThat(outcome.primaryReason()).isEqualTo("create score below gate");
         assertThat(outcome.supportBelowGate()).isTrue();
         assertThat(outcome.ambiguityBlocked()).isFalse();
@@ -175,7 +185,8 @@ class ThreadDecisionEngineTest {
                         creationSupport("topic:topic:concept:travel", 3031L, 1, 1.0d));
 
         assertThat(outcome.decision().action()).isEqualTo(ThreadDecision.Action.IGNORE);
-        assertThat(outcome.nonAdmissionDisposition()).isEqualTo(ThreadNonAdmissionDisposition.DEFER);
+        assertThat(outcome.nonAdmissionDisposition())
+                .isEqualTo(ThreadNonAdmissionDisposition.DEFER);
         assertThat(outcome.primaryReason()).isEqualTo("support below two-hit gate");
         assertThat(outcome.supportBelowGate()).isTrue();
         assertThat(outcome.ambiguityBlocked()).isFalse();
@@ -190,7 +201,11 @@ class ThreadDecisionEngineTest {
                 new CanonicalizedSignal(signal, canonicalizer.canonicalize(signal).orElseThrow());
         ThreadCandidateScore topCandidate =
                 new ThreadCandidateScore(
-                        new ThreadCandidate(projection("topic:topic:concept:travel"), Set.of(304L), false, true),
+                        new ThreadCandidate(
+                                projection("topic:topic:concept:travel"),
+                                Set.of(304L),
+                                false,
+                                true),
                         0.0d,
                         0.95d,
                         0.0d,
@@ -202,7 +217,8 @@ class ThreadDecisionEngineTest {
                         0.95d);
         ThreadCandidateScore runnerUp =
                 new ThreadCandidateScore(
-                        new ThreadCandidate(projection("topic:topic:concept:japan"), Set.of(305L), false, true),
+                        new ThreadCandidate(
+                                projection("topic:topic:concept:japan"), Set.of(305L), false, true),
                         0.0d,
                         0.90d,
                         0.0d,
@@ -223,7 +239,8 @@ class ThreadDecisionEngineTest {
 
         assertThat(outcome.decision().action()).isEqualTo(ThreadDecision.Action.IGNORE);
         assertThat(outcome.decision().reason()).contains("ambiguous");
-        assertThat(outcome.nonAdmissionDisposition()).isEqualTo(ThreadNonAdmissionDisposition.REJECT);
+        assertThat(outcome.nonAdmissionDisposition())
+                .isEqualTo(ThreadNonAdmissionDisposition.REJECT);
         assertThat(outcome.primaryReason()).isEqualTo("ambiguous candidate scores");
         assertThat(outcome.ambiguityBlocked()).isTrue();
         assertThat(outcome.supportBelowGate()).isFalse();
@@ -239,7 +256,9 @@ class ThreadDecisionEngineTest {
                 "The user briefly mentioned travel.",
                 Instant.parse("2026-04-20T11:00:00Z"),
                 MemoryThreadType.TOPIC,
-                List.of(new ThreadIntakeSignal.AnchorCandidate("topic", anchorKey, List.of(), 1.0d)),
+                List.of(
+                        new ThreadIntakeSignal.AnchorCandidate(
+                                "topic", anchorKey, List.of(), 1.0d)),
                 new ThreadIntakeSignal.ThreadEligibilityScore(1.0d, 0.95d, 0.20d),
                 List.of(triggerItemId),
                 List.of(),

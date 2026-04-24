@@ -56,7 +56,14 @@ class MemoryItemUnifiedPromptsTest {
         assertThat(enabled.systemPrompt())
                 .contains("\"entities\"")
                 .contains("\"causalRelations\"")
-                .contains("targetIndex must reference an earlier item");
+                .contains("causeIndex")
+                .contains("effectIndex")
+                .contains("Good entities")
+                .contains("Bad entities")
+                .contains("Good causal relation")
+                .contains("Bad causal relation")
+                .contains("not for topical similarity")
+                .contains("not for ownership or dependency");
         assertThat(disabled.systemPrompt())
                 .doesNotContain("\"entities\"")
                 .doesNotContain("\"causalRelations\"");
