@@ -64,6 +64,14 @@ public final class MemoryAttributes {
             "memind.extraction.graph.temporal_build_duration_ms";
     public static final String EXTRACTION_GRAPH_TEMPORAL_UPSERT_DURATION_MS =
             "memind.extraction.graph.temporal_upsert_duration_ms";
+    public static final String EXTRACTION_GRAPH_TEMPORAL_BELOW_RETRIEVAL_FLOOR_COUNT =
+            "memind.extraction.graph.temporal_below_retrieval_floor_count";
+    public static final String EXTRACTION_GRAPH_TEMPORAL_MIN_STRENGTH =
+            "memind.extraction.graph.temporal_min_strength";
+    public static final String EXTRACTION_GRAPH_TEMPORAL_MAX_STRENGTH =
+            "memind.extraction.graph.temporal_max_strength";
+    public static final String EXTRACTION_GRAPH_TEMPORAL_STRENGTH_BUCKET_SUMMARY =
+            "memind.extraction.graph.temporal_strength_bucket_summary";
     public static final String EXTRACTION_GRAPH_TEMPORAL_DEGRADED =
             "memind.extraction.graph.temporal_degraded";
     public static final String EXTRACTION_GRAPH_RESOLUTION_CANDIDATE_COUNT =
@@ -142,6 +150,8 @@ public final class MemoryAttributes {
             "memind.extraction.graph.dropped_date_like_count";
     public static final String EXTRACTION_GRAPH_DROPPED_RESERVED_SPECIAL_COLLISION_COUNT =
             "memind.extraction.graph.dropped_reserved_special_collision_count";
+    public static final String EXTRACTION_GRAPH_STRUCTURED_BATCH_DEGRADED =
+            "memind.extraction.graph.structured_batch_degraded";
 
     // ===== Extraction (Insight Tree) =====
     public static final String EXTRACTION_INSIGHT_TYPE = "memind.extraction.insight_type";

@@ -50,6 +50,10 @@ public record ItemGraphMaterializationResult(Stats stats) {
             long temporalQueryDurationMs,
             long temporalBuildDurationMs,
             long temporalUpsertDurationMs,
+            int temporalBelowRetrievalFloorCount,
+            double temporalMinStrength,
+            double temporalMaxStrength,
+            String temporalStrengthBucketSummary,
             boolean temporalDegraded,
             int resolutionCandidateCount,
             String resolutionCandidateSourceSummary,
@@ -89,9 +93,12 @@ public record ItemGraphMaterializationResult(Stats stats) {
             int droppedTemporalCount,
             int droppedDateLikeCount,
             int droppedReservedSpecialCollisionCount,
+            boolean structuredBatchDegraded,
             boolean derivedMaintenanceDegraded) {
 
         public Stats {
+            temporalStrengthBucketSummary =
+                    temporalStrengthBucketSummary == null ? "" : temporalStrengthBucketSummary;
             resolutionCandidateSourceSummary =
                     resolutionCandidateSourceSummary == null
                             ? ""
@@ -145,6 +152,10 @@ public record ItemGraphMaterializationResult(Stats stats) {
                     0L,
                     0L,
                     0L,
+                    0,
+                    0.0d,
+                    0.0d,
+                    "",
                     false,
                     0,
                     "",
@@ -184,6 +195,7 @@ public record ItemGraphMaterializationResult(Stats stats) {
                     droppedTemporalCount,
                     droppedDateLikeCount,
                     droppedReservedSpecialCollisionCount,
+                    false,
                     false);
         }
 
@@ -238,6 +250,10 @@ public record ItemGraphMaterializationResult(Stats stats) {
                     temporalQueryDurationMs,
                     temporalBuildDurationMs,
                     temporalUpsertDurationMs,
+                    0,
+                    0.0d,
+                    0.0d,
+                    "",
                     temporalDegraded,
                     0,
                     "",
@@ -277,6 +293,7 @@ public record ItemGraphMaterializationResult(Stats stats) {
                     droppedTemporalCount,
                     droppedDateLikeCount,
                     droppedReservedSpecialCollisionCount,
+                    false,
                     false);
         }
 
@@ -335,6 +352,10 @@ public record ItemGraphMaterializationResult(Stats stats) {
                     0L,
                     0L,
                     0L,
+                    0,
+                    0.0d,
+                    0.0d,
+                    "",
                     false,
                     resolutionCandidateCount,
                     resolutionCandidateSourceSummary,
@@ -374,6 +395,7 @@ public record ItemGraphMaterializationResult(Stats stats) {
                     droppedTemporalCount,
                     droppedDateLikeCount,
                     droppedReservedSpecialCollisionCount,
+                    false,
                     false);
         }
 
@@ -417,6 +439,10 @@ public record ItemGraphMaterializationResult(Stats stats) {
                     effectiveTemporalStats.queryDurationMs(),
                     effectiveTemporalStats.buildDurationMs(),
                     effectiveTemporalStats.upsertDurationMs(),
+                    effectiveTemporalStats.belowRetrievalFloorCount(),
+                    effectiveTemporalStats.minStrength(),
+                    effectiveTemporalStats.maxStrength(),
+                    effectiveTemporalStats.strengthBucketSummary(),
                     effectiveTemporalStats.degraded(),
                     effectiveResolutionDiagnostics.candidateCount(),
                     summarizeCountMap(effectiveResolutionDiagnostics.candidateSourceCounts(), 5),
@@ -456,63 +482,20 @@ public record ItemGraphMaterializationResult(Stats stats) {
                     droppedTemporalCount,
                     droppedDateLikeCount,
                     droppedReservedSpecialCollisionCount,
+                    false,
                     false);
         }
 
+        Builder toBuilder() {
+            return new Builder(this);
+        }
+
+        public Stats withStructuredBatchDegraded(boolean structuredBatchDegraded) {
+            return toBuilder().structuredBatchDegraded(structuredBatchDegraded).build();
+        }
+
         public Stats withDerivedMaintenanceDegraded() {
-            return new Stats(
-                    entityCount,
-                    mentionCount,
-                    structuredItemLinkCount,
-                    temporalSourceCount,
-                    temporalHistoryQueryBatchCount,
-                    temporalHistoryCandidateCount,
-                    temporalIntraBatchCandidateCount,
-                    temporalSelectedPairCount,
-                    temporalCreatedLinkCount,
-                    temporalQueryDurationMs,
-                    temporalBuildDurationMs,
-                    temporalUpsertDurationMs,
-                    temporalDegraded,
-                    resolutionCandidateCount,
-                    resolutionCandidateSourceSummary,
-                    resolutionMergeScoreHistogramSummary,
-                    resolutionCandidateRejectedCount,
-                    resolutionMergeAcceptedCount,
-                    resolutionMergeRejectedCount,
-                    resolutionCreateNewCount,
-                    resolutionExactFallbackCount,
-                    resolutionCandidateCapHitCount,
-                    aliasEvidenceObservedCount,
-                    aliasEvidenceMergedCount,
-                    resolutionSpecialBypassCount,
-                    semanticSearchRequestCount,
-                    semanticSearchInvocationCount,
-                    semanticSearchHitCount,
-                    semanticResolvedCandidateCount,
-                    semanticLinkCount,
-                    semanticUpsertBatchCount,
-                    semanticSourceWindowCount,
-                    semanticFailedResolveChunkCount,
-                    semanticFailedWindowCount,
-                    semanticFailedUpsertBatchCount,
-                    semanticSameBatchHitCount,
-                    semanticSearchFallbackCount,
-                    semanticIntraBatchCandidateCount,
-                    semanticSearchPhaseDurationMs,
-                    semanticResolvePhaseDurationMs,
-                    semanticUpsertPhaseDurationMs,
-                    semanticIntraBatchPhaseDurationMs,
-                    semanticDegraded,
-                    typeFallbackToOtherCount,
-                    topUnresolvedTypeLabelsSummary,
-                    droppedBlankCount,
-                    droppedPunctuationOnlyCount,
-                    droppedPronounLikeCount,
-                    droppedTemporalCount,
-                    droppedDateLikeCount,
-                    droppedReservedSpecialCollisionCount,
-                    true);
+            return toBuilder().derivedMaintenanceDegraded(true).build();
         }
 
         public static Stats empty() {
@@ -552,6 +535,202 @@ public record ItemGraphMaterializationResult(Stats stats) {
                 return 0;
             }
             return counts.values().stream().mapToInt(Integer::intValue).sum();
+        }
+
+        static final class Builder {
+
+            private int entityCount;
+            private int mentionCount;
+            private int structuredItemLinkCount;
+            private int temporalSourceCount;
+            private int temporalHistoryQueryBatchCount;
+            private int temporalHistoryCandidateCount;
+            private int temporalIntraBatchCandidateCount;
+            private int temporalSelectedPairCount;
+            private int temporalCreatedLinkCount;
+            private long temporalQueryDurationMs;
+            private long temporalBuildDurationMs;
+            private long temporalUpsertDurationMs;
+            private int temporalBelowRetrievalFloorCount;
+            private double temporalMinStrength;
+            private double temporalMaxStrength;
+            private String temporalStrengthBucketSummary;
+            private boolean temporalDegraded;
+            private int resolutionCandidateCount;
+            private String resolutionCandidateSourceSummary;
+            private String resolutionMergeScoreHistogramSummary;
+            private int resolutionCandidateRejectedCount;
+            private int resolutionMergeAcceptedCount;
+            private int resolutionMergeRejectedCount;
+            private int resolutionCreateNewCount;
+            private int resolutionExactFallbackCount;
+            private int resolutionCandidateCapHitCount;
+            private int aliasEvidenceObservedCount;
+            private int aliasEvidenceMergedCount;
+            private int resolutionSpecialBypassCount;
+            private int semanticSearchRequestCount;
+            private int semanticSearchInvocationCount;
+            private int semanticSearchHitCount;
+            private int semanticResolvedCandidateCount;
+            private int semanticLinkCount;
+            private int semanticUpsertBatchCount;
+            private int semanticSourceWindowCount;
+            private int semanticFailedResolveChunkCount;
+            private int semanticFailedWindowCount;
+            private int semanticFailedUpsertBatchCount;
+            private int semanticSameBatchHitCount;
+            private int semanticSearchFallbackCount;
+            private int semanticIntraBatchCandidateCount;
+            private long semanticSearchPhaseDurationMs;
+            private long semanticResolvePhaseDurationMs;
+            private long semanticUpsertPhaseDurationMs;
+            private long semanticIntraBatchPhaseDurationMs;
+            private boolean semanticDegraded;
+            private int typeFallbackToOtherCount;
+            private String topUnresolvedTypeLabelsSummary;
+            private int droppedBlankCount;
+            private int droppedPunctuationOnlyCount;
+            private int droppedPronounLikeCount;
+            private int droppedTemporalCount;
+            private int droppedDateLikeCount;
+            private int droppedReservedSpecialCollisionCount;
+            private boolean structuredBatchDegraded;
+            private boolean derivedMaintenanceDegraded;
+
+            private Builder(Stats stats) {
+                this.entityCount = stats.entityCount();
+                this.mentionCount = stats.mentionCount();
+                this.structuredItemLinkCount = stats.structuredItemLinkCount();
+                this.temporalSourceCount = stats.temporalSourceCount();
+                this.temporalHistoryQueryBatchCount = stats.temporalHistoryQueryBatchCount();
+                this.temporalHistoryCandidateCount = stats.temporalHistoryCandidateCount();
+                this.temporalIntraBatchCandidateCount = stats.temporalIntraBatchCandidateCount();
+                this.temporalSelectedPairCount = stats.temporalSelectedPairCount();
+                this.temporalCreatedLinkCount = stats.temporalCreatedLinkCount();
+                this.temporalQueryDurationMs = stats.temporalQueryDurationMs();
+                this.temporalBuildDurationMs = stats.temporalBuildDurationMs();
+                this.temporalUpsertDurationMs = stats.temporalUpsertDurationMs();
+                this.temporalBelowRetrievalFloorCount =
+                        stats.temporalBelowRetrievalFloorCount();
+                this.temporalMinStrength = stats.temporalMinStrength();
+                this.temporalMaxStrength = stats.temporalMaxStrength();
+                this.temporalStrengthBucketSummary = stats.temporalStrengthBucketSummary();
+                this.temporalDegraded = stats.temporalDegraded();
+                this.resolutionCandidateCount = stats.resolutionCandidateCount();
+                this.resolutionCandidateSourceSummary = stats.resolutionCandidateSourceSummary();
+                this.resolutionMergeScoreHistogramSummary =
+                        stats.resolutionMergeScoreHistogramSummary();
+                this.resolutionCandidateRejectedCount = stats.resolutionCandidateRejectedCount();
+                this.resolutionMergeAcceptedCount = stats.resolutionMergeAcceptedCount();
+                this.resolutionMergeRejectedCount = stats.resolutionMergeRejectedCount();
+                this.resolutionCreateNewCount = stats.resolutionCreateNewCount();
+                this.resolutionExactFallbackCount = stats.resolutionExactFallbackCount();
+                this.resolutionCandidateCapHitCount = stats.resolutionCandidateCapHitCount();
+                this.aliasEvidenceObservedCount = stats.aliasEvidenceObservedCount();
+                this.aliasEvidenceMergedCount = stats.aliasEvidenceMergedCount();
+                this.resolutionSpecialBypassCount = stats.resolutionSpecialBypassCount();
+                this.semanticSearchRequestCount = stats.semanticSearchRequestCount();
+                this.semanticSearchInvocationCount = stats.semanticSearchInvocationCount();
+                this.semanticSearchHitCount = stats.semanticSearchHitCount();
+                this.semanticResolvedCandidateCount = stats.semanticResolvedCandidateCount();
+                this.semanticLinkCount = stats.semanticLinkCount();
+                this.semanticUpsertBatchCount = stats.semanticUpsertBatchCount();
+                this.semanticSourceWindowCount = stats.semanticSourceWindowCount();
+                this.semanticFailedResolveChunkCount = stats.semanticFailedResolveChunkCount();
+                this.semanticFailedWindowCount = stats.semanticFailedWindowCount();
+                this.semanticFailedUpsertBatchCount = stats.semanticFailedUpsertBatchCount();
+                this.semanticSameBatchHitCount = stats.semanticSameBatchHitCount();
+                this.semanticSearchFallbackCount = stats.semanticSearchFallbackCount();
+                this.semanticIntraBatchCandidateCount = stats.semanticIntraBatchCandidateCount();
+                this.semanticSearchPhaseDurationMs = stats.semanticSearchPhaseDurationMs();
+                this.semanticResolvePhaseDurationMs = stats.semanticResolvePhaseDurationMs();
+                this.semanticUpsertPhaseDurationMs = stats.semanticUpsertPhaseDurationMs();
+                this.semanticIntraBatchPhaseDurationMs =
+                        stats.semanticIntraBatchPhaseDurationMs();
+                this.semanticDegraded = stats.semanticDegraded();
+                this.typeFallbackToOtherCount = stats.typeFallbackToOtherCount();
+                this.topUnresolvedTypeLabelsSummary = stats.topUnresolvedTypeLabelsSummary();
+                this.droppedBlankCount = stats.droppedBlankCount();
+                this.droppedPunctuationOnlyCount = stats.droppedPunctuationOnlyCount();
+                this.droppedPronounLikeCount = stats.droppedPronounLikeCount();
+                this.droppedTemporalCount = stats.droppedTemporalCount();
+                this.droppedDateLikeCount = stats.droppedDateLikeCount();
+                this.droppedReservedSpecialCollisionCount =
+                        stats.droppedReservedSpecialCollisionCount();
+                this.structuredBatchDegraded = stats.structuredBatchDegraded();
+                this.derivedMaintenanceDegraded = stats.derivedMaintenanceDegraded();
+            }
+
+            Builder structuredBatchDegraded(boolean structuredBatchDegraded) {
+                this.structuredBatchDegraded = structuredBatchDegraded;
+                return this;
+            }
+
+            Builder derivedMaintenanceDegraded(boolean derivedMaintenanceDegraded) {
+                this.derivedMaintenanceDegraded = derivedMaintenanceDegraded;
+                return this;
+            }
+
+            Stats build() {
+                return new Stats(
+                        entityCount,
+                        mentionCount,
+                        structuredItemLinkCount,
+                        temporalSourceCount,
+                        temporalHistoryQueryBatchCount,
+                        temporalHistoryCandidateCount,
+                        temporalIntraBatchCandidateCount,
+                        temporalSelectedPairCount,
+                        temporalCreatedLinkCount,
+                        temporalQueryDurationMs,
+                        temporalBuildDurationMs,
+                        temporalUpsertDurationMs,
+                        temporalBelowRetrievalFloorCount,
+                        temporalMinStrength,
+                        temporalMaxStrength,
+                        temporalStrengthBucketSummary,
+                        temporalDegraded,
+                        resolutionCandidateCount,
+                        resolutionCandidateSourceSummary,
+                        resolutionMergeScoreHistogramSummary,
+                        resolutionCandidateRejectedCount,
+                        resolutionMergeAcceptedCount,
+                        resolutionMergeRejectedCount,
+                        resolutionCreateNewCount,
+                        resolutionExactFallbackCount,
+                        resolutionCandidateCapHitCount,
+                        aliasEvidenceObservedCount,
+                        aliasEvidenceMergedCount,
+                        resolutionSpecialBypassCount,
+                        semanticSearchRequestCount,
+                        semanticSearchInvocationCount,
+                        semanticSearchHitCount,
+                        semanticResolvedCandidateCount,
+                        semanticLinkCount,
+                        semanticUpsertBatchCount,
+                        semanticSourceWindowCount,
+                        semanticFailedResolveChunkCount,
+                        semanticFailedWindowCount,
+                        semanticFailedUpsertBatchCount,
+                        semanticSameBatchHitCount,
+                        semanticSearchFallbackCount,
+                        semanticIntraBatchCandidateCount,
+                        semanticSearchPhaseDurationMs,
+                        semanticResolvePhaseDurationMs,
+                        semanticUpsertPhaseDurationMs,
+                        semanticIntraBatchPhaseDurationMs,
+                        semanticDegraded,
+                        typeFallbackToOtherCount,
+                        topUnresolvedTypeLabelsSummary,
+                        droppedBlankCount,
+                        droppedPunctuationOnlyCount,
+                        droppedPronounLikeCount,
+                        droppedTemporalCount,
+                        droppedDateLikeCount,
+                        droppedReservedSpecialCollisionCount,
+                        structuredBatchDegraded,
+                        derivedMaintenanceDegraded);
+            }
         }
     }
 }

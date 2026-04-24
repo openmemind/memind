@@ -36,7 +36,9 @@ import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.support.TestMemoryIds;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -231,6 +233,107 @@ class DefaultRetrievalGraphAssistantTest {
     }
 
     @Test
+    void graphAssistReadsAdjacentLinksOnceForAllSeeds() {
+        var recordingGraphOperations = new RecordingGraphOperations();
+        recordingGraphOperations.upsertItemLinks(
+                MEMORY_ID,
+                List.of(link(101L, 201L, ItemLinkType.CAUSAL, 0.95d)));
+        lenient().when(store.graphOperations()).thenReturn(recordingGraphOperations);
+        assistant = new DefaultRetrievalGraphAssistant(store);
+
+        StepVerifier.create(
+                        assistant.assist(
+                                CONTEXT, CONFIG, SIMPLE_CONFIG.graphAssist(), directSeeds()))
+                .assertNext(result -> assertThat(result.stats().seedCount()).isEqualTo(2))
+                .verifyComplete();
+
+        assertThat(recordingGraphOperations.adjacentReadSeedSets())
+                .containsExactly(List.of(101L, 102L));
+    }
+
+    @Test
+    void graphAssistAppliesPerSeedCapsAfterDeterministicOrderingInsteadOfStoreReturnOrder() {
+        itemsById.put(
+                202L,
+                item(
+                        202L,
+                        "second deterministic graph candidate",
+                        Instant.parse("2026-04-16T12:05:00Z")));
+        var recordingGraphOperations = new RecordingGraphOperations();
+        recordingGraphOperations.overrideAdjacentRead(
+                List.of(101L, 102L),
+                List.of(
+                        link(101L, 202L, ItemLinkType.SEMANTIC, 0.81d),
+                        link(102L, 202L, ItemLinkType.SEMANTIC, 0.90d),
+                        link(101L, 201L, ItemLinkType.SEMANTIC, 0.91d)));
+        lenient().when(store.graphOperations()).thenReturn(recordingGraphOperations);
+        assistant = new DefaultRetrievalGraphAssistant(store);
+        var deterministicConfig =
+                SIMPLE_CONFIG.withGraphAssist(
+                        new SimpleStrategyConfig.GraphAssistConfig(
+                                SIMPLE_CONFIG.graphAssist().enabled(),
+                                SIMPLE_CONFIG.graphAssist().mode(),
+                                SIMPLE_CONFIG.graphAssist().maxSeedItems(),
+                                SIMPLE_CONFIG.graphAssist().maxExpandedItems(),
+                                1,
+                                0,
+                                0,
+                                0,
+                                SIMPLE_CONFIG.graphAssist().maxItemsPerEntity(),
+                                SIMPLE_CONFIG.graphAssist().graphChannelWeight(),
+                                SIMPLE_CONFIG.graphAssist().minLinkStrength(),
+                                SIMPLE_CONFIG.graphAssist().minMentionConfidence(),
+                                SIMPLE_CONFIG.graphAssist().protectDirectTopK(),
+                                SIMPLE_CONFIG.graphAssist().semanticEvidenceDecayFactor(),
+                                SIMPLE_CONFIG.graphAssist().timeout()));
+
+        StepVerifier.create(
+                        assistant.assist(
+                                CONTEXT, CONFIG, deterministicConfig.graphAssist(), directSeeds()))
+                .assertNext(
+                        result ->
+                                assertThat(
+                                                result.items().stream()
+                                                        .map(ScoredResult::sourceId)
+                                                        .toList())
+                                        .containsSubsequence("201", "202"))
+                .verifyComplete();
+    }
+
+    @Test
+    void defaultRetrievalFloorStillAdmitsLegacyAndFirstRolloutTemporalLinks() {
+        itemsById.put(
+                801L,
+                item(801L, "legacy temporal link candidate", Instant.parse("2026-04-16T12:00:00Z")));
+        itemsById.put(
+                802L,
+                item(
+                        802L,
+                        "first rollout floor temporal link candidate",
+                        Instant.parse("2026-04-16T12:05:00Z")));
+        var temporalGraphOperations = new InMemoryGraphOperations();
+        temporalGraphOperations.upsertItemLinks(
+                MEMORY_ID,
+                List.of(
+                        link(101L, 801L, ItemLinkType.TEMPORAL, 1.0d),
+                        link(102L, 802L, ItemLinkType.TEMPORAL, 0.60d)));
+        lenient().when(store.graphOperations()).thenReturn(temporalGraphOperations);
+        assistant = new DefaultRetrievalGraphAssistant(store);
+
+        StepVerifier.create(
+                        assistant.assist(
+                                CONTEXT, CONFIG, SIMPLE_CONFIG.graphAssist(), directSeeds()))
+                .assertNext(
+                        result ->
+                                assertThat(
+                                                result.items().stream()
+                                                        .map(ScoredResult::sourceId)
+                                                        .toList())
+                                        .containsSubsequence("801", "802"))
+                .verifyComplete();
+    }
+
+    @Test
     void semanticConvergenceAcrossSeedsOutranksSingleSeedSemanticHit() {
         itemsById.put(
                 301L,
@@ -259,7 +362,7 @@ class DefaultRetrievalGraphAssistantTest {
     }
 
     @Test
-    void repeatedSemanticEvidenceFromSameSeedDoesNotStackPastBestPath() {
+    void repeatedSemanticEvidenceFromSameSeedUsesStrongestPathUnderDeterministicOrdering() {
         itemsById.put(
                 501L,
                 item(
@@ -285,7 +388,7 @@ class DefaultRetrievalGraphAssistantTest {
                                                 result.items().stream()
                                                         .map(ScoredResult::sourceId)
                                                         .toList())
-                                        .containsSubsequence("502", "501"))
+                                        .containsSubsequence("501", "502"))
                 .verifyComplete();
     }
 
@@ -553,5 +656,32 @@ class DefaultRetrievalGraphAssistantTest {
     private static ItemEntityMention mention(long itemId, String entityKey, float confidence) {
         return new ItemEntityMention(
                 MEMORY_ID.toIdentifier(), itemId, entityKey, confidence, Map.of(), NOW);
+    }
+
+    private static final class RecordingGraphOperations extends InMemoryGraphOperations {
+        private final List<List<Long>> adjacentReadSeedSets = new ArrayList<>();
+        private final Map<List<Long>, List<ItemLink>> adjacentOverrides = new LinkedHashMap<>();
+
+        @Override
+        public List<ItemLink> listAdjacentItemLinks(
+                MemoryId memoryId,
+                Collection<Long> seedItemIds,
+                Collection<ItemLinkType> linkTypes) {
+            var seedSet = List.copyOf(seedItemIds);
+            adjacentReadSeedSets.add(seedSet);
+            var override = adjacentOverrides.get(seedSet);
+            if (override != null) {
+                return override;
+            }
+            return super.listAdjacentItemLinks(memoryId, seedItemIds, linkTypes);
+        }
+
+        private void overrideAdjacentRead(List<Long> seedIds, List<ItemLink> links) {
+            adjacentOverrides.put(List.copyOf(seedIds), List.copyOf(links));
+        }
+
+        private List<List<Long>> adjacentReadSeedSets() {
+            return List.copyOf(adjacentReadSeedSets);
+        }
     }
 }

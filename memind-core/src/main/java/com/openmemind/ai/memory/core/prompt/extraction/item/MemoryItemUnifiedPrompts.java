@@ -568,7 +568,8 @@ public final class MemoryItemUnifiedPrompts {
         - `"entities"` uses objects with `"name"`, `"entityType"`, optional `"salience"`, and optional `"aliasObservations"`.
         - Each `"aliasObservations"` entry uses `"aliasSurface"`, `"aliasClass"`, optional `"evidenceSource"`, and optional `"confidence"`.
         - Allowed `"aliasClass"` values are `case_only`, `punctuation`, `spacing`, `org_suffix`, `explicit_parenthetical`, `explicit_slash_apposition`, and `user_dictionary`.
-        - `"causalRelations"` uses objects with `"targetIndex"`, `"relationType"`, and optional `"strength"`.
+        - `"causalRelations"` uses objects with `"targetIndex"`, `"relationType"`, and `"strength"` in [0,1].
+        - If you emit a causal relation, include an explicit strength in [0,1]; otherwise omit the relation.
         - targetIndex must reference an earlier item in the same response.
         - Prefer omission to hallucinated graph structure.
         """

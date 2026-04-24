@@ -125,6 +125,81 @@ class TemporalItemLinkerTest {
         assertThat(stats.degraded()).isTrue();
     }
 
+    @Test
+    void linkerComputesStrengthsForOverlapNearbyAndBeforeRelations() {
+        var itemOps = new InMemoryItemOperations();
+        var graphOps = new InMemoryGraphOperations();
+        itemOps.insertItems(
+                MEMORY_ID,
+                List.of(
+                        rangedItem(
+                                1L,
+                                MemoryItemType.FACT,
+                                MemoryCategory.EVENT,
+                                "2026-04-10T09:00:00Z",
+                                "2026-04-10T11:00:00Z")));
+        var linker =
+                new TemporalItemLinker(
+                        itemOps,
+                        graphOps,
+                        new TemporalRelationClassifier(),
+                        new ItemGraphOptions(true, 8, 2, 1, 5, 0.82d, 4, 1, 128));
+        var incoming =
+                List.of(
+                        temporalItem(
+                                101L,
+                                MemoryItemType.FACT,
+                                MemoryCategory.EVENT,
+                                "2026-04-10T10:00:00Z"),
+                        temporalItem(
+                                201L,
+                                MemoryItemType.FACT,
+                                MemoryCategory.EVENT,
+                                "2026-04-11T10:00:00Z"),
+                        temporalItem(
+                                301L,
+                                MemoryItemType.FACT,
+                                MemoryCategory.EVENT,
+                                "2026-04-20T10:00:00Z"));
+
+        var stats = linker.link(MEMORY_ID, incoming).block();
+
+        assertThat(stats.createdLinkCount()).isEqualTo(3);
+        assertThat(stats.belowRetrievalFloorCount()).isEqualTo(0);
+        assertThat(stats.minStrength()).isEqualTo(0.60d);
+        assertThat(stats.maxStrength()).isEqualTo(1.0d);
+        assertThat(stats.strengthBucketSummary())
+                .isEqualTo("0.60-0.74=1,0.75-0.89=1,0.90-1.00=1");
+        assertThat(graphOps.listItemLinks(MEMORY_ID))
+                .extracting(link -> link.metadata().get("relationType"), ItemLink::strength)
+                .containsExactly(
+                        tuple("overlap", 1.0d),
+                        tuple("nearby", 0.75d),
+                        tuple("before", 0.60d));
+    }
+
+    @Test
+    void temporalLinkingStatsBuilderRoundTripsRolloutFields() {
+        var stats =
+                new TemporalItemLinker.TemporalLinkingStats(
+                        2,
+                        1,
+                        4,
+                        3,
+                        2,
+                        2,
+                        10L,
+                        11L,
+                        12L,
+                        1,
+                        0.60d,
+                        1.0d,
+                        "0.60-0.74=1,0.90-1.00=1",
+                        false);
+
+        assertThat(stats.toBuilder().build()).isEqualTo(stats);
+    }
+
     private static MemoryItem temporalItem(
             Long id, MemoryItemType type, MemoryCategory category, String occurredAt) {
         return new MemoryItem(

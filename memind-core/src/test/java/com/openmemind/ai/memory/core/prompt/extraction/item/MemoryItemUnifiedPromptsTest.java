@@ -105,6 +105,26 @@ class MemoryItemUnifiedPromptsTest {
     }
 
     @Test
+    @DisplayName("Rendered prompt should require explicit causal strength when graph is enabled")
+    void renderedPromptRequiresExplicitCausalStrengthWhenGraphHintsAreEnabled() {
+        var prompt =
+                MemoryItemUnifiedPrompts.build(
+                                List.of(),
+                                "user: the rollback happened because the deployment failed",
+                                Instant.parse("2026-04-18T00:00:00Z"),
+                                null,
+                                Set.of(MemoryCategory.EVENT),
+                                ItemGraphOptions.defaults().withEnabled(true))
+                        .render("English");
+
+        assertThat(prompt.systemPrompt())
+                .contains("include an explicit strength in [0,1]")
+                .contains("omit the relation")
+                .contains("\"aliasObservations\"")
+                .contains("Use \"special\" only for conversational role anchors");
+    }
+
+    @Test
     @DisplayName(
             "Rendered prompt should describe alias observation schema when graph is enabled for"
                     + " Chinese")

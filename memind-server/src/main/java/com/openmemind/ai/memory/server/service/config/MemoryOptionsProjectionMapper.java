@@ -766,23 +766,7 @@ public class MemoryOptionsProjectionMapper {
             }
             ItemGraphOptions graph = extraction.item().graph();
             ItemGraphOptions normalizedGraph =
-                    new ItemGraphOptions(
-                            graph.enabled(),
-                            graph.maxEntitiesPerItem(),
-                            graph.maxCausalReferencesPerItem(),
-                            graph.maxTemporalLinksPerItem(),
-                            graph.maxSemanticLinksPerItem(),
-                            graph.semanticMinScore(),
-                            graph.semanticSearchHeadroom(),
-                            graph.semanticLinkConcurrency(),
-                            graph.semanticSourceWindowSize(),
-                            graph.resolutionMode(),
-                            graph.maxResolutionCandidatesPerMention(),
-                            graph.resolutionMergeThreshold(),
-                            orderedSupportedLanguagePacks,
-                            graph.crossScriptMergePolicy(),
-                            graph.aliasEvidenceMode(),
-                            graph.userAliasDictionary());
+                    graph.toBuilder().supportedLanguagePacks(orderedSupportedLanguagePacks).build();
             ExtractionOptions normalizedExtraction =
                     new ExtractionOptions(
                             extraction.common(),

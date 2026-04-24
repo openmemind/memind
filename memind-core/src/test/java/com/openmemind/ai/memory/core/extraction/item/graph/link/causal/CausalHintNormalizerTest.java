@@ -101,6 +101,46 @@ class CausalHintNormalizerTest {
                         tuple(104L, 105L, 0.75d, "caused_by"));
     }
 
+    @Test
+    void normalizeDropsWeakAndMissingStrengthButKeepsThresholdBoundary() {
+        var items =
+                List.of(
+                        item(101L, "Primary cause"),
+                        item(102L, "Dropped effect"),
+                        item(103L, "Boundary effect"),
+                        item(104L, "Secondary cause"),
+                        item(105L, "Strong effect"));
+        var entries =
+                List.of(
+                        entry("Primary cause", List.of()),
+                        entry(
+                                "Dropped effect",
+                                List.of(
+                                        causalHint(0, "caused_by", null),
+                                        causalHint(0, "caused_by", 0.49f))),
+                        entry("Boundary effect", List.of(causalHint(0, "enabled_by", 0.50f))),
+                        entry("Secondary cause", List.of()),
+                        entry("Strong effect", List.of(causalHint(3, "motivated_by", 0.91f))));
+
+        var links =
+                new CausalHintNormalizer()
+                        .normalize(
+                                MEMORY_ID,
+                                items,
+                                entries,
+                                ItemGraphOptions.defaults().withEnabled(true));
+
+        assertThat(links)
+                .extracting(
+                        ItemLink::sourceItemId,
+                        ItemLink::targetItemId,
+                        ItemLink::strength,
+                        link -> link.metadata().get("relationType"))
+                .containsExactly(
+                        tuple(101L, 103L, 0.5d, "enabled_by"),
+                        tuple(104L, 105L, Double.valueOf(0.91f), "motivated_by"));
+    }
+
     private static MemoryItem item(Long id, String content) {
         return new MemoryItem(
                 id,

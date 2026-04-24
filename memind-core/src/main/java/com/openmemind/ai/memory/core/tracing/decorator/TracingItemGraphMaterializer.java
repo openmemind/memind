@@ -97,6 +97,20 @@ public final class TracingItemGraphMaterializer extends TracingSupport
                                                 .EXTRACTION_GRAPH_TEMPORAL_UPSERT_DURATION_MS,
                                         result.stats().temporalUpsertDurationMs()),
                                 Map.entry(
+                                        MemoryAttributes
+                                                .EXTRACTION_GRAPH_TEMPORAL_BELOW_RETRIEVAL_FLOOR_COUNT,
+                                        result.stats().temporalBelowRetrievalFloorCount()),
+                                Map.entry(
+                                        MemoryAttributes.EXTRACTION_GRAPH_TEMPORAL_MIN_STRENGTH,
+                                        result.stats().temporalMinStrength()),
+                                Map.entry(
+                                        MemoryAttributes.EXTRACTION_GRAPH_TEMPORAL_MAX_STRENGTH,
+                                        result.stats().temporalMaxStrength()),
+                                Map.entry(
+                                        MemoryAttributes
+                                                .EXTRACTION_GRAPH_TEMPORAL_STRENGTH_BUCKET_SUMMARY,
+                                        result.stats().temporalStrengthBucketSummary()),
+                                Map.entry(
                                         MemoryAttributes.EXTRACTION_GRAPH_TEMPORAL_DEGRADED,
                                         result.stats().temporalDegraded()),
                                 Map.entry(
@@ -244,7 +258,11 @@ public final class TracingItemGraphMaterializer extends TracingSupport
                                 Map.entry(
                                         MemoryAttributes
                                                 .EXTRACTION_GRAPH_DROPPED_RESERVED_SPECIAL_COLLISION_COUNT,
-                                        result.stats().droppedReservedSpecialCollisionCount())),
+                                        result.stats().droppedReservedSpecialCollisionCount()),
+                                Map.entry(
+                                        MemoryAttributes
+                                                .EXTRACTION_GRAPH_STRUCTURED_BATCH_DEGRADED,
+                                        result.stats().structuredBatchDegraded())),
                 () -> delegate.materialize(memoryId, items, sourceEntries));
     }
 }

@@ -134,7 +134,7 @@ class TracingItemGraphMaterializerTest {
     }
 
     @Test
-    void tracingDecoratorShouldEmitDedicatedTemporalAttributes() {
+    void tracingDecoratorShouldEmitDedicatedTemporalAndRolloutSummaryAttributes() {
         var observer = new RecordingMemoryObserver();
         var stats =
                 ItemGraphMaterializationResult.Stats.withTemporalAndSemantic(
@@ -142,7 +142,20 @@ class TracingItemGraphMaterializerTest {
                         2,
                         1,
                         new TemporalItemLinker.TemporalLinkingStats(
-                                2, 1, 3, 1, 1, 1, 4L, 3L, 2L, true),
+                                2,
+                                1,
+                                3,
+                                1,
+                                1,
+                                1,
+                                4L,
+                                3L,
+                                2L,
+                                0,
+                                0.75d,
+                                0.75d,
+                                "0.75-0.89=1",
+                                true),
                         EntityResolutionDiagnostics.empty(),
                         new SemanticItemLinker.SemanticLinkingStats(
                                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0L, 0L, 0L, 0L, false),
@@ -177,7 +190,44 @@ class TracingItemGraphMaterializerTest {
         assertThat(resultAttributes)
                 .containsEntry(MemoryAttributes.EXTRACTION_GRAPH_TEMPORAL_SOURCE_COUNT, 2)
                 .containsEntry(MemoryAttributes.EXTRACTION_GRAPH_TEMPORAL_CREATED_LINK_COUNT, 1)
+                .containsEntry(
+                        MemoryAttributes.EXTRACTION_GRAPH_TEMPORAL_BELOW_RETRIEVAL_FLOOR_COUNT, 0)
+                .containsEntry(MemoryAttributes.EXTRACTION_GRAPH_TEMPORAL_MIN_STRENGTH, 0.75d)
+                .containsEntry(MemoryAttributes.EXTRACTION_GRAPH_TEMPORAL_MAX_STRENGTH, 0.75d)
+                .containsEntry(
+                        MemoryAttributes.EXTRACTION_GRAPH_TEMPORAL_STRENGTH_BUCKET_SUMMARY,
+                        "0.75-0.89=1")
                 .containsEntry(MemoryAttributes.EXTRACTION_GRAPH_TEMPORAL_DEGRADED, true);
+    }
+
+    @Test
+    void tracingDecoratorEmitsStructuredBatchDegradedAttribute() {
+        var observer = new RecordingMemoryObserver();
+        var stats = semanticThroughputStats().withStructuredBatchDegraded(true);
+        ItemGraphMaterializer materializer =
+                new TracingItemGraphMaterializer(
+                        (memoryId, items, entries) ->
+                                Mono.just(new ItemGraphMaterializationResult(stats)),
+                        observer);
+
+        StepVerifier.create(
+                        materializer.materialize(
+                                DefaultMemoryId.of("user-1", "agent-1"),
+                                List.of(newItem(101L)),
+                                List.of(newEntry())))
+                .expectNextCount(1)
+                .verifyComplete();
+
+        @SuppressWarnings("unchecked")
+        var resultAttributes =
+                ((ObservationContext<ItemGraphMaterializationResult>)
+                                observer.monoContexts().getFirst())
+                        .resultExtractor()
+                        .extract(new ItemGraphMaterializationResult(stats));
+        assertThat(resultAttributes)
+                .containsEntry(
+                        MemoryAttributes.EXTRACTION_GRAPH_STRUCTURED_BATCH_DEGRADED,
+                        true);
     }
 
     @Test

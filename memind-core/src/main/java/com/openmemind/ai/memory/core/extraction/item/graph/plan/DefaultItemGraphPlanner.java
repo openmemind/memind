@@ -37,12 +37,17 @@ import com.openmemind.ai.memory.core.store.graph.ItemLinkType;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * Pure precompute planner for a single item-graph extraction batch.
  */
 public final class DefaultItemGraphPlanner {
+
+    private static final Logger log = LoggerFactory.getLogger(DefaultItemGraphPlanner.class);
 
     private final GraphHintNormalizer normalizer;
     private final EntityResolutionStrategy resolutionStrategy;
@@ -75,28 +80,27 @@ public final class DefaultItemGraphPlanner {
         List<MemoryItem> batchItems = List.copyOf(items);
         List<ExtractedMemoryEntry> batchEntries =
                 sourceEntries == null ? List.of() : List.copyOf(sourceEntries);
-        ResolvedGraphBatch resolvedBatch =
+        StructuredBatchResolutionResult structuredBatchResult =
                 resolveStructuredBatch(memoryId, batchItems, batchEntries);
 
-        return temporalItemLinker
-                .plan(memoryId, batchItems)
+        Mono<TemporalItemLinker.TemporalLinkingPlan> temporalPlan =
+                Mono.defer(() -> temporalItemLinker.plan(memoryId, batchItems))
+                        .subscribeOn(Schedulers.boundedElastic())
                 .onErrorReturn(TemporalItemLinker.TemporalLinkingPlan.stageFailure())
-                .flatMap(
-                        temporalPlan ->
-                                semanticItemLinker
-                                        .plan(memoryId, batchItems)
-                                        .onErrorReturn(
-                                                SemanticItemLinker.SemanticLinkingPlan
-                                                        .stageFailure())
-                                        .map(
-                                                semanticPlan ->
-                                                        assemblePlanningResult(
-                                                                resolvedBatch,
-                                                                temporalPlan,
-                                                                semanticPlan)));
+                ;
+        Mono<SemanticItemLinker.SemanticLinkingPlan> semanticPlan =
+                Mono.defer(() -> semanticItemLinker.plan(memoryId, batchItems))
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .onErrorReturn(SemanticItemLinker.SemanticLinkingPlan.stageFailure());
+
+        return Mono.zip(temporalPlan, semanticPlan)
+                .map(
+                        tuple ->
+                                assemblePlanningResult(
+                                        structuredBatchResult, tuple.getT1(), tuple.getT2()));
     }
 
-    private ResolvedGraphBatch resolveStructuredBatch(
+    private StructuredBatchResolutionResult resolveStructuredBatch(
             MemoryId memoryId,
             List<MemoryItem> batchItems,
             List<ExtractedMemoryEntry> batchEntries) {
@@ -104,16 +108,19 @@ public final class DefaultItemGraphPlanner {
             NormalizedGraphBatch normalized =
                     normalizer.normalize(memoryId, batchItems, batchEntries, options);
             ResolvedGraphBatch resolved = resolutionStrategy.resolve(memoryId, normalized, options);
-            return resolved.withEntityAliases(aliasPlanner.plan(memoryId, resolved));
+            return StructuredBatchResolutionResult.success(
+                    resolved.withEntityAliases(aliasPlanner.plan(memoryId, resolved)));
         } catch (RuntimeException error) {
-            return ResolvedGraphBatch.empty();
+            log.warn("item graph structured batch degraded for {}", memoryId.toIdentifier(), error);
+            return StructuredBatchResolutionResult.degraded();
         }
     }
 
     private PlanningResult assemblePlanningResult(
-            ResolvedGraphBatch resolvedBatch,
+            StructuredBatchResolutionResult structuredBatchResult,
             TemporalItemLinker.TemporalLinkingPlan temporalPlan,
             SemanticItemLinker.SemanticLinkingPlan semanticPlan) {
+        ResolvedGraphBatch resolvedBatch = structuredBatchResult.resolvedBatch();
         var diagnostics = resolvedBatch.diagnostics();
         var droppedEntityCounts = diagnostics.droppedEntityCounts();
 
@@ -161,8 +168,26 @@ public final class DefaultItemGraphPlanner {
                         droppedEntityCounts.getOrDefault(EntityDropReason.TEMPORAL, 0),
                         droppedEntityCounts.getOrDefault(EntityDropReason.DATE_LIKE, 0),
                         droppedEntityCounts.getOrDefault(
-                                EntityDropReason.RESERVED_SPECIAL_COLLISION, 0));
+                                EntityDropReason.RESERVED_SPECIAL_COLLISION, 0))
+                        .withStructuredBatchDegraded(
+                                structuredBatchResult.structuredBatchDegraded());
         return new PlanningResult(writePlan, stats);
+    }
+
+    private record StructuredBatchResolutionResult(
+            ResolvedGraphBatch resolvedBatch, boolean structuredBatchDegraded) {
+
+        private StructuredBatchResolutionResult {
+            resolvedBatch = resolvedBatch == null ? ResolvedGraphBatch.empty() : resolvedBatch;
+        }
+
+        private static StructuredBatchResolutionResult success(ResolvedGraphBatch resolvedBatch) {
+            return new StructuredBatchResolutionResult(resolvedBatch, false);
+        }
+
+        private static StructuredBatchResolutionResult degraded() {
+            return new StructuredBatchResolutionResult(ResolvedGraphBatch.empty(), true);
+        }
     }
 
     private static List<SemanticItemRelation> structuredSemanticRelations(

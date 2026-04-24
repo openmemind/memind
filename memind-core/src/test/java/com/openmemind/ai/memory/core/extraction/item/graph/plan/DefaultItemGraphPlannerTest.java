@@ -27,6 +27,7 @@ import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.item.graph.entity.alias.EntityAliasIndexPlanner;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.EntityResolutionStrategy;
 import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.ExactCanonicalEntityResolutionStrategy;
 import com.openmemind.ai.memory.core.extraction.item.graph.link.semantic.SemanticItemLinker;
 import com.openmemind.ai.memory.core.extraction.item.graph.link.temporal.TemporalItemLinker;
@@ -38,8 +39,12 @@ import com.openmemind.ai.memory.core.store.graph.ItemLinkType;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 
 class DefaultItemGraphPlannerTest {
@@ -64,6 +69,10 @@ class DefaultItemGraphPlannerTest {
                             assertThat(result.writePlan().causalRelations()).hasSize(1);
                             assertThat(result.stats().structuredItemLinkCount()).isEqualTo(1);
                             assertThat(result.stats().temporalCreatedLinkCount()).isEqualTo(1);
+                            assertThat(result.stats().temporalMinStrength()).isEqualTo(0.88d);
+                            assertThat(result.stats().temporalMaxStrength()).isEqualTo(0.88d);
+                            assertThat(result.stats().temporalStrengthBucketSummary())
+                                    .isEqualTo("0.75-0.89=1");
                             assertThat(result.stats().semanticLinkCount()).isEqualTo(1);
                         })
                 .verifyComplete();
@@ -82,15 +91,114 @@ class DefaultItemGraphPlannerTest {
                 .verifyComplete();
     }
 
+    @Test
+    void plannerMarksStructuredBatchDegradedWhenStructuredResolutionThrowsButStillReturnsOtherFamilies() {
+        var resolutionStrategy = mock(EntityResolutionStrategy.class);
+        when(resolutionStrategy.resolve(eq(MEMORY_ID), any(), any()))
+                .thenThrow(new IllegalStateException("structured stage failed"));
+        var planner =
+                planner(
+                        new GraphHintNormalizer(),
+                        resolutionStrategy,
+                        temporalLinkerReturning(beforeLink(101L, 102L)),
+                        semanticLinkerReturning(semanticLink(101L, 201L)));
+
+        StepVerifier.create(planner.plan(MEMORY_ID, batchItems(), batchEntries()))
+                .assertNext(
+                        result -> {
+                            assertThat(result.stats().structuredBatchDegraded()).isTrue();
+                            assertThat(result.stats().temporalCreatedLinkCount()).isEqualTo(1);
+                            assertThat(result.stats().semanticLinkCount()).isEqualTo(1);
+                            assertThat(result.writePlan().causalRelations()).isEmpty();
+                        })
+                .verifyComplete();
+    }
+
+    @Test
+    void plannerRunsTemporalAndSemanticBranchesConcurrently() {
+        var bothEntered = new CountDownLatch(2);
+        var release = new CountDownLatch(1);
+        var maxConcurrent = new AtomicInteger();
+        var active = new AtomicInteger();
+        var temporalLinker = mock(TemporalItemLinker.class);
+        when(temporalLinker.plan(eq(MEMORY_ID), any()))
+                .thenReturn(
+                        blockingStage(
+                                new TemporalItemLinker.TemporalLinkingPlan(
+                                        List.of(beforeLink(101L, 102L)),
+                                        TemporalItemLinker.TemporalLinkingStats.success(
+                                                2,
+                                                0,
+                                                0,
+                                                0,
+                                                1,
+                                                1,
+                                                0L,
+                                                0L,
+                                                0L,
+                                                0,
+                                                0.88d,
+                                                0.88d,
+                                                "0.75-0.89=1",
+                                                false)),
+                                active,
+                                maxConcurrent,
+                                bothEntered,
+                                release));
+        var semanticLinker = mock(SemanticItemLinker.class);
+        when(semanticLinker.plan(eq(MEMORY_ID), any()))
+                .thenReturn(
+                        blockingStage(
+                                new SemanticItemLinker.SemanticLinkingPlan(
+                                        List.of(semanticLink(101L, 201L)),
+                                        new SemanticItemLinker.SemanticLinkingStats(
+                                                0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0L, 0L, 0L,
+                                                0L, false)),
+                                active,
+                                maxConcurrent,
+                                bothEntered,
+                                release));
+        var planner = planner(temporalLinker, semanticLinker);
+
+        StepVerifier.create(planner.plan(MEMORY_ID, batchItems(), batchEntries()))
+                .then(() -> assertThat(awaitLatch(bothEntered)).isTrue())
+                .then(release::countDown)
+                .assertNext(result -> assertThat(maxConcurrent.get()).isEqualTo(2))
+                .verifyComplete();
+    }
+
     private static DefaultItemGraphPlanner planner(
             TemporalItemLinker temporalLinker, SemanticItemLinker semanticLinker) {
-        return new DefaultItemGraphPlanner(
+        return planner(
                 new GraphHintNormalizer(),
                 new ExactCanonicalEntityResolutionStrategy(),
+                temporalLinker,
+                semanticLinker);
+    }
+
+    private static DefaultItemGraphPlanner planner(
+            GraphHintNormalizer normalizer,
+            EntityResolutionStrategy resolutionStrategy,
+            TemporalItemLinker temporalLinker,
+            SemanticItemLinker semanticLinker) {
+        return new DefaultItemGraphPlanner(
+                normalizer,
+                resolutionStrategy,
                 new EntityAliasIndexPlanner(),
                 temporalLinker,
                 semanticLinker,
                 ItemGraphOptions.defaults().withEnabled(true));
+    }
+
+    private static DefaultItemGraphPlanner planner(
+            GraphHintNormalizer normalizer,
+            TemporalItemLinker temporalLinker,
+            SemanticItemLinker semanticLinker) {
+        return planner(
+                normalizer,
+                new ExactCanonicalEntityResolutionStrategy(),
+                temporalLinker,
+                semanticLinker);
     }
 
     private static TemporalItemLinker temporalLinkerReturning(ItemLink link) {
@@ -101,7 +209,20 @@ class DefaultItemGraphPlannerTest {
                                 new TemporalItemLinker.TemporalLinkingPlan(
                                         List.of(link),
                                         TemporalItemLinker.TemporalLinkingStats.success(
-                                                2, 0, 0, 0, 1, 1, 0L, 0L, 0L, false))));
+                                                2,
+                                                0,
+                                                0,
+                                                0,
+                                                1,
+                                                1,
+                                                0L,
+                                                0L,
+                                                0L,
+                                                0,
+                                                0.88d,
+                                                0.88d,
+                                                "0.75-0.89=1",
+                                                false))));
         return linker;
     }
 
@@ -130,6 +251,34 @@ class DefaultItemGraphPlannerTest {
         when(linker.plan(eq(MEMORY_ID), any()))
                 .thenReturn(Mono.error(new IllegalStateException("semantic stage failed")));
         return linker;
+    }
+
+    private static <T> Mono<T> blockingStage(
+            T value,
+            AtomicInteger active,
+            AtomicInteger maxConcurrent,
+            CountDownLatch bothEntered,
+            CountDownLatch release) {
+        return Mono.fromCallable(
+                        () -> {
+                            int concurrent = active.incrementAndGet();
+                            maxConcurrent.accumulateAndGet(concurrent, Math::max);
+                            bothEntered.countDown();
+                            assertThat(bothEntered.await(1, TimeUnit.SECONDS)).isTrue();
+                            assertThat(release.await(1, TimeUnit.SECONDS)).isTrue();
+                            active.decrementAndGet();
+                            return value;
+                        })
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private static boolean awaitLatch(CountDownLatch latch) {
+        try {
+            return latch.await(1, TimeUnit.SECONDS);
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError("unexpected interruption while waiting for latch", error);
+        }
     }
 
     private static List<MemoryItem> batchItems() {

@@ -155,6 +155,81 @@ class DefaultItemGraphMaterializerTest {
     }
 
     @Test
+    void materializeShouldPersistOnlyExplicitCausalStrengthsAtOrAboveThreshold() {
+        var graphOps = new InMemoryGraphOperations();
+        var materializer = materializer(graphOps);
+        var items =
+                List.of(
+                        newItem(101L, "vector-101", "Cause item", Map.of()),
+                        newItem(102L, "vector-102", "Dropped effect", Map.of()),
+                        newItem(103L, "vector-103", "Boundary effect", Map.of()));
+        var entries =
+                List.of(
+                        entry("Cause item", List.of(), List.of()),
+                        entry(
+                                "Dropped effect",
+                                List.of(),
+                                List.of(
+                                        new ExtractedGraphHints.ExtractedCausalRelationHint(
+                                                0, "caused_by", null),
+                                        new ExtractedGraphHints.ExtractedCausalRelationHint(
+                                                0, "caused_by", 0.49f))),
+                        entry(
+                                "Boundary effect",
+                                List.of(),
+                                List.of(
+                                        new ExtractedGraphHints.ExtractedCausalRelationHint(
+                                                0, "enabled_by", 0.50f))));
+
+        StepVerifier.create(materializer.materialize(MEMORY_ID, items, entries))
+                .assertNext(result -> assertThat(result.stats().structuredItemLinkCount()).isEqualTo(1))
+                .verifyComplete();
+
+        assertThat(graphOps.listItemLinks(MEMORY_ID))
+                .filteredOn(link -> link.linkType() == ItemLinkType.CAUSAL)
+                .extracting(
+                        ItemLink::sourceItemId,
+                        ItemLink::targetItemId,
+                        ItemLink::strength,
+                        link -> link.metadata().get("relationType"))
+                .containsExactly(tuple(101L, 103L, 0.5d, "enabled_by"));
+    }
+
+    @Test
+    void materializeShouldPersistDistanceAwareTemporalStrengths() {
+        var graphOps = new InMemoryGraphOperations();
+        var materializer = materializer(graphOps);
+        var items =
+                List.of(
+                        timedItem(101L, "2026-04-10T10:00:00Z"),
+                        timedItem(201L, "2026-04-11T10:00:00Z"),
+                        timedItem(301L, "2026-04-20T10:00:00Z"));
+        var entries =
+                List.of(
+                        entry("Overlap item", List.of(), List.of()),
+                        entry("Nearby item", List.of(), List.of()),
+                        entry("Before item", List.of(), List.of()));
+
+        StepVerifier.create(materializer.materialize(MEMORY_ID, items, entries))
+                .assertNext(
+                        result -> {
+                            assertThat(result.stats().temporalCreatedLinkCount()).isEqualTo(3);
+                            assertThat(result.stats().temporalBelowRetrievalFloorCount())
+                                    .isEqualTo(0);
+                            assertThat(result.stats().temporalMinStrength()).isEqualTo(0.60d);
+                            assertThat(result.stats().temporalMaxStrength()).isEqualTo(0.75d);
+                            assertThat(result.stats().temporalStrengthBucketSummary())
+                                    .isEqualTo("0.60-0.74=2,0.75-0.89=1");
+                        })
+                .verifyComplete();
+
+        assertThat(graphOps.listItemLinks(MEMORY_ID))
+                .filteredOn(link -> link.linkType() == ItemLinkType.TEMPORAL)
+                .extracting(link -> link.metadata().get("relationType"), ItemLink::strength)
+                .contains(tuple("nearby", 0.75d), tuple("before", 0.60d));
+    }
+
+    @Test
     void semanticLinksShouldUseSameEmbeddingTextRuleAsItemVectorization() {
         var graphOps = new InMemoryGraphOperations();
         var vector = new StubMemoryVector();
@@ -915,6 +990,24 @@ class DefaultItemGraphMaterializerTest {
 
     private static MemoryItem existingItem(Long id, String vectorId, String content) {
         return newItem(id, vectorId, content, Map.of());
+    }
+
+    private static MemoryItem timedItem(Long id, String occurredAt) {
+        return new MemoryItem(
+                id,
+                MEMORY_ID.toIdentifier(),
+                "item-" + id,
+                MemoryScope.USER,
+                MemoryCategory.EVENT,
+                "conversation",
+                "vector-" + id,
+                "raw-" + id,
+                "hash-" + id,
+                Instant.parse(occurredAt),
+                CREATED_AT,
+                Map.of(),
+                CREATED_AT,
+                MemoryItemType.FACT);
     }
 
     private static MemoryItem newItem(

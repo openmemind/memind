@@ -35,8 +35,13 @@ import com.openmemind.ai.memory.plugin.store.mybatis.handler.InstantTypeHandler;
 import com.openmemind.ai.memory.plugin.store.mybatis.schema.MemorySchemaAutoConfiguration;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -81,6 +86,23 @@ class MybatisGraphReadParityTest {
                                                     MEMORY_ID,
                                                     fixture.seedIds(),
                                                     fixture.linkTypes()));
+
+                            assertThat(
+                                            indexAdjacentLinksBySeed(
+                                                    fixture.seedIds(),
+                                                    Set.of("102", "104"),
+                                                    mybatis.listAdjacentItemLinks(
+                                                            MEMORY_ID,
+                                                            fixture.seedIds(),
+                                                            fixture.linkTypes())))
+                                    .isEqualTo(
+                                            indexAdjacentLinksBySeed(
+                                                    fixture.seedIds(),
+                                                    Set.of("102", "104"),
+                                                    inMemory.listAdjacentItemLinks(
+                                                            MEMORY_ID,
+                                                            fixture.seedIds(),
+                                                            fixture.linkTypes())));
 
                             assertThat(
                                             mybatis.listItemEntityMentionsByEntityKeys(
@@ -275,6 +297,42 @@ class MybatisGraphReadParityTest {
                 NOW);
     }
 
+    private static Map<Long, List<SeedAdjacentProjection>> indexAdjacentLinksBySeed(
+            List<Long> seedIds, Set<String> directIds, List<ItemLink> adjacentLinks) {
+        var seedIdSet = Set.copyOf(seedIds);
+        var buckets = new LinkedHashMap<Long, List<SeedAdjacentProjection>>();
+        seedIds.forEach(seedId -> buckets.put(seedId, new ArrayList<>()));
+        for (ItemLink link : adjacentLinks) {
+            if (seedIdSet.contains(link.sourceItemId())) {
+                buckets.get(link.sourceItemId())
+                        .add(seedAdjacentProjection(link, link.sourceItemId(), link.targetItemId(), directIds));
+            }
+            if (seedIdSet.contains(link.targetItemId())) {
+                buckets.get(link.targetItemId())
+                        .add(seedAdjacentProjection(link, link.targetItemId(), link.sourceItemId(), directIds));
+            }
+        }
+        return buckets.entrySet().stream()
+                .collect(
+                        java.util.stream.Collectors.toMap(
+                                Map.Entry::getKey,
+                                entry -> List.copyOf(entry.getValue()),
+                                (left, right) -> left,
+                                LinkedHashMap::new));
+    }
+
+    private static SeedAdjacentProjection seedAdjacentProjection(
+            ItemLink link, long seedItemId, long neighborItemId, Collection<String> directIds) {
+        return new SeedAdjacentProjection(
+                seedItemId,
+                neighborItemId,
+                link.sourceItemId(),
+                link.targetItemId(),
+                link.linkType(),
+                directIds.contains(String.valueOf(neighborItemId)),
+                link.strength() == null ? 1.0d : link.strength());
+    }
+
     private record GraphFixture(
             List<GraphEntity> entities,
             List<ItemEntityMention> mentions,
@@ -364,7 +422,7 @@ class MybatisGraphReadParityTest {
                                     0.81d,
                                     Map.of(),
                                     NOW)),
-                    List.of(101L),
+                    List.of(101L, 103L),
                     List.of("organization:openai", "person:sam_altman"),
                     List.of(ItemLinkType.CAUSAL, ItemLinkType.SEMANTIC));
         }
@@ -375,6 +433,15 @@ class MybatisGraphReadParityTest {
             ops.upsertItemLinks(MEMORY_ID, links);
         }
     }
+
+    private record SeedAdjacentProjection(
+            long seedItemId,
+            long neighborItemId,
+            long sourceItemId,
+            long targetItemId,
+            ItemLinkType linkType,
+            boolean overlap,
+            double strength) {}
 
     @Configuration(proxyBeanMethods = false)
     @Import(SqliteTestSupportConfig.class)

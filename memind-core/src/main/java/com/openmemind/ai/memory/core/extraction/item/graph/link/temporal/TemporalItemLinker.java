@@ -39,6 +39,11 @@ import reactor.core.publisher.Mono;
 public class TemporalItemLinker {
 
     static final int TEMPORAL_QUERY_BATCH_SIZE = 128;
+    private static final Duration BEFORE_DECAY_CAP = Duration.ofDays(7);
+    private static final double BEFORE_FLOOR = 0.60d;
+    private static final double NEARBY_FLOOR = 0.75d;
+    // Observability proxy for the current default simple-retrieval graph threshold.
+    private static final double DEFAULT_RETRIEVAL_MIN_LINK_STRENGTH_PROXY = 0.55d;
 
     private final ItemOperations itemOperations;
     private final GraphOperations graphOperations;
@@ -137,6 +142,11 @@ public class TemporalItemLinker {
                                                         new LinkIdentity(link), link));
                     }
                     long buildDurationMs = elapsedMillis(buildStartedAt);
+                    var strengthValues =
+                            finalLinks.values().stream()
+                                    .map(ItemLink::strength)
+                                    .filter(Objects::nonNull)
+                                    .toList();
 
                     return new TemporalLinkingPlan(
                             List.copyOf(finalLinks.values()),
@@ -152,6 +162,22 @@ public class TemporalItemLinker {
                                     queryDurationMs,
                                     buildDurationMs,
                                     0L,
+                                    (int)
+                                            strengthValues.stream()
+                                                    .filter(
+                                                            strength ->
+                                                                    strength
+                                                                            < DEFAULT_RETRIEVAL_MIN_LINK_STRENGTH_PROXY)
+                                                    .count(),
+                                    strengthValues.stream()
+                                            .mapToDouble(Double::doubleValue)
+                                            .min()
+                                            .orElse(0.0d),
+                                    strengthValues.stream()
+                                            .mapToDouble(Double::doubleValue)
+                                            .max()
+                                            .orElse(0.0d),
+                                    summarizeStrengthBuckets(strengthValues),
                                     degraded));
                 });
     }
@@ -230,15 +256,18 @@ public class TemporalItemLinker {
         MemoryItem leftItem = source.item();
         MemoryItem rightItem = candidate.item();
         int compare = classifier.compare(left, right);
+        TemporalWindow earlierWindow = compare <= 0 ? left : right;
+        TemporalWindow laterWindow = earlierWindow == left ? right : left;
         MemoryItem earlier = compare <= 0 ? leftItem : rightItem;
         MemoryItem later = earlier == leftItem ? rightItem : leftItem;
         String relationType = classifier.classify(left, right);
+        double strength = computeTemporalStrength(relationType, earlierWindow, laterWindow);
         return new ItemLink(
                 memoryId.toIdentifier(),
                 earlier.id(),
                 later.id(),
                 ItemLinkType.TEMPORAL,
-                1.0d,
+                strength,
                 Map.of("relationType", relationType),
                 resolveGraphTimestamp(later));
     }
@@ -271,6 +300,63 @@ public class TemporalItemLinker {
             case "before" -> 2;
             default -> Integer.MAX_VALUE;
         };
+    }
+
+    private double computeTemporalStrength(
+            String relationType, TemporalWindow earlier, TemporalWindow later) {
+        return switch (relationType) {
+            case "overlap" -> 1.0d;
+            case "nearby" -> linearDecay(
+                    Duration.between(earlier.anchor(), later.anchor()).abs(),
+                    Duration.ZERO,
+                    TemporalRelationClassifier.NEARBY_THRESHOLD,
+                    0.95d,
+                    NEARBY_FLOOR);
+            case "before" -> linearDecay(
+                    Duration.between(earlier.endOrAnchor(), later.start()).abs(),
+                    Duration.ZERO,
+                    BEFORE_DECAY_CAP,
+                    0.85d,
+                    BEFORE_FLOOR);
+            default -> 1.0d;
+        };
+    }
+
+    private static double linearDecay(
+            Duration gap,
+            Duration minGap,
+            Duration maxGap,
+            double strongestValue,
+            double floorValue) {
+        if (gap.compareTo(minGap) <= 0) {
+            return strongestValue;
+        }
+        if (gap.compareTo(maxGap) >= 0) {
+            return floorValue;
+        }
+        double ratio =
+                (double) (gap.minus(minGap).toMillis()) / (double) (maxGap.minus(minGap).toMillis());
+        return strongestValue - ((strongestValue - floorValue) * ratio);
+    }
+
+    private static String summarizeStrengthBuckets(List<Double> strengths) {
+        var buckets = new LinkedHashMap<String, Integer>();
+        buckets.put("0.60-0.74", 0);
+        buckets.put("0.75-0.89", 0);
+        buckets.put("0.90-1.00", 0);
+        for (double strength : strengths) {
+            if (strength >= 0.90d) {
+                buckets.computeIfPresent("0.90-1.00", (ignored, count) -> count + 1);
+            } else if (strength >= 0.75d) {
+                buckets.computeIfPresent("0.75-0.89", (ignored, count) -> count + 1);
+            } else if (strength >= 0.60d) {
+                buckets.computeIfPresent("0.60-0.74", (ignored, count) -> count + 1);
+            }
+        }
+        return buckets.entrySet().stream()
+                .filter(entry -> entry.getValue() > 0)
+                .map(entry -> entry.getKey() + "=" + entry.getValue())
+                .collect(Collectors.joining(","));
     }
 
     private static Instant resolveGraphTimestamp(MemoryItem item) {
@@ -335,7 +421,43 @@ public class TemporalItemLinker {
             long queryDurationMs,
             long buildDurationMs,
             long upsertDurationMs,
+            int belowRetrievalFloorCount,
+            double minStrength,
+            double maxStrength,
+            String strengthBucketSummary,
             boolean degraded) {
+
+        public TemporalLinkingStats {
+            strengthBucketSummary = strengthBucketSummary == null ? "" : strengthBucketSummary;
+        }
+
+        public TemporalLinkingStats(
+                int sourceCount,
+                int historyQueryBatchCount,
+                int historyCandidateCount,
+                int intraBatchCandidateCount,
+                int selectedPairCount,
+                int createdLinkCount,
+                long queryDurationMs,
+                long buildDurationMs,
+                long upsertDurationMs,
+                boolean degraded) {
+            this(
+                    sourceCount,
+                    historyQueryBatchCount,
+                    historyCandidateCount,
+                    intraBatchCandidateCount,
+                    selectedPairCount,
+                    createdLinkCount,
+                    queryDurationMs,
+                    buildDurationMs,
+                    upsertDurationMs,
+                    0,
+                    0.0d,
+                    0.0d,
+                    "",
+                    degraded);
+        }
 
         public static TemporalLinkingStats empty() {
             return new TemporalLinkingStats(0, 0, 0, 0, 0, 0, 0L, 0L, 0L, false);
@@ -352,6 +474,38 @@ public class TemporalItemLinker {
                 long buildDurationMs,
                 long upsertDurationMs,
                 boolean degraded) {
+            return success(
+                    sourceCount,
+                    historyQueryBatchCount,
+                    historyCandidateCount,
+                    intraBatchCandidateCount,
+                    selectedPairCount,
+                    createdLinkCount,
+                    queryDurationMs,
+                    buildDurationMs,
+                    upsertDurationMs,
+                    0,
+                    0.0d,
+                    0.0d,
+                    "",
+                    degraded);
+        }
+
+        public static TemporalLinkingStats success(
+                int sourceCount,
+                int historyQueryBatchCount,
+                int historyCandidateCount,
+                int intraBatchCandidateCount,
+                int selectedPairCount,
+                int createdLinkCount,
+                long queryDurationMs,
+                long buildDurationMs,
+                long upsertDurationMs,
+                int belowRetrievalFloorCount,
+                double minStrength,
+                double maxStrength,
+                String strengthBucketSummary,
+                boolean degraded) {
             return new TemporalLinkingStats(
                     sourceCount,
                     historyQueryBatchCount,
@@ -362,6 +516,10 @@ public class TemporalItemLinker {
                     queryDurationMs,
                     buildDurationMs,
                     upsertDurationMs,
+                    belowRetrievalFloorCount,
+                    minStrength,
+                    maxStrength,
+                    strengthBucketSummary,
                     degraded);
         }
 
@@ -389,35 +547,86 @@ public class TemporalItemLinker {
                     queryDurationMs,
                     buildDurationMs,
                     upsertDurationMs,
+                    0,
+                    0.0d,
+                    0.0d,
+                    "",
                     true);
+        }
+
+        Builder toBuilder() {
+            return new Builder(this);
         }
 
         public TemporalLinkingStats withUpsertDuration(long upsertDurationMs) {
-            return new TemporalLinkingStats(
-                    sourceCount,
-                    historyQueryBatchCount,
-                    historyCandidateCount,
-                    intraBatchCandidateCount,
-                    selectedPairCount,
-                    createdLinkCount,
-                    queryDurationMs,
-                    buildDurationMs,
-                    upsertDurationMs,
-                    degraded);
+            return toBuilder().upsertDurationMs(upsertDurationMs).build();
         }
 
         public TemporalLinkingStats withUpsertFailure(long upsertDurationMs) {
-            return new TemporalLinkingStats(
-                    sourceCount,
-                    historyQueryBatchCount,
-                    historyCandidateCount,
-                    intraBatchCandidateCount,
-                    selectedPairCount,
-                    createdLinkCount,
-                    queryDurationMs,
-                    buildDurationMs,
-                    upsertDurationMs,
-                    true);
+            return toBuilder().upsertDurationMs(upsertDurationMs).degraded(true).build();
+        }
+
+        static final class Builder {
+
+            private int sourceCount;
+            private int historyQueryBatchCount;
+            private int historyCandidateCount;
+            private int intraBatchCandidateCount;
+            private int selectedPairCount;
+            private int createdLinkCount;
+            private long queryDurationMs;
+            private long buildDurationMs;
+            private long upsertDurationMs;
+            private int belowRetrievalFloorCount;
+            private double minStrength;
+            private double maxStrength;
+            private String strengthBucketSummary;
+            private boolean degraded;
+
+            private Builder(TemporalLinkingStats stats) {
+                this.sourceCount = stats.sourceCount();
+                this.historyQueryBatchCount = stats.historyQueryBatchCount();
+                this.historyCandidateCount = stats.historyCandidateCount();
+                this.intraBatchCandidateCount = stats.intraBatchCandidateCount();
+                this.selectedPairCount = stats.selectedPairCount();
+                this.createdLinkCount = stats.createdLinkCount();
+                this.queryDurationMs = stats.queryDurationMs();
+                this.buildDurationMs = stats.buildDurationMs();
+                this.upsertDurationMs = stats.upsertDurationMs();
+                this.belowRetrievalFloorCount = stats.belowRetrievalFloorCount();
+                this.minStrength = stats.minStrength();
+                this.maxStrength = stats.maxStrength();
+                this.strengthBucketSummary = stats.strengthBucketSummary();
+                this.degraded = stats.degraded();
+            }
+
+            Builder upsertDurationMs(long upsertDurationMs) {
+                this.upsertDurationMs = upsertDurationMs;
+                return this;
+            }
+
+            Builder degraded(boolean degraded) {
+                this.degraded = degraded;
+                return this;
+            }
+
+            TemporalLinkingStats build() {
+                return new TemporalLinkingStats(
+                        sourceCount,
+                        historyQueryBatchCount,
+                        historyCandidateCount,
+                        intraBatchCandidateCount,
+                        selectedPairCount,
+                        createdLinkCount,
+                        queryDurationMs,
+                        buildDurationMs,
+                        upsertDurationMs,
+                        belowRetrievalFloorCount,
+                        minStrength,
+                        maxStrength,
+                        strengthBucketSummary,
+                        degraded);
+            }
         }
     }
 

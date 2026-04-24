@@ -120,124 +120,36 @@ public record ItemGraphOptions(
         return new ItemGraphOptions(false, 8, 2, 10, 5, 0.82d, 4, 1, 128);
     }
 
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public Builder toBuilder() {
+        return new Builder(this);
+    }
+
     public ItemGraphOptions withEnabled(boolean enabled) {
-        return new ItemGraphOptions(
-                enabled,
-                maxEntitiesPerItem,
-                maxCausalReferencesPerItem,
-                maxTemporalLinksPerItem,
-                maxSemanticLinksPerItem,
-                semanticMinScore,
-                semanticSearchHeadroom,
-                semanticLinkConcurrency,
-                semanticSourceWindowSize,
-                resolutionMode,
-                maxResolutionCandidatesPerMention,
-                resolutionMergeThreshold,
-                supportedLanguagePacks,
-                crossScriptMergePolicy,
-                aliasEvidenceMode,
-                userAliasDictionary);
+        return toBuilder().enabled(enabled).build();
     }
 
     public ItemGraphOptions withSemanticSearchHeadroom(int semanticSearchHeadroom) {
-        return new ItemGraphOptions(
-                enabled,
-                maxEntitiesPerItem,
-                maxCausalReferencesPerItem,
-                maxTemporalLinksPerItem,
-                maxSemanticLinksPerItem,
-                semanticMinScore,
-                semanticSearchHeadroom,
-                semanticLinkConcurrency,
-                semanticSourceWindowSize,
-                resolutionMode,
-                maxResolutionCandidatesPerMention,
-                resolutionMergeThreshold,
-                supportedLanguagePacks,
-                crossScriptMergePolicy,
-                aliasEvidenceMode,
-                userAliasDictionary);
+        return toBuilder().semanticSearchHeadroom(semanticSearchHeadroom).build();
     }
 
     public ItemGraphOptions withSemanticLinkConcurrency(int semanticLinkConcurrency) {
-        return new ItemGraphOptions(
-                enabled,
-                maxEntitiesPerItem,
-                maxCausalReferencesPerItem,
-                maxTemporalLinksPerItem,
-                maxSemanticLinksPerItem,
-                semanticMinScore,
-                semanticSearchHeadroom,
-                semanticLinkConcurrency,
-                semanticSourceWindowSize,
-                resolutionMode,
-                maxResolutionCandidatesPerMention,
-                resolutionMergeThreshold,
-                supportedLanguagePacks,
-                crossScriptMergePolicy,
-                aliasEvidenceMode,
-                userAliasDictionary);
+        return toBuilder().semanticLinkConcurrency(semanticLinkConcurrency).build();
     }
 
     public ItemGraphOptions withSemanticSourceWindowSize(int semanticSourceWindowSize) {
-        return new ItemGraphOptions(
-                enabled,
-                maxEntitiesPerItem,
-                maxCausalReferencesPerItem,
-                maxTemporalLinksPerItem,
-                maxSemanticLinksPerItem,
-                semanticMinScore,
-                semanticSearchHeadroom,
-                semanticLinkConcurrency,
-                semanticSourceWindowSize,
-                resolutionMode,
-                maxResolutionCandidatesPerMention,
-                resolutionMergeThreshold,
-                supportedLanguagePacks,
-                crossScriptMergePolicy,
-                aliasEvidenceMode,
-                userAliasDictionary);
+        return toBuilder().semanticSourceWindowSize(semanticSourceWindowSize).build();
     }
 
     public ItemGraphOptions withResolutionMode(EntityResolutionMode resolutionMode) {
-        return new ItemGraphOptions(
-                enabled,
-                maxEntitiesPerItem,
-                maxCausalReferencesPerItem,
-                maxTemporalLinksPerItem,
-                maxSemanticLinksPerItem,
-                semanticMinScore,
-                semanticSearchHeadroom,
-                semanticLinkConcurrency,
-                semanticSourceWindowSize,
-                resolutionMode,
-                maxResolutionCandidatesPerMention,
-                resolutionMergeThreshold,
-                supportedLanguagePacks,
-                crossScriptMergePolicy,
-                aliasEvidenceMode,
-                userAliasDictionary);
+        return toBuilder().resolutionMode(resolutionMode).build();
     }
 
     public ItemGraphOptions withUserAliasDictionary(UserAliasDictionary userAliasDictionary) {
-        return new ItemGraphOptions(
-                enabled,
-                maxEntitiesPerItem,
-                maxCausalReferencesPerItem,
-                maxTemporalLinksPerItem,
-                maxSemanticLinksPerItem,
-                semanticMinScore,
-                semanticSearchHeadroom,
-                semanticLinkConcurrency,
-                semanticSourceWindowSize,
-                resolutionMode,
-                maxResolutionCandidatesPerMention,
-                resolutionMergeThreshold,
-                supportedLanguagePacks,
-                crossScriptMergePolicy,
-                aliasEvidenceMode,
-                userAliasDictionary);
+        return toBuilder().userAliasDictionary(userAliasDictionary).build();
     }
 
     private static Set<String> defaultSupportedLanguagePacks() {
@@ -249,5 +161,148 @@ public record ItemGraphOptions(
 
     private static Set<String> immutableOrderedSet(Set<String> values) {
         return Collections.unmodifiableSet(new LinkedHashSet<>(values));
+    }
+
+    public static final class Builder {
+
+        private boolean enabled;
+        private int maxEntitiesPerItem;
+        private int maxCausalReferencesPerItem;
+        private int maxTemporalLinksPerItem;
+        private int maxSemanticLinksPerItem;
+        private double semanticMinScore;
+        private int semanticSearchHeadroom;
+        private int semanticLinkConcurrency;
+        private int semanticSourceWindowSize;
+        private EntityResolutionMode resolutionMode;
+        private int maxResolutionCandidatesPerMention;
+        private double resolutionMergeThreshold;
+        private Set<String> supportedLanguagePacks;
+        private CrossScriptMergePolicy crossScriptMergePolicy;
+        private AliasEvidenceMode aliasEvidenceMode;
+        private UserAliasDictionary userAliasDictionary;
+
+        private Builder() {
+            this(ItemGraphOptions.defaults());
+        }
+
+        private Builder(ItemGraphOptions options) {
+            this.enabled = options.enabled();
+            this.maxEntitiesPerItem = options.maxEntitiesPerItem();
+            this.maxCausalReferencesPerItem = options.maxCausalReferencesPerItem();
+            this.maxTemporalLinksPerItem = options.maxTemporalLinksPerItem();
+            this.maxSemanticLinksPerItem = options.maxSemanticLinksPerItem();
+            this.semanticMinScore = options.semanticMinScore();
+            this.semanticSearchHeadroom = options.semanticSearchHeadroom();
+            this.semanticLinkConcurrency = options.semanticLinkConcurrency();
+            this.semanticSourceWindowSize = options.semanticSourceWindowSize();
+            this.resolutionMode = options.resolutionMode();
+            this.maxResolutionCandidatesPerMention = options.maxResolutionCandidatesPerMention();
+            this.resolutionMergeThreshold = options.resolutionMergeThreshold();
+            this.supportedLanguagePacks = options.supportedLanguagePacks();
+            this.crossScriptMergePolicy = options.crossScriptMergePolicy();
+            this.aliasEvidenceMode = options.aliasEvidenceMode();
+            this.userAliasDictionary = options.userAliasDictionary();
+        }
+
+        public Builder enabled(boolean enabled) {
+            this.enabled = enabled;
+            return this;
+        }
+
+        public Builder maxEntitiesPerItem(int maxEntitiesPerItem) {
+            this.maxEntitiesPerItem = maxEntitiesPerItem;
+            return this;
+        }
+
+        public Builder maxCausalReferencesPerItem(int maxCausalReferencesPerItem) {
+            this.maxCausalReferencesPerItem = maxCausalReferencesPerItem;
+            return this;
+        }
+
+        public Builder maxTemporalLinksPerItem(int maxTemporalLinksPerItem) {
+            this.maxTemporalLinksPerItem = maxTemporalLinksPerItem;
+            return this;
+        }
+
+        public Builder maxSemanticLinksPerItem(int maxSemanticLinksPerItem) {
+            this.maxSemanticLinksPerItem = maxSemanticLinksPerItem;
+            return this;
+        }
+
+        public Builder semanticMinScore(double semanticMinScore) {
+            this.semanticMinScore = semanticMinScore;
+            return this;
+        }
+
+        public Builder semanticSearchHeadroom(int semanticSearchHeadroom) {
+            this.semanticSearchHeadroom = semanticSearchHeadroom;
+            return this;
+        }
+
+        public Builder semanticLinkConcurrency(int semanticLinkConcurrency) {
+            this.semanticLinkConcurrency = semanticLinkConcurrency;
+            return this;
+        }
+
+        public Builder semanticSourceWindowSize(int semanticSourceWindowSize) {
+            this.semanticSourceWindowSize = semanticSourceWindowSize;
+            return this;
+        }
+
+        public Builder resolutionMode(EntityResolutionMode resolutionMode) {
+            this.resolutionMode = resolutionMode;
+            return this;
+        }
+
+        public Builder maxResolutionCandidatesPerMention(int maxResolutionCandidatesPerMention) {
+            this.maxResolutionCandidatesPerMention = maxResolutionCandidatesPerMention;
+            return this;
+        }
+
+        public Builder resolutionMergeThreshold(double resolutionMergeThreshold) {
+            this.resolutionMergeThreshold = resolutionMergeThreshold;
+            return this;
+        }
+
+        public Builder supportedLanguagePacks(Set<String> supportedLanguagePacks) {
+            this.supportedLanguagePacks = supportedLanguagePacks;
+            return this;
+        }
+
+        public Builder crossScriptMergePolicy(CrossScriptMergePolicy crossScriptMergePolicy) {
+            this.crossScriptMergePolicy = crossScriptMergePolicy;
+            return this;
+        }
+
+        public Builder aliasEvidenceMode(AliasEvidenceMode aliasEvidenceMode) {
+            this.aliasEvidenceMode = aliasEvidenceMode;
+            return this;
+        }
+
+        public Builder userAliasDictionary(UserAliasDictionary userAliasDictionary) {
+            this.userAliasDictionary = userAliasDictionary;
+            return this;
+        }
+
+        public ItemGraphOptions build() {
+            return new ItemGraphOptions(
+                    enabled,
+                    maxEntitiesPerItem,
+                    maxCausalReferencesPerItem,
+                    maxTemporalLinksPerItem,
+                    maxSemanticLinksPerItem,
+                    semanticMinScore,
+                    semanticSearchHeadroom,
+                    semanticLinkConcurrency,
+                    semanticSourceWindowSize,
+                    resolutionMode,
+                    maxResolutionCandidatesPerMention,
+                    resolutionMergeThreshold,
+                    supportedLanguagePacks,
+                    crossScriptMergePolicy,
+                    aliasEvidenceMode,
+                    userAliasDictionary);
+        }
     }
 }

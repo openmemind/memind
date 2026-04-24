@@ -26,6 +26,7 @@ import com.openmemind.ai.memory.core.store.graph.ItemEntityMention;
 import com.openmemind.ai.memory.core.store.graph.ItemLink;
 import com.openmemind.ai.memory.core.store.graph.ItemLinkType;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -51,6 +52,13 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
 
     private static final List<ItemLinkType> SUPPORTED_LINK_TYPES =
             List.of(ItemLinkType.SEMANTIC, ItemLinkType.TEMPORAL, ItemLinkType.CAUSAL);
+    private static final Comparator<SeedAdjacentLink> SEED_ADJACENT_LINK_ORDER =
+            Comparator.comparing(SeedAdjacentLink::overlap).reversed()
+                    .thenComparing(SeedAdjacentLink::family, relationFamilyOrder())
+                    .thenComparing(SeedAdjacentLink::strength, Comparator.reverseOrder())
+                    .thenComparingLong(SeedAdjacentLink::neighborItemId)
+                    .thenComparingLong(link -> link.link().sourceItemId())
+                    .thenComparingLong(link -> link.link().targetItemId());
     private static final Map<RelationFamily, Double> DEFAULT_RELATION_WEIGHTS =
             Map.of(
                     RelationFamily.SEMANTIC, 1.00d,
@@ -213,39 +221,42 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
                 loadReverseMentionBundle(
                         context, graphSettings, seeds, seedMentionsByItem, graphOps);
         int skippedOverFanoutEntityCount = reverseMentionBundle.overFanoutEntityKeys().size();
+        var adjacentLinksBySeed =
+                indexAdjacentLinksBySeed(
+                        seedIds,
+                        directIds,
+                        graphOps.listAdjacentItemLinks(
+                                context.memoryId(), seedIds, SUPPORTED_LINK_TYPES));
 
         for (MaterializedSeed seed : seeds) {
             var perSeedRelationCounts = new EnumMap<RelationFamily, Integer>(RelationFamily.class);
-            var adjacentLinks =
-                    graphOps.listAdjacentItemLinks(
-                            context.memoryId(), List.of(seed.item().id()), SUPPORTED_LINK_TYPES);
-            for (ItemLink link : adjacentLinks) {
-                if (link.strength() == null || link.strength() < graphSettings.minLinkStrength()) {
+            var orderedAdjacentLinks =
+                    adjacentLinksBySeed.getOrDefault(seed.item().id(), List.of()).stream()
+                            .sorted(SEED_ADJACENT_LINK_ORDER)
+                            .toList();
+            for (SeedAdjacentLink adjacent : orderedAdjacentLinks) {
+                if (adjacent.strength() < graphSettings.minLinkStrength()) {
                     continue;
                 }
-
-                long neighborItemId =
-                        Objects.equals(link.sourceItemId(), seed.item().id())
-                                ? link.targetItemId()
-                                : link.sourceItemId();
-                boolean overlap = directIds.contains(String.valueOf(neighborItemId));
-                var family = toRelationFamily(link.linkType());
-                if (!overlap) {
-                    int offered = perSeedRelationCounts.getOrDefault(family, 0);
-                    if (offered >= maxNeighborsPerSeed(graphSettings, family)) {
+                if (!adjacent.overlap()) {
+                    int offered = perSeedRelationCounts.getOrDefault(adjacent.family(), 0);
+                    if (offered >= maxNeighborsPerSeed(graphSettings, adjacent.family())) {
                         continue;
                     }
-                    perSeedRelationCounts.put(family, offered + 1);
+                    perSeedRelationCounts.put(adjacent.family(), offered + 1);
                     linkExpansionCount++;
                 }
                 rawCandidates
-                        .computeIfAbsent(neighborItemId, GraphCandidateAccumulator::new)
+                        .computeIfAbsent(adjacent.neighborItemId(), GraphCandidateAccumulator::new)
                         .accept(
-                                family,
+                                adjacent.family(),
                                 seed.item().id(),
-                                baseScore(family, seed.seedRelevance(), link.strength()));
-                if (overlap) {
-                    overlapItemIds.add(neighborItemId);
+                                baseScore(
+                                        adjacent.family(),
+                                        seed.seedRelevance(),
+                                        adjacent.strength()));
+                if (adjacent.overlap()) {
+                    overlapItemIds.add(adjacent.neighborItemId());
                 }
             }
 
@@ -322,6 +333,32 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
                 entityExpansionCount,
                 overlapItemIds.size(),
                 skippedOverFanoutEntityCount);
+    }
+
+    private Map<Long, List<SeedAdjacentLink>> indexAdjacentLinksBySeed(
+            List<Long> seedIds, Set<String> directIds, List<ItemLink> adjacentLinks) {
+        var seedIdSet = Set.copyOf(seedIds);
+        var buckets = new LinkedHashMap<Long, List<SeedAdjacentLink>>();
+        seedIds.forEach(seedId -> buckets.put(seedId, new ArrayList<>()));
+        for (ItemLink link : adjacentLinks) {
+            if (seedIdSet.contains(link.sourceItemId())) {
+                long neighborItemId = link.targetItemId();
+                buckets.get(link.sourceItemId())
+                        .add(seedAdjacentLink(link, link.sourceItemId(), neighborItemId, directIds));
+            }
+            if (seedIdSet.contains(link.targetItemId())) {
+                long neighborItemId = link.sourceItemId();
+                buckets.get(link.targetItemId())
+                        .add(seedAdjacentLink(link, link.targetItemId(), neighborItemId, directIds));
+            }
+        }
+        return buckets.entrySet().stream()
+                .collect(
+                        Collectors.toMap(
+                                Map.Entry::getKey,
+                                entry -> List.copyOf(entry.getValue()),
+                                (left, right) -> left,
+                                LinkedHashMap::new));
     }
 
     private ReverseMentionBundle loadReverseMentionBundle(
@@ -542,12 +579,34 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
         return originalTopDirectIds.size();
     }
 
+    private SeedAdjacentLink seedAdjacentLink(
+            ItemLink link, long seedItemId, long neighborItemId, Set<String> directIds) {
+        return new SeedAdjacentLink(
+                link,
+                seedItemId,
+                neighborItemId,
+                toRelationFamily(link.linkType()),
+                directIds.contains(String.valueOf(neighborItemId)),
+                link.strength() == null ? 1.0d : link.strength());
+    }
+
     private RelationFamily toRelationFamily(ItemLinkType linkType) {
         return switch (linkType) {
             case SEMANTIC -> RelationFamily.SEMANTIC;
             case TEMPORAL -> RelationFamily.TEMPORAL;
             case CAUSAL -> RelationFamily.CAUSAL;
         };
+    }
+
+    private static Comparator<RelationFamily> relationFamilyOrder() {
+        return Comparator.comparingInt(
+                family ->
+                        switch (family) {
+                            case SEMANTIC -> 0;
+                            case TEMPORAL -> 1;
+                            case CAUSAL -> 2;
+                            case ENTITY_SIBLING -> 3;
+                        });
     }
 
     private int maxNeighborsPerSeed(RetrievalGraphSettings graphSettings, RelationFamily family) {
@@ -583,6 +642,14 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
     }
 
     private record MaterializedSeed(MemoryItem item, double seedRelevance) {}
+
+    private record SeedAdjacentLink(
+            ItemLink link,
+            long seedItemId,
+            long neighborItemId,
+            RelationFamily family,
+            boolean overlap,
+            double strength) {}
 
     private static final class GraphCandidateAccumulator {
         private final long itemId;

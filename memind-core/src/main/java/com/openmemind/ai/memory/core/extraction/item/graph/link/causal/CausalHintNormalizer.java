@@ -28,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -35,6 +36,7 @@ import java.util.Set;
  */
 public final class CausalHintNormalizer {
 
+    private static final float CAUSAL_MIN_STRENGTH = 0.5f;
     private static final Set<String> VALID_CAUSAL_RELATIONS =
             Set.of("caused_by", "enabled_by", "motivated_by");
 
@@ -75,16 +77,23 @@ public final class CausalHintNormalizer {
             List<ItemLink> links) {
         List<ExtractedGraphHints.ExtractedCausalRelationHint> retained =
                 entry.graphHints().causalRelations().stream()
-                        .filter(java.util.Objects::nonNull)
+                        .filter(Objects::nonNull)
                         .filter(relation -> relation.targetIndex() != null)
                         .filter(relation -> relation.targetIndex() >= 0)
                         .filter(relation -> relation.targetIndex() < currentIndex)
                         .filter(relation -> isValidCausalRelationType(relation.relationType()))
+                        .filter(relation -> normalizedStrength(relation.strength()) != null)
+                        .filter(
+                                relation ->
+                                        normalizedStrength(relation.strength())
+                                                >= CAUSAL_MIN_STRENGTH)
                         .sorted(
-                                Comparator.comparing(
-                                                ExtractedGraphHints.ExtractedCausalRelationHint
-                                                        ::strength,
-                                                Comparator.nullsLast(Comparator.reverseOrder()))
+                                Comparator
+                                        .<ExtractedGraphHints.ExtractedCausalRelationHint, Float>
+                                                comparing(
+                                                relation ->
+                                                        normalizedStrength(relation.strength()),
+                                                Comparator.reverseOrder())
                                         .thenComparing(
                                                 ExtractedGraphHints.ExtractedCausalRelationHint
                                                         ::targetIndex))
@@ -103,7 +112,7 @@ public final class CausalHintNormalizer {
                                     causeItem.id(),
                                     effectItem.id(),
                                     ItemLinkType.CAUSAL,
-                                    clampScore(relation.strength()).doubleValue(),
+                                    normalizedStrength(relation.strength()).doubleValue(),
                                     Map.of(
                                             "relationType",
                                             normalizeRelationType(relation.relationType())),
@@ -140,9 +149,9 @@ public final class CausalHintNormalizer {
                 .forEach(link -> retained.putIfAbsent(new LinkIdentity(link), link));
     }
 
-    private static Float clampScore(Float score) {
+    private static Float normalizedStrength(Float score) {
         if (score == null) {
-            return 1.0f;
+            return null;
         }
         return Math.max(0.0f, Math.min(1.0f, score));
     }
