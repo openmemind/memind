@@ -11,22 +11,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.plugin.store.mybatis.schema;
+package com.openmemind.ai.memory.plugin.jdbc.sqlite;
 
-import java.util.List;
+import com.openmemind.ai.memory.plugin.jdbc.internal.graph.AbstractJdbcGraphOperations;
+import com.openmemind.ai.memory.plugin.jdbc.internal.graph.JdbcGraphDialect;
+import javax.sql.DataSource;
 
-public enum DatabaseDialect {
-    SQLITE("db/migration/sqlite/V1__init.sql"),
-    MYSQL("db/migration/mysql/V1__init.sql"),
-    POSTGRESQL("db/migration/postgresql/V1__init.sql");
+public final class SqliteGraphOperations extends AbstractJdbcGraphOperations {
 
-    private final List<String> scriptPaths;
-
-    DatabaseDialect(String... scriptPaths) {
-        this.scriptPaths = List.of(scriptPaths);
+    public SqliteGraphOperations(DataSource dataSource) {
+        this(dataSource, true);
     }
 
-    public List<String> scriptPaths() {
-        return scriptPaths;
+    public SqliteGraphOperations(DataSource dataSource, boolean createIfNotExist) {
+        super(dataSource, JdbcGraphDialect.SQLITE, createIfNotExist);
     }
 }

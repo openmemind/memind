@@ -26,6 +26,7 @@ import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Locale;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.DisplayName;
@@ -36,7 +37,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.AbstractDataSource;
-import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.sqlite.SQLiteDataSource;
 
 @DisplayName("Memory store DDL")
@@ -47,66 +47,39 @@ class MemoryStoreDdlTest {
     @ParameterizedTest
     @ValueSource(
             strings = {
-                "db/migration/sqlite/V1__init_store.sql",
-                "db/migration/mysql/V1__init_store.sql",
-                "db/migration/postgresql/V1__init_store.sql"
+                "db/migration/sqlite/V1__init.sql",
+                "db/migration/mysql/V1__init.sql",
+                "db/migration/postgresql/V1__init.sql"
             })
-    @DisplayName("Fresh V1 store scripts should not define confidence column")
+    @DisplayName("Fresh init scripts should not define confidence column")
     void freshStoreScriptsShouldNotDefineInsightConfidenceColumn(String classpathResource) {
-        assertThat(normalizedSqlResource(classpathResource)).doesNotContain(" confidence ");
+        assertThat(normalizedCreateTableStatement(classpathResource, "memory_insight"))
+                .doesNotContain(" confidence ");
     }
 
     @Test
-    @DisplayName("Load SQLite store scripts through V14 memory thread rebuild epoch migration")
-    void loadsSqliteScriptsThroughTemporalLookupMigration() {
+    @DisplayName("Load SQLite squashed init script")
+    void loadsSqliteSquashedInitScript() {
         assertThat(
                         new MemoryStoreDdl(dataSource("SQLite", "jdbc:sqlite::memory:"), detector)
                                 .getSqlFiles())
-                .containsExactly(
-                        "db/migration/sqlite/V1__init_store.sql",
-                        "db/migration/sqlite/V2__init_text_search.sql",
-                        "db/migration/sqlite/V3__multimodal.sql",
-                        "db/migration/sqlite/V4__bubble_state.sql",
-                        "db/migration/sqlite/V5__item_temporal_fields.sql",
-                        "db/migration/sqlite/V6__graph_store.sql",
-                        "db/migration/sqlite/V7__memory_thread.sql",
-                        "db/migration/sqlite/V8__graph_entity_alias_store.sql",
-                        "db/migration/sqlite/V9__item_temporal_lookup.sql",
-                        "db/migration/sqlite/V10__item_graph_evolution.sql",
-                        "db/migration/sqlite/V11__simplified_thread_core_v1.sql",
-                        "db/migration/sqlite/V12__memory_thread_enrichment_input.sql",
-                        "db/migration/sqlite/V13__memory_thread_enqueue_generation.sql",
-                        "db/migration/sqlite/V14__memory_thread_rebuild_epoch.sql");
+                .containsExactly("db/migration/sqlite/V1__init.sql");
     }
 
     @Test
-    @DisplayName("Load MySQL store scripts through V14 memory thread rebuild epoch migration")
-    void loadsMysqlScriptsThroughTemporalLookupMigration() {
+    @DisplayName("Load MySQL squashed init script")
+    void loadsMysqlSquashedInitScript() {
         assertThat(
                         new MemoryStoreDdl(
                                         dataSource("MySQL", "jdbc:mysql://localhost:3306/memind"),
                                         detector)
                                 .getSqlFiles())
-                .containsExactly(
-                        "db/migration/mysql/V1__init_store.sql",
-                        "db/migration/mysql/V2__init_text_search.sql",
-                        "db/migration/mysql/V3__multimodal.sql",
-                        "db/migration/mysql/V4__bubble_state.sql",
-                        "db/migration/mysql/V5__item_temporal_fields.sql",
-                        "db/migration/mysql/V6__graph_store.sql",
-                        "db/migration/mysql/V7__memory_thread.sql",
-                        "db/migration/mysql/V8__graph_entity_alias_store.sql",
-                        "db/migration/mysql/V9__item_temporal_lookup.sql",
-                        "db/migration/mysql/V10__item_graph_evolution.sql",
-                        "db/migration/mysql/V11__simplified_thread_core_v1.sql",
-                        "db/migration/mysql/V12__memory_thread_enrichment_input.sql",
-                        "db/migration/mysql/V13__memory_thread_enqueue_generation.sql",
-                        "db/migration/mysql/V14__memory_thread_rebuild_epoch.sql");
+                .containsExactly("db/migration/mysql/V1__init.sql");
     }
 
     @Test
-    @DisplayName("Load PostgreSQL store scripts through V14 memory thread rebuild epoch migration")
-    void loadsPostgresqlScriptsThroughTemporalLookupMigration() {
+    @DisplayName("Load PostgreSQL squashed init script")
+    void loadsPostgresqlSquashedInitScript() {
         assertThat(
                         new MemoryStoreDdl(
                                         dataSource(
@@ -114,21 +87,7 @@ class MemoryStoreDdlTest {
                                                 "jdbc:postgresql://localhost:5432/memind"),
                                         detector)
                                 .getSqlFiles())
-                .containsExactly(
-                        "db/migration/postgresql/V1__init_store.sql",
-                        "db/migration/postgresql/V2__init_text_search.sql",
-                        "db/migration/postgresql/V3__multimodal.sql",
-                        "db/migration/postgresql/V4__bubble_state.sql",
-                        "db/migration/postgresql/V5__item_temporal_fields.sql",
-                        "db/migration/postgresql/V6__graph_store.sql",
-                        "db/migration/postgresql/V7__memory_thread.sql",
-                        "db/migration/postgresql/V8__graph_entity_alias_store.sql",
-                        "db/migration/postgresql/V9__item_temporal_lookup.sql",
-                        "db/migration/postgresql/V10__item_graph_evolution.sql",
-                        "db/migration/postgresql/V11__simplified_thread_core_v1.sql",
-                        "db/migration/postgresql/V12__memory_thread_enrichment_input.sql",
-                        "db/migration/postgresql/V13__memory_thread_enqueue_generation.sql",
-                        "db/migration/postgresql/V14__memory_thread_rebuild_epoch.sql");
+                .containsExactly("db/migration/postgresql/V1__init.sql");
     }
 
     @Test
@@ -138,15 +97,7 @@ class MemoryStoreDdlTest {
         dataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("graph-indexes.db"));
         MemoryStoreDdl ddl = new MemoryStoreDdl(dataSource, detector);
 
-        ddl.runScript(
-                ds -> {
-                    ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
-                    populator.addScript(
-                            new ClassPathResource("db/migration/sqlite/V1__init_store.sql"));
-                    populator.addScript(
-                            new ClassPathResource("db/migration/sqlite/V6__graph_store.sql"));
-                    populator.execute(ds);
-                });
+        ddl.runScript(ds -> executeSqlResource(ds, "db/migration/sqlite/V1__init.sql"));
 
         assertThat(indexExists(dataSource, "uk_item_entity_mention_identity")).isTrue();
         assertThat(indexExists(dataSource, "idx_item_entity_mention_item")).isTrue();
@@ -163,20 +114,14 @@ class MemoryStoreDdlTest {
         dataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("memory-thread.db"));
         MemoryStoreDdl ddl = new MemoryStoreDdl(dataSource, detector);
 
-        ddl.runScript(
-                ds -> {
-                    ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
-                    populator.addScript(
-                            new ClassPathResource("db/migration/sqlite/V1__init_store.sql"));
-                    populator.addScript(
-                            new ClassPathResource("db/migration/sqlite/V7__memory_thread.sql"));
-                    populator.execute(ds);
-                });
+        ddl.runScript(ds -> executeSqlResource(ds, "db/migration/sqlite/V1__init.sql"));
 
         assertThat(tableExists(dataSource, "memory_thread")).isTrue();
-        assertThat(tableExists(dataSource, "memory_thread_item")).isTrue();
+        assertThat(tableExists(dataSource, "memory_thread_membership")).isTrue();
+        assertThat(tableExists(dataSource, "memory_thread_runtime")).isTrue();
+        assertThat(tableExists(dataSource, "thread_intake_outbox")).isTrue();
         assertThat(indexExists(dataSource, "uk_memory_thread_key")).isTrue();
-        assertThat(indexExists(dataSource, "idx_memory_thread_item_thread_sequence")).isTrue();
+        assertThat(indexExists(dataSource, "uk_memory_thread_membership")).isTrue();
     }
 
     @Test
@@ -184,11 +129,7 @@ class MemoryStoreDdlTest {
     void sqliteDdlUpgradeRepairsPartialTemporalLookupColumnsAndIndexes(@TempDir Path tempDir) {
         SQLiteDataSource dataSource = new SQLiteDataSource();
         dataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("temporal-upgrade.db"));
-        ResourceDatabasePopulator populator =
-                new ResourceDatabasePopulator(
-                        new ClassPathResource("db/migration/sqlite/V1__init_store.sql"),
-                        new ClassPathResource("db/migration/sqlite/V5__item_temporal_fields.sql"));
-        populator.execute(dataSource);
+        createLegacyTemporalStoreSchema(dataSource);
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
         jdbcTemplate.execute("ALTER TABLE memory_item ADD COLUMN temporal_start TEXT");
         jdbcTemplate.execute("ALTER TABLE memory_item ADD COLUMN temporal_end_or_anchor TEXT");
@@ -250,14 +191,7 @@ class MemoryStoreDdlTest {
         dataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("fresh.db"));
 
         MemoryStoreDdl ddl = new MemoryStoreDdl(dataSource, detector);
-        ddl.runScript(
-                ds -> {
-                    ResourceDatabasePopulator populator =
-                            new ResourceDatabasePopulator(
-                                    new ClassPathResource(
-                                            "db/migration/sqlite/V1__init_store.sql"));
-                    populator.execute(ds);
-                });
+        ddl.runScript(ds -> executeSqlResource(ds, "db/migration/sqlite/V1__init.sql"));
 
         Integer count =
                 new JdbcTemplate(dataSource)
@@ -273,10 +207,7 @@ class MemoryStoreDdlTest {
         SQLiteDataSource dataSource = new SQLiteDataSource();
         dataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("existing.db"));
 
-        ResourceDatabasePopulator populator =
-                new ResourceDatabasePopulator(
-                        new ClassPathResource("db/migration/sqlite/V1__init_store.sql"));
-        populator.execute(dataSource);
+        executeSqlResource(dataSource, "db/migration/sqlite/V1__init.sql");
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
         jdbcTemplate.update("DELETE FROM memory_insight_type");
 
@@ -289,6 +220,109 @@ class MemoryStoreDdlTest {
 
         assertThat(count).isZero();
         assertThat(columnExists(dataSource, "memory_insight", "confidence")).isFalse();
+    }
+
+
+    private void createLegacyTemporalStoreSchema(DataSource dataSource) {
+        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+        jdbcTemplate.execute(
+                """
+                CREATE TABLE memory_item (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    biz_id INTEGER NOT NULL,
+                    user_id TEXT NOT NULL,
+                    agent_id TEXT NOT NULL,
+                    memory_id TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    scope TEXT NOT NULL,
+                    category TEXT,
+                    vector_id TEXT,
+                    raw_data_id TEXT,
+                    content_hash TEXT,
+                    occurred_at TEXT,
+                    occurred_start TEXT,
+                    occurred_end TEXT,
+                    time_granularity TEXT,
+                    observed_at TEXT,
+                    type TEXT NOT NULL DEFAULT 'FACT',
+                    raw_data_type TEXT NOT NULL DEFAULT 'CONVERSATION',
+                    metadata TEXT,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    deleted INTEGER NOT NULL DEFAULT 0
+                )
+                """);
+    }
+
+
+    private void executeSqlResource(DataSource dataSource, String classpathResource) {
+        String script = loadSqlResource(classpathResource);
+        try (Connection connection = dataSource.getConnection();
+                java.sql.Statement statement = connection.createStatement()) {
+            for (String sql : splitStatements(script)) {
+                if (!sql.isBlank()) {
+                    statement.execute(sql);
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private List<String> splitStatements(String script) {
+        List<String> statements = new java.util.ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inSingleQuote = false;
+        boolean inLineComment = false;
+        int beginEndDepth = 0;
+        for (int i = 0; i < script.length(); i++) {
+            char currentChar = script.charAt(i);
+            char nextChar = i + 1 < script.length() ? script.charAt(i + 1) : 0;
+            if (inLineComment) {
+                if (currentChar == '\n') {
+                    inLineComment = false;
+                    current.append(currentChar);
+                }
+                continue;
+            }
+            if (!inSingleQuote && currentChar == '-' && nextChar == '-') {
+                inLineComment = true;
+                i++;
+                continue;
+            }
+            if (currentChar == '\'') {
+                inSingleQuote = !inSingleQuote;
+            }
+            if (!inSingleQuote) {
+                String remaining = script.substring(i);
+                if (remaining.length() >= 5
+                        && remaining.substring(0, 5).equalsIgnoreCase("BEGIN")
+                        && (remaining.length() == 5
+                                || !Character.isLetterOrDigit(remaining.charAt(5)))) {
+                    beginEndDepth++;
+                } else if (remaining.length() >= 3
+                        && remaining.substring(0, 3).equalsIgnoreCase("END")
+                        && (remaining.length() == 3
+                                || !Character.isLetterOrDigit(remaining.charAt(3)))
+                        && beginEndDepth > 0) {
+                    beginEndDepth--;
+                }
+            }
+            if (currentChar == ';' && !inSingleQuote && beginEndDepth == 0) {
+                String statement = current.toString().trim();
+                if (!statement.isEmpty()) {
+                    statements.add(statement);
+                }
+                current.setLength(0);
+                continue;
+            }
+            current.append(currentChar);
+        }
+        String statement = current.toString().trim();
+        if (!statement.isEmpty()) {
+            statements.add(statement);
+        }
+        return statements;
     }
 
     private DataSource dataSource(String productName, String url) {
@@ -343,14 +377,23 @@ class MemoryStoreDdlTest {
     }
 
     private String normalizedSqlResource(String classpathResource) {
+        return loadSqlResource(classpathResource).replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizedCreateTableStatement(String classpathResource, String tableName) {
+        return java.util.Arrays.stream(normalizedSqlResource(classpathResource).split(";"))
+                .filter(statement -> statement.contains("create table if not exists " + tableName))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Table not found: " + tableName));
+    }
+
+    private String loadSqlResource(String classpathResource) {
         try (InputStream inputStream =
                 MemoryStoreDdlTest.class.getClassLoader().getResourceAsStream(classpathResource)) {
             if (inputStream == null) {
                 throw new IllegalArgumentException("Resource not found: " + classpathResource);
             }
-            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8)
-                    .replaceAll("\\s+", " ")
-                    .toLowerCase(Locale.ROOT);
+            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

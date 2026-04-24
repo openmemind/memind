@@ -18,6 +18,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.graph.NoOpGraphOperations;
+import com.openmemind.ai.memory.core.store.graph.NoOpItemGraphCommitOperations;
+import com.openmemind.ai.memory.core.store.thread.NoOpThreadEnrichmentInputStore;
+import com.openmemind.ai.memory.core.store.thread.NoOpThreadProjectionStore;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteBubbleTrackerStore;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteConversationBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteInsightBuffer;
@@ -46,6 +50,23 @@ class JdbcStoreTest {
         assertThat(jdbc.store().itemOperations()).isInstanceOf(SqliteMemoryStore.class);
         assertThat(jdbc.store().insightOperations()).isInstanceOf(SqliteMemoryStore.class);
         assertThat(jdbc.store().resourceOperations()).isInstanceOf(SqliteMemoryStore.class);
+        assertThat(jdbc.store().graphOperations()).isNotInstanceOf(NoOpGraphOperations.class);
+        assertThat(jdbc.store().graphOperationsCapabilities().supportsBoundedEntityKeyLookup())
+                .isTrue();
+        assertThat(jdbc.store().graphOperationsCapabilities().supportsHistoricalAliasLookup())
+                .isTrue();
+        assertThat(jdbc.store().graphOperationsCapabilities().supportsBoundedAdjacencyLookup())
+                .isTrue();
+        assertThat(
+                        jdbc.store()
+                                .graphOperationsCapabilities()
+                                .supportsStoreSideCooccurrenceRebuild())
+                .isTrue();
+        assertThat(jdbc.store().itemGraphCommitOperations())
+                .isNotSameAs(NoOpItemGraphCommitOperations.INSTANCE);
+        assertThat(jdbc.store().threadOperations()).isNotSameAs(NoOpThreadProjectionStore.INSTANCE);
+        assertThat(jdbc.store().threadEnrichmentInputStore())
+                .isNotSameAs(NoOpThreadEnrichmentInputStore.INSTANCE);
         assertThat(jdbc.store().resourceStore()).isNull();
         assertThat(jdbc.buffer().insightBuffer()).isInstanceOf(SqliteInsightBuffer.class);
         assertThat(jdbc.buffer().pendingConversationBuffer())

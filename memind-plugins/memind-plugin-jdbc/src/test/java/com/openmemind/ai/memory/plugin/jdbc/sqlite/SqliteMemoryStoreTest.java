@@ -35,6 +35,8 @@ import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
+import com.openmemind.ai.memory.core.store.item.TemporalCandidateMatch;
+import com.openmemind.ai.memory.core.store.item.TemporalCandidateRequest;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.content.ToolCallContent;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -192,6 +194,38 @@ class SqliteMemoryStoreTest {
 
         MemoryRawData inserted = store.getRawData(memoryId, "rd-runtime").orElseThrow();
         assertThat(inserted.segment().runtimeContext()).isNull();
+    }
+
+    @Test
+    void listTemporalCandidateMatchesUsesStoreSideTemporalLookupColumns() {
+        MemoryItem source = temporalItem(1L, "source", BASE_TIME, BASE_TIME.plusSeconds(60));
+        MemoryItem overlap =
+                temporalItem(2L, "overlap", BASE_TIME.plusSeconds(30), BASE_TIME.plusSeconds(90));
+        MemoryItem before =
+                temporalItem(3L, "before", BASE_TIME.minusSeconds(120), BASE_TIME.minusSeconds(60));
+        MemoryItem after =
+                temporalItem(4L, "after", BASE_TIME.plusSeconds(120), BASE_TIME.plusSeconds(180));
+        store.insertItems(memoryId, List.of(source, overlap, before, after));
+
+        List<TemporalCandidateMatch> matches =
+                store.listTemporalCandidateMatches(
+                        memoryId,
+                        List.of(
+                                new TemporalCandidateRequest(
+                                        1L,
+                                        source.occurredStart(),
+                                        source.occurredEnd(),
+                                        source.occurredStart(),
+                                        MemoryItemType.FACT,
+                                        MemoryCategory.EVENT,
+                                        1,
+                                        1,
+                                        2)),
+                        List.of(1L));
+
+        assertThat(matches)
+                .extracting(match -> match.candidateItem().id())
+                .containsExactly(2L, 3L, 4L);
     }
 
     @Test
@@ -688,6 +722,27 @@ class SqliteMemoryStoreTest {
                 BASE_TIME.minusSeconds(55),
                 Map.of("origin", content),
                 BASE_TIME.minusSeconds(30),
+                MemoryItemType.FACT);
+    }
+
+    private MemoryItem temporalItem(Long id, String content, Instant start, Instant end) {
+        return new MemoryItem(
+                id,
+                memoryId.toIdentifier(),
+                content,
+                MemoryScope.USER,
+                MemoryCategory.EVENT,
+                ConversationContent.TYPE,
+                null,
+                null,
+                "hash-" + id,
+                start,
+                start,
+                end,
+                "minute",
+                start,
+                Map.of("origin", content),
+                start,
                 MemoryItemType.FACT);
     }
 

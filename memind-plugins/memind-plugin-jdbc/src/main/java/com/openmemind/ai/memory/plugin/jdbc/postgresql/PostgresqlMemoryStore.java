@@ -34,10 +34,18 @@ import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentBoundary;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.graph.GraphOperations;
+import com.openmemind.ai.memory.core.store.graph.GraphOperationsCapabilities;
+import com.openmemind.ai.memory.core.store.graph.ItemGraphCommitOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
+import com.openmemind.ai.memory.core.store.item.TemporalCandidateMatch;
+import com.openmemind.ai.memory.core.store.item.TemporalCandidateRequest;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
+import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentInputStore;
+import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
+import com.openmemind.ai.memory.plugin.jdbc.internal.graph.JdbcGraphOperationsCapabilities;
 import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaBootstrap;
 import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaInitResult;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JdbcExecutor;
@@ -81,6 +89,9 @@ public class PostgresqlMemoryStore
     private final DataSource dataSource;
     private final JsonCodec jsonHelper;
     private final ResourceStore resourceStore;
+    private final PostgresqlGraphOperations graphOperations;
+    private final PostgresqlItemGraphCommitOperations itemGraphCommitOperations;
+    private final PostgresqlThreadStore threadStore;
 
     public PostgresqlMemoryStore(DataSource dataSource) {
         this(dataSource, null, true);
@@ -108,6 +119,9 @@ public class PostgresqlMemoryStore
         if (initResult.createdInsightTypeTable()) {
             upsertInsightTypes(DefaultInsightTypes.all());
         }
+        this.graphOperations = new PostgresqlGraphOperations(this.dataSource, createIfNotExist);
+        this.itemGraphCommitOperations = new PostgresqlItemGraphCommitOperations(this.dataSource);
+        this.threadStore = new PostgresqlThreadStore(this.dataSource, createIfNotExist);
     }
 
     @Override
@@ -128,6 +142,31 @@ public class PostgresqlMemoryStore
     @Override
     public ResourceOperations resourceOperations() {
         return this;
+    }
+
+    @Override
+    public GraphOperations graphOperations() {
+        return graphOperations;
+    }
+
+    @Override
+    public GraphOperationsCapabilities graphOperationsCapabilities() {
+        return JdbcGraphOperationsCapabilities.INSTANCE;
+    }
+
+    @Override
+    public ItemGraphCommitOperations itemGraphCommitOperations() {
+        return itemGraphCommitOperations;
+    }
+
+    @Override
+    public ThreadProjectionStore threadOperations() {
+        return threadStore;
+    }
+
+    @Override
+    public ThreadEnrichmentInputStore threadEnrichmentInputStore() {
+        return threadStore;
     }
 
     @Override
@@ -345,8 +384,9 @@ public class PostgresqlMemoryStore
                                         (biz_id, user_id, agent_id, memory_id, content, scope, category,
                                          vector_id, raw_data_id, content_hash, occurred_at,
                                          occurred_start, occurred_end, time_granularity, observed_at,
+                                         temporal_start, temporal_end_or_anchor, temporal_anchor,
                                          type, raw_data_type, metadata, created_at, updated_at, deleted)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)
                                     """)) {
                         Instant now = Instant.now();
                         for (MemoryItem item : items) {
@@ -402,6 +442,127 @@ public class PostgresqlMemoryStore
                         scope.userId(),
                         scope.agentId())
                 > 0;
+    }
+
+    @Override
+    public List<TemporalCandidateMatch> listTemporalCandidateMatches(
+            MemoryId memoryId,
+            List<TemporalCandidateRequest> requests,
+            Collection<Long> excludeItemIds) {
+        if (requests == null || requests.isEmpty()) {
+            return List.of();
+        }
+        Collection<Long> effectiveExcludeIds = excludeItemIds != null ? excludeItemIds : List.of();
+        List<TemporalCandidateMatch> matches = new ArrayList<>();
+        for (TemporalCandidateRequest request : requests) {
+            var seenCandidateIds = new java.util.LinkedHashSet<Long>();
+            appendTemporalMatches(
+                    matches,
+                    seenCandidateIds,
+                    request,
+                    selectTemporalCandidates(
+                            memoryId,
+                            request,
+                            effectiveExcludeIds,
+                            "AND temporal_start < ? AND ? < temporal_end_or_anchor",
+                            "ABS(EXTRACT(EPOCH FROM (temporal_anchor - CAST(? AS TIMESTAMPTZ))))"
+                                    + " ASC, biz_id ASC",
+                            request.sourceEndOrAnchor(),
+                            request.sourceStart(),
+                            request.sourceAnchor(),
+                            request.overlapLimit()));
+            appendTemporalMatches(
+                    matches,
+                    seenCandidateIds,
+                    request,
+                    selectTemporalCandidates(
+                            memoryId,
+                            request,
+                            effectiveExcludeIds,
+                            "AND temporal_anchor < ?",
+                            "ABS(EXTRACT(EPOCH FROM (temporal_anchor - CAST(? AS TIMESTAMPTZ))))"
+                                    + " ASC, biz_id ASC",
+                            request.sourceAnchor(),
+                            request.sourceAnchor(),
+                            request.beforeLimit()));
+            appendTemporalMatches(
+                    matches,
+                    seenCandidateIds,
+                    request,
+                    selectTemporalCandidates(
+                            memoryId,
+                            request,
+                            effectiveExcludeIds,
+                            "AND temporal_anchor > ?",
+                            "ABS(EXTRACT(EPOCH FROM (temporal_anchor - CAST(? AS TIMESTAMPTZ))))"
+                                    + " ASC, biz_id ASC",
+                            request.sourceAnchor(),
+                            request.sourceAnchor(),
+                            request.afterLimit()));
+        }
+        return List.copyOf(matches);
+    }
+
+    private List<MemoryItem> selectTemporalCandidates(
+            MemoryId memoryId,
+            TemporalCandidateRequest request,
+            Collection<Long> excludeItemIds,
+            String temporalPredicate,
+            String orderBy,
+            Object... temporalParamsAndLimit) {
+        if (((Number) temporalParamsAndLimit[temporalParamsAndLimit.length - 1]).intValue() <= 0) {
+            return List.of();
+        }
+        ScopeContext scope = scopeOf(memoryId);
+        String excludePredicate =
+                excludeItemIds.isEmpty()
+                        ? ""
+                        : " AND biz_id NOT IN (" + placeholders(excludeItemIds.size()) + ")";
+        List<Object> params = new ArrayList<>();
+        params.add(scope.memoryId());
+        params.add(request.itemType().name());
+        params.add(request.category() != null ? request.category().name() : null);
+        params.add(request.category() != null ? request.category().name() : null);
+        params.addAll(excludeItemIds);
+        for (int i = 0; i < temporalParamsAndLimit.length - 1; i++) {
+            Object value = temporalParamsAndLimit[i];
+            params.add(value instanceof Instant instant ? setTimestampValue(instant) : value);
+        }
+        params.add(((Number) temporalParamsAndLimit[temporalParamsAndLimit.length - 1]).intValue());
+        return JdbcExecutor.queryList(
+                dataSource,
+                """
+                SELECT * FROM memory_item
+                WHERE deleted = FALSE
+                  AND memory_id = ?
+                  AND type = ?
+                  AND ((? IS NULL AND category IS NULL) OR category = ?)
+                """
+                        + excludePredicate
+                        + """
+
+                          AND temporal_start IS NOT NULL
+                          AND temporal_end_or_anchor IS NOT NULL
+                          AND temporal_anchor IS NOT NULL
+                        """
+                        + temporalPredicate
+                        + " ORDER BY "
+                        + orderBy
+                        + " LIMIT ?",
+                this::mapItem,
+                params.toArray());
+    }
+
+    private static void appendTemporalMatches(
+            List<TemporalCandidateMatch> matches,
+            java.util.LinkedHashSet<Long> seenCandidateIds,
+            TemporalCandidateRequest request,
+            List<MemoryItem> candidates) {
+        for (MemoryItem candidate : candidates) {
+            if (seenCandidateIds.add(candidate.id())) {
+                matches.add(new TemporalCandidateMatch(request.sourceItemId(), candidate));
+            }
+        }
     }
 
     @Override
@@ -868,13 +1029,26 @@ public class PostgresqlMemoryStore
         setTimestamp(statement, 13, item.occurredEnd());
         statement.setString(14, item.timeGranularity());
         setTimestamp(statement, 15, item.observedAt());
+        Instant temporalStart =
+                firstNonNull(item.occurredStart(), item.occurredAt(), item.observedAt());
+        Instant temporalEndOrAnchor =
+                firstNonNull(
+                        item.occurredEnd(),
+                        item.occurredStart(),
+                        item.occurredAt(),
+                        item.observedAt());
+        Instant temporalAnchor =
+                firstNonNull(item.occurredStart(), item.occurredAt(), item.observedAt());
+        setTimestamp(statement, 16, temporalStart);
+        setTimestamp(statement, 17, temporalEndOrAnchor);
+        setTimestamp(statement, 18, temporalAnchor);
         statement.setString(
-                16, item.type() != null ? item.type().name() : MemoryItemType.FACT.name());
+                19, item.type() != null ? item.type().name() : MemoryItemType.FACT.name());
         statement.setString(
-                17, item.contentType() != null ? item.contentType() : ConversationContent.TYPE);
-        setJsonb(statement, 18, jsonHelper.toJson(item.metadata()));
-        setTimestamp(statement, 19, item.createdAt() != null ? item.createdAt() : now);
-        setTimestamp(statement, 20, now);
+                20, item.contentType() != null ? item.contentType() : ConversationContent.TYPE);
+        setJsonb(statement, 21, jsonHelper.toJson(item.metadata()));
+        setTimestamp(statement, 22, item.createdAt() != null ? item.createdAt() : now);
+        setTimestamp(statement, 23, now);
     }
 
     private void bindInsightTypeUpsert(
@@ -1097,6 +1271,10 @@ public class PostgresqlMemoryStore
         return new Segment(content, caption, boundary, metadata);
     }
 
+    private Object setTimestampValue(Instant instant) {
+        return instant == null ? null : Timestamp.from(instant);
+    }
+
     private MemoryScope parseScope(String value) {
         return value == null ? null : MemoryScope.valueOf(value);
     }
@@ -1154,6 +1332,18 @@ public class PostgresqlMemoryStore
         jsonb.setType("jsonb");
         jsonb.setValue(json);
         statement.setObject(parameterIndex, jsonb);
+    }
+
+    private static Instant firstNonNull(Instant first, Instant... rest) {
+        if (first != null) {
+            return first;
+        }
+        for (Instant candidate : rest) {
+            if (candidate != null) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     private Long nullableLong(ResultSet resultSet, String columnLabel) throws SQLException {

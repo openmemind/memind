@@ -11,22 +11,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.plugin.store.mybatis.schema;
+package com.openmemind.ai.memory.plugin.jdbc.internal.schema;
 
-import java.util.List;
+public enum JdbcDialectSchema {
+    SQLITE("db/jdbc/sqlite/V1__init.sql"),
+    MYSQL("db/jdbc/mysql/V1__init.sql"),
+    POSTGRESQL("db/jdbc/postgresql/V1__init.sql");
 
-public enum DatabaseDialect {
-    SQLITE("db/migration/sqlite/V1__init.sql"),
-    MYSQL("db/migration/mysql/V1__init.sql"),
-    POSTGRESQL("db/migration/postgresql/V1__init.sql");
+    private final String scriptPath;
 
-    private final List<String> scriptPaths;
-
-    DatabaseDialect(String... scriptPaths) {
-        this.scriptPaths = List.of(scriptPaths);
+    JdbcDialectSchema(String scriptPath) {
+        this.scriptPath = scriptPath;
     }
 
-    public List<String> scriptPaths() {
-        return scriptPaths;
+    public String scriptPath() {
+        return scriptPath;
     }
 }

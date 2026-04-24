@@ -57,21 +57,7 @@ class MemorySchemaAutoConfigurationTest {
 
                             IDdl ddl = context.getBean(IDdl.class);
                             assertThat(ddl.getSqlFiles())
-                                    .containsExactly(
-                                            "db/migration/sqlite/V1__init_store.sql",
-                                            "db/migration/sqlite/V2__init_text_search.sql",
-                                            "db/migration/sqlite/V3__multimodal.sql",
-                                            "db/migration/sqlite/V4__bubble_state.sql",
-                                            "db/migration/sqlite/V5__item_temporal_fields.sql",
-                                            "db/migration/sqlite/V6__graph_store.sql",
-                                            "db/migration/sqlite/V7__memory_thread.sql",
-                                            "db/migration/sqlite/V8__graph_entity_alias_store.sql",
-                                            "db/migration/sqlite/V9__item_temporal_lookup.sql",
-                                            "db/migration/sqlite/V10__item_graph_evolution.sql",
-                                            "db/migration/sqlite/V11__simplified_thread_core_v1.sql",
-                                            "db/migration/sqlite/V12__memory_thread_enrichment_input.sql",
-                                            "db/migration/sqlite/V13__memory_thread_enqueue_generation.sql",
-                                            "db/migration/sqlite/V14__memory_thread_rebuild_epoch.sql");
+                                    .containsExactly("db/migration/sqlite/V1__init.sql");
 
                             DdlApplicationRunner runner =
                                     context.getBean(DdlApplicationRunner.class);

@@ -38,12 +38,21 @@ class StoreSchemaBootstrapTest {
     @ParameterizedTest
     @ValueSource(
             strings = {
-                "db/jdbc/sqlite/store/V1__init.sql",
-                "db/jdbc/mysql/store/V1__init.sql",
-                "db/jdbc/postgresql/store/V1__init.sql"
+                "db/jdbc/sqlite/V1__init.sql",
+                "db/jdbc/mysql/V1__init.sql",
+                "db/jdbc/postgresql/V1__init.sql"
             })
     void freshStoreScriptsShouldNotDefineInsightConfidenceColumn(String classpathResource) {
-        assertThat(normalizedSqlResource(classpathResource)).doesNotContain(" confidence ");
+        assertThat(normalizedCreateTableStatement(classpathResource, "memory_insight"))
+                .doesNotContain(" confidence ");
+    }
+
+    @Test
+    void unifiedJdbcSchemaUsesSingleInitScriptPerDialect() {
+        assertThat(JdbcDialectSchema.SQLITE.scriptPath()).isEqualTo("db/jdbc/sqlite/V1__init.sql");
+        assertThat(JdbcDialectSchema.MYSQL.scriptPath()).isEqualTo("db/jdbc/mysql/V1__init.sql");
+        assertThat(JdbcDialectSchema.POSTGRESQL.scriptPath())
+                .isEqualTo("db/jdbc/postgresql/V1__init.sql");
     }
 
     @Test
@@ -81,8 +90,7 @@ class StoreSchemaBootstrapTest {
     @Test
     void ensureSqliteRepairsPartialTemporalLookupColumnsDuringBootstrap(@TempDir Path tempDir) {
         DataSource dataSource = dataSource(tempDir.resolve("bootstrap-temporal-upgrade.db"));
-        executeSqlResource(dataSource, "db/jdbc/sqlite/store/V1__init.sql");
-        executeSqlResource(dataSource, "db/jdbc/sqlite/store/V4__item_temporal_fields.sql");
+        createLegacySqliteStoreSchema(dataSource);
         executeStatement(dataSource, "ALTER TABLE memory_item ADD COLUMN temporal_start TEXT");
         executeStatement(
                 dataSource, "ALTER TABLE memory_item ADD COLUMN temporal_end_or_anchor TEXT");
@@ -313,6 +321,13 @@ class StoreSchemaBootstrapTest {
 
     private String normalizedSqlResource(String classpathResource) {
         return loadSqlResource(classpathResource).replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizedCreateTableStatement(String classpathResource, String tableName) {
+        return java.util.Arrays.stream(normalizedSqlResource(classpathResource).split(";"))
+                .filter(statement -> statement.contains("create table if not exists " + tableName))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Table not found: " + tableName));
     }
 
     private String loadSqlResource(String classpathResource) {

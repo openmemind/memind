@@ -11,22 +11,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.plugin.store.mybatis.schema;
+package com.openmemind.ai.memory.plugin.jdbc.postgresql;
 
-import java.util.List;
+import com.openmemind.ai.memory.plugin.jdbc.internal.thread.AbstractJdbcThreadStore;
+import com.openmemind.ai.memory.plugin.jdbc.internal.thread.JdbcThreadDialect;
+import javax.sql.DataSource;
 
-public enum DatabaseDialect {
-    SQLITE("db/migration/sqlite/V1__init.sql"),
-    MYSQL("db/migration/mysql/V1__init.sql"),
-    POSTGRESQL("db/migration/postgresql/V1__init.sql");
+public final class PostgresqlThreadStore extends AbstractJdbcThreadStore {
 
-    private final List<String> scriptPaths;
-
-    DatabaseDialect(String... scriptPaths) {
-        this.scriptPaths = List.of(scriptPaths);
+    public PostgresqlThreadStore(DataSource dataSource) {
+        this(dataSource, true);
     }
 
-    public List<String> scriptPaths() {
-        return scriptPaths;
+    public PostgresqlThreadStore(DataSource dataSource, boolean createIfNotExist) {
+        super(dataSource, JdbcThreadDialect.POSTGRESQL, createIfNotExist);
     }
 }
