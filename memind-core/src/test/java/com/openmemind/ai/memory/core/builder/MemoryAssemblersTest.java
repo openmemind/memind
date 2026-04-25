@@ -57,7 +57,10 @@ import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
+import com.openmemind.ai.memory.core.retrieval.admission.DefaultRetrievalAdmissionPolicy;
 import com.openmemind.ai.memory.core.retrieval.graph.NoOpRetrievalGraphAssistant;
+import com.openmemind.ai.memory.core.retrieval.query.LlmLongQueryCondenser;
+import com.openmemind.ai.memory.core.retrieval.query.LongQueryCondenser;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
 import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
@@ -205,6 +208,28 @@ class MemoryAssemblersTest {
         assertThat(strategies.keySet())
                 .containsExactlyInAnyOrder(
                         RetrievalStrategies.SIMPLE, RetrievalStrategies.DEEP_RETRIEVAL);
+    }
+
+    @Test
+    void retrievalAssemblerWiresAdmissionPolicyAndOptions() {
+        var retriever =
+                new MemoryRetrievalAssembler()
+                        .assemble(context(MemoryBuildOptions.defaults(), null, null));
+
+        assertThat(readField(retriever, "admissionPolicy", Object.class))
+                .isInstanceOf(DefaultRetrievalAdmissionPolicy.class);
+        assertThat(readField(retriever, "admissionOptions", Object.class))
+                .isEqualTo(MemoryBuildOptions.defaults().retrieval().common().admission());
+    }
+
+    @Test
+    void retrievalAssemblerWiresLlmLongQueryCondenserWhenChatClientExists() {
+        var retriever =
+                new MemoryRetrievalAssembler()
+                        .assemble(context(MemoryBuildOptions.defaults(), null, null));
+
+        assertThat(readField(retriever, "longQueryCondenser", LongQueryCondenser.class))
+                .isInstanceOf(LlmLongQueryCondenser.class);
     }
 
     @Test

@@ -17,6 +17,7 @@ package com.openmemind.ai.memory.core.prompt;
 public enum PromptType {
     INTENT_ROUTING,
     QUERY_REWRITE,
+    LONG_QUERY_CONDENSE,
     TYPED_QUERY_EXPAND,
     INSIGHT_TYPE_ROUTING,
     SUFFICIENCY_GATE,

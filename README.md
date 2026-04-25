@@ -95,6 +95,8 @@ memind maintains separate memory scopes for comprehensive agent cognition:
 | **Simple** | Vector search + BM25 keyword matching, merged via RRF (Reciprocal Rank Fusion), with adaptive truncation | Low-latency, cost-sensitive scenarios |
 | **Deep** | LLM-assisted query expansion, sufficiency checking, and reranking | Complex queries requiring reasoning |
 
+Retrieval admission is always enabled: blank queries, pure punctuation/symbol inputs, and pure emoji inputs return empty retrieval results before search. In the standard `Memory.builder()` path, oversized queries are handled by LLM long-query condensation; if condensation fails or remains invalid, retrieval returns an empty result.
+
 #### Core Capabilities
 
 | Category | Capability | Description |

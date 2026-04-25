@@ -11,24 +11,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.core.llm;
+package com.openmemind.ai.memory.core.retrieval.admission;
 
-/**
- * Identifies each LLM call site in the memind pipeline.
- *
- * <p>Used with {@link ChatClientRegistry} to bind different
- * {@link StructuredChatClient} instances to specific pipeline components.
- */
-public enum ChatClientSlot {
-    ITEM_EXTRACTION,
-    CONVERSATION_CHUNKER,
-    CAPTION_GENERATOR,
-    CONTEXT_COMMIT_DETECTOR,
-    INSIGHT_GENERATOR,
-    INSIGHT_GROUP_CLASSIFIER,
-    QUERY_EXPANDER,
-    LONG_QUERY_CONDENSER,
-    SUFFICIENCY_GATE,
-    INSIGHT_TYPE_ROUTER,
-    THREAD_ENRICHMENT,
+public enum RetrievalAdmissionReason {
+    ADMITTED,
+    EMPTY_QUERY,
+    NO_TEXT_TOKEN,
+    QUERY_TOO_MANY_TOKENS,
+    QUERY_TOO_MANY_CHARS,
+    INVALID_CONTROL_CHARACTER
 }

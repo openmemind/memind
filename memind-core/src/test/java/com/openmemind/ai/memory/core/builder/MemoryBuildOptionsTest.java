@@ -22,6 +22,7 @@ import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildCo
 import com.openmemind.ai.memory.core.extraction.item.graph.AliasEvidenceMode;
 import com.openmemind.ai.memory.core.extraction.item.graph.CrossScriptMergePolicy;
 import com.openmemind.ai.memory.core.extraction.item.graph.EntityResolutionMode;
+import com.openmemind.ai.memory.core.retrieval.admission.RetrievalAdmissionOptions;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphMode;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoringConfig;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
@@ -36,6 +37,32 @@ import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 class MemoryBuildOptionsTest {
+
+    @Test
+    void retrievalAdmissionOptionsShouldDefaultToSafeLimits() {
+        var options = MemoryBuildOptions.defaults().retrieval().common().admission();
+
+        assertThat(options.maxQueryChars()).isEqualTo(4000);
+        assertThat(options.maxQueryTokens()).isEqualTo(512);
+    }
+
+    @Test
+    void retrievalAdmissionOptionsShouldRejectNonPositiveLimits() {
+        assertThatThrownBy(() -> new RetrievalAdmissionOptions(0, 512))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maxQueryChars");
+        assertThatThrownBy(() -> new RetrievalAdmissionOptions(4000, 0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maxQueryTokens");
+    }
+
+    @Test
+    void retrievalCommonOptionsShouldKeepBackwardCompatibleCacheConstructor() {
+        var common = new RetrievalCommonOptions(false);
+
+        assertThat(common.cacheEnabled()).isFalse();
+        assertThat(common.admission()).isEqualTo(RetrievalAdmissionOptions.defaults());
+    }
 
     @Test
     void defaultsMatchBuilderBaseline() {

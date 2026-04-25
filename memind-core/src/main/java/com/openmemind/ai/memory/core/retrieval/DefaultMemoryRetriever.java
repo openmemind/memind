@@ -14,15 +14,23 @@
 package com.openmemind.ai.memory.core.retrieval;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.retrieval.admission.DefaultRetrievalAdmissionPolicy;
+import com.openmemind.ai.memory.core.retrieval.admission.RetrievalAdmissionDecision;
+import com.openmemind.ai.memory.core.retrieval.admission.RetrievalAdmissionOptions;
+import com.openmemind.ai.memory.core.retrieval.admission.RetrievalAdmissionPolicy;
+import com.openmemind.ai.memory.core.retrieval.admission.RetrievalAdmissionResult;
 import com.openmemind.ai.memory.core.retrieval.cache.RetrievalCache;
+import com.openmemind.ai.memory.core.retrieval.query.LongQueryCondenser;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.query.QueryRewriter;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategy;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.utils.HashUtils;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +52,9 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
     private final MemoryStore memoryStore;
     private final MemoryTextSearch textSearch; // nullable
     private final QueryRewriter queryRewriter; // nullable
+    private final RetrievalAdmissionPolicy admissionPolicy;
+    private final RetrievalAdmissionOptions admissionOptions;
+    private final LongQueryCondenser longQueryCondenser; // nullable for legacy constructors
 
     public DefaultMemoryRetriever(RetrievalCache cache, MemoryStore memoryStore) {
         this(cache, memoryStore, null, null);
@@ -59,11 +70,58 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
             MemoryStore memoryStore,
             MemoryTextSearch textSearch,
             QueryRewriter queryRewriter) {
+        this(
+                cache,
+                memoryStore,
+                textSearch,
+                queryRewriter,
+                defaultAdmissionPolicy(),
+                defaultAdmissionOptions(),
+                null);
+    }
+
+    public DefaultMemoryRetriever(
+            RetrievalCache cache,
+            MemoryStore memoryStore,
+            MemoryTextSearch textSearch,
+            QueryRewriter queryRewriter,
+            LongQueryCondenser longQueryCondenser) {
+        this(
+                cache,
+                memoryStore,
+                textSearch,
+                queryRewriter,
+                defaultAdmissionPolicy(),
+                defaultAdmissionOptions(),
+                longQueryCondenser);
+    }
+
+    public DefaultMemoryRetriever(
+            RetrievalCache cache,
+            MemoryStore memoryStore,
+            MemoryTextSearch textSearch,
+            QueryRewriter queryRewriter,
+            RetrievalAdmissionPolicy admissionPolicy,
+            RetrievalAdmissionOptions admissionOptions,
+            LongQueryCondenser longQueryCondenser) {
         this.cache = Objects.requireNonNull(cache, "cache must not be null");
         this.memoryStore = Objects.requireNonNull(memoryStore, "memoryStore must not be null");
         this.textSearch = textSearch; // nullable
         this.queryRewriter = queryRewriter; // nullable
+        this.admissionPolicy =
+                Objects.requireNonNull(admissionPolicy, "admissionPolicy must not be null");
+        this.admissionOptions =
+                Objects.requireNonNull(admissionOptions, "admissionOptions must not be null");
+        this.longQueryCondenser = longQueryCondenser;
         this.strategies = new ConcurrentHashMap<>();
+    }
+
+    private static RetrievalAdmissionOptions defaultAdmissionOptions() {
+        return RetrievalAdmissionOptions.defaults();
+    }
+
+    private static RetrievalAdmissionPolicy defaultAdmissionPolicy() {
+        return new DefaultRetrievalAdmissionPolicy(defaultAdmissionOptions());
     }
 
     @Override
@@ -78,15 +136,18 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
         Objects.requireNonNull(request, "request must not be null");
         Objects.requireNonNull(request.memoryId(), "memoryId must not be null");
 
-        if (request.query() == null || request.query().isBlank()) {
-            return Mono.just(RetrievalResult.empty("none", ""));
-        }
-
         RetrievalConfig config = request.config();
         if (config == null) {
             throw new IllegalArgumentException(
                     "RetrievalRequest.config must not be null — use RetrievalRequest.of(memoryId,"
                             + " query, strategy)");
+        }
+
+        RetrievalAdmissionResult admission = admissionPolicy.evaluate(request);
+        if (admission.decision() == RetrievalAdmissionDecision.SKIP
+                || admission.decision() == RetrievalAdmissionDecision.REJECT) {
+            logAdmissionRejection(admission);
+            return Mono.just(RetrievalResult.empty(config.strategyName(), request.query()));
         }
 
         if (!memoryStore.itemOperations().hasItems(request.memoryId())) {
@@ -108,24 +169,108 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
             }
         }
 
+        return condenseAdmittedQuery(request, admission)
+                .flatMap(
+                        outcome ->
+                                outcome.<Mono<RetrievalResult>>map(
+                                                admitted ->
+                                                        retrieveAdmitted(
+                                                                request,
+                                                                config,
+                                                                queryHash,
+                                                                configHash,
+                                                                admitted))
+                                        .orElseGet(
+                                                () ->
+                                                        Mono.just(
+                                                                RetrievalResult.empty(
+                                                                        config.strategyName(),
+                                                                        request.query()))));
+    }
+
+    private Mono<Optional<AdmissionOutcome>> condenseAdmittedQuery(
+            RetrievalRequest request, RetrievalAdmissionResult admission) {
+        if (admission.decision() == RetrievalAdmissionDecision.ADMIT) {
+            return Mono.just(Optional.of(new AdmissionOutcome(request.query(), false)));
+        }
+        if (admission.decision() != RetrievalAdmissionDecision.QUERY_TOO_LONG) {
+            return Mono.just(Optional.empty());
+        }
+        if (longQueryCondenser == null) {
+            log.warn(
+                    "Retrieval admission QUERY_TOO_LONG has no LongQueryCondenser wired;"
+                            + " this should only happen for legacy direct retriever construction");
+            return Mono.just(Optional.empty());
+        }
+        return longQueryCondenser
+                .condense(
+                        request.memoryId(),
+                        request.query(),
+                        safeConversationHistory(request.conversationHistory()),
+                        admissionOptions.maxQueryTokens())
+                .flatMap(
+                        condensed -> {
+                            RetrievalRequest condensedRequest =
+                                    new RetrievalRequest(
+                                            request.memoryId(),
+                                            condensed,
+                                            safeConversationHistory(request.conversationHistory()),
+                                            request.config(),
+                                            request.metadata(),
+                                            request.scope(),
+                                            request.categories());
+                            RetrievalAdmissionResult condensedAdmission =
+                                    admissionPolicy.evaluate(condensedRequest);
+                            if (condensedAdmission.decision() == RetrievalAdmissionDecision.ADMIT) {
+                                return Mono.just(
+                                        Optional.of(new AdmissionOutcome(condensed, true)));
+                            }
+                            log.debug(
+                                    "Condensed query rejected by admission: decision={}, reason={},"
+                                            + " chars={}, tokens={}",
+                                    condensedAdmission.decision(),
+                                    condensedAdmission.reason(),
+                                    condensedAdmission.charCount(),
+                                    condensedAdmission.tokenCount());
+                            return Mono.just(Optional.<AdmissionOutcome>empty());
+                        })
+                .switchIfEmpty(
+                        Mono.fromSupplier(
+                                () -> {
+                                    log.debug(
+                                            "Retrieval admission QUERY_TOO_LONG could not be"
+                                                    + " condensed: reason={}, chars={}, tokens={},"
+                                                    + " maxChars={}, maxTokens={}",
+                                            admission.reason(),
+                                            admission.charCount(),
+                                            admission.tokenCount(),
+                                            admissionOptions.maxQueryChars(),
+                                            admissionOptions.maxQueryTokens());
+                                    return Optional.empty();
+                                }));
+    }
+
+    private Mono<RetrievalResult> retrieveAdmitted(
+            RetrievalRequest request,
+            RetrievalConfig config,
+            String queryHash,
+            String configHash,
+            AdmissionOutcome outcome) {
+        String effectiveQuery = outcome.effectiveQuery();
         // 2. Query rewriting
         Mono<String> rewrittenMono;
-        if (queryRewriter != null
-                && request.conversationHistory() != null
-                && !request.conversationHistory().isEmpty()) {
+        var conversationHistory = safeConversationHistory(request.conversationHistory());
+        if (!outcome.condensed() && queryRewriter != null && !conversationHistory.isEmpty()) {
             rewrittenMono =
                     queryRewriter
-                            .rewrite(
-                                    request.memoryId(),
-                                    request.query(),
-                                    request.conversationHistory())
+                            .rewrite(request.memoryId(), effectiveQuery, conversationHistory)
                             .onErrorResume(
                                     e -> {
                                         log.warn("Query rewriting failed, using original query", e);
-                                        return Mono.just(request.query());
+                                        return Mono.just(effectiveQuery);
                                     });
         } else {
-            rewrittenMono = Mono.just(request.query());
+            rewrittenMono = Mono.just(effectiveQuery);
         }
 
         return rewrittenMono.flatMap(
@@ -136,7 +281,7 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
                                     request.memoryId(),
                                     request.query(),
                                     rewritten.equals(request.query()) ? null : rewritten,
-                                    request.conversationHistory(),
+                                    conversationHistory,
                                     request.metadata(),
                                     request.scope(),
                                     request.categories());
@@ -183,10 +328,25 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
                                                 e);
                                         return Mono.just(
                                                 RetrievalResult.empty(
-                                                        config.strategyName(), request.query()));
+                                                        config.strategyName(), effectiveQuery));
                                     });
                 });
     }
+
+    private static List<String> safeConversationHistory(List<String> conversationHistory) {
+        return conversationHistory == null ? List.of() : conversationHistory;
+    }
+
+    private static void logAdmissionRejection(RetrievalAdmissionResult admission) {
+        log.debug(
+                "Retrieval admission {}: reason={}, chars={}, tokens={}",
+                admission.decision(),
+                admission.reason(),
+                admission.charCount(),
+                admission.tokenCount());
+    }
+
+    private record AdmissionOutcome(String effectiveQuery, boolean condensed) {}
 
     @Override
     public void onDataChanged(MemoryId memoryId) {

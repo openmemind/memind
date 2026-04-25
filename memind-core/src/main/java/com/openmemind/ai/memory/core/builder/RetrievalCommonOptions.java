@@ -13,9 +13,20 @@
  */
 package com.openmemind.ai.memory.core.builder;
 
-public record RetrievalCommonOptions(boolean cacheEnabled) {
+import com.openmemind.ai.memory.core.retrieval.admission.RetrievalAdmissionOptions;
+import java.util.Objects;
+
+public record RetrievalCommonOptions(boolean cacheEnabled, RetrievalAdmissionOptions admission) {
+
+    public RetrievalCommonOptions {
+        admission = Objects.requireNonNull(admission, "admission");
+    }
+
+    public RetrievalCommonOptions(boolean cacheEnabled) {
+        this(cacheEnabled, RetrievalAdmissionOptions.defaults());
+    }
 
     public static RetrievalCommonOptions defaults() {
-        return new RetrievalCommonOptions(true);
+        return new RetrievalCommonOptions(true, RetrievalAdmissionOptions.defaults());
     }
 }

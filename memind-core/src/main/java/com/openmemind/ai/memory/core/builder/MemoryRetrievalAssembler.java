@@ -16,12 +16,15 @@ package com.openmemind.ai.memory.core.builder;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
+import com.openmemind.ai.memory.core.retrieval.admission.DefaultRetrievalAdmissionPolicy;
 import com.openmemind.ai.memory.core.retrieval.cache.CaffeineRetrievalCache;
 import com.openmemind.ai.memory.core.retrieval.cache.RetrievalCache;
 import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.deep.TypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.graph.DefaultRetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistant;
+import com.openmemind.ai.memory.core.retrieval.query.LlmLongQueryCondenser;
+import com.openmemind.ai.memory.core.retrieval.query.LongQueryCondenser;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepRetrievalStrategy;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.strategy.SimpleRetrievalStrategy;
@@ -86,9 +89,21 @@ final class MemoryRetrievalAssembler {
                         memoryThreadAssistant);
 
         RetrievalCache retrievalCache = new CaffeineRetrievalCache();
+        var admissionOptions = context.options().retrieval().common().admission();
+        var admissionPolicy = new DefaultRetrievalAdmissionPolicy(admissionOptions);
+        LongQueryCondenser longQueryCondenser =
+                new LlmLongQueryCondenser(
+                        registry.resolve(ChatClientSlot.LONG_QUERY_CONDENSER),
+                        context.promptRegistry());
         DefaultMemoryRetriever memoryRetriever =
                 new DefaultMemoryRetriever(
-                        retrievalCache, context.memoryStore(), context.textSearch());
+                        retrievalCache,
+                        context.memoryStore(),
+                        context.textSearch(),
+                        null,
+                        admissionPolicy,
+                        admissionOptions,
+                        longQueryCondenser);
         memoryRetriever.registerStrategy(simpleRetrievalStrategy);
         memoryRetriever.registerStrategy(deepRetrievalStrategy);
         return memoryRetriever;
