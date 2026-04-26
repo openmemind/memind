@@ -22,13 +22,32 @@ import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.CommitDetectorConfig;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
+import com.openmemind.ai.memory.core.extraction.insight.graph.DefaultInsightGraphAssistant;
+import com.openmemind.ai.memory.core.extraction.insight.graph.NoOpInsightGraphAssistant;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildConfig;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
+import com.openmemind.ai.memory.core.extraction.item.MemoryItemLayer;
+import com.openmemind.ai.memory.core.extraction.item.graph.EntityResolutionMode;
+import com.openmemind.ai.memory.core.extraction.item.graph.NoOpItemGraphMaterializer;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.ConservativeHeuristicEntityResolutionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.DefaultEntityCandidateRetriever;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.EntityResolutionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.ExactCanonicalEntityResolutionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.graph.pipeline.DefaultItemGraphMaterializer;
+import com.openmemind.ai.memory.core.extraction.item.graph.plan.DefaultItemGraphPlanner;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawDataLayer;
+import com.openmemind.ai.memory.core.extraction.thread.CoalescingThreadWakeScheduler;
+import com.openmemind.ai.memory.core.extraction.thread.MemoryThreadLayer;
+import com.openmemind.ai.memory.core.extraction.thread.NoOpThreadDerivationMetrics;
+import com.openmemind.ai.memory.core.extraction.thread.ThreadIntakeWorker;
+import com.openmemind.ai.memory.core.extraction.thread.ThreadMaterializationPolicy;
+import com.openmemind.ai.memory.core.extraction.thread.ThreadMaterializationPolicyFactory;
+import com.openmemind.ai.memory.core.extraction.thread.ThreadProjectionRebuilder;
+import com.openmemind.ai.memory.core.extraction.thread.ThreadWakeScheduler;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
@@ -38,17 +57,35 @@ import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
+import com.openmemind.ai.memory.core.retrieval.admission.DefaultRetrievalAdmissionPolicy;
+import com.openmemind.ai.memory.core.retrieval.graph.NoOpRetrievalGraphAssistant;
+import com.openmemind.ai.memory.core.retrieval.query.LlmLongQueryCondenser;
+import com.openmemind.ai.memory.core.retrieval.query.LongQueryCondenser;
+import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
+import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
+import com.openmemind.ai.memory.core.retrieval.thread.DefaultMemoryThreadAssistant;
+import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.graph.GraphOperations;
+import com.openmemind.ai.memory.core.store.graph.GraphOperationsCapabilities;
+import com.openmemind.ai.memory.core.store.graph.InMemoryGraphOperations;
+import com.openmemind.ai.memory.core.store.insight.InMemoryInsightOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
+import com.openmemind.ai.memory.core.store.item.InMemoryItemOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
+import com.openmemind.ai.memory.core.store.rawdata.InMemoryRawDataOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingItemGraphMaterializer;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryThreadAssistant;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.lang.reflect.Proxy;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -174,6 +211,115 @@ class MemoryAssemblersTest {
     }
 
     @Test
+    void retrievalAssemblerWiresAdmissionPolicyAndOptions() {
+        var retriever =
+                new MemoryRetrievalAssembler()
+                        .assemble(context(MemoryBuildOptions.defaults(), null, null));
+
+        assertThat(readField(retriever, "admissionPolicy", Object.class))
+                .isInstanceOf(DefaultRetrievalAdmissionPolicy.class);
+        assertThat(readField(retriever, "admissionOptions", Object.class))
+                .isEqualTo(MemoryBuildOptions.defaults().retrieval().common().admission());
+    }
+
+    @Test
+    void retrievalAssemblerWiresLlmLongQueryCondenserWhenChatClientExists() {
+        var retriever =
+                new MemoryRetrievalAssembler()
+                        .assemble(context(MemoryBuildOptions.defaults(), null, null));
+
+        assertThat(readField(retriever, "longQueryCondenser", LongQueryCondenser.class))
+                .isInstanceOf(LlmLongQueryCondenser.class);
+    }
+
+    @Test
+    void retrievalAssemblerAlwaysWiresRuntimeGraphAssistantIntoBothStrategies() {
+        var retriever =
+                new MemoryRetrievalAssembler()
+                        .assemble(context(MemoryBuildOptions.defaults(), null, null));
+
+        @SuppressWarnings("unchecked")
+        var strategies = readField(retriever, "strategies", Map.class);
+        var simple = strategies.get(RetrievalStrategies.SIMPLE);
+        var deep = strategies.get(RetrievalStrategies.DEEP_RETRIEVAL);
+
+        assertThat(readField(simple, "graphAssistant", Object.class))
+                .isNotInstanceOf(NoOpRetrievalGraphAssistant.class);
+        assertThat(readField(deep, "graphAssistant", Object.class))
+                .isNotInstanceOf(NoOpRetrievalGraphAssistant.class);
+    }
+
+    @Test
+    void retrievalAssemblerWiresRuntimeThreadAssistantAndClampedCapsWhenEnabled() {
+        var options =
+                MemoryBuildOptions.builder()
+                        .memoryThread(
+                                MemoryThreadOptions.defaults()
+                                        .withEnabled(true)
+                                        .withRule(
+                                                MemoryThreadRuleOptions.defaults()
+                                                        .withMaxRetrievalMembersPerThread(1)))
+                        .retrieval(
+                                new RetrievalOptions(
+                                        RetrievalCommonOptions.defaults(),
+                                        new SimpleRetrievalOptions(
+                                                Duration.ofSeconds(10),
+                                                5,
+                                                15,
+                                                5,
+                                                true,
+                                                SimpleRetrievalGraphOptions.defaults(),
+                                                new SimpleMemoryThreadAssistOptions(
+                                                        true, 2, 5, 2, Duration.ofMillis(150))),
+                                        new DeepRetrievalOptions(
+                                                Duration.ofSeconds(120),
+                                                5,
+                                                50,
+                                                false,
+                                                0,
+                                                QueryExpansionOptions.defaults(),
+                                                SufficiencyOptions.defaults(),
+                                                DeepRetrievalGraphOptions.defaults(),
+                                                new DeepMemoryThreadAssistOptions(
+                                                        true, 2, 5, 2, Duration.ofMillis(150))),
+                                        RetrievalAdvancedOptions.defaults()))
+                        .build();
+        var retriever = new MemoryRetrievalAssembler().assemble(context(options, null, null));
+
+        @SuppressWarnings("unchecked")
+        var strategies = readField(retriever, "strategies", Map.class);
+        var simple = strategies.get(RetrievalStrategies.SIMPLE);
+        var deep = strategies.get(RetrievalStrategies.DEEP_RETRIEVAL);
+
+        assertThat(readField(simple, "memoryThreadAssistant", Object.class))
+                .isInstanceOf(TracingMemoryThreadAssistant.class);
+        assertThat(readField(deep, "memoryThreadAssistant", Object.class))
+                .isInstanceOf(TracingMemoryThreadAssistant.class);
+        assertThat(
+                        readField(
+                                readField(simple, "memoryThreadAssistant", Object.class),
+                                "delegate",
+                                Object.class))
+                .isInstanceOf(DefaultMemoryThreadAssistant.class);
+        assertThat(
+                        readField(
+                                readField(deep, "memoryThreadAssistant", Object.class),
+                                "delegate",
+                                Object.class))
+                .isInstanceOf(DefaultMemoryThreadAssistant.class);
+        assertThat(
+                        readField(simple, "defaultStrategyConfig", SimpleStrategyConfig.class)
+                                .memoryThreadAssist()
+                                .maxMembersPerThread())
+                .isEqualTo(1);
+        assertThat(
+                        readField(deep, "defaultStrategyConfig", DeepStrategyConfig.class)
+                                .memoryThreadAssist()
+                                .maxMembersPerThread())
+                .isEqualTo(1);
+    }
+
+    @Test
     void extractionAssemblerFallsBackToDefaultResourceFetcherWhenMissing() {
         var assembly =
                 new MemoryExtractionAssembler()
@@ -181,6 +327,309 @@ class MemoryAssemblersTest {
         var extractor = (DefaultMemoryExtractor) assembly.pipeline();
 
         assertThat(readField(extractor, "resourceFetcher", ResourceFetcher.class)).isNotNull();
+    }
+
+    @Test
+    void extractionAssemblerWrapsMemoryItemStepWithMemoryThreadLayerWhenEnabled() {
+        var options =
+                MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults().withEnabled(true)),
+                                        InsightExtractionOptions.defaults()))
+                        .memoryThread(
+                                MemoryThreadOptions.defaults()
+                                        .withEnabled(true)
+                                        .withDerivation(
+                                                MemoryThreadDerivationOptions.defaults()
+                                                        .withEnabled(true)))
+                        .build();
+
+        var assembly = new MemoryExtractionAssembler().assemble(context(options, null, null));
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
+
+        assertThat(readField(extractor, "memoryItemStep", Object.class))
+                .isInstanceOf(MemoryThreadLayer.class);
+        assertThat(assembly.memoryThreadLayer()).isNotNull();
+    }
+
+    @Test
+    void extractionAssemblerBuildsMemoryThreadPolicyFromPublicOptions() {
+        var options =
+                MemoryBuildOptions.builder()
+                        .memoryThread(
+                                MemoryThreadOptions.defaults()
+                                        .withEnabled(true)
+                                        .withDerivation(
+                                                MemoryThreadDerivationOptions.defaults()
+                                                        .withEnabled(true))
+                                        .withRule(
+                                                new MemoryThreadRuleOptions(0.82d, 0.74d, 5, 32, 6))
+                                        .withLifecycle(
+                                                new MemoryThreadLifecycleOptions(
+                                                        Duration.ofDays(9), Duration.ofDays(28))))
+                        .build();
+
+        var assembly = new MemoryExtractionAssembler().assemble(context(options, null, null));
+        var expectedPolicy = ThreadMaterializationPolicyFactory.from(options.memoryThread());
+        var actualPolicy =
+                readField(
+                        assembly.memoryThreadLayer(), "policy", ThreadMaterializationPolicy.class);
+
+        assertThat(actualPolicy).isEqualTo(expectedPolicy);
+    }
+
+    @Test
+    void extractionAssemblerWiresReplayableEnrichmentStoreIntoThreadMaterializersWhenEnabled() {
+        var store = new InMemoryMemoryStore();
+        var options =
+                MemoryBuildOptions.builder()
+                        .memoryThread(
+                                MemoryThreadOptions.defaults()
+                                        .withEnabled(true)
+                                        .withDerivation(
+                                                MemoryThreadDerivationOptions.defaults()
+                                                        .withEnabled(true))
+                                        .withEnrichment(
+                                                MemoryThreadEnrichmentOptions.defaults()
+                                                        .withEnabled(true)))
+                        .build();
+
+        var assembly =
+                new MemoryExtractionAssembler()
+                        .assemble(context(options, null, null, List.of(), store));
+        var layer = assembly.memoryThreadLayer();
+        var scheduler = readField(layer, "scheduler", ThreadWakeScheduler.class);
+        var worker = readField(scheduler, "worker", ThreadIntakeWorker.class);
+        var rebuilder = readField(layer, "rebuilder", ThreadProjectionRebuilder.class);
+        var workerMaterializer = readField(worker, "materializer", Object.class);
+        var rebuilderMaterializer = readField(rebuilder, "materializer", Object.class);
+
+        assertThat(scheduler).isInstanceOf(CoalescingThreadWakeScheduler.class);
+        assertThat(readField(workerMaterializer, "enrichmentInputStore", Object.class))
+                .isSameAs(store.threadEnrichmentInputStore());
+        assertThat(readField(rebuilderMaterializer, "enrichmentInputStore", Object.class))
+                .isSameAs(store.threadEnrichmentInputStore());
+    }
+
+    @Test
+    void extractionAssemblerWiresSharedNoOpThreadDerivationMetricsByDefault() {
+        var store = new InMemoryMemoryStore();
+        var options =
+                MemoryBuildOptions.builder()
+                        .memoryThread(
+                                MemoryThreadOptions.defaults()
+                                        .withEnabled(true)
+                                        .withDerivation(
+                                                MemoryThreadDerivationOptions.defaults()
+                                                        .withEnabled(true)))
+                        .build();
+
+        var assembly =
+                new MemoryExtractionAssembler()
+                        .assemble(context(options, null, null, List.of(), store));
+        var layer = assembly.memoryThreadLayer();
+        var scheduler = readField(layer, "scheduler", ThreadWakeScheduler.class);
+        var worker = readField(scheduler, "worker", ThreadIntakeWorker.class);
+        var rebuilder = readField(layer, "rebuilder", ThreadProjectionRebuilder.class);
+        var layerMetrics = readField(layer, "metrics", Object.class);
+
+        assertThat(layerMetrics).isInstanceOf(NoOpThreadDerivationMetrics.class);
+        assertThat(readField(worker, "metrics", Object.class)).isSameAs(layerMetrics);
+        assertThat(readField(rebuilder, "metrics", Object.class)).isSameAs(layerMetrics);
+    }
+
+    @Test
+    void extractionAssemblerWiresExactResolutionByDefault() {
+        var assembly =
+                new MemoryExtractionAssembler()
+                        .assemble(
+                                context(
+                                        graphEnabledBuildOptions(),
+                                        null,
+                                        null,
+                                        List.of(),
+                                        new InMemoryMemoryStore()));
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
+        var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+        var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
+        var delegate = readField(tracing, "delegate", DefaultItemGraphMaterializer.class);
+
+        assertThat(readResolutionStrategy(delegate))
+                .isInstanceOf(ExactCanonicalEntityResolutionStrategy.class);
+    }
+
+    @Test
+    void extractionAssemblerFallsBackToPersistItemsOnlyWhenCommitCoordinatorIsUnavailable() {
+        MemoryStore unsupportedStore =
+                new MemoryStore() {
+                    @Override
+                    public RawDataOperations rawDataOperations() {
+                        return new InMemoryRawDataOperations();
+                    }
+
+                    @Override
+                    public ItemOperations itemOperations() {
+                        return new InMemoryItemOperations();
+                    }
+
+                    @Override
+                    public InsightOperations insightOperations() {
+                        return new InMemoryInsightOperations();
+                    }
+
+                    @Override
+                    public GraphOperations graphOperations() {
+                        return new InMemoryGraphOperations();
+                    }
+                };
+
+        var assembly =
+                new MemoryExtractionAssembler()
+                        .assemble(
+                                context(
+                                        graphEnabledBuildOptions(),
+                                        null,
+                                        null,
+                                        List.of(),
+                                        unsupportedStore));
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
+        var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+
+        assertThat(readField(itemLayer, "graphMaterializer", Object.class))
+                .isInstanceOf(NoOpItemGraphMaterializer.class);
+    }
+
+    @Test
+    void extractionAssemblerWiresConservativeResolutionWhenRequested() {
+        var options =
+                MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults()
+                                                        .withEnabled(true)
+                                                        .withResolutionMode(
+                                                                com.openmemind.ai.memory.core
+                                                                        .extraction.item.graph
+                                                                        .EntityResolutionMode
+                                                                        .CONSERVATIVE)),
+                                        InsightExtractionOptions.defaults()))
+                        .build();
+
+        var assembly =
+                new MemoryExtractionAssembler()
+                        .assemble(
+                                context(options, null, null, List.of(), new InMemoryMemoryStore()));
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
+        var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+        var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
+        var delegate = readField(tracing, "delegate", DefaultItemGraphMaterializer.class);
+
+        assertThat(readResolutionStrategy(delegate))
+                .isInstanceOf(ConservativeHeuristicEntityResolutionStrategy.class);
+    }
+
+    @Test
+    void extractionAssemblerWiresHistoricalAliasAwareRetrieverWhenCapabilityExists() {
+        var store = new InMemoryMemoryStore();
+        var options =
+                MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults()
+                                                        .withEnabled(true)
+                                                        .withResolutionMode(
+                                                                EntityResolutionMode.CONSERVATIVE)),
+                                        InsightExtractionOptions.defaults()))
+                        .build();
+
+        var assembly =
+                new MemoryExtractionAssembler()
+                        .assemble(context(options, null, null, List.of(), store));
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
+        var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+        var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
+        var delegate = readField(tracing, "delegate", DefaultItemGraphMaterializer.class);
+        var strategy = readResolutionStrategy(delegate);
+
+        assertThat(strategy).isInstanceOf(ConservativeHeuristicEntityResolutionStrategy.class);
+        assertThat(readField(strategy, "candidateRetriever", Object.class))
+                .isInstanceOf(DefaultEntityCandidateRetriever.class);
+        assertThat(
+                        readField(
+                                readField(strategy, "candidateRetriever", Object.class),
+                                "historicalAliasLookupEnabled",
+                                Boolean.class))
+                .isTrue();
+    }
+
+    @Test
+    void extractionAssemblerDisablesHistoricalAliasRetrievalWhenCapabilityIsMissing() {
+        MemoryStore stageTwoOnlyStore =
+                new InMemoryMemoryStore() {
+                    @Override
+                    public GraphOperationsCapabilities graphOperationsCapabilities() {
+                        return new GraphOperationsCapabilities() {
+                            @Override
+                            public boolean supportsBoundedEntityKeyLookup() {
+                                return true;
+                            }
+
+                            @Override
+                            public boolean supportsHistoricalAliasLookup() {
+                                return false;
+                            }
+                        };
+                    }
+                };
+
+        var options =
+                MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults()
+                                                        .withEnabled(true)
+                                                        .withResolutionMode(
+                                                                EntityResolutionMode.CONSERVATIVE)),
+                                        InsightExtractionOptions.defaults()))
+                        .build();
+
+        var assembly =
+                new MemoryExtractionAssembler()
+                        .assemble(context(options, null, null, List.of(), stageTwoOnlyStore));
+        var extractor = (DefaultMemoryExtractor) assembly.pipeline();
+        var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+        var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
+        var delegate = readField(tracing, "delegate", DefaultItemGraphMaterializer.class);
+        var strategy = readResolutionStrategy(delegate);
+
+        assertThat(strategy).isInstanceOf(ConservativeHeuristicEntityResolutionStrategy.class);
+        assertThat(
+                        readField(
+                                readField(strategy, "candidateRetriever", Object.class),
+                                "historicalAliasLookupEnabled",
+                                Boolean.class))
+                .isFalse();
     }
 
     @Test
@@ -199,7 +648,9 @@ class MemoryAssemblersTest {
                         null,
                         null,
                         List.of(),
-                        customBubbleTracker);
+                        customBubbleTracker,
+                        null,
+                        Optional.empty());
 
         var assembly = new MemoryExtractionAssembler().assemble(context);
         var scheduler =
@@ -208,6 +659,74 @@ class MemoryAssemblersTest {
 
         assertThat(readField(reorganizer, "bubbleTracker", BubbleTrackerStore.class))
                 .isSameAs(customBubbleTracker);
+    }
+
+    @Test
+    void extractionAssemblerKeepsInsightGraphAssistantNoOpWhenItemGraphIsDisabled() {
+        var context =
+                context(
+                        MemoryBuildOptions.builder()
+                                .extraction(
+                                        new ExtractionOptions(
+                                                ExtractionCommonOptions.defaults(),
+                                                RawDataExtractionOptions.defaults(),
+                                                new ItemExtractionOptions(
+                                                        false,
+                                                        PromptBudgetOptions.defaults(),
+                                                        ItemGraphOptions.defaults()
+                                                                .withEnabled(false)),
+                                                new InsightExtractionOptions(
+                                                        true,
+                                                        InsightBuildConfig.defaults(),
+                                                        InsightGraphAssistOptions.defaults()
+                                                                .withEnabled(true))))
+                                .build(),
+                        CONTENT_PARSER_REGISTRY,
+                        RESOURCE_FETCHER);
+
+        var assembly = new MemoryExtractionAssembler().assemble(context);
+        var scheduler =
+                readField(assembly.insightLayer(), "scheduler", InsightBuildScheduler.class);
+        var reorganizer = readField(scheduler, "treeReorganizer", InsightTreeReorganizer.class);
+
+        assertThat(readField(scheduler, "graphAssistant", Object.class))
+                .isInstanceOf(NoOpInsightGraphAssistant.class);
+        assertThat(readField(reorganizer, "graphAssistant", Object.class))
+                .isInstanceOf(NoOpInsightGraphAssistant.class);
+    }
+
+    @Test
+    void extractionAssemblerBuildsInsightGraphAssistantWhenBothGraphSwitchesAreEnabled() {
+        var context =
+                context(
+                        MemoryBuildOptions.builder()
+                                .extraction(
+                                        new ExtractionOptions(
+                                                ExtractionCommonOptions.defaults(),
+                                                RawDataExtractionOptions.defaults(),
+                                                new ItemExtractionOptions(
+                                                        false,
+                                                        PromptBudgetOptions.defaults(),
+                                                        ItemGraphOptions.defaults()
+                                                                .withEnabled(true)),
+                                                new InsightExtractionOptions(
+                                                        true,
+                                                        InsightBuildConfig.defaults(),
+                                                        InsightGraphAssistOptions.defaults()
+                                                                .withEnabled(true))))
+                                .build(),
+                        CONTENT_PARSER_REGISTRY,
+                        RESOURCE_FETCHER);
+
+        var assembly = new MemoryExtractionAssembler().assemble(context);
+        var scheduler =
+                readField(assembly.insightLayer(), "scheduler", InsightBuildScheduler.class);
+        var reorganizer = readField(scheduler, "treeReorganizer", InsightTreeReorganizer.class);
+
+        assertThat(readField(scheduler, "graphAssistant", Object.class))
+                .isInstanceOf(DefaultInsightGraphAssistant.class);
+        assertThat(readField(reorganizer, "graphAssistant", Object.class))
+                .isInstanceOf(DefaultInsightGraphAssistant.class);
     }
 
     @Test
@@ -256,9 +775,19 @@ class MemoryAssemblersTest {
             ContentParserRegistry contentParserRegistry,
             ResourceFetcher resourceFetcher,
             List<RawDataPlugin> rawDataPlugins) {
+        return context(
+                options, contentParserRegistry, resourceFetcher, rawDataPlugins, MEMORY_STORE);
+    }
+
+    static MemoryAssemblyContext context(
+            MemoryBuildOptions options,
+            ContentParserRegistry contentParserRegistry,
+            ResourceFetcher resourceFetcher,
+            List<RawDataPlugin> rawDataPlugins,
+            MemoryStore store) {
         return new MemoryAssemblyContext(
                 new ChatClientRegistry(CHAT_CLIENT, Map.<ChatClientSlot, StructuredChatClient>of()),
-                MEMORY_STORE,
+                store,
                 MEMORY_BUFFER,
                 TEXT_SEARCH,
                 MEMORY_VECTOR,
@@ -268,7 +797,9 @@ class MemoryAssemblersTest {
                 contentParserRegistry,
                 resourceFetcher,
                 rawDataPlugins,
-                null);
+                null,
+                null,
+                Optional.empty());
     }
 
     @SuppressWarnings("unchecked")
@@ -340,9 +871,29 @@ class MemoryAssemblersTest {
         }
     }
 
+    private static EntityResolutionStrategy readResolutionStrategy(
+            DefaultItemGraphMaterializer materializer) {
+        var planner = readField(materializer, "planner", DefaultItemGraphPlanner.class);
+        return readField(planner, "resolutionStrategy", EntityResolutionStrategy.class);
+    }
+
     private static void assertDefaultCoreProcessors(RawContentProcessorRegistry processorRegistry) {
         assertThat(processorRegistry.all())
                 .extracting(RawContentProcessor::contentType)
                 .containsExactly("CONVERSATION");
+    }
+
+    private static MemoryBuildOptions graphEnabledBuildOptions() {
+        return MemoryBuildOptions.builder()
+                .extraction(
+                        new ExtractionOptions(
+                                ExtractionCommonOptions.defaults(),
+                                RawDataExtractionOptions.defaults(),
+                                new ItemExtractionOptions(
+                                        false,
+                                        PromptBudgetOptions.defaults(),
+                                        ItemGraphOptions.defaults().withEnabled(true)),
+                                InsightExtractionOptions.defaults()))
+                .build();
     }
 }

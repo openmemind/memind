@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.core.prompt.extraction.item;
 
+import com.openmemind.ai.memory.core.builder.ItemGraphOptions;
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
@@ -150,6 +151,8 @@ public final class MemoryItemUnifiedPrompts {
             canonical half-open bucket in the System Time Zone before converting to UTC.
             - During rollout the parser still tolerates legacy `occurredAt`, but your response \
             should use `time`.
+            {{GRAPH_HINT_RULES}}
+            {{THREAD_SEMANTICS_RULES}}
             """;
 
     private static final String OUTPUT =
@@ -169,6 +172,8 @@ public final class MemoryItemUnifiedPrompts {
                     "granularity": "point"
                   },
                   "insightTypes": ["Choose ONLY from the Available insightTypes listed under the assigned category"],
+            {{THREAD_SEMANTICS_OUTPUT_FIELDS}}
+            {{GRAPH_OUTPUT_FIELDS}}
                   "category_reason": "CRITICAL: Briefly explain WHY this category was chosen based on the rules. This field is for reasoning only and will NOT be stored.",
                   "category": "<matched_category_from_list>"
                 }
@@ -449,12 +454,29 @@ public final class MemoryItemUnifiedPrompts {
             String userName,
             Set<MemoryCategory> categories) {
         return build(
+                insightTypes,
+                segmentText,
+                referenceTime,
+                userName,
+                categories,
+                ItemGraphOptions.defaults());
+    }
+
+    public static PromptTemplate build(
+            List<MemoryInsightType> insightTypes,
+            String segmentText,
+            Instant referenceTime,
+            String userName,
+            Set<MemoryCategory> categories,
+            ItemGraphOptions graphOptions) {
+        return build(
                 PromptRegistry.EMPTY,
                 insightTypes,
                 segmentText,
                 referenceTime,
                 userName,
-                categories);
+                categories,
+                graphOptions);
     }
 
     public static PromptTemplate buildDefault() {
@@ -479,6 +501,24 @@ public final class MemoryItemUnifiedPrompts {
             Instant referenceTime,
             String userName,
             Set<MemoryCategory> categories) {
+        return build(
+                registry,
+                insightTypes,
+                segmentText,
+                referenceTime,
+                userName,
+                categories,
+                ItemGraphOptions.defaults());
+    }
+
+    public static PromptTemplate build(
+            PromptRegistry registry,
+            List<MemoryInsightType> insightTypes,
+            String segmentText,
+            Instant referenceTime,
+            String userName,
+            Set<MemoryCategory> categories,
+            ItemGraphOptions graphOptions) {
 
         PromptTemplate.Builder builder =
                 registry.hasOverride(PromptType.MEMORY_ITEM_UNIFIED)
@@ -493,8 +533,109 @@ public final class MemoryItemUnifiedPrompts {
                 .variable("IDENTITY_CONTEXT", buildIdentityContext(userName))
                 .variable("SUBJECT_CONTEXT", buildSubjectClarityContext(userName))
                 .variable("TEMPORAL_CONTEXT", buildTimeContext(segmentText, referenceTime))
+                .variable("GRAPH_HINT_RULES", buildGraphHintRules(graphOptions))
+                .variable("THREAD_SEMANTICS_RULES", buildThreadSemanticsRules())
+                .variable("THREAD_SEMANTICS_OUTPUT_FIELDS", buildThreadSemanticsOutputFields())
+                .variable("GRAPH_OUTPUT_FIELDS", buildGraphOutputFields(graphOptions))
                 .variable("CONVERSATION", segmentText != null ? segmentText : "")
                 .build();
+    }
+
+    private static String buildThreadSemanticsRules() {
+        return """
+
+        ## threadSemantics
+        - Optional. Emit only when the item clearly contains durable thread-relevant meaning.
+        - If emitted, `threadSemantics.version` must be `1`.
+        - Use `threadSemantics.markers` for strong semantic events such as `STATE_CHANGE`, `BLOCKER_ADDED`, `DECISION_MADE`, `QUESTION_OPENED`, `MILESTONE_REACHED`, or `RESOLUTION_DECLARED`.
+        - Use `threadSemantics.canonicalRefs` for typed stable refs like `project`, `person`, `organization`, or `topic`.
+        - Use `threadSemantics.continuityLinks` only for explicit continuation evidence pointing to an earlier item.
+        - If unsure, omit `threadSemantics` entirely.
+        """;
+    }
+
+    private static String buildGraphHintRules(ItemGraphOptions graphOptions) {
+        if (graphOptions == null || !graphOptions.enabled()) {
+            return "";
+        }
+        return """
+
+        ## Graph Hints
+        - Include `"entities"` only for concrete, high-value named entities; keep at most %d per item.
+        - Allowed `"entityType"` values are `person`, `organization`, `place`, `object`, `concept`, and `special`.
+        - Use "special" only for conversational role anchors such as self, user, or assistant; do not label arbitrary nouns as special.
+        - Good entities: named people, organizations, places, durable objects, and durable concepts central to the item.
+        - Bad entities: pronouns, generic nouns, dates, categories, vague topics, or entities not grounded in the source.
+        - Include `"causalRelations"` only for strong explicit cause/effect links inside this response; keep at most %d per item.
+        - Good causal relation: one item states a cause, trigger, enabler, or motivation for another item.
+        - Bad causal relation: not for topical similarity, not for ownership or dependency, and not for simple co-occurrence.
+        - `"entities"` uses objects with `"name"`, `"entityType"`, optional `"salience"`, and optional `"aliasObservations"`.
+        - Each `"aliasObservations"` entry uses `"aliasSurface"`, `"aliasClass"`, optional `"evidenceSource"`, and optional `"confidence"`.
+        - Allowed `"aliasClass"` values are `case_only`, `punctuation`, `spacing`, `org_suffix`, `explicit_parenthetical`, `explicit_slash_apposition`, and `user_dictionary`.
+        - `"causalRelations"` uses objects with `"causeIndex"`, `"effectIndex"`, `"relationType"`, and `"strength"` in [0,1].
+        - If you emit a causal relation, include an explicit strength in [0,1]; otherwise omit the relation.
+        - causeIndex and effectIndex must reference different items in the same response.
+        - Prefer omission to hallucinated graph structure.
+        """
+                .formatted(
+                        graphOptions.maxEntitiesPerItem(),
+                        graphOptions.maxCausalReferencesPerItem());
+    }
+
+    private static String buildThreadSemanticsOutputFields() {
+        return "      \"threadSemantics\": {\n"
+                + "        \"version\": 1,\n"
+                + "        \"markers\": [\n"
+                + "          {\n"
+                + "            \"type\": \"STATE_CHANGE\",\n"
+                + "            \"objectRef\": \"project:alpha\",\n"
+                + "            \"summary\": \"Project alpha moved into implementation\",\n"
+                + "            \"fromState\": \"planning\",\n"
+                + "            \"toState\": \"implementation\"\n"
+                + "          }\n"
+                + "        ],\n"
+                + "        \"canonicalRefs\": [\n"
+                + "          {\n"
+                + "            \"refType\": \"project\",\n"
+                + "            \"refKey\": \"alpha\"\n"
+                + "          }\n"
+                + "        ],\n"
+                + "        \"continuityLinks\": [\n"
+                + "          {\n"
+                + "            \"linkType\": \"CONTINUES\",\n"
+                + "            \"targetItemId\": 0\n"
+                + "          }\n"
+                + "        ]\n"
+                + "      },\n";
+    }
+
+    private static String buildGraphOutputFields(ItemGraphOptions graphOptions) {
+        if (graphOptions == null || !graphOptions.enabled()) {
+            return "";
+        }
+        return "      \"entities\": [\n"
+                + "        {\n"
+                + "          \"name\": \"OpenAI\",\n"
+                + "          \"entityType\": \"organization\",\n"
+                + "          \"salience\": 0.91,\n"
+                + "          \"aliasObservations\": [\n"
+                + "            {\n"
+                + "              \"aliasSurface\": \"开放人工智能\",\n"
+                + "              \"aliasClass\": \"explicit_parenthetical\",\n"
+                + "              \"evidenceSource\": \"entity_inline\",\n"
+                + "              \"confidence\": 0.93\n"
+                + "            }\n"
+                + "          ]\n"
+                + "        }\n"
+                + "      ],\n"
+                + "      \"causalRelations\": [\n"
+                + "        {\n"
+                + "          \"causeIndex\": 0,\n"
+                + "          \"effectIndex\": 1,\n"
+                + "          \"relationType\": \"caused_by\",\n"
+                + "          \"strength\": 0.88\n"
+                + "        }\n"
+                + "      ],\n";
     }
 
     private static PromptTemplate.Builder defaultBuilder() {

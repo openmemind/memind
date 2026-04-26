@@ -67,18 +67,19 @@ public class SpringAiMemoryVector implements MemoryVector {
 
     @Override
     public Mono<String> store(MemoryId memoryId, String text, Map<String, Object> metadata) {
+        return store(memoryId, UUID.randomUUID().toString(), text, metadata);
+    }
+
+    @Override
+    public Mono<String> store(
+            MemoryId memoryId, String vectorId, String text, Map<String, Object> metadata) {
         return Mono.fromCallable(
                         () -> {
-                            String vectorId = UUID.randomUUID().toString();
-
-                            Map<String, Object> fullMetadata = new HashMap<>();
-                            if (metadata != null) {
-                                fullMetadata.putAll(metadata);
-                            }
-                            fullMetadata.put(MEMORY_ID_KEY, memoryId.toIdentifier());
-                            fullMetadata.put(ORIGINAL_TEXT_KEY, text);
-
-                            Document document = new Document(vectorId, text, fullMetadata);
+                            Document document =
+                                    new Document(
+                                            vectorId,
+                                            text,
+                                            buildMetadata(memoryId, text, metadata));
                             vectorStore.add(List.of(document));
 
                             return vectorId;
@@ -90,29 +91,47 @@ public class SpringAiMemoryVector implements MemoryVector {
     @Override
     public Mono<List<String>> storeBatch(
             MemoryId memoryId, List<String> texts, List<Map<String, Object>> metadataList) {
+        List<String> vectorIds =
+                texts.stream().map(ignored -> UUID.randomUUID().toString()).toList();
+        return storeBatch(memoryId, vectorIds, texts, metadataList);
+    }
+
+    @Override
+    public Mono<List<String>> storeBatch(
+            MemoryId memoryId,
+            List<String> vectorIds,
+            List<String> texts,
+            List<Map<String, Object>> metadataList) {
         return Mono.fromCallable(
                         () -> {
-                            List<String> vectorIds = new ArrayList<>();
+                            if (vectorIds != null && vectorIds.size() != texts.size()) {
+                                throw new IllegalArgumentException(
+                                        "vectorIds must match texts size");
+                            }
+                            List<String> resolvedVectorIds =
+                                    vectorIds == null
+                                            ? texts.stream()
+                                                    .map(ignored -> UUID.randomUUID().toString())
+                                                    .toList()
+                                            : List.copyOf(vectorIds);
                             List<Document> documents = new ArrayList<>();
 
                             for (int i = 0; i < texts.size(); i++) {
-                                String vectorId = UUID.randomUUID().toString();
-                                vectorIds.add(vectorId);
-
-                                Map<String, Object> metadata = new HashMap<>();
-                                if (metadataList != null
-                                        && i < metadataList.size()
-                                        && metadataList.get(i) != null) {
-                                    metadata.putAll(metadataList.get(i));
-                                }
-                                metadata.put(MEMORY_ID_KEY, memoryId.toIdentifier());
-                                metadata.put(ORIGINAL_TEXT_KEY, texts.get(i));
-
-                                documents.add(new Document(vectorId, texts.get(i), metadata));
+                                documents.add(
+                                        new Document(
+                                                resolvedVectorIds.get(i),
+                                                texts.get(i),
+                                                buildMetadata(
+                                                        memoryId,
+                                                        texts.get(i),
+                                                        metadataList != null
+                                                                        && i < metadataList.size()
+                                                                ? metadataList.get(i)
+                                                                : null)));
                             }
 
                             vectorStore.add(documents);
-                            return vectorIds;
+                            return resolvedVectorIds;
                         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .retryWhen(VECTOR_RETRY);
@@ -217,6 +236,17 @@ public class SpringAiMemoryVector implements MemoryVector {
             return originalText.toString();
         }
         return doc.getText();
+    }
+
+    private Map<String, Object> buildMetadata(
+            MemoryId memoryId, String text, Map<String, Object> metadata) {
+        Map<String, Object> fullMetadata = new HashMap<>();
+        if (metadata != null) {
+            fullMetadata.putAll(metadata);
+        }
+        fullMetadata.put(MEMORY_ID_KEY, memoryId.toIdentifier());
+        fullMetadata.put(ORIGINAL_TEXT_KEY, text);
+        return fullMetadata;
     }
 
     private static List<Float> toFloatList(float[] array) {

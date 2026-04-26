@@ -22,10 +22,12 @@ public final class MemoryBuildOptions {
 
     private final ExtractionOptions extraction;
     private final RetrievalOptions retrieval;
+    private final MemoryThreadOptions memoryThread;
 
     private MemoryBuildOptions(Builder builder) {
         this.extraction = Objects.requireNonNull(builder.extraction, "extraction");
         this.retrieval = Objects.requireNonNull(builder.retrieval, "retrieval");
+        this.memoryThread = Objects.requireNonNull(builder.memoryThread, "memoryThread");
     }
 
     public static Builder builder() {
@@ -44,6 +46,10 @@ public final class MemoryBuildOptions {
         return retrieval;
     }
 
+    public MemoryThreadOptions memoryThread() {
+        return memoryThread;
+    }
+
     @Override
     public boolean equals(Object object) {
         if (this == object) {
@@ -53,12 +59,13 @@ public final class MemoryBuildOptions {
             return false;
         }
         return Objects.equals(extraction, that.extraction)
-                && Objects.equals(retrieval, that.retrieval);
+                && Objects.equals(retrieval, that.retrieval)
+                && Objects.equals(memoryThread, that.memoryThread);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(extraction, retrieval);
+        return Objects.hash(extraction, retrieval, memoryThread);
     }
 
     @Override
@@ -68,6 +75,8 @@ public final class MemoryBuildOptions {
                 + extraction
                 + ", retrieval="
                 + retrieval
+                + ", memoryThread="
+                + memoryThread
                 + '}';
     }
 
@@ -75,6 +84,7 @@ public final class MemoryBuildOptions {
 
         private ExtractionOptions extraction = ExtractionOptions.defaults();
         private RetrievalOptions retrieval = RetrievalOptions.defaults();
+        private MemoryThreadOptions memoryThread = MemoryThreadOptions.defaults();
 
         private Builder() {}
 
@@ -85,6 +95,11 @@ public final class MemoryBuildOptions {
 
         public Builder retrieval(RetrievalOptions retrieval) {
             this.retrieval = Objects.requireNonNull(retrieval, "retrieval");
+            return this;
+        }
+
+        public Builder memoryThread(MemoryThreadOptions memoryThread) {
+            this.memoryThread = Objects.requireNonNull(memoryThread, "memoryThread");
             return this;
         }
 

@@ -17,6 +17,11 @@ import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.graph.GraphOperations;
+import com.openmemind.ai.memory.core.store.graph.GraphOperationsCapabilities;
+import com.openmemind.ai.memory.core.store.graph.ItemGraphCommitOperations;
+import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentInputStore;
+import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlBubbleTrackerStore;
@@ -40,6 +45,8 @@ import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteInsightBuffer;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryStore;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryTextSearch;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteRecentConversationBuffer;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -83,6 +90,37 @@ public class JdbcPluginAutoConfiguration {
                         dataSource, resourceStore, objectMapper, createIfNotExist);
             }
         };
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(GraphOperations.class)
+    public GraphOperations graphOperations(MemoryStore memoryStore) {
+        return memoryStore.graphOperations();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(GraphOperationsCapabilities.class)
+    public GraphOperationsCapabilities graphOperationsCapabilities(MemoryStore memoryStore) {
+        return memoryStore.graphOperationsCapabilities();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(ItemGraphCommitOperations.class)
+    public ItemGraphCommitOperations itemGraphCommitOperations(MemoryStore memoryStore) {
+        return memoryStore.itemGraphCommitOperations();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(ThreadProjectionStore.class)
+    public ThreadProjectionStore threadProjectionStore(MemoryStore memoryStore) {
+        return narrowInterface(ThreadProjectionStore.class, memoryStore.threadOperations());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(ThreadEnrichmentInputStore.class)
+    public ThreadEnrichmentInputStore threadEnrichmentInputStore(MemoryStore memoryStore) {
+        return narrowInterface(
+                ThreadEnrichmentInputStore.class, memoryStore.threadEnrichmentInputStore());
     }
 
     @Bean
@@ -140,6 +178,21 @@ public class JdbcPluginAutoConfiguration {
             case MYSQL -> new MysqlBubbleTrackerStore(dataSource, createIfNotExist);
             case POSTGRESQL -> new PostgresqlBubbleTrackerStore(dataSource, createIfNotExist);
         };
+    }
+
+    private <T> T narrowInterface(Class<T> interfaceType, T delegate) {
+        Object proxy =
+                Proxy.newProxyInstance(
+                        interfaceType.getClassLoader(),
+                        new Class<?>[] {interfaceType},
+                        (proxyInstance, method, args) -> {
+                            try {
+                                return method.invoke(delegate, args);
+                            } catch (InvocationTargetException e) {
+                                throw e.getTargetException();
+                            }
+                        });
+        return interfaceType.cast(proxy);
     }
 
     private JdbcDialect detectDialect(DataSource dataSource) {

@@ -17,10 +17,19 @@ import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
 import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
+import com.openmemind.ai.memory.core.store.graph.GraphOperations;
+import com.openmemind.ai.memory.core.store.graph.GraphOperationsCapabilities;
+import com.openmemind.ai.memory.core.store.graph.ItemGraphCommitOperations;
+import com.openmemind.ai.memory.core.store.graph.NoOpGraphOperations;
+import com.openmemind.ai.memory.core.store.graph.NoOpItemGraphCommitOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
+import com.openmemind.ai.memory.core.store.thread.NoOpThreadEnrichmentInputStore;
+import com.openmemind.ai.memory.core.store.thread.NoOpThreadProjectionStore;
+import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentInputStore;
+import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -36,6 +45,26 @@ public interface MemoryStore extends AutoCloseable {
     ItemOperations itemOperations();
 
     InsightOperations insightOperations();
+
+    default GraphOperations graphOperations() {
+        return NoOpGraphOperations.INSTANCE;
+    }
+
+    default GraphOperationsCapabilities graphOperationsCapabilities() {
+        return GraphOperationsCapabilities.NONE;
+    }
+
+    default ItemGraphCommitOperations itemGraphCommitOperations() {
+        return NoOpItemGraphCommitOperations.INSTANCE;
+    }
+
+    default ThreadProjectionStore threadOperations() {
+        return NoOpThreadProjectionStore.INSTANCE;
+    }
+
+    default ThreadEnrichmentInputStore threadEnrichmentInputStore() {
+        return NoOpThreadEnrichmentInputStore.INSTANCE;
+    }
 
     default ResourceOperations resourceOperations() {
         throw new IllegalStateException(

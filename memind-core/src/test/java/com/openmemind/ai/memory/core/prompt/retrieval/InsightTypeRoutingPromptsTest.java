@@ -56,6 +56,24 @@ class InsightTypeRoutingPromptsTest {
     }
 
     @Test
+    @DisplayName("routing prompt should request types object wrapper")
+    void shouldRequestTypesObjectWrapper() {
+        var prompt =
+                InsightTypeRoutingPrompts.build(
+                                "What does the user do for work?",
+                                List.of("identity", "experiences"),
+                                Map.of(
+                                        "identity", "Stable user traits",
+                                        "experiences", "Time-bound events"))
+                        .render("English");
+
+        assertThat(prompt.systemPrompt())
+                .contains("\"types\"")
+                .contains("Return a JSON object")
+                .doesNotContain("Return a JSON array");
+    }
+
+    @Test
     @DisplayName("build with registry should replace insight type routing instructions")
     void buildWithRegistryUsesOverrideInstruction() {
         var registry =

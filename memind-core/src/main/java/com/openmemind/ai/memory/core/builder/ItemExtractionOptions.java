@@ -15,17 +15,24 @@ package com.openmemind.ai.memory.core.builder;
 
 import java.util.Objects;
 
-public record ItemExtractionOptions(boolean foresightEnabled, PromptBudgetOptions promptBudget) {
+public record ItemExtractionOptions(
+        boolean foresightEnabled, PromptBudgetOptions promptBudget, ItemGraphOptions graph) {
 
     public ItemExtractionOptions {
         promptBudget = Objects.requireNonNull(promptBudget, "promptBudget");
+        graph = Objects.requireNonNull(graph, "graph");
     }
 
     public ItemExtractionOptions(boolean foresightEnabled) {
-        this(foresightEnabled, PromptBudgetOptions.defaults());
+        this(foresightEnabled, PromptBudgetOptions.defaults(), ItemGraphOptions.defaults());
+    }
+
+    public ItemExtractionOptions(boolean foresightEnabled, PromptBudgetOptions promptBudget) {
+        this(foresightEnabled, promptBudget, ItemGraphOptions.defaults());
     }
 
     public static ItemExtractionOptions defaults() {
-        return new ItemExtractionOptions(false, PromptBudgetOptions.defaults());
+        return new ItemExtractionOptions(
+                false, PromptBudgetOptions.defaults(), ItemGraphOptions.defaults());
     }
 }

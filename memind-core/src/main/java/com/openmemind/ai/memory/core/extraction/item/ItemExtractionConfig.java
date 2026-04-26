@@ -14,6 +14,7 @@
 package com.openmemind.ai.memory.core.extraction.item;
 
 import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
+import com.openmemind.ai.memory.core.builder.ItemGraphOptions;
 import com.openmemind.ai.memory.core.builder.PromptBudgetOptions;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
@@ -30,6 +31,7 @@ import java.util.Set;
  * @param enableForesight whether to enable Foresight
  * @param language target output language
  * @param promptBudget prompt budget governance for item extraction
+ * @param graph graph extraction/materialization runtime options
  */
 public record ItemExtractionConfig(
         MemoryScope scope,
@@ -37,7 +39,8 @@ public record ItemExtractionConfig(
         Set<MemoryCategory> allowedCategories,
         boolean enableForesight,
         String language,
-        PromptBudgetOptions promptBudget) {
+        PromptBudgetOptions promptBudget,
+        ItemGraphOptions graph) {
 
     public ItemExtractionConfig(
             MemoryScope scope, String contentType, boolean enableForesight, String language) {
@@ -47,7 +50,8 @@ public record ItemExtractionConfig(
                 MemoryCategory.userCategories(),
                 enableForesight,
                 language,
-                PromptBudgetOptions.defaults());
+                PromptBudgetOptions.defaults(),
+                ItemGraphOptions.defaults());
     }
 
     public ItemExtractionConfig(
@@ -62,7 +66,8 @@ public record ItemExtractionConfig(
                 allowedCategories,
                 enableForesight,
                 language,
-                PromptBudgetOptions.defaults());
+                PromptBudgetOptions.defaults(),
+                ItemGraphOptions.defaults());
     }
 
     public ItemExtractionConfig(
@@ -77,7 +82,25 @@ public record ItemExtractionConfig(
                 MemoryCategory.userCategories(),
                 enableForesight,
                 language,
-                promptBudget);
+                promptBudget,
+                ItemGraphOptions.defaults());
+    }
+
+    public ItemExtractionConfig(
+            MemoryScope scope,
+            String contentType,
+            Set<MemoryCategory> allowedCategories,
+            boolean enableForesight,
+            String language,
+            PromptBudgetOptions promptBudget) {
+        this(
+                scope,
+                contentType,
+                allowedCategories,
+                enableForesight,
+                language,
+                promptBudget,
+                ItemGraphOptions.defaults());
     }
 
     public static ItemExtractionConfig defaults() {
@@ -87,7 +110,8 @@ public record ItemExtractionConfig(
                 MemoryCategory.userCategories(),
                 false,
                 PromptResult.DEFAULT_LANGUAGE,
-                PromptBudgetOptions.defaults());
+                PromptBudgetOptions.defaults(),
+                ItemGraphOptions.defaults());
     }
 
     public static ItemExtractionConfig from(
@@ -101,6 +125,7 @@ public record ItemExtractionConfig(
                 allowedCategories,
                 config.enableForesight(),
                 config.language(),
-                options.promptBudget());
+                options.promptBudget(),
+                options.graph());
     }
 }

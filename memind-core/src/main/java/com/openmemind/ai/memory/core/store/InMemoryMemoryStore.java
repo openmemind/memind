@@ -14,6 +14,11 @@
 package com.openmemind.ai.memory.core.store;
 
 import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
+import com.openmemind.ai.memory.core.store.graph.GraphOperations;
+import com.openmemind.ai.memory.core.store.graph.GraphOperationsCapabilities;
+import com.openmemind.ai.memory.core.store.graph.InMemoryGraphOperations;
+import com.openmemind.ai.memory.core.store.graph.InMemoryItemGraphCommitOperations;
+import com.openmemind.ai.memory.core.store.graph.ItemGraphCommitOperations;
 import com.openmemind.ai.memory.core.store.insight.InMemoryInsightOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.InMemoryItemOperations;
@@ -22,6 +27,10 @@ import com.openmemind.ai.memory.core.store.rawdata.InMemoryRawDataOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.InMemoryResourceOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
+import com.openmemind.ai.memory.core.store.thread.InMemoryThreadEnrichmentInputStore;
+import com.openmemind.ai.memory.core.store.thread.InMemoryThreadProjectionStore;
+import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentInputStore;
+import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 
 /**
  * In-memory implementation of {@link MemoryStore}.
@@ -29,8 +38,17 @@ import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 public class InMemoryMemoryStore implements MemoryStore {
 
     private final RawDataOperations rawDataOperations = new InMemoryRawDataOperations();
-    private final ItemOperations itemOperations = new InMemoryItemOperations();
+    private final InMemoryItemOperations itemOperations = new InMemoryItemOperations();
     private final InsightOperations insightOperations = new InMemoryInsightOperations();
+    private final InMemoryGraphOperations graphOperations = new InMemoryGraphOperations();
+    private final InMemoryExtractionCommitState extractionCommitState =
+            new InMemoryExtractionCommitState();
+    private final ItemGraphCommitOperations itemGraphCommitOperations =
+            new InMemoryItemGraphCommitOperations(
+                    extractionCommitState, itemOperations, graphOperations);
+    private final ThreadProjectionStore threadOperations = new InMemoryThreadProjectionStore();
+    private final ThreadEnrichmentInputStore threadEnrichmentInputStore =
+            new InMemoryThreadEnrichmentInputStore(threadOperations);
     private final ResourceOperations resourceOperations = new InMemoryResourceOperations();
 
     public InMemoryMemoryStore() {
@@ -50,6 +68,51 @@ public class InMemoryMemoryStore implements MemoryStore {
     @Override
     public InsightOperations insightOperations() {
         return insightOperations;
+    }
+
+    @Override
+    public GraphOperations graphOperations() {
+        return graphOperations;
+    }
+
+    @Override
+    public ItemGraphCommitOperations itemGraphCommitOperations() {
+        return itemGraphCommitOperations;
+    }
+
+    @Override
+    public GraphOperationsCapabilities graphOperationsCapabilities() {
+        return new GraphOperationsCapabilities() {
+            @Override
+            public boolean supportsBoundedEntityKeyLookup() {
+                return true;
+            }
+
+            @Override
+            public boolean supportsHistoricalAliasLookup() {
+                return true;
+            }
+
+            @Override
+            public boolean supportsBoundedAdjacencyLookup() {
+                return true;
+            }
+
+            @Override
+            public boolean supportsStoreSideCooccurrenceRebuild() {
+                return true;
+            }
+        };
+    }
+
+    @Override
+    public ThreadProjectionStore threadOperations() {
+        return threadOperations;
+    }
+
+    @Override
+    public ThreadEnrichmentInputStore threadEnrichmentInputStore() {
+        return threadEnrichmentInputStore;
     }
 
     @Override

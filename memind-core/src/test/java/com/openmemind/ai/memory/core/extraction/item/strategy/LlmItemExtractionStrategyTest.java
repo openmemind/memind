@@ -18,6 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
+import com.openmemind.ai.memory.core.extraction.item.graph.EntityAliasClass;
+import com.openmemind.ai.memory.core.extraction.item.graph.EntityAliasObservation;
+import com.openmemind.ai.memory.core.extraction.item.support.ExtractedGraphHints;
 import com.openmemind.ai.memory.core.extraction.item.support.ForesightExtractionResponse;
 import com.openmemind.ai.memory.core.extraction.item.support.MemoryItemExtractionResponse;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
@@ -43,6 +46,110 @@ import reactor.test.StepVerifier;
 
 @DisplayName("LlmItemExtractionStrategy")
 class LlmItemExtractionStrategyTest {
+
+    @Test
+    @DisplayName("toFactEntries should parse graph hints into extracted memory entries")
+    void toFactEntriesShouldParseGraphHintsIntoExtractedMemoryEntries() {
+        var response =
+                new MemoryItemExtractionResponse(
+                        List.of(
+                                new MemoryItemExtractionResponse.ExtractedItem(
+                                        "User discussed OpenAI launch plans",
+                                        0.95f,
+                                        null,
+                                        null,
+                                        List.of("event"),
+                                        Map.of(),
+                                        "event",
+                                        List.of(
+                                                new MemoryItemExtractionResponse.ExtractedEntity(
+                                                        "OpenAI", "organization", 0.91f)),
+                                        List.of(
+                                                new MemoryItemExtractionResponse
+                                                        .ExtractedCausalRelation(
+                                                        0, 1, "enabled_by", 0.88f)))));
+
+        var entries =
+                LlmItemExtractionStrategy.toFactEntries(
+                        response, sampleSegment(), Instant.parse("2026-04-16T00:00:00Z"));
+
+        assertThat(entries)
+                .singleElement()
+                .satisfies(
+                        entry -> {
+                            assertThat(entry.graphHints().entities()).hasSize(1);
+                            assertThat(entry.graphHints().causalRelations()).hasSize(1);
+                        });
+    }
+
+    @Test
+    @DisplayName("toFactEntries should preserve raw entity type labels")
+    void toFactEntriesShouldPreserveRawEntityTypeLabels() {
+        var response =
+                new MemoryItemExtractionResponse(
+                        List.of(
+                                new MemoryItemExtractionResponse.ExtractedItem(
+                                        "用户让我联系张三",
+                                        0.95f,
+                                        null,
+                                        null,
+                                        List.of("event"),
+                                        Map.of(),
+                                        "event",
+                                        List.of(
+                                                new MemoryItemExtractionResponse.ExtractedEntity(
+                                                        "张三", "人物", 0.95f),
+                                                new MemoryItemExtractionResponse.ExtractedEntity(
+                                                        "用户", "special", 0.90f)),
+                                        List.of())));
+
+        var entries =
+                LlmItemExtractionStrategy.toFactEntries(
+                        response, sampleSegment(), Instant.parse("2026-04-18T00:00:00Z"));
+
+        assertThat(entries.getFirst().graphHints().entities())
+                .extracting(ExtractedGraphHints.ExtractedEntityHint::entityType)
+                .containsExactly("人物", "special");
+    }
+
+    @Test
+    @DisplayName("toFactEntries should parse alias observations into graph hints")
+    void toFactEntriesShouldParseAliasObservationsIntoGraphHints() {
+        var response =
+                new MemoryItemExtractionResponse(
+                        List.of(
+                                new MemoryItemExtractionResponse.ExtractedItem(
+                                        "我在 OpenAI（开放人工智能）团队工作",
+                                        0.95f,
+                                        null,
+                                        null,
+                                        List.of("event"),
+                                        Map.of(),
+                                        "event",
+                                        List.of(
+                                                new MemoryItemExtractionResponse.ExtractedEntity(
+                                                        "OpenAI",
+                                                        "organization",
+                                                        0.95f,
+                                                        List.of(
+                                                                new MemoryItemExtractionResponse
+                                                                        .ExtractedAliasObservation(
+                                                                        "开放人工智能",
+                                                                        "explicit_parenthetical",
+                                                                        "entity_inline",
+                                                                        0.93f)))),
+                                        List.of())));
+
+        var entries =
+                LlmItemExtractionStrategy.toFactEntries(
+                        response, sampleSegment(), Instant.parse("2026-04-18T00:00:00Z"));
+
+        assertThat(entries.getFirst().graphHints().entities().getFirst().aliasObservations())
+                .singleElement()
+                .extracting(
+                        EntityAliasObservation::aliasSurface, EntityAliasObservation::aliasClass)
+                .containsExactly("开放人工智能", EntityAliasClass.EXPLICIT_PARENTHETICAL);
+    }
 
     @Test
     @DisplayName("extract should use unified prompt override instruction")
@@ -238,6 +345,55 @@ class LlmItemExtractionStrategyTest {
                 .containsEntry("truncationReason", "prompt_budget")
                 .containsEntry("retainedTokenCount", 100)
                 .containsEntry("source", "llm");
+    }
+
+    @Test
+    @DisplayName("mergeMetadata should store thread semantics under versioned metadata key")
+    void mergeMetadataShouldStoreThreadSemanticsUnderVersionedMetadataKey() {
+        var segment =
+                new ParsedSegment("text", null, 0, 1, "raw-1", Map.of("channel", "chat"), null);
+        var semantics =
+                new MemoryItemExtractionResponse.ExtractedThreadSemantics(
+                        1,
+                        List.of(
+                                new MemoryItemExtractionResponse.ExtractedThreadMarker(
+                                        "STATE_CHANGE",
+                                        "project:memind-v1",
+                                        "Memind v1 moved into implementation",
+                                        Map.of(
+                                                "fromState",
+                                                "planning",
+                                                "toState",
+                                                "implementation"))),
+                        List.of(
+                                new MemoryItemExtractionResponse.ExtractedCanonicalRef(
+                                        "project", "memind-v1")),
+                        List.of(
+                                new MemoryItemExtractionResponse.ExtractedContinuityLink(
+                                        "CONTINUES", 301L)));
+        var item =
+                new MemoryItemExtractionResponse.ExtractedItem(
+                        "fact",
+                        0.9f,
+                        null,
+                        null,
+                        List.of(),
+                        Map.of("source", "llm"),
+                        "event",
+                        List.of(),
+                        List.of(),
+                        semantics);
+
+        assertThat(LlmItemExtractionStrategy.mergeMetadata(segment, item))
+                .containsEntry("channel", "chat")
+                .containsEntry("source", "llm")
+                .containsKey("threadSemantics");
+        assertThat(LlmItemExtractionStrategy.mergeMetadata(segment, item).get("threadSemantics"))
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("version", 1)
+                .containsKey("markers")
+                .containsKey("canonicalRefs")
+                .containsKey("continuityLinks");
     }
 
     @Test

@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.prompt.extraction.item;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.builder.ItemGraphOptions;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
@@ -29,6 +30,129 @@ import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.api.parallel.Resources;
 
 class MemoryItemUnifiedPromptsTest {
+
+    @Test
+    @DisplayName("Rendered prompt should include graph schema only when graph is enabled")
+    void shouldIncludeGraphSchemaOnlyWhenGraphIsEnabled() {
+        var enabled =
+                MemoryItemUnifiedPrompts.build(
+                                List.of(),
+                                "user: 我昨天和 OpenAI 团队讨论了部署方案",
+                                Instant.parse("2026-04-16T00:00:00Z"),
+                                null,
+                                Set.of(MemoryCategory.EVENT),
+                                ItemGraphOptions.defaults().withEnabled(true))
+                        .render("English");
+        var disabled =
+                MemoryItemUnifiedPrompts.build(
+                                List.of(),
+                                "user: 我昨天和 OpenAI 团队讨论了部署方案",
+                                Instant.parse("2026-04-16T00:00:00Z"),
+                                null,
+                                Set.of(MemoryCategory.EVENT),
+                                ItemGraphOptions.defaults().withEnabled(false))
+                        .render("English");
+
+        assertThat(enabled.systemPrompt())
+                .contains("\"entities\"")
+                .contains("\"causalRelations\"")
+                .contains("causeIndex")
+                .contains("effectIndex")
+                .contains("Good entities")
+                .contains("Bad entities")
+                .contains("Good causal relation")
+                .contains("Bad causal relation")
+                .contains("not for topical similarity")
+                .contains("not for ownership or dependency");
+        assertThat(disabled.systemPrompt())
+                .doesNotContain("\"entities\"")
+                .doesNotContain("\"causalRelations\"");
+    }
+
+    @Test
+    @DisplayName("Rendered prompt should describe allowed entity types and special anchors")
+    void renderedPromptShouldDescribeAllowedEntityTypesAndSpecialAnchors() {
+        var prompt =
+                MemoryItemUnifiedPrompts.build(
+                                List.of(),
+                                "user: 我今天告诉助手联系张三",
+                                Instant.parse("2026-04-18T00:00:00Z"),
+                                "Alice",
+                                Set.of(MemoryCategory.EVENT),
+                                ItemGraphOptions.defaults().withEnabled(true))
+                        .render("English");
+
+        assertThat(prompt.systemPrompt())
+                .contains("\"entityType\"")
+                .contains("person")
+                .contains("organization")
+                .contains("special")
+                .contains("Use \"special\" only for conversational role anchors");
+    }
+
+    @Test
+    @DisplayName("Rendered prompt should describe alias observation schema when graph is enabled")
+    void renderedPromptShouldDescribeAliasObservationSchemaWhenGraphIsEnabled() {
+        var prompt =
+                MemoryItemUnifiedPrompts.build(
+                                List.of(),
+                                "user: 我在 OpenAI（开放人工智能）团队工作",
+                                Instant.parse("2026-04-18T00:00:00Z"),
+                                null,
+                                Set.of(MemoryCategory.EVENT),
+                                ItemGraphOptions.defaults().withEnabled(true))
+                        .render("English");
+
+        assertThat(prompt.systemPrompt())
+                .contains("\"aliasObservations\"")
+                .contains("\"aliasSurface\"")
+                .contains("\"aliasClass\"")
+                .contains("explicit_parenthetical")
+                .contains("explicit_slash_apposition");
+    }
+
+    @Test
+    @DisplayName("Rendered prompt should require explicit causal strength when graph is enabled")
+    void renderedPromptRequiresExplicitCausalStrengthWhenGraphHintsAreEnabled() {
+        var prompt =
+                MemoryItemUnifiedPrompts.build(
+                                List.of(),
+                                "user: the rollback happened because the deployment failed",
+                                Instant.parse("2026-04-18T00:00:00Z"),
+                                null,
+                                Set.of(MemoryCategory.EVENT),
+                                ItemGraphOptions.defaults().withEnabled(true))
+                        .render("English");
+
+        assertThat(prompt.systemPrompt())
+                .contains("include an explicit strength in [0,1]")
+                .contains("omit the relation")
+                .contains("\"aliasObservations\"")
+                .contains("Use \"special\" only for conversational role anchors");
+    }
+
+    @Test
+    @DisplayName(
+            "Rendered prompt should describe alias observation schema when graph is enabled for"
+                    + " Chinese")
+    void renderedPromptShouldDescribeAliasObservationSchemaWhenGraphIsEnabledForChinese() {
+        var prompt =
+                MemoryItemUnifiedPrompts.build(
+                                List.of(),
+                                "user: 我在 OpenAI（开放人工智能）团队工作",
+                                Instant.parse("2026-04-18T00:00:00Z"),
+                                null,
+                                Set.of(MemoryCategory.EVENT),
+                                ItemGraphOptions.defaults().withEnabled(true))
+                        .render("Chinese");
+
+        assertThat(prompt.systemPrompt())
+                .contains("\"aliasObservations\"")
+                .contains("\"aliasSurface\"")
+                .contains("\"aliasClass\"")
+                .contains("explicit_parenthetical")
+                .contains("explicit_slash_apposition");
+    }
 
     @Test
     @DisplayName("build default should keep runtime category placeholders raw")
@@ -177,6 +301,27 @@ class MemoryItemUnifiedPromptsTest {
                 .contains("time.start")
                 .contains("time.end")
                 .contains("time.granularity");
+    }
+
+    @Test
+    @DisplayName("Rendered prompt should describe optional versioned thread semantics output")
+    void shouldDescribeOptionalVersionedThreadSemanticsOutput() {
+        var result =
+                MemoryItemUnifiedPrompts.build(
+                                List.of(),
+                                "user: 项目 alpha 从规划阶段进入开发阶段",
+                                Instant.parse("2026-04-16T00:00:00Z"),
+                                null,
+                                Set.of(MemoryCategory.EVENT))
+                        .render("English");
+
+        assertThat(result.systemPrompt())
+                .contains("\"threadSemantics\"")
+                .contains("\"version\": 1")
+                .contains("\"markers\"")
+                .contains("\"canonicalRefs\"")
+                .contains("\"continuityLinks\"")
+                .contains("If unsure, omit `threadSemantics` entirely");
     }
 
     @Test

@@ -14,7 +14,10 @@
 package com.openmemind.ai.memory.core.retrieval.strategy;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.openmemind.ai.memory.core.builder.SimpleMemoryThreadAssistOptions;
+import com.openmemind.ai.memory.core.utils.JsonUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -39,5 +42,191 @@ class StrategyConfigTest {
         assertThat(updated.queryExpansion().maxExpandedQueries()).isEqualTo(5);
         assertThat(updated.sufficiency()).isEqualTo(base.sufficiency());
         assertThat(updated.strategyName()).isEqualTo(RetrievalStrategies.DEEP_RETRIEVAL);
+    }
+
+    @Test
+    @DisplayName("legacy deep strategy json without graph assist still deserializes")
+    void legacyDeepStrategyJsonWithoutGraphAssistStillDeserializes() throws Exception {
+        var mapper = JsonUtils.newMapper();
+
+        StrategyConfig config =
+                mapper.readValue(
+                        """
+                        {
+                          "type":"deep",
+                          "queryExpansion":{"maxExpandedQueries":4},
+                          "sufficiency":{"itemTopK":12},
+                          "tier2InitTopK":40,
+                          "bm25InitTopK":30,
+                          "minScore":0.25
+                        }
+                        """,
+                        StrategyConfig.class);
+
+        assertThat(config).isInstanceOf(DeepStrategyConfig.class);
+        var deep = (DeepStrategyConfig) config;
+        assertThat(deep.graphAssist()).isEqualTo(DeepStrategyConfig.GraphAssistConfig.defaults());
+        assertThat(deep.queryExpansion().maxExpandedQueries()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("legacy deep strategy constructor defaults graph assist")
+    void legacyDeepStrategyConstructorDefaultsGraphAssist() {
+        var config =
+                new DeepStrategyConfig(
+                        new DeepStrategyConfig.QueryExpansionConfig(4),
+                        new DeepStrategyConfig.SufficiencyConfig(12),
+                        40,
+                        30,
+                        0.25d);
+
+        assertThat(config.graphAssist()).isEqualTo(DeepStrategyConfig.GraphAssistConfig.defaults());
+        assertThat(config.queryExpansion().maxExpandedQueries()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("invalid deep strategy graph assist weight fails fast")
+    void invalidDeepStrategyGraphAssistWeightFailsFast() {
+        var mapper = JsonUtils.newMapper();
+
+        assertThatThrownBy(
+                        () ->
+                                mapper.readValue(
+                                        """
+                                        {
+                                          "type":"deep",
+                                          "graphAssist":{"enabled":true,"graphChannelWeight":1.0,"timeout":"PT0.3S"}
+                                        }
+                                        """,
+                                        StrategyConfig.class))
+                .isInstanceOf(Exception.class)
+                .hasMessageContaining("graph retrieval weights must keep graph below direct");
+    }
+
+    @Test
+    @DisplayName("legacy simple strategy json without graph assist still deserializes")
+    void legacySimpleStrategyJsonWithoutGraphAssistStillDeserializes() throws Exception {
+        var mapper = JsonUtils.newMapper();
+
+        StrategyConfig config =
+                mapper.readValue(
+                        """
+                        {"type":"simple","enableKeywordSearch":false}
+                        """,
+                        StrategyConfig.class);
+
+        assertThat(config).isInstanceOf(SimpleStrategyConfig.class);
+        assertThat(((SimpleStrategyConfig) config).enableKeywordSearch()).isFalse();
+        assertThat(((SimpleStrategyConfig) config).graphAssist())
+                .isEqualTo(SimpleStrategyConfig.GraphAssistConfig.defaults());
+    }
+
+    @Test
+    @DisplayName("legacy simple strategy graph assist json defaults semantic evidence decay")
+    void legacySimpleStrategyGraphAssistJsonDefaultsSemanticEvidenceDecay() throws Exception {
+        var mapper = JsonUtils.newMapper();
+
+        StrategyConfig config =
+                mapper.readValue(
+                        """
+                        {
+                          "type":"simple",
+                          "enableKeywordSearch":true,
+                          "graphAssist":{"enabled":true,"timeout":"PT0.2S"}
+                        }
+                        """,
+                        StrategyConfig.class);
+
+        assertThat(config).isInstanceOf(SimpleStrategyConfig.class);
+        assertThat(((SimpleStrategyConfig) config).graphAssist().semanticEvidenceDecayFactor())
+                .isEqualTo(0.5d);
+    }
+
+    @Test
+    @DisplayName("invalid simple strategy graph assist json fails fast")
+    void invalidSimpleStrategyGraphAssistJsonFailsFast() {
+        var mapper = JsonUtils.newMapper();
+
+        assertThatThrownBy(
+                        () ->
+                                mapper.readValue(
+                                        """
+                                        {
+                                          "type":"simple",
+                                          "enableKeywordSearch":true,
+                                          "graphAssist":{"enabled":true,"maxSeedItems":0,"timeout":"PT0.2S"}
+                                        }
+                                        """,
+                                        StrategyConfig.class))
+                .isInstanceOf(Exception.class)
+                .hasMessageContaining("graph retrieval caps must be non-negative");
+    }
+
+    @Test
+    @DisplayName("invalid simple strategy graph assist weight fails fast")
+    void invalidSimpleStrategyGraphAssistWeightFailsFast() {
+        var mapper = JsonUtils.newMapper();
+
+        assertThatThrownBy(
+                        () ->
+                                mapper.readValue(
+                                        """
+                                        {
+                                          "type":"simple",
+                                          "enableKeywordSearch":true,
+                                          "graphAssist":{"enabled":true,"graphChannelWeight":1.0,"timeout":"PT0.2S"}
+                                        }
+                                        """,
+                                        StrategyConfig.class))
+                .isInstanceOf(Exception.class)
+                .hasMessageContaining("graph retrieval weights must keep graph below direct");
+    }
+
+    @Test
+    @DisplayName("invalid simple strategy semantic evidence decay fails fast")
+    void invalidSimpleStrategySemanticEvidenceDecayFailsFast() {
+        var mapper = JsonUtils.newMapper();
+
+        assertThatThrownBy(
+                        () ->
+                                mapper.readValue(
+                                        """
+                                        {
+                                          "type":"simple",
+                                          "enableKeywordSearch":true,
+                                          "graphAssist":{"enabled":true,"semanticEvidenceDecayFactor":-0.1,"timeout":"PT0.2S"}
+                                        }
+                                        """,
+                                        StrategyConfig.class))
+                .isInstanceOf(Exception.class)
+                .hasMessageContaining("semanticEvidenceDecayFactor must be non-negative");
+    }
+
+    @Test
+    @DisplayName("legacy simple strategy json without memory thread assist still deserializes")
+    void legacySimpleStrategyJsonWithoutMemoryThreadAssistStillDeserializes() throws Exception {
+        var mapper = JsonUtils.newMapper();
+
+        StrategyConfig config =
+                mapper.readValue(
+                        """
+                        {"type":"simple","enableKeywordSearch":false}
+                        """,
+                        StrategyConfig.class);
+
+        assertThat(config).isInstanceOf(SimpleStrategyConfig.class);
+        assertThat(((SimpleStrategyConfig) config).memoryThreadAssist())
+                .isEqualTo(SimpleStrategyConfig.MemoryThreadAssistConfig.defaults());
+    }
+
+    @Test
+    @DisplayName("memory thread assist options reject negative protect direct top k")
+    void memoryThreadAssistOptionsRejectNegativeProtectDirectTopK() {
+        assertThatThrownBy(
+                        () ->
+                                new SimpleMemoryThreadAssistOptions(
+                                        true, 2, 3, -1, java.time.Duration.ofMillis(150)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("protectDirectTopK");
     }
 }

@@ -25,8 +25,10 @@ import com.openmemind.ai.memory.core.prompt.extraction.item.ToolItemPrompts;
 import com.openmemind.ai.memory.core.prompt.extraction.rawdata.BoundaryDetectionPrompts;
 import com.openmemind.ai.memory.core.prompt.extraction.rawdata.CaptionPrompts;
 import com.openmemind.ai.memory.core.prompt.extraction.rawdata.ConversationSegmentationPrompts;
+import com.openmemind.ai.memory.core.prompt.extraction.thread.ThreadEnrichmentPrompts;
 import com.openmemind.ai.memory.core.prompt.retrieval.InsightTypeRoutingPrompts;
 import com.openmemind.ai.memory.core.prompt.retrieval.IntentRoutingPrompts;
+import com.openmemind.ai.memory.core.prompt.retrieval.LongQueryCondensePrompts;
 import com.openmemind.ai.memory.core.prompt.retrieval.QueryRewritePrompts;
 import com.openmemind.ai.memory.core.prompt.retrieval.SufficiencyGatePrompts;
 import com.openmemind.ai.memory.core.prompt.retrieval.TypedQueryExpandPrompts;
@@ -63,6 +65,7 @@ final class PromptDefaults {
         var builders = new EnumMap<PromptType, PromptDefaultEntry>(PromptType.class);
         builders.put(PromptType.INTENT_ROUTING, entry(IntentRoutingPrompts::buildDefault));
         builders.put(PromptType.QUERY_REWRITE, entry(QueryRewritePrompts::buildDefault));
+        builders.put(PromptType.LONG_QUERY_CONDENSE, entry(LongQueryCondensePrompts::buildDefault));
         builders.put(
                 PromptType.TYPED_QUERY_EXPAND,
                 entry(
@@ -117,6 +120,11 @@ final class PromptDefaults {
                 entry(
                         InteractionGuideSynthesisPrompts::buildDefault,
                         InteractionGuideSynthesisPrompts::buildPreview));
+        builders.put(
+                PromptType.THREAD_ENRICHMENT,
+                entry(
+                        ThreadEnrichmentPrompts::buildDefault,
+                        ThreadEnrichmentPrompts::buildPreview));
         validateExhaustive(builders);
         return builders;
     }

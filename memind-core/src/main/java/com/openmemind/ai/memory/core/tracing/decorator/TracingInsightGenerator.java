@@ -128,6 +128,32 @@ public class TracingInsightGenerator extends TracingSupport implements InsightGe
     }
 
     @Override
+    public Mono<InsightPointGenerateResponse> generateBranchSummary(
+            MemoryInsightType insightType,
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> leafInsights,
+            int targetTokens,
+            String additionalContext,
+            String language) {
+        return trace(
+                MemorySpanNames.EXTRACTION_INSIGHT_GENERATE_BRANCH,
+                Map.of(
+                        EXTRACTION_INSIGHT_TYPE,
+                        insightType.name(),
+                        EXTRACTION_INSIGHT_LEAF_COUNT,
+                        leafInsights.size()),
+                r -> Map.of(EXTRACTION_INSIGHT_POINT_COUNT, r.points().size()),
+                () ->
+                        delegate.generateBranchSummary(
+                                insightType,
+                                existingPoints,
+                                leafInsights,
+                                targetTokens,
+                                additionalContext,
+                                language));
+    }
+
+    @Override
     public Mono<InsightPointOpsResponse> generateBranchPointOps(
             MemoryInsightType insightType,
             List<InsightPoint> existingPoints,
@@ -145,6 +171,32 @@ public class TracingInsightGenerator extends TracingSupport implements InsightGe
                 () ->
                         delegate.generateBranchPointOps(
                                 insightType, existingPoints, leafInsights, targetTokens, language));
+    }
+
+    @Override
+    public Mono<InsightPointOpsResponse> generateBranchPointOps(
+            MemoryInsightType insightType,
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> leafInsights,
+            int targetTokens,
+            String additionalContext,
+            String language) {
+        return trace(
+                MemorySpanNames.EXTRACTION_INSIGHT_GENERATE_BRANCH,
+                Map.of(
+                        EXTRACTION_INSIGHT_TYPE,
+                        insightType.name(),
+                        EXTRACTION_INSIGHT_LEAF_COUNT,
+                        leafInsights.size()),
+                this::operationCountAttributes,
+                () ->
+                        delegate.generateBranchPointOps(
+                                insightType,
+                                existingPoints,
+                                leafInsights,
+                                targetTokens,
+                                additionalContext,
+                                language));
     }
 
     @Override
@@ -168,6 +220,32 @@ public class TracingInsightGenerator extends TracingSupport implements InsightGe
                                 existingPoints,
                                 branchInsights,
                                 targetTokens,
+                                language));
+    }
+
+    @Override
+    public Mono<InsightPointGenerateResponse> generateRootSynthesis(
+            MemoryInsightType rootInsightType,
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> branchInsights,
+            int targetTokens,
+            String additionalContext,
+            String language) {
+        return trace(
+                MemorySpanNames.EXTRACTION_INSIGHT_GENERATE_ROOT,
+                Map.of(
+                        EXTRACTION_INSIGHT_TYPE,
+                        rootInsightType.name(),
+                        EXTRACTION_INSIGHT_LEAF_COUNT,
+                        branchInsights.size()),
+                r -> Map.of(EXTRACTION_INSIGHT_POINT_COUNT, r.points().size()),
+                () ->
+                        delegate.generateRootSynthesis(
+                                rootInsightType,
+                                existingPoints,
+                                branchInsights,
+                                targetTokens,
+                                additionalContext,
                                 language));
     }
 

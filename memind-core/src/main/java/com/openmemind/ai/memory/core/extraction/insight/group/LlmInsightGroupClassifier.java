@@ -100,7 +100,7 @@ public class LlmInsightGroupClassifier implements InsightGroupClassifier {
             MemoryInsightType insightType,
             List<MemoryItem> items,
             List<String> existingGroupNames) {
-        return classify(insightType, items, existingGroupNames, null);
+        return classify(insightType, items, existingGroupNames, null, null);
     }
 
     @Override
@@ -108,6 +108,16 @@ public class LlmInsightGroupClassifier implements InsightGroupClassifier {
             MemoryInsightType insightType,
             List<MemoryItem> items,
             List<String> existingGroupNames,
+            String language) {
+        return classify(insightType, items, existingGroupNames, null, language);
+    }
+
+    @Override
+    public Mono<Map<String, List<MemoryItem>>> classify(
+            MemoryInsightType insightType,
+            List<MemoryItem> items,
+            List<String> existingGroupNames,
+            String additionalContext,
             String language) {
 
         if (items.isEmpty()) {
@@ -118,8 +128,14 @@ public class LlmInsightGroupClassifier implements InsightGroupClassifier {
                 InsightGroupPrompts.build(
                                 promptRegistry, insightType, items, existingGroupNames, language)
                         .render(language);
-        var messages =
-                ChatMessages.systemUser(promptResult.systemPrompt(), promptResult.userPrompt());
+        var userPrompt =
+                additionalContext != null && !additionalContext.isBlank()
+                        ? promptResult.userPrompt()
+                                + "\n\n<AdditionalContext>\n"
+                                + additionalContext
+                                + "\n</AdditionalContext>"
+                        : promptResult.userPrompt();
+        var messages = ChatMessages.systemUser(promptResult.systemPrompt(), userPrompt);
 
         // item id → item mapping
         Map<String, MemoryItem> itemById =

@@ -26,7 +26,7 @@ import java.util.Set;
  * @param memoryId            Memory identifier
  * @param query               Query text
  * @param conversationHistory Recent conversation history (for intent determination and query rewriting)
- * @param config              Retrieval configuration (use default configuration when null)
+ * @param config              Retrieval configuration; must be non-null when passed to MemoryRetriever
  * @param metadata            Additional metadata
  * @param scope               Memory scope filter (null means no filter)
  * @param categories          Memory category filter (null means no filter)

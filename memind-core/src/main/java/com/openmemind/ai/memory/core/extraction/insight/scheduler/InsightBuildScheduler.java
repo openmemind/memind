@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.extraction.insight.scheduler;
 
 import com.openmemind.ai.memory.core.buffer.BufferEntry;
 import com.openmemind.ai.memory.core.buffer.InsightBuffer;
+import com.openmemind.ai.memory.core.data.GroupingStrategy;
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
@@ -24,6 +25,9 @@ import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
+import com.openmemind.ai.memory.core.extraction.insight.graph.InsightGraphAssistContext.LeafAssist;
+import com.openmemind.ai.memory.core.extraction.insight.graph.InsightGraphAssistant;
+import com.openmemind.ai.memory.core.extraction.insight.graph.NoOpInsightGraphAssistant;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassifier;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupRouter;
 import com.openmemind.ai.memory.core.extraction.insight.operation.PointOperationResolver;
@@ -42,6 +46,7 @@ import java.io.Closeable;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -75,6 +80,7 @@ public class InsightBuildScheduler implements Closeable {
     private final InsightGenerator generator;
     private final InsightGroupClassifier groupClassifier;
     private final InsightGroupRouter groupRouter;
+    private final InsightGraphAssistant graphAssistant;
     private final InsightTreeReorganizer treeReorganizer;
     private final MemoryVector memoryVector;
     private final IdUtils.SnowflakeIdGenerator idGenerator;
@@ -137,6 +143,7 @@ public class InsightBuildScheduler implements Closeable {
                 config,
                 new InsightPointIdentityManager(),
                 new InsightPointEvidenceNormalizer(),
+                NoOpInsightGraphAssistant.INSTANCE,
                 null);
     }
 
@@ -163,6 +170,35 @@ public class InsightBuildScheduler implements Closeable {
                 config,
                 new InsightPointIdentityManager(),
                 new InsightPointEvidenceNormalizer(),
+                NoOpInsightGraphAssistant.INSTANCE,
+                observer);
+    }
+
+    public InsightBuildScheduler(
+            InsightBuffer bufferStore,
+            MemoryStore store,
+            InsightGenerator generator,
+            InsightGroupClassifier groupClassifier,
+            InsightGroupRouter groupRouter,
+            InsightTreeReorganizer treeReorganizer,
+            MemoryVector memoryVector,
+            IdUtils.SnowflakeIdGenerator idGenerator,
+            InsightBuildConfig config,
+            InsightGraphAssistant graphAssistant,
+            MemoryObserver observer) {
+        this(
+                bufferStore,
+                store,
+                generator,
+                groupClassifier,
+                groupRouter,
+                treeReorganizer,
+                memoryVector,
+                idGenerator,
+                config,
+                new InsightPointIdentityManager(),
+                new InsightPointEvidenceNormalizer(),
+                graphAssistant,
                 observer);
     }
 
@@ -179,11 +215,43 @@ public class InsightBuildScheduler implements Closeable {
             InsightPointIdentityManager pointIdentityManager,
             InsightPointEvidenceNormalizer evidenceNormalizer,
             MemoryObserver observer) {
+        this(
+                bufferStore,
+                store,
+                generator,
+                groupClassifier,
+                groupRouter,
+                treeReorganizer,
+                memoryVector,
+                idGenerator,
+                config,
+                pointIdentityManager,
+                evidenceNormalizer,
+                NoOpInsightGraphAssistant.INSTANCE,
+                observer);
+    }
+
+    public InsightBuildScheduler(
+            InsightBuffer bufferStore,
+            MemoryStore store,
+            InsightGenerator generator,
+            InsightGroupClassifier groupClassifier,
+            InsightGroupRouter groupRouter,
+            InsightTreeReorganizer treeReorganizer,
+            MemoryVector memoryVector,
+            IdUtils.SnowflakeIdGenerator idGenerator,
+            InsightBuildConfig config,
+            InsightPointIdentityManager pointIdentityManager,
+            InsightPointEvidenceNormalizer evidenceNormalizer,
+            InsightGraphAssistant graphAssistant,
+            MemoryObserver observer) {
         this.bufferStore = Objects.requireNonNull(bufferStore);
         this.store = Objects.requireNonNull(store);
         this.generator = Objects.requireNonNull(generator);
         this.groupClassifier = Objects.requireNonNull(groupClassifier);
         this.groupRouter = Objects.requireNonNull(groupRouter);
+        this.graphAssistant =
+                graphAssistant != null ? graphAssistant : NoOpInsightGraphAssistant.INSTANCE;
         this.treeReorganizer = treeReorganizer;
         this.memoryVector = memoryVector;
         this.idGenerator = Objects.requireNonNull(idGenerator);
@@ -468,9 +536,16 @@ public class InsightBuildScheduler implements Closeable {
         Map<String, List<MemoryItem>> mergedGroups = new LinkedHashMap<>();
 
         if (!nullCategoryItems.isEmpty()) {
+            var groupingContext =
+                    graphAssistant.groupingAssist(memoryId, insightType, nullCategoryItems);
             var groupResult =
-                    groupClassifier
-                            .classify(insightType, nullCategoryItems, existingGroupNames, language)
+                    groupRouter
+                            .groupSemantic(
+                                    insightType,
+                                    nullCategoryItems,
+                                    existingGroupNames,
+                                    groupingContext.additionalContext(),
+                                    language)
                             .block();
             if (groupResult != null) {
                 mergedGroups.putAll(groupResult);
@@ -480,9 +555,21 @@ public class InsightBuildScheduler implements Closeable {
         for (var bucket : categorizedItems.entrySet()) {
             var category = bucket.getKey();
             var bucketItems = bucket.getValue();
+            var additionalContext =
+                    category.groupingStrategy() instanceof GroupingStrategy.LlmClassify
+                            ? graphAssistant
+                                    .groupingAssist(memoryId, insightType, bucketItems)
+                                    .additionalContext()
+                            : "";
             var groupResult =
                     groupRouter
-                            .group(insightType, category, bucketItems, existingGroupNames, language)
+                            .group(
+                                    insightType,
+                                    category,
+                                    bucketItems,
+                                    existingGroupNames,
+                                    additionalContext,
+                                    language)
                             .block();
             if (groupResult != null) {
                 mergedGroups.putAll(groupResult);
@@ -564,6 +651,9 @@ public class InsightBuildScheduler implements Closeable {
                 existingLeaf != null && existingLeaf.points() != null
                         ? existingLeaf.points()
                         : List.<InsightPoint>of();
+        var leafAssist = resolveLeafAssist(memoryId, insightType, groupName, items);
+        var orderedItems = leafAssist.orderedItems();
+        var additionalContext = normalizeAdditionalContext(leafAssist.additionalContext());
 
         var opsResponse =
                 generator
@@ -571,9 +661,9 @@ public class InsightBuildScheduler implements Closeable {
                                 insightType,
                                 groupName,
                                 existingPoints,
-                                items,
+                                orderedItems,
                                 insightType.targetTokens(),
-                                null,
+                                additionalContext,
                                 language)
                         .block();
 
@@ -583,10 +673,11 @@ public class InsightBuildScheduler implements Closeable {
                     insightTypeName,
                     insightType,
                     groupName,
-                    items,
+                    orderedItems,
                     unbuiltItemIds,
                     existingLeaf,
                     existingPoints,
+                    additionalContext,
                     language);
         }
 
@@ -600,10 +691,11 @@ public class InsightBuildScheduler implements Closeable {
                     insightTypeName,
                     insightType,
                     groupName,
-                    items,
+                    orderedItems,
                     unbuiltItemIds,
                     existingLeaf,
                     existingPoints,
+                    additionalContext,
                     language);
         }
         if (resolved.noop()) {
@@ -622,7 +714,7 @@ public class InsightBuildScheduler implements Closeable {
                 insightTypeName,
                 insightType,
                 groupName,
-                items,
+                orderedItems,
                 unbuiltItemIds,
                 existingLeaf,
                 points);
@@ -637,6 +729,7 @@ public class InsightBuildScheduler implements Closeable {
             List<Long> unbuiltItemIds,
             MemoryInsight existingLeaf,
             List<InsightPoint> existingPoints,
+            String additionalContext,
             String language) {
         var response =
                 generator
@@ -646,7 +739,7 @@ public class InsightBuildScheduler implements Closeable {
                                 existingPoints,
                                 items,
                                 insightType.targetTokens(),
-                                null,
+                                additionalContext,
                                 language)
                         .block();
         if (response == null || response.points().isEmpty()) {
@@ -676,6 +769,47 @@ public class InsightBuildScheduler implements Closeable {
                 unbuiltItemIds,
                 existingLeaf,
                 points);
+    }
+
+    private LeafAssist resolveLeafAssist(
+            MemoryId memoryId,
+            MemoryInsightType insightType,
+            String groupName,
+            List<MemoryItem> items) {
+        var assist = graphAssistant.leafAssist(memoryId, insightType, groupName, items);
+        if (assist == null) {
+            return LeafAssist.identity(items);
+        }
+        return new LeafAssist(
+                normalizeLeafOrder(items, assist.orderedItems()), assist.additionalContext());
+    }
+
+    private List<MemoryItem> normalizeLeafOrder(
+            List<MemoryItem> originalItems, List<MemoryItem> assistedItems) {
+        if (originalItems == null || originalItems.isEmpty()) {
+            return List.of();
+        }
+        if (assistedItems == null
+                || assistedItems.isEmpty()
+                || assistedItems.size() != originalItems.size()) {
+            return List.copyOf(originalItems);
+        }
+        var originalIds =
+                originalItems.stream()
+                        .map(MemoryItem::id)
+                        .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
+        var assistedIds =
+                assistedItems.stream()
+                        .map(MemoryItem::id)
+                        .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
+        if (!originalIds.equals(assistedIds)) {
+            return List.copyOf(originalItems);
+        }
+        return List.copyOf(assistedItems);
+    }
+
+    private String normalizeAdditionalContext(String additionalContext) {
+        return additionalContext == null || additionalContext.isBlank() ? null : additionalContext;
     }
 
     private MemoryInsight normalizeExistingInsightIfNeeded(

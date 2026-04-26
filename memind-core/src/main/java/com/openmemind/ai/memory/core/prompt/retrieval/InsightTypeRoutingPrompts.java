@@ -80,8 +80,9 @@ public final class InsightTypeRoutingPrompts {
             - "Virtual threads exhausted HikariCP; fix by setting maximumPoolSize" → resolutions, NOT playbooks
 
             # Output
-            Return a JSON array of selected type names. Empty array if none are relevant.
-            Example: ["identity", "experiences"]
+            Return a JSON object with a "types" array of selected type names.
+            Use an empty "types" array if none are relevant.
+            Example: {"types": ["identity", "experiences"]}
             """;
 
     private static final String USER_TEMPLATE =

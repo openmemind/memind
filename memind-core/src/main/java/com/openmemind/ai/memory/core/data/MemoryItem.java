@@ -62,7 +62,8 @@ public record MemoryItem(
         /* Source observation time from the original message/segment (null when unavailable) */
         Instant observedAt,
 
-        /* Additional key-value metadata (including insightTypes, whenToUse, etc.) */
+        /* Additional key-value metadata (including insightTypes and tool-scoped keys such as
+         * whenToUse) */
         Map<String, Object> metadata,
 
         /* Creation time */

@@ -61,6 +61,9 @@ public final class MemorySpanNames {
     public static final String RETRIEVAL_VECTOR_SEARCH = "memind.retrieval.vector_search";
     public static final String RETRIEVAL_RERANK = "memind.retrieval.rerank";
     public static final String RETRIEVAL_KEYWORD_SEARCH = "memind.retrieval.keyword_search";
+    public static final String RETRIEVAL_MEMORY_THREAD_ASSIST =
+            "memind.retrieval.memory_thread.assist";
+    public static final String RETRIEVAL_GRAPH_ASSIST = "memind.retrieval.graph.assist";
     public static final String RETRIEVAL_INSIGHT_TYPE_ROUTING =
             "memind.retrieval.insight_type_routing";
     public static final String RETRIEVAL_MULTI_QUERY_EXPAND = "memind.retrieval.multi_query_expand";
@@ -69,4 +72,6 @@ public final class MemorySpanNames {
     public static final String GRAPH_EXTRACT_EDGES = "memind.graph.extract_edges";
     public static final String GRAPH_RESOLVE_ENTITIES = "memind.graph.resolve_entities";
     public static final String GRAPH_RESOLVE_EDGES = "memind.graph.resolve_edges";
+    public static final String GRAPH_MATERIALIZE = "memind.graph.materialize";
+    public static final String GRAPH_SEMANTIC_LINK = "memind.graph.semantic_link";
 }

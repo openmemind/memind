@@ -15,10 +15,19 @@ package com.openmemind.ai.memory.core.builder;
 
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
+import com.openmemind.ai.memory.core.extraction.thread.MemoryThreadLayer;
 import java.util.Objects;
 
 record MemoryExtractionAssembly(
-        MemoryExtractor pipeline, InsightLayer insightLayer, AutoCloseable lifecycle) {
+        MemoryExtractor pipeline,
+        InsightLayer insightLayer,
+        AutoCloseable lifecycle,
+        MemoryThreadLayer memoryThreadLayer) {
+
+    MemoryExtractionAssembly(
+            MemoryExtractor pipeline, InsightLayer insightLayer, AutoCloseable lifecycle) {
+        this(pipeline, insightLayer, lifecycle, null);
+    }
 
     MemoryExtractionAssembly {
         Objects.requireNonNull(pipeline, "pipeline");

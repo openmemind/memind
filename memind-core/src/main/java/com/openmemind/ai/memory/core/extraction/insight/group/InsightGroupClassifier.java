@@ -46,4 +46,13 @@ public interface InsightGroupClassifier {
             String language) {
         return classify(insightType, items, existingGroupNames);
     }
+
+    default Mono<Map<String, List<MemoryItem>>> classify(
+            MemoryInsightType insightType,
+            List<MemoryItem> items,
+            List<String> existingGroupNames,
+            String additionalContext,
+            String language) {
+        return classify(insightType, items, existingGroupNames, language);
+    }
 }

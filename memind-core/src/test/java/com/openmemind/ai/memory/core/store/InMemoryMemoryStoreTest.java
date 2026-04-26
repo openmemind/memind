@@ -29,6 +29,14 @@ import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadLifecycleStatus;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadMembershipRole;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadObjectState;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadProjectionState;
+import com.openmemind.ai.memory.core.data.enums.MemoryThreadType;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadMembership;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadProjection;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadRuntimeState;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import java.time.Instant;
 import java.util.List;
@@ -153,6 +161,45 @@ class InMemoryMemoryStoreTest {
         assertThat(store.resourceOperations().getResource(MEMORY_ID, "res-1")).contains(resource);
     }
 
+    @Test
+    @DisplayName("graphOperations stays empty by default and is exposed by in-memory store")
+    void graphOperationsStaysEmptyByDefaultAndIsExposedByInMemoryStore() {
+        var store = new InMemoryMemoryStore();
+
+        assertThat(store.graphOperations().listEntities(MEMORY_ID)).isEmpty();
+        assertThat(store.graphOperations().listItemLinks(MEMORY_ID)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("threadOperations persists many-to-many memberships in the in-memory store")
+    void threadOperationsPersistsManyToManyMembershipsInTheInMemoryStore() {
+        var store = new InMemoryMemoryStore();
+
+        store.threadOperations()
+                .replaceProjection(
+                        MEMORY_ID,
+                        List.of(
+                                projection("relationship:relationship:person:alice|person:bob"),
+                                projection("topic:topic:concept:travel")),
+                        List.of(),
+                        List.of(
+                                membership(
+                                        "relationship:relationship:person:alice|person:bob", 101L),
+                                membership("topic:topic:concept:travel", 101L)),
+                        runtime(),
+                        BASE_TIME);
+
+        assertThat(store.threadOperations().listThreadsByItemId(MEMORY_ID, 101L))
+                .extracting(MemoryThreadProjection::threadKey)
+                .containsExactlyInAnyOrder(
+                        "relationship:relationship:person:alice|person:bob",
+                        "topic:topic:concept:travel");
+        assertThat(store.threadOperations().getRuntime(MEMORY_ID))
+                .get()
+                .extracting(MemoryThreadRuntimeState::projectionState)
+                .isEqualTo(MemoryThreadProjectionState.AVAILABLE);
+    }
+
     private static MemoryRawData rawData(
             String id, String caption, String contentId, Map<String, Object> metadata) {
         return new MemoryRawData(
@@ -223,5 +270,56 @@ class InMemoryMemoryStoreTest {
                 null,
                 List.of(),
                 1);
+    }
+
+    private static MemoryThreadProjection projection(String threadKey) {
+        return new MemoryThreadProjection(
+                MEMORY_ID.toIdentifier(),
+                threadKey,
+                MemoryThreadType.TOPIC,
+                "topic",
+                threadKey.substring(threadKey.lastIndexOf(':') + 1),
+                "label-" + threadKey,
+                MemoryThreadLifecycleStatus.ACTIVE,
+                MemoryThreadObjectState.ONGOING,
+                "headline",
+                Map.of("source", "test"),
+                1,
+                BASE_TIME,
+                BASE_TIME,
+                BASE_TIME,
+                null,
+                1,
+                1,
+                BASE_TIME,
+                BASE_TIME);
+    }
+
+    private static MemoryThreadMembership membership(String threadKey, Long itemId) {
+        return new MemoryThreadMembership(
+                MEMORY_ID.toIdentifier(),
+                threadKey,
+                itemId,
+                MemoryThreadMembershipRole.CORE,
+                true,
+                1.0d,
+                BASE_TIME,
+                BASE_TIME);
+    }
+
+    private static MemoryThreadRuntimeState runtime() {
+        return new MemoryThreadRuntimeState(
+                MEMORY_ID.toIdentifier(),
+                MemoryThreadProjectionState.AVAILABLE,
+                0,
+                0,
+                101L,
+                101L,
+                false,
+                null,
+                0L,
+                "v1",
+                null,
+                BASE_TIME);
     }
 }

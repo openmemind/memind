@@ -32,6 +32,11 @@ import com.openmemind.ai.memory.core.resource.ResourceRef;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.graph.GraphOperations;
+import com.openmemind.ai.memory.core.store.graph.GraphOperationsCapabilities;
+import com.openmemind.ai.memory.core.store.graph.ItemGraphCommitOperations;
+import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentInputStore;
+import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.textsearch.TextSearchResult;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JsonCodec;
@@ -78,6 +83,11 @@ class JdbcPluginAutoConfigurationSqliteTest {
                             assertThat(context).hasSingleBean(MemoryStore.class);
                             assertThat(context).hasSingleBean(MemoryBuffer.class);
                             assertThat(context).hasSingleBean(MemoryTextSearch.class);
+                            assertThat(context).hasSingleBean(GraphOperations.class);
+                            assertThat(context).hasSingleBean(GraphOperationsCapabilities.class);
+                            assertThat(context).hasSingleBean(ItemGraphCommitOperations.class);
+                            assertThat(context).hasSingleBean(ThreadProjectionStore.class);
+                            assertThat(context).hasSingleBean(ThreadEnrichmentInputStore.class);
                             assertThat(context.getBean(MemoryTextSearch.class))
                                     .isInstanceOf(SqliteMemoryTextSearch.class);
                             assertThat(context).doesNotHaveBean(InsightBuffer.class);
@@ -95,6 +105,16 @@ class JdbcPluginAutoConfigurationSqliteTest {
                                     .isInstanceOf(SqliteMemoryStore.class);
                             assertThat(memoryStore.resourceOperations())
                                     .isInstanceOf(SqliteMemoryStore.class);
+                            assertThat(context.getBean(GraphOperations.class))
+                                    .isSameAs(memoryStore.graphOperations());
+                            assertThat(context.getBean(GraphOperationsCapabilities.class))
+                                    .isSameAs(memoryStore.graphOperationsCapabilities());
+                            assertThat(context.getBean(ItemGraphCommitOperations.class))
+                                    .isSameAs(memoryStore.itemGraphCommitOperations());
+                            assertThat(context.getBean(ThreadProjectionStore.class))
+                                    .isNotInstanceOf(ThreadEnrichmentInputStore.class);
+                            assertThat(context.getBean(ThreadEnrichmentInputStore.class))
+                                    .isNotInstanceOf(ThreadProjectionStore.class);
                             assertThat(tableExists(dataSource, "memory_item")).isTrue();
                             assertThat(tableExists(dataSource, "item_fts")).isTrue();
                             assertThat(tableExists(dataSource, "memory_insight_buffer")).isTrue();

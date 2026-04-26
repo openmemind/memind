@@ -52,12 +52,22 @@ public class MemoryItemDO extends BaseDO {
     @TableField(typeHandler = InstantTypeHandler.class)
     private Instant observedAt;
 
+    @TableField(typeHandler = InstantTypeHandler.class)
+    private Instant temporalStart;
+
+    @TableField(typeHandler = InstantTypeHandler.class)
+    private Instant temporalEndOrAnchor;
+
+    @TableField(typeHandler = InstantTypeHandler.class)
+    private Instant temporalAnchor;
+
     @TableField(typeHandler = Jackson3TypeHandler.class)
     private Map<String, Object> metadata;
 
     private String type;
 
     private String rawDataType;
+    private String extractionBatchId;
 
     public Integer getId() {
         return id;
@@ -187,6 +197,30 @@ public class MemoryItemDO extends BaseDO {
         this.observedAt = observedAt;
     }
 
+    public Instant getTemporalStart() {
+        return temporalStart;
+    }
+
+    public void setTemporalStart(Instant temporalStart) {
+        this.temporalStart = temporalStart;
+    }
+
+    public Instant getTemporalEndOrAnchor() {
+        return temporalEndOrAnchor;
+    }
+
+    public void setTemporalEndOrAnchor(Instant temporalEndOrAnchor) {
+        this.temporalEndOrAnchor = temporalEndOrAnchor;
+    }
+
+    public Instant getTemporalAnchor() {
+        return temporalAnchor;
+    }
+
+    public void setTemporalAnchor(Instant temporalAnchor) {
+        this.temporalAnchor = temporalAnchor;
+    }
+
     public Map<String, Object> getMetadata() {
         return metadata;
     }
@@ -209,5 +243,13 @@ public class MemoryItemDO extends BaseDO {
 
     public void setRawDataType(String rawDataType) {
         this.rawDataType = rawDataType;
+    }
+
+    public String getExtractionBatchId() {
+        return extractionBatchId;
+    }
+
+    public void setExtractionBatchId(String extractionBatchId) {
+        this.extractionBatchId = extractionBatchId;
     }
 }

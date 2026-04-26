@@ -21,7 +21,10 @@ import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.item.dedup.DeduplicationResult;
 import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicator;
 import com.openmemind.ai.memory.core.extraction.item.extractor.MemoryItemExtractor;
+import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
+import com.openmemind.ai.memory.core.extraction.item.graph.NoOpItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
+import com.openmemind.ai.memory.core.extraction.item.support.ItemEmbeddingTextResolver;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
@@ -36,6 +39,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -55,13 +59,21 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
     private final MemoryVector vector;
     private final IdUtils.SnowflakeIdGenerator idGenerator;
     private final LlmSelfVerificationStep selfVerificationStep; // nullable
+    private final ItemGraphMaterializer graphMaterializer;
 
     public MemoryItemLayer(
             MemoryItemExtractor extractor,
             MemoryItemDeduplicator deduplicator,
             MemoryStore memoryStore,
             MemoryVector vector) {
-        this(extractor, deduplicator, memoryStore, vector, IdUtils.snowflake(), null);
+        this(
+                extractor,
+                deduplicator,
+                memoryStore,
+                vector,
+                IdUtils.snowflake(),
+                null,
+                NoOpItemGraphMaterializer.persistItemsOnly(memoryStore.itemOperations()));
     }
 
     public MemoryItemLayer(
@@ -76,7 +88,24 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 memoryStore,
                 vector,
                 IdUtils.snowflake(),
-                selfVerificationStep);
+                selfVerificationStep,
+                NoOpItemGraphMaterializer.persistItemsOnly(memoryStore.itemOperations()));
+    }
+
+    public MemoryItemLayer(
+            MemoryItemExtractor extractor,
+            MemoryItemDeduplicator deduplicator,
+            MemoryStore memoryStore,
+            MemoryVector vector,
+            ItemGraphMaterializer graphMaterializer) {
+        this(
+                extractor,
+                deduplicator,
+                memoryStore,
+                vector,
+                IdUtils.snowflake(),
+                null,
+                graphMaterializer);
     }
 
     public MemoryItemLayer(
@@ -86,12 +115,34 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
             MemoryVector vector,
             IdUtils.SnowflakeIdGenerator idGenerator,
             LlmSelfVerificationStep selfVerificationStep) {
+        this(
+                extractor,
+                deduplicator,
+                memoryStore,
+                vector,
+                idGenerator,
+                selfVerificationStep,
+                NoOpItemGraphMaterializer.persistItemsOnly(memoryStore.itemOperations()));
+    }
+
+    public MemoryItemLayer(
+            MemoryItemExtractor extractor,
+            MemoryItemDeduplicator deduplicator,
+            MemoryStore memoryStore,
+            MemoryVector vector,
+            IdUtils.SnowflakeIdGenerator idGenerator,
+            LlmSelfVerificationStep selfVerificationStep,
+            ItemGraphMaterializer graphMaterializer) {
         this.extractor = extractor;
         this.deduplicator = deduplicator;
         this.memoryStore = memoryStore;
         this.vector = vector;
         this.idGenerator = idGenerator;
         this.selfVerificationStep = selfVerificationStep;
+        this.graphMaterializer =
+                graphMaterializer != null
+                        ? graphMaterializer
+                        : NoOpItemGraphMaterializer.persistItemsOnly(memoryStore.itemOperations());
     }
 
     @Override
@@ -155,7 +206,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 // insightTypes normalization
                 .map(entry -> entryWithNormalizedInsightTypes(entry, allowedInsightTypes))
                 .map(entry -> entryWithValidatedCategory(entry, allowedCategories))
-                .filter(entry -> entry != null)
+                .filter(Objects::nonNull)
                 // In-batch deduplication (keep the one with the highest confidence)
                 .collect(Collectors.groupingBy(ExtractedMemoryEntry::content))
                 .values()
@@ -274,7 +325,8 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
             return Mono.just(new MemoryItemResult(List.of(), resolvedInsightTypes));
         }
 
-        List<String> contents = newEntries.stream().map(this::embeddingText).toList();
+        List<String> contents =
+                newEntries.stream().map(ItemEmbeddingTextResolver::resolve).toList();
         List<Map<String, Object>> metadataList =
                 newEntries.stream()
                         .map(
@@ -285,7 +337,9 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                                             e.metadata() != null
                                                     ? e.metadata().get("whenToUse")
                                                     : null;
-                                    if (whenToUse instanceof String s && !s.isBlank()) {
+                                    if (shouldPersistWhenToUse(e)
+                                            && whenToUse instanceof String s
+                                            && !s.isBlank()) {
                                         meta.put("whenToUse", s);
                                     }
                                     return Map.<String, Object>copyOf(meta);
@@ -293,7 +347,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                         .toList();
 
         return vector.storeBatch(memoryId, contents, metadataList)
-                .map(
+                .flatMap(
                         vectorIds -> {
                             List<MemoryItem> newItems =
                                     IntStream.range(0, newEntries.size())
@@ -307,23 +361,23 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                                                                     contentType))
                                             .toList();
 
-                            memoryStore.itemOperations().insertItems(memoryId, newItems);
-
-                            return new MemoryItemResult(newItems, resolvedInsightTypes);
+                            return graphMaterializer
+                                    .materialize(memoryId, newItems, newEntries)
+                                    .onErrorResume(
+                                            error ->
+                                                    vector.deleteBatch(memoryId, vectorIds)
+                                                            .onErrorResume(ignore -> Mono.empty())
+                                                            .then(Mono.error(error)))
+                                    .map(
+                                            graphResult ->
+                                                    new MemoryItemResult(
+                                                            newItems,
+                                                            resolvedInsightTypes,
+                                                            graphResult));
                         });
     }
 
     // ===== Utility methods =====
-
-    private String embeddingText(ExtractedMemoryEntry entry) {
-        if (entry.metadata() != null) {
-            Object whenToUse = entry.metadata().get("whenToUse");
-            if (whenToUse instanceof String s && !s.isBlank()) {
-                return s;
-            }
-        }
-        return entry.content();
-    }
 
     private MemoryItem toMemoryItem(
             MemoryId memoryId,
@@ -363,10 +417,20 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
         if (entry.metadata() != null) {
             result.putAll(entry.metadata());
         }
+        if (!shouldPersistWhenToUse(entry)) {
+            result.remove("whenToUse");
+        }
         if (entry.insightTypes() != null && !entry.insightTypes().isEmpty()) {
             result.put("insightTypes", entry.insightTypes());
         }
         return result.isEmpty() ? Map.of() : Map.copyOf(result);
+    }
+
+    private boolean shouldPersistWhenToUse(ExtractedMemoryEntry entry) {
+        if (entry == null || entry.category() == null) {
+            return false;
+        }
+        return MemoryCategory.byName(entry.category()).orElse(null) == MemoryCategory.TOOL;
     }
 
     private List<MemoryInsightType> resolveInsightTypes() {

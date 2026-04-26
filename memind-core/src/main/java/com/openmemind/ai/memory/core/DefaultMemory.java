@@ -21,6 +21,7 @@ import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.RerankOptions;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
+import com.openmemind.ai.memory.core.data.MemoryThreadRuntimeStatus;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
@@ -31,12 +32,15 @@ import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import com.openmemind.ai.memory.core.extraction.thread.MemoryThreadLayer;
+import com.openmemind.ai.memory.core.extraction.thread.ThreadMaterializationPolicyFactory;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
+import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistConfigMapper;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.utils.TokenUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
@@ -72,6 +76,7 @@ public class DefaultMemory implements Memory {
     private final InsightLayer insightLayer;
     private final AutoCloseable lifecycle;
     private final MemoryBuildOptions buildOptions;
+    private final MemoryThreadLayer memoryThreadLayer;
     private final AtomicBoolean closed = new AtomicBoolean();
 
     public DefaultMemory(
@@ -83,6 +88,28 @@ public class DefaultMemory implements Memory {
             InsightLayer insightLayer,
             AutoCloseable lifecycle,
             MemoryBuildOptions buildOptions) {
+        this(
+                extractor,
+                retriever,
+                memoryStore,
+                memoryBuffer,
+                vector,
+                insightLayer,
+                lifecycle,
+                buildOptions,
+                null);
+    }
+
+    public DefaultMemory(
+            MemoryExtractor extractor,
+            MemoryRetriever retriever,
+            MemoryStore memoryStore,
+            MemoryBuffer memoryBuffer,
+            MemoryVector vector,
+            InsightLayer insightLayer,
+            AutoCloseable lifecycle,
+            MemoryBuildOptions buildOptions,
+            MemoryThreadLayer memoryThreadLayer) {
         this.extractor = Objects.requireNonNull(extractor, "extractor must not be null");
         this.retriever = Objects.requireNonNull(retriever, "retriever must not be null");
         this.memoryStore = Objects.requireNonNull(memoryStore, "memoryStore must not be null");
@@ -91,6 +118,7 @@ public class DefaultMemory implements Memory {
         this.insightLayer = insightLayer;
         this.lifecycle = lifecycle;
         this.buildOptions = Objects.requireNonNull(buildOptions, "buildOptions must not be null");
+        this.memoryThreadLayer = memoryThreadLayer;
     }
 
     // ===== Generic extraction =====
@@ -277,10 +305,35 @@ public class DefaultMemory implements Memory {
         var retrieval = buildOptions.retrieval();
         return switch (strategy) {
             case SIMPLE -> {
+                var graph = retrieval.simple().graphAssist();
+                var temporal = retrieval.simple().temporalRetrieval();
                 var base =
                         RetrievalConfig.simple(
                                 new SimpleStrategyConfig(
-                                        retrieval.simple().keywordSearchEnabled()));
+                                        retrieval.simple().keywordSearchEnabled(),
+                                        new SimpleStrategyConfig.TemporalRetrievalConfig(
+                                                temporal.enabled(),
+                                                temporal.maxWindowCandidates(),
+                                                temporal.channelWeight(),
+                                                temporal.timeout()),
+                                        new SimpleStrategyConfig.GraphAssistConfig(
+                                                graph.enabled(),
+                                                graph.mode(),
+                                                graph.maxSeedItems(),
+                                                graph.maxExpandedItems(),
+                                                graph.maxSemanticNeighborsPerSeed(),
+                                                graph.maxTemporalNeighborsPerSeed(),
+                                                graph.maxCausalNeighborsPerSeed(),
+                                                graph.maxEntitySiblingItemsPerSeed(),
+                                                graph.maxItemsPerEntity(),
+                                                graph.graphChannelWeight(),
+                                                graph.minLinkStrength(),
+                                                graph.minMentionConfidence(),
+                                                graph.protectDirectTopK(),
+                                                graph.semanticEvidenceDecayFactor(),
+                                                graph.timeout()),
+                                        MemoryThreadAssistConfigMapper.toSimpleConfig(
+                                                buildOptions)));
                 yield applyCache(
                         base.withTier1(copyTier(base.tier1(), retrieval.simple().insightTopK()))
                                 .withTier2(copyTier(base.tier2(), retrieval.simple().itemTopK()))
@@ -292,6 +345,7 @@ public class DefaultMemory implements Memory {
             case DEEP -> {
                 var base = RetrievalConfig.deep();
                 var baseStrategy = (DeepStrategyConfig) base.strategyConfig();
+                var graph = retrieval.deep().graphAssist();
                 var strategyConfig =
                         new DeepStrategyConfig(
                                 new DeepStrategyConfig.QueryExpansionConfig(
@@ -300,7 +354,24 @@ public class DefaultMemory implements Memory {
                                         retrieval.deep().sufficiency().itemTopK()),
                                 baseStrategy.tier2InitTopK(),
                                 baseStrategy.bm25InitTopK(),
-                                baseStrategy.minScore());
+                                baseStrategy.minScore(),
+                                new DeepStrategyConfig.GraphAssistConfig(
+                                        graph.enabled(),
+                                        graph.mode(),
+                                        graph.maxSeedItems(),
+                                        graph.maxExpandedItems(),
+                                        graph.maxSemanticNeighborsPerSeed(),
+                                        graph.maxTemporalNeighborsPerSeed(),
+                                        graph.maxCausalNeighborsPerSeed(),
+                                        graph.maxEntitySiblingItemsPerSeed(),
+                                        graph.maxItemsPerEntity(),
+                                        graph.graphChannelWeight(),
+                                        graph.minLinkStrength(),
+                                        graph.minMentionConfidence(),
+                                        graph.protectDirectTopK(),
+                                        graph.semanticEvidenceDecayFactor(),
+                                        graph.timeout()),
+                                MemoryThreadAssistConfigMapper.toDeepConfig(buildOptions));
                 var tier3 =
                         retrieval.deep().rawDataEnabled()
                                 ? new RetrievalConfig.TierConfig(
@@ -368,6 +439,12 @@ public class DefaultMemory implements Memory {
                                         ? Mono.<Void>empty()
                                         : vector.deleteBatch(memoryId, vectorIds))
                 .then(
+                        Mono.fromRunnable(
+                                () ->
+                                        memoryStore
+                                                .threadOperations()
+                                                .markRebuildRequired(memoryId, "item deletion")))
+                .then(
                         Mono.<Void>fromRunnable(
                                 () ->
                                         memoryStore
@@ -407,6 +484,46 @@ public class DefaultMemory implements Memory {
             return;
         }
         insightLayer.flush(memoryId, language);
+    }
+
+    @Override
+    public void flushMemoryThreads(MemoryId memoryId) {
+        Objects.requireNonNull(memoryId, "memoryId");
+        if (memoryThreadLayer == null) {
+            return;
+        }
+        memoryThreadLayer.flush(memoryId);
+    }
+
+    @Override
+    public void rebuildMemoryThreads(MemoryId memoryId) {
+        Objects.requireNonNull(memoryId, "memoryId");
+        if (memoryThreadLayer == null) {
+            return;
+        }
+        memoryThreadLayer.rebuild(memoryId);
+    }
+
+    @Override
+    public MemoryThreadRuntimeStatus getThreadRuntimeStatus(MemoryId memoryId) {
+        Objects.requireNonNull(memoryId, "memoryId");
+        if (memoryThreadLayer != null) {
+            return memoryThreadLayer.getThreadRuntimeStatus(memoryId);
+        }
+        if (!buildOptions.memoryThread().enabled()) {
+            return MemoryThreadRuntimeStatus.disabled("memoryThread disabled");
+        }
+        if (!buildOptions.memoryThread().derivation().enabled()) {
+            return MemoryThreadRuntimeStatus.disabled("memoryThread derivation disabled");
+        }
+        memoryStore
+                .threadOperations()
+                .ensureRuntime(
+                        memoryId,
+                        ThreadMaterializationPolicyFactory.from(buildOptions.memoryThread())
+                                .version());
+        return MemoryThreadRuntimeStatus.fromRuntimeState(
+                memoryStore.threadOperations().getRuntime(memoryId).orElse(null), true, true, null);
     }
 
     @Override

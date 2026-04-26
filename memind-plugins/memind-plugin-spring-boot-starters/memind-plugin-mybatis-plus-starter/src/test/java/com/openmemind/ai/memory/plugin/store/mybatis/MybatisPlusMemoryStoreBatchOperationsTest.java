@@ -27,9 +27,12 @@ import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.extraction.item.graph.commit.ExtractionBatchId;
+import com.openmemind.ai.memory.core.extraction.item.graph.plan.ItemGraphWritePlan;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
+import com.openmemind.ai.memory.core.store.item.TemporalCandidateRequest;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.plugin.store.mybatis.handler.InstantTypeHandler;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
@@ -40,6 +43,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
@@ -265,6 +269,35 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
     }
 
     @Test
+    @DisplayName("transactional commit uses batch item persistence instead of row fallback")
+    void transactionalCommitUsesBatchItemPersistenceInsteadOfRowFallback() {
+        newContextRunner(tempDir.resolve("graph-commit-batch-discipline.db"))
+                .run(
+                        context -> {
+                            MemoryStore store = context.getBean(MemoryStore.class);
+                            MapperMethodCounter counter =
+                                    context.getBean(MapperMethodCounter.class);
+
+                            counter.reset();
+                            store.itemGraphCommitOperations()
+                                    .commit(
+                                            MEMORY_ID,
+                                            new ExtractionBatchId("batch-bulk"),
+                                            List.of(
+                                                    memoryItem(101L, "batch item 1"),
+                                                    memoryItem(102L, "batch item 2"),
+                                                    memoryItem(103L, "batch item 3")),
+                                            ItemGraphWritePlan.builder().build());
+
+                            assertThat(counter.count(MemoryItemMapper.class, "insertBatch"))
+                                    .isEqualTo(1);
+                            assertThat(counter.count(MemoryItemMapper.class, "insert")).isZero();
+                            assertThat(counter.count(MemoryItemMapper.class, "selectList"))
+                                    .isZero();
+                        });
+    }
+
+    @Test
     @DisplayName("insertItems allows null occurredAt for non-temporal items")
     void insertItemsAllowsNullOccurredAtForNonTemporalItems() {
         newContextRunner(tempDir.resolve("null-occurred-at.db"))
@@ -378,6 +411,185 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
                                                         .isEqualTo("unknown");
                                                 assertThat(item.observedAt()).isEqualTo(observedAt);
                                             });
+                        });
+    }
+
+    @Test
+    @DisplayName("insertItems persists derived temporal lookup columns")
+    void insertItemsPersistsDerivedTemporalLookupColumns() {
+        newContextRunner(tempDir.resolve("temporal-lookup-columns.db"))
+                .run(
+                        context -> {
+                            ItemOperations itemOps =
+                                    context.getBean(MemoryStore.class).itemOperations();
+                            JdbcTemplate jdbc = new JdbcTemplate(context.getBean(DataSource.class));
+
+                            itemOps.insertItems(
+                                    MEMORY_ID,
+                                    List.of(
+                                            memoryItem(
+                                                    21L,
+                                                    "temporal item",
+                                                    BASE_TIME,
+                                                    BASE_TIME,
+                                                    BASE_TIME.plusSeconds(3600),
+                                                    "range")));
+
+                            var row =
+                                    jdbc.queryForMap(
+                                            "SELECT temporal_start, temporal_end_or_anchor,"
+                                                    + " temporal_anchor FROM memory_item WHERE"
+                                                    + " biz_id = ?",
+                                            21L);
+
+                            assertThat(row.get("temporal_start").toString())
+                                    .contains(BASE_TIME.toString());
+                            assertThat(row.get("temporal_end_or_anchor").toString())
+                                    .contains(BASE_TIME.plusSeconds(3600).toString());
+                            assertThat(row.get("temporal_anchor").toString())
+                                    .contains(BASE_TIME.toString());
+                        });
+    }
+
+    @Test
+    @DisplayName(
+            "native temporal lookup returns overlap then before then after without deleted or"
+                    + " mismatched rows")
+    void nativeTemporalLookupReturnsBoundedMatches() {
+        newContextRunner(tempDir.resolve("temporal-native-lookup.db"))
+                .run(
+                        context -> {
+                            ItemOperations itemOps =
+                                    context.getBean(MemoryStore.class).itemOperations();
+                            JdbcTemplate jdbc = new JdbcTemplate(context.getBean(DataSource.class));
+                            MapperMethodCounter counter =
+                                    context.getBean(MapperMethodCounter.class);
+
+                            itemOps.insertItems(
+                                    MEMORY_ID,
+                                    List.of(
+                                            memoryItem(
+                                                    1L,
+                                                    "before item",
+                                                    BASE_TIME.minusSeconds(3600),
+                                                    BASE_TIME.minusSeconds(3600),
+                                                    null,
+                                                    "instant"),
+                                            memoryItem(
+                                                    2L,
+                                                    "overlap item",
+                                                    BASE_TIME.minusSeconds(1800),
+                                                    BASE_TIME.minusSeconds(1800),
+                                                    BASE_TIME.plusSeconds(1800),
+                                                    "range"),
+                                            memoryItem(
+                                                    3L,
+                                                    "after item",
+                                                    BASE_TIME.plusSeconds(3600),
+                                                    BASE_TIME.plusSeconds(3600),
+                                                    null,
+                                                    "instant"),
+                                            memoryItem(
+                                                    4L,
+                                                    "profile mismatch",
+                                                    BASE_TIME.plusSeconds(300),
+                                                    BASE_TIME.plusSeconds(300),
+                                                    null,
+                                                    "instant"),
+                                            memoryItem(
+                                                    5L,
+                                                    "deleted item",
+                                                    BASE_TIME.plusSeconds(7200),
+                                                    BASE_TIME.plusSeconds(7200),
+                                                    null,
+                                                    "instant")));
+                            jdbc.update(
+                                    "UPDATE memory_item SET category = 'PROFILE' WHERE biz_id = ?",
+                                    4L);
+                            itemOps.deleteItems(MEMORY_ID, List.of(5L));
+                            counter.reset();
+
+                            var request =
+                                    new TemporalCandidateRequest(
+                                            101L,
+                                            BASE_TIME,
+                                            BASE_TIME,
+                                            BASE_TIME,
+                                            MemoryItemType.FACT,
+                                            MemoryCategory.EVENT,
+                                            4,
+                                            8,
+                                            8);
+
+                            var matches =
+                                    itemOps.listTemporalCandidateMatches(
+                                            MEMORY_ID, List.of(request), Set.of(101L));
+
+                            assertThat(matches)
+                                    .extracting(match -> match.candidateItem().id())
+                                    .containsExactly(2L, 1L, 3L);
+                            assertThat(
+                                            counter.count(
+                                                    MemoryItemMapper.class,
+                                                    "selectTemporalOverlapCandidates"))
+                                    .isEqualTo(1);
+                            assertThat(
+                                            counter.count(
+                                                    MemoryItemMapper.class,
+                                                    "selectTemporalBeforeCandidates"))
+                                    .isEqualTo(1);
+                            assertThat(
+                                            counter.count(
+                                                    MemoryItemMapper.class,
+                                                    "selectTemporalAfterCandidates"))
+                                    .isEqualTo(1);
+                            assertThat(counter.count(MemoryItemMapper.class, "selectList"))
+                                    .isZero();
+                        });
+    }
+
+    @Test
+    @DisplayName("native temporal lookup matches uncategorized requests without throwing")
+    void nativeTemporalLookupMatchesNullCategoryRequests() {
+        newContextRunner(tempDir.resolve("temporal-native-null-category.db"))
+                .run(
+                        context -> {
+                            ItemOperations itemOps =
+                                    context.getBean(MemoryStore.class).itemOperations();
+                            JdbcTemplate jdbc = new JdbcTemplate(context.getBean(DataSource.class));
+
+                            itemOps.insertItems(
+                                    MEMORY_ID,
+                                    List.of(
+                                            memoryItem(
+                                                    6L,
+                                                    "uncategorized item",
+                                                    BASE_TIME.minusSeconds(900),
+                                                    BASE_TIME.minusSeconds(900),
+                                                    null,
+                                                    "instant")));
+                            jdbc.update(
+                                    "UPDATE memory_item SET category = NULL WHERE biz_id = ?", 6L);
+
+                            var request =
+                                    new TemporalCandidateRequest(
+                                            202L,
+                                            BASE_TIME,
+                                            BASE_TIME,
+                                            BASE_TIME,
+                                            MemoryItemType.FACT,
+                                            null,
+                                            4,
+                                            8,
+                                            8);
+
+                            var matches =
+                                    itemOps.listTemporalCandidateMatches(
+                                            MEMORY_ID, List.of(request), Set.of(202L));
+
+                            assertThat(matches)
+                                    .extracting(match -> match.candidateItem().id())
+                                    .containsExactly(6L);
                         });
     }
 

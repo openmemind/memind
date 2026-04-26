@@ -33,7 +33,8 @@ import java.util.Map;
  * @param rawDataId Source data ID
  * @param contentHash Content hash (filled after deduplication)
  * @param insightTypes List of matched InsightType names (can be empty)
- * @param metadata Additional metadata (can be null; merged from ParsedSegment.metadata + LLM output metadata, including whenToUse)
+ * @param metadata Additional metadata (can be null; merged from ParsedSegment.metadata + LLM
+ *     output metadata, including tool-scoped keys such as whenToUse)
  */
 public record ExtractedMemoryEntry(
         String content,
@@ -48,7 +49,43 @@ public record ExtractedMemoryEntry(
         List<String> insightTypes,
         Map<String, Object> metadata,
         MemoryItemType type,
-        String category) {
+        String category,
+        ExtractedGraphHints graphHints) {
+
+    public ExtractedMemoryEntry {
+        graphHints = graphHints == null ? ExtractedGraphHints.empty() : graphHints;
+    }
+
+    public ExtractedMemoryEntry(
+            String content,
+            float confidence,
+            Instant occurredAt,
+            Instant occurredStart,
+            Instant occurredEnd,
+            String timeGranularity,
+            Instant observedAt,
+            String rawDataId,
+            String contentHash,
+            List<String> insightTypes,
+            Map<String, Object> metadata,
+            MemoryItemType type,
+            String category) {
+        this(
+                content,
+                confidence,
+                occurredAt,
+                occurredStart,
+                occurredEnd,
+                timeGranularity,
+                observedAt,
+                rawDataId,
+                contentHash,
+                insightTypes,
+                metadata,
+                type,
+                category,
+                ExtractedGraphHints.empty());
+    }
 
     public ExtractedMemoryEntry(
             String content,
@@ -74,7 +111,8 @@ public record ExtractedMemoryEntry(
                 insightTypes,
                 metadata,
                 type,
-                category);
+                category,
+                ExtractedGraphHints.empty());
     }
 
     /**
@@ -94,6 +132,7 @@ public record ExtractedMemoryEntry(
                 insightTypes,
                 metadata,
                 type,
-                category);
+                category,
+                graphHints);
     }
 }

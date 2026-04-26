@@ -18,6 +18,7 @@ import com.openmemind.ai.memory.core.data.MemoryItem;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,6 +43,23 @@ public class InMemoryItemOperations implements ItemOperations {
         Map<Long, MemoryItem> map =
                 itemStore.computeIfAbsent(key(id), k -> new ConcurrentHashMap<>());
         items.forEach(item -> map.put(item.id(), item));
+    }
+
+    public List<MemoryItem> previewCommittedBatch(MemoryId id, List<MemoryItem> stagedItems) {
+        var nextItems =
+                new LinkedHashMap<Long, MemoryItem>(itemStore.getOrDefault(key(id), Map.of()));
+        if (stagedItems != null) {
+            stagedItems.forEach(item -> nextItems.put(item.id(), item));
+        }
+        return List.copyOf(nextItems.values());
+    }
+
+    public void installCommittedBatch(MemoryId id, List<MemoryItem> committedItems) {
+        var nextItems = new ConcurrentHashMap<Long, MemoryItem>();
+        if (committedItems != null) {
+            committedItems.forEach(item -> nextItems.put(item.id(), item));
+        }
+        itemStore.put(key(id), nextItems);
     }
 
     @Override

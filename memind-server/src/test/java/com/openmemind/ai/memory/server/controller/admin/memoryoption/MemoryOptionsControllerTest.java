@@ -88,6 +88,33 @@ class MemoryOptionsControllerTest {
     }
 
     @Test
+    void getAndPutExposeSemanticSourceWindowSize() throws Exception {
+        mockMvc.perform(get("/admin/v1/config/memory-options"))
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath(
+                                        "$.data.config.extraction[?(@.key=='extraction.item.graph.semanticSourceWindowSize')].value")
+                                .value(128));
+
+        mockMvc.perform(
+                        put("/admin/v1/config/memory-options")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        objectMapper.writeValueAsBytes(
+                                                semanticWindowUpdateRequestBody())))
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath(
+                                        "$.data.config.extraction[?(@.key=='extraction.item.graph.semanticSourceWindowSize')].value")
+                                .value(64));
+
+        assertThat(configService.recordedConfig.get("extraction"))
+                .singleElement()
+                .extracting(MemoryOptionItemView::value)
+                .isEqualTo(64);
+    }
+
+    @Test
     void putReturnsConflictWhenExpectedVersionIsStale() throws Exception {
         configService.updateFailure =
                 new OptimisticLockingFailureException("Memory options version conflict");
@@ -119,6 +146,24 @@ class MemoryOptionsControllerTest {
                                         "Maximum extraction timeout"))));
     }
 
+    private static Map<String, Object> semanticWindowUpdateRequestBody() {
+        return Map.of(
+                "expectedVersion",
+                3,
+                "config",
+                Map.of(
+                        "extraction",
+                        List.of(
+                                Map.of(
+                                        "key",
+                                        "extraction.item.graph.semanticSourceWindowSize",
+                                        "value",
+                                        64,
+                                        "description",
+                                        "Maximum number of source items grouped into one"
+                                                + " semantic-link window"))));
+    }
+
     private static final class StubMemoryOptionService extends MemoryOptionService {
 
         private final MemoryOptionsSnapshot current =
@@ -133,7 +178,15 @@ class MemoryOptionsControllerTest {
                                                 "Maximum extraction timeout",
                                                 "duration",
                                                 "PT30S",
-                                                Map.of("format", "iso-8601-duration")))));
+                                                Map.of("format", "iso-8601-duration")),
+                                        new MemoryOptionItemView(
+                                                "extraction.item.graph.semanticSourceWindowSize",
+                                                128,
+                                                "Maximum number of source items grouped into one"
+                                                        + " semantic-link window",
+                                                "integer",
+                                                128,
+                                                Map.of("minimum", 1)))));
 
         private long recordedExpectedVersion;
         private Map<String, List<MemoryOptionItemView>> recordedConfig;

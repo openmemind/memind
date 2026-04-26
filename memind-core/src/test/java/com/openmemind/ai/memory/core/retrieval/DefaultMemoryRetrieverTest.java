@@ -26,6 +26,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.retrieval.cache.RetrievalCache;
+import com.openmemind.ai.memory.core.retrieval.query.LongQueryCondenser;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.query.QueryRewriter;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategy;
@@ -45,6 +46,184 @@ import reactor.test.StepVerifier;
 class DefaultMemoryRetrieverTest {
 
     private final com.openmemind.ai.memory.core.data.MemoryId memoryId = TestMemoryIds.userAgent();
+
+    @Test
+    @DisplayName("admission skip should return empty result before store/cache/strategy")
+    void admissionSkipShouldReturnEmptyBeforeStoreCacheAndStrategy() {
+        var cache = mock(RetrievalCache.class);
+        var store = mock(MemoryStore.class);
+        var retriever = new DefaultMemoryRetriever(cache, store);
+
+        var result =
+                retriever
+                        .retrieve(
+                                RetrievalRequest.of(
+                                        memoryId, "!!!", RetrievalConfig.Strategy.SIMPLE))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.isEmpty()).isTrue();
+        assertThat(result.strategy()).isEqualTo("simple");
+        assertThat(result.query()).isEqualTo("!!!");
+        verifyNoInteractions(store, cache);
+    }
+
+    @Test
+    @DisplayName("admission reject should return empty result before store/cache/strategy")
+    void admissionRejectShouldReturnEmptyBeforeStoreCacheAndStrategy() {
+        var cache = mock(RetrievalCache.class);
+        var store = mock(MemoryStore.class);
+        var retriever = new DefaultMemoryRetriever(cache, store);
+
+        var result =
+                retriever
+                        .retrieve(
+                                RetrievalRequest.of(
+                                        memoryId,
+                                        "hello\u0000world",
+                                        RetrievalConfig.Strategy.SIMPLE))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.isEmpty()).isTrue();
+        assertThat(result.strategy()).isEqualTo("simple");
+        verifyNoInteractions(store, cache);
+    }
+
+    @Test
+    @DisplayName("too long query with no items should not call condenser")
+    void tooLongQueryWithNoItemsShouldNotCallCondenser() {
+        var cache = mock(RetrievalCache.class);
+        var store = mock(MemoryStore.class);
+        var itemOperations = mock(ItemOperations.class);
+        var condenser = mock(LongQueryCondenser.class);
+        var retriever = new DefaultMemoryRetriever(cache, store, null, null, condenser);
+        var longQuery = "word ".repeat(600);
+
+        when(store.itemOperations()).thenReturn(itemOperations);
+        when(itemOperations.hasItems(memoryId)).thenReturn(false);
+
+        var result =
+                retriever
+                        .retrieve(
+                                RetrievalRequest.of(
+                                        memoryId, longQuery, RetrievalConfig.Strategy.SIMPLE))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.isEmpty()).isTrue();
+        assertThat(result.query()).isEqualTo(longQuery);
+        verifyNoInteractions(cache, condenser);
+    }
+
+    @Test
+    @DisplayName("too long query with cache hit should not call condenser")
+    void tooLongQueryWithCacheHitShouldNotCallCondenser() {
+        var cache = mock(RetrievalCache.class);
+        var store = mock(MemoryStore.class);
+        var itemOperations = mock(ItemOperations.class);
+        var condenser = mock(LongQueryCondenser.class);
+        var retriever = new DefaultMemoryRetriever(cache, store, null, null, condenser);
+        var longQuery = "word ".repeat(600);
+        var cached = RetrievalResult.empty("simple", longQuery);
+
+        when(store.itemOperations()).thenReturn(itemOperations);
+        when(itemOperations.hasItems(memoryId)).thenReturn(true);
+        when(cache.get(eq(memoryId), anyString(), anyString())).thenReturn(Optional.of(cached));
+
+        var result =
+                retriever
+                        .retrieve(
+                                RetrievalRequest.of(
+                                        memoryId, longQuery, RetrievalConfig.Strategy.SIMPLE))
+                        .block();
+
+        assertThat(result).isSameAs(cached);
+        verifyNoInteractions(condenser);
+    }
+
+    @Test
+    @DisplayName(
+            "too long query with cache miss and condenser failure should return empty before"
+                    + " strategy")
+    void tooLongQueryWithCacheMissAndCondenserFailureShouldReturnEmptyBeforeStrategy() {
+        var cache = mock(RetrievalCache.class);
+        var store = mock(MemoryStore.class);
+        var itemOperations = mock(ItemOperations.class);
+        var condenser = mock(LongQueryCondenser.class);
+        var retriever = new DefaultMemoryRetriever(cache, store, null, null, condenser);
+        var longQuery = "word ".repeat(600);
+
+        when(store.itemOperations()).thenReturn(itemOperations);
+        when(itemOperations.hasItems(memoryId)).thenReturn(true);
+        when(cache.get(eq(memoryId), anyString(), anyString())).thenReturn(Optional.empty());
+        when(condenser.condense(eq(memoryId), eq(longQuery), eq(List.of()), eq(512)))
+                .thenReturn(Mono.empty());
+
+        var result =
+                retriever
+                        .retrieve(
+                                RetrievalRequest.of(
+                                        memoryId, longQuery, RetrievalConfig.Strategy.SIMPLE))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.isEmpty()).isTrue();
+        assertThat(result.strategy()).isEqualTo("simple");
+        assertThat(result.query()).isEqualTo(longQuery);
+        verify(condenser).condense(eq(memoryId), eq(longQuery), eq(List.of()), eq(512));
+    }
+
+    @Test
+    @DisplayName("too long query with condenser should retrieve using condensed query")
+    void tooLongQueryWithCondenserShouldRetrieveUsingCondensedQuery() {
+        var cache = mock(RetrievalCache.class);
+        var store = mock(MemoryStore.class);
+        var itemOperations = mock(ItemOperations.class);
+        var strategy = mock(RetrievalStrategy.class);
+        var rewriter = mock(QueryRewriter.class);
+        var condenser = mock(LongQueryCondenser.class);
+        var longQuery = "word ".repeat(600);
+        var condensedQuery = "Alice budget";
+
+        when(store.itemOperations()).thenReturn(itemOperations);
+        when(itemOperations.hasItems(memoryId)).thenReturn(true);
+        when(cache.get(eq(memoryId), anyString(), anyString())).thenReturn(Optional.empty());
+        when(condenser.condense(eq(memoryId), eq(longQuery), eq(List.of("history")), eq(512)))
+                .thenReturn(Mono.just(condensedQuery));
+        when(strategy.name()).thenReturn("simple");
+        when(strategy.retrieve(any(), any()))
+                .thenAnswer(
+                        invocation -> {
+                            QueryContext context = invocation.getArgument(0);
+                            return Mono.just(
+                                    RetrievalResult.empty("simple", context.searchQuery()));
+                        });
+
+        var retriever = new DefaultMemoryRetriever(cache, store, null, rewriter, condenser);
+        retriever.registerStrategy(strategy);
+
+        var result =
+                retriever
+                        .retrieve(
+                                new RetrievalRequest(
+                                        memoryId,
+                                        longQuery,
+                                        List.of("history"),
+                                        RetrievalConfig.simple(),
+                                        Map.of(),
+                                        null,
+                                        null))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.query()).isEqualTo(condensedQuery);
+        verifyNoInteractions(rewriter);
+        verify(strategy)
+                .retrieve(
+                        argThat(context -> condensedQuery.equals(context.searchQuery())),
+                        eq(RetrievalConfig.simple()));
+    }
 
     @Test
     @DisplayName("Should fail fast when requested retrieval strategy is not registered")

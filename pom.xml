@@ -295,6 +295,8 @@
                         <exclude>LICENSE</exclude>
                         <exclude>NOTICE</exclude>
                         <exclude>etc/**</exclude>
+                        <exclude>eval-data/**</exclude>
+                        <exclude>memind-evaluation/data/**</exclude>
                     </excludes>
                 </configuration>
                 <dependencies>

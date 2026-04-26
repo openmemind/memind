@@ -35,6 +35,7 @@ import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
+import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Instant;
 import java.util.List;
@@ -51,8 +52,10 @@ class MemoryItemLayerRuntimeContextTest {
         MemoryItemDeduplicator deduplicator = mock(MemoryItemDeduplicator.class);
         MemoryStore memoryStore = mock(MemoryStore.class);
         InsightOperations insightOperations = mock(InsightOperations.class);
+        ItemOperations itemOperations = mock(ItemOperations.class);
         MemoryVector vector = mock(MemoryVector.class);
         var selfVerificationStep = new CapturingSelfVerificationStep();
+        when(memoryStore.itemOperations()).thenReturn(itemOperations);
         var layer =
                 new MemoryItemLayer(
                         extractor, deduplicator, memoryStore, vector, selfVerificationStep);

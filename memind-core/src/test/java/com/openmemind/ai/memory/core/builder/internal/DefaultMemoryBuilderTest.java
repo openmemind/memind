@@ -22,13 +22,26 @@ import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
 import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
+import com.openmemind.ai.memory.core.builder.DeepRetrievalGraphOptions;
 import com.openmemind.ai.memory.core.builder.DeepRetrievalOptions;
+import com.openmemind.ai.memory.core.builder.ExtractionCommonOptions;
+import com.openmemind.ai.memory.core.builder.ExtractionOptions;
+import com.openmemind.ai.memory.core.builder.InsightExtractionOptions;
+import com.openmemind.ai.memory.core.builder.ItemExtractionOptions;
+import com.openmemind.ai.memory.core.builder.ItemGraphOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.MemoryBuilder;
+import com.openmemind.ai.memory.core.builder.MemoryThreadDerivationOptions;
+import com.openmemind.ai.memory.core.builder.MemoryThreadOptions;
+import com.openmemind.ai.memory.core.builder.PromptBudgetOptions;
+import com.openmemind.ai.memory.core.builder.QueryExpansionOptions;
+import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalAdvancedOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalCommonOptions;
 import com.openmemind.ai.memory.core.builder.RetrievalOptions;
+import com.openmemind.ai.memory.core.builder.SimpleRetrievalGraphOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
+import com.openmemind.ai.memory.core.builder.SufficiencyOptions;
 import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
@@ -37,6 +50,12 @@ import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
 import com.openmemind.ai.memory.core.extraction.item.MemoryItemLayer;
 import com.openmemind.ai.memory.core.extraction.item.extractor.DefaultMemoryItemExtractor;
+import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
+import com.openmemind.ai.memory.core.extraction.item.graph.NoOpItemGraphMaterializer;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.EntityResolutionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.graph.entity.resolve.ExactCanonicalEntityResolutionStrategy;
+import com.openmemind.ai.memory.core.extraction.item.graph.pipeline.DefaultItemGraphMaterializer;
+import com.openmemind.ai.memory.core.extraction.item.graph.plan.DefaultItemGraphPlanner;
 import com.openmemind.ai.memory.core.extraction.item.strategy.LlmItemExtractionStrategy;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
@@ -46,14 +65,21 @@ import com.openmemind.ai.memory.core.prompt.PromptType;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
+import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphMode;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepRetrievalStrategy;
+import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
+import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
+import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
+import com.openmemind.ai.memory.core.support.RecordingMemoryObserver;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingItemGraphMaterializer;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.lang.reflect.Proxy;
 import java.util.Map;
@@ -126,6 +152,15 @@ class DefaultMemoryBuilderTest {
     void builderPropagatesConfiguredBuildOptionsIntoDefaultMemory() {
         var configured =
                 MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults().withEnabled(false)),
+                                        InsightExtractionOptions.defaults()))
                         .retrieval(
                                 new RetrievalOptions(
                                         new RetrievalCommonOptions(false),
@@ -146,6 +181,172 @@ class DefaultMemoryBuilderTest {
 
         assertThat(readField(memory, "buildOptions", MemoryBuildOptions.class))
                 .isEqualTo(configured);
+    }
+
+    @Test
+    void builderStoresSanitizedBuildOptionsOnDefaultMemory() {
+        var configured =
+                MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults().withEnabled(true)),
+                                        InsightExtractionOptions.defaults()))
+                        .memoryThread(
+                                MemoryThreadOptions.defaults()
+                                        .withEnabled(true)
+                                        .withDerivation(
+                                                MemoryThreadDerivationOptions.defaults()
+                                                        .withEnabled(true)))
+                        .build();
+
+        var memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(CHAT_CLIENT)
+                                .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .options(configured)
+                                .build();
+
+        assertThat(
+                        readField(memory, "buildOptions", MemoryBuildOptions.class)
+                                .memoryThread()
+                                .derivation()
+                                .enabled())
+                .isFalse();
+    }
+
+    @Test
+    void defaultBuilderShouldKeepStage1aGraphHardeningEnabledOnlyThroughBuiltInDefaults() {
+        var graph = MemoryBuildOptions.defaults().extraction().item().graph();
+
+        assertThat(graph.enabled()).isTrue();
+        assertThat(graph.maxEntitiesPerItem()).isEqualTo(8);
+    }
+
+    @Test
+    void defaultRetrievalConfigMapsSimpleGraphAssistSemanticEvidenceDecayFactor() {
+        var configured =
+                MemoryBuildOptions.builder()
+                        .retrieval(
+                                new RetrievalOptions(
+                                        RetrievalCommonOptions.defaults(),
+                                        new SimpleRetrievalOptions(
+                                                java.time.Duration.ofSeconds(10),
+                                                5,
+                                                15,
+                                                5,
+                                                true,
+                                                new SimpleRetrievalGraphOptions(
+                                                        true,
+                                                        RetrievalGraphMode.ASSIST,
+                                                        6,
+                                                        12,
+                                                        2,
+                                                        2,
+                                                        2,
+                                                        3,
+                                                        8,
+                                                        0.35d,
+                                                        0.55d,
+                                                        0.70f,
+                                                        3,
+                                                        0.65d,
+                                                        java.time.Duration.ofMillis(200))),
+                                        DeepRetrievalOptions.defaults(),
+                                        RetrievalAdvancedOptions.defaults()))
+                        .build();
+
+        var memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(CHAT_CLIENT)
+                                .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .options(configured)
+                                .build();
+
+        RetrievalConfig runtimeConfig =
+                invokeMethod(
+                        memory,
+                        "defaultRetrievalConfig",
+                        RetrievalConfig.class,
+                        new Class<?>[] {RetrievalConfig.Strategy.class},
+                        RetrievalConfig.Strategy.SIMPLE);
+
+        assertThat(runtimeConfig.strategyConfig()).isInstanceOf(SimpleStrategyConfig.class);
+        var simpleConfig = (SimpleStrategyConfig) runtimeConfig.strategyConfig();
+        assertThat(simpleConfig.graphAssist().mode()).isEqualTo(RetrievalGraphMode.ASSIST);
+        assertThat(simpleConfig.graphAssist().semanticEvidenceDecayFactor()).isEqualTo(0.65d);
+    }
+
+    @Test
+    void defaultRetrievalConfigMapsDeepGraphAssistOptionsIntoRuntimeStrategyConfig() {
+        var configured =
+                MemoryBuildOptions.builder()
+                        .retrieval(
+                                new RetrievalOptions(
+                                        RetrievalCommonOptions.defaults(),
+                                        SimpleRetrievalOptions.defaults(),
+                                        new DeepRetrievalOptions(
+                                                java.time.Duration.ofSeconds(90),
+                                                5,
+                                                40,
+                                                false,
+                                                0,
+                                                QueryExpansionOptions.defaults(),
+                                                SufficiencyOptions.defaults(),
+                                                new DeepRetrievalGraphOptions(
+                                                        true,
+                                                        RetrievalGraphMode.ASSIST,
+                                                        8,
+                                                        16,
+                                                        2,
+                                                        2,
+                                                        2,
+                                                        4,
+                                                        8,
+                                                        0.30d,
+                                                        0.55d,
+                                                        0.70f,
+                                                        5,
+                                                        0.45d,
+                                                        java.time.Duration.ofMillis(300))),
+                                        RetrievalAdvancedOptions.defaults()))
+                        .build();
+
+        var memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(CHAT_CLIENT)
+                                .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .options(configured)
+                                .build();
+
+        RetrievalConfig runtimeConfig =
+                invokeMethod(
+                        memory,
+                        "defaultRetrievalConfig",
+                        RetrievalConfig.class,
+                        new Class<?>[] {RetrievalConfig.Strategy.class},
+                        RetrievalConfig.Strategy.DEEP);
+
+        assertThat(runtimeConfig.strategyConfig()).isInstanceOf(DeepStrategyConfig.class);
+        var deepConfig = (DeepStrategyConfig) runtimeConfig.strategyConfig();
+        assertThat(deepConfig.graphAssist().enabled()).isTrue();
+        assertThat(deepConfig.graphAssist().mode()).isEqualTo(RetrievalGraphMode.ASSIST);
+        assertThat(deepConfig.graphAssist().maxExpandedItems()).isEqualTo(16);
+        assertThat(deepConfig.graphAssist().protectDirectTopK()).isEqualTo(5);
+        assertThat(deepConfig.graphAssist().semanticEvidenceDecayFactor()).isEqualTo(0.45d);
     }
 
     @Test
@@ -272,6 +473,73 @@ class DefaultMemoryBuilderTest {
     }
 
     @Test
+    void builderManagedRuntimeShouldWrapGraphMaterializerWithTracingObserver() {
+        var observer = new RecordingMemoryObserver();
+
+        var memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(CHAT_CLIENT)
+                                .store(new InMemoryMemoryStore())
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .memoryObserver(observer)
+                                .options(graphEnabledBuildOptions())
+                                .build();
+
+        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
+        var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+
+        assertThat(readField(itemLayer, "graphMaterializer", ItemGraphMaterializer.class))
+                .isInstanceOf(TracingItemGraphMaterializer.class);
+    }
+
+    @Test
+    void builderManagedRuntimeShouldWireExactResolutionByDefault() {
+        var memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(CHAT_CLIENT)
+                                .store(new InMemoryMemoryStore())
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .options(graphEnabledBuildOptions())
+                                .build();
+
+        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
+        var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+        var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
+        var delegate = readField(tracing, "delegate", DefaultItemGraphMaterializer.class);
+
+        var planner = readField(delegate, "planner", DefaultItemGraphPlanner.class);
+
+        assertThat(readField(planner, "resolutionStrategy", EntityResolutionStrategy.class))
+                .isInstanceOf(ExactCanonicalEntityResolutionStrategy.class);
+    }
+
+    @Test
+    void builderManagedRuntimeShouldKeepGraphMaterializerNoOpAndUntracedWhenGraphDisabled() {
+        var observer = new RecordingMemoryObserver();
+
+        var memory =
+                (DefaultMemory)
+                        Memory.builder()
+                                .chatClient(CHAT_CLIENT)
+                                .store(MEMORY_STORE)
+                                .buffer(MEMORY_BUFFER)
+                                .vector(MEMORY_VECTOR)
+                                .memoryObserver(observer)
+                                .options(MemoryBuildOptions.defaults())
+                                .build();
+
+        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
+        var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+
+        assertThat(readField(itemLayer, "graphMaterializer", ItemGraphMaterializer.class))
+                .isInstanceOf(NoOpItemGraphMaterializer.class);
+    }
+
+    @Test
     void closeClosesCloseableComponentsOnlyOnce() {
         var storeCloseCount = new AtomicInteger();
         var bufferCloseCount = new AtomicInteger();
@@ -390,6 +658,21 @@ class DefaultMemoryBuilderTest {
                 closeCount.incrementAndGet();
             }
         }
+    }
+
+    private static MemoryBuildOptions graphEnabledBuildOptions() {
+        return MemoryBuildOptions.builder()
+                .extraction(
+                        new ExtractionOptions(
+                                ExtractionCommonOptions.defaults(),
+                                RawDataExtractionOptions.defaults(),
+                                new ItemExtractionOptions(
+                                        false,
+                                        com.openmemind.ai.memory.core.builder.PromptBudgetOptions
+                                                .defaults(),
+                                        ItemGraphOptions.defaults().withEnabled(true)),
+                                InsightExtractionOptions.defaults()))
+                .build();
     }
 
     private static final class FixedMemoryBuffer implements MemoryBuffer {
@@ -614,6 +897,23 @@ class DefaultMemoryBuilderTest {
                             }
                             return null;
                         });
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T invokeMethod(
+            Object target,
+            String methodName,
+            Class<T> returnType,
+            Class<?>[] parameterTypes,
+            Object... args) {
+        try {
+            var method = target.getClass().getDeclaredMethod(methodName, parameterTypes);
+            method.setAccessible(true);
+            return (T) returnType.cast(method.invoke(target, args));
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(
+                    "Failed to invoke method '" + methodName + "' on " + target.getClass(), e);
+        }
     }
 
     @SuppressWarnings("unchecked")

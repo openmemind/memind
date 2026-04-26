@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.extraction.insight.generator;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
@@ -190,6 +191,50 @@ class LlmInsightGeneratorTest {
     }
 
     @Test
+    @DisplayName("generateBranchPointOps should append additional context to the user prompt")
+    void generateBranchPointOpsShouldAppendAdditionalContextToUserPrompt() {
+        var client = new FakeStructuredChatClient(new InsightPointOpsResponse(List.of()));
+        var generator = new LlmInsightGenerator(client);
+
+        StepVerifier.create(
+                        generator.generateBranchPointOps(
+                                rootInsightType("profile"),
+                                List.of(),
+                                List.of(memoryInsight()),
+                                300,
+                                "GraphBranchHints: shared entity project-x",
+                                "English"))
+                .expectNextMatches(response -> response.operations().isEmpty())
+                .verifyComplete();
+
+        assertThat(client.lastMessages().getLast().content())
+                .contains("<AdditionalContext>")
+                .contains("GraphBranchHints: shared entity project-x");
+    }
+
+    @Test
+    @DisplayName("generateBranchSummary should append additional context to the user prompt")
+    void generateBranchSummaryShouldAppendAdditionalContextToUserPrompt() {
+        var client = new FakeStructuredChatClient(new InsightPointGenerateResponse(List.of()));
+        var generator = new LlmInsightGenerator(client);
+
+        StepVerifier.create(
+                        generator.generateBranchSummary(
+                                rootInsightType("profile"),
+                                List.of(),
+                                List.of(memoryInsight()),
+                                300,
+                                "GraphBranchHints: shared entity project-x",
+                                "English"))
+                .expectNextMatches(response -> response.points().isEmpty())
+                .verifyComplete();
+
+        assertThat(client.lastMessages().getLast().content())
+                .contains("<AdditionalContext>")
+                .contains("GraphBranchHints: shared entity project-x");
+    }
+
+    @Test
     @DisplayName("generateRootSynthesis should use root synthesis override instruction")
     void generateRootSynthesisShouldUseRootSynthesisOverrideInstruction() {
         var client = new FakeStructuredChatClient(new InsightPointGenerateResponse(List.of()));
@@ -235,6 +280,28 @@ class LlmInsightGeneratorTest {
                 .contains("Custom interaction guide instruction");
     }
 
+    @Test
+    @DisplayName("generateRootSynthesis should append additional context to the user prompt")
+    void generateRootSynthesisShouldAppendAdditionalContextToUserPrompt() {
+        var client = new FakeStructuredChatClient(new InsightPointGenerateResponse(List.of()));
+        var generator = new LlmInsightGenerator(client);
+
+        StepVerifier.create(
+                        generator.generateRootSynthesis(
+                                rootInsightType("interaction"),
+                                List.of(),
+                                List.of(memoryInsight()),
+                                300,
+                                "GraphRootHints: weak bridge between branches",
+                                "English"))
+                .expectNextMatches(response -> response.points().isEmpty())
+                .verifyComplete();
+
+        assertThat(client.lastMessages().getLast().content())
+                .contains("<AdditionalContext>")
+                .contains("GraphRootHints: weak bridge between branches");
+    }
+
     private static MemoryInsightType rootInsightType(String name) {
         return new MemoryInsightType(
                 1L,
@@ -249,6 +316,26 @@ class LlmInsightGeneratorTest {
                 InsightAnalysisMode.BRANCH,
                 null,
                 MemoryScope.AGENT);
+    }
+
+    private static MemoryInsight memoryInsight() {
+        return new MemoryInsight(
+                1L,
+                "memory-1",
+                "profile",
+                MemoryScope.AGENT,
+                "group",
+                List.of("directive"),
+                List.of(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                0);
     }
 
     private static final class FakeStructuredChatClient implements StructuredChatClient {

@@ -26,9 +26,12 @@ import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import com.openmemind.ai.memory.core.tracing.MemoryObserver;
+import com.openmemind.ai.memory.core.tracing.NoopMemoryObserver;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 record MemoryAssemblyContext(
         ChatClientRegistry chatClientRegistry,
@@ -42,7 +45,9 @@ record MemoryAssemblyContext(
         ContentParserRegistry contentParserRegistry,
         ResourceFetcher resourceFetcher,
         List<RawDataPlugin> rawDataPlugins,
-        BubbleTrackerStore bubbleTrackerStore) {
+        BubbleTrackerStore bubbleTrackerStore,
+        MemoryObserver memoryObserver,
+        Optional<String> memoryThreadForcedDisableReason) {
 
     MemoryAssemblyContext {
         Objects.requireNonNull(chatClientRegistry, "chatClientRegistry");
@@ -62,6 +67,11 @@ record MemoryAssemblyContext(
         Objects.requireNonNull(promptRegistry, "promptRegistry");
         Objects.requireNonNull(options, "options");
         rawDataPlugins = List.copyOf(Objects.requireNonNull(rawDataPlugins, "rawDataPlugins"));
+        memoryObserver = memoryObserver != null ? memoryObserver : new NoopMemoryObserver();
+        memoryThreadForcedDisableReason =
+                memoryThreadForcedDisableReason != null
+                        ? memoryThreadForcedDisableReason
+                        : Optional.empty();
     }
 
     InsightBuffer insightBuffer() {

@@ -103,6 +103,49 @@ class LlmInsightGroupClassifierTest {
                 .contains("Custom insight group instruction");
     }
 
+    @Test
+    @DisplayName("Should append additional graph context to the user prompt")
+    void shouldAppendAdditionalGraphContextToUserPrompt() {
+        var item =
+                new MemoryItem(
+                        1L,
+                        "m1",
+                        "The team keeps revisiting launch sequencing details.",
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null);
+        var response =
+                new InsightGroupClassifyResponse(
+                        List.of(
+                                new InsightGroupClassifyResponse.GroupAssignment(
+                                        "Launch Planning", List.of("1"))));
+        var client = new FakeStructuredChatClient(response);
+        var classifier = new LlmInsightGroupClassifier(client);
+
+        StepVerifier.create(
+                        classifier.classify(
+                                createInsightType(),
+                                List.of(item),
+                                List.of(),
+                                "GraphGroupingHints: cluster alpha",
+                                "English"))
+                .assertNext(groups -> assertThat(groups).containsKey("Launch Planning"))
+                .verifyComplete();
+
+        assertThat(client.lastMessages()).hasSize(2);
+        assertThat(client.lastMessages().get(1).content())
+                .contains("<AdditionalContext>")
+                .contains("GraphGroupingHints: cluster alpha");
+    }
+
     private static MemoryInsightType createInsightType() {
         return new MemoryInsightType(
                 1L,

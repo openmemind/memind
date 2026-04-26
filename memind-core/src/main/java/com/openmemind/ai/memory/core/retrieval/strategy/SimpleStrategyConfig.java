@@ -13,12 +13,66 @@
  */
 package com.openmemind.ai.memory.core.retrieval.strategy;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.openmemind.ai.memory.core.builder.SimpleMemoryThreadAssistOptions;
+import com.openmemind.ai.memory.core.builder.SimpleRetrievalGraphOptions;
+import com.openmemind.ai.memory.core.builder.SimpleTemporalRetrievalOptions;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphMode;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphSettings;
+import com.openmemind.ai.memory.core.retrieval.temporal.TemporalItemChannelSettings;
+import com.openmemind.ai.memory.core.retrieval.thread.RetrievalMemoryThreadSettings;
+import java.time.Duration;
+import java.util.Objects;
+
 /**
  * Simple Strategy Configuration
  *
  * @param enableKeywordSearch Whether to enable BM25 keyword search (only effective at the Item level)
  */
-public record SimpleStrategyConfig(boolean enableKeywordSearch) implements StrategyConfig {
+public record SimpleStrategyConfig(
+        boolean enableKeywordSearch,
+        TemporalRetrievalConfig temporalRetrieval,
+        GraphAssistConfig graphAssist,
+        MemoryThreadAssistConfig memoryThreadAssist)
+        implements StrategyConfig {
+
+    public SimpleStrategyConfig {
+        temporalRetrieval =
+                temporalRetrieval != null ? temporalRetrieval : TemporalRetrievalConfig.defaults();
+        graphAssist = graphAssist != null ? graphAssist : GraphAssistConfig.defaults();
+        memoryThreadAssist =
+                memoryThreadAssist != null
+                        ? memoryThreadAssist
+                        : MemoryThreadAssistConfig.defaults();
+    }
+
+    public SimpleStrategyConfig(boolean enableKeywordSearch) {
+        this(
+                enableKeywordSearch,
+                TemporalRetrievalConfig.defaults(),
+                GraphAssistConfig.defaults(),
+                MemoryThreadAssistConfig.defaults());
+    }
+
+    public SimpleStrategyConfig(boolean enableKeywordSearch, GraphAssistConfig graphAssist) {
+        this(
+                enableKeywordSearch,
+                TemporalRetrievalConfig.defaults(),
+                graphAssist,
+                MemoryThreadAssistConfig.defaults());
+    }
+
+    public SimpleStrategyConfig(
+            boolean enableKeywordSearch,
+            GraphAssistConfig graphAssist,
+            MemoryThreadAssistConfig memoryThreadAssist) {
+        this(
+                enableKeywordSearch,
+                TemporalRetrievalConfig.defaults(),
+                graphAssist,
+                memoryThreadAssist);
+    }
 
     @Override
     public String strategyName() {
@@ -30,6 +84,305 @@ public record SimpleStrategyConfig(boolean enableKeywordSearch) implements Strat
     }
 
     public SimpleStrategyConfig withKeywordSearch(boolean enabled) {
-        return new SimpleStrategyConfig(enabled);
+        return new SimpleStrategyConfig(
+                enabled, temporalRetrieval, graphAssist, memoryThreadAssist);
+    }
+
+    public SimpleStrategyConfig withTemporalRetrieval(TemporalRetrievalConfig temporalRetrieval) {
+        return new SimpleStrategyConfig(
+                enableKeywordSearch, temporalRetrieval, graphAssist, memoryThreadAssist);
+    }
+
+    public SimpleStrategyConfig withGraphAssist(GraphAssistConfig graphAssist) {
+        return new SimpleStrategyConfig(
+                enableKeywordSearch, temporalRetrieval, graphAssist, memoryThreadAssist);
+    }
+
+    public SimpleStrategyConfig withMemoryThreadAssist(
+            MemoryThreadAssistConfig memoryThreadAssist) {
+        return new SimpleStrategyConfig(
+                enableKeywordSearch, temporalRetrieval, graphAssist, memoryThreadAssist);
+    }
+
+    public record TemporalRetrievalConfig(
+            boolean enabled, int maxWindowCandidates, double channelWeight, Duration timeout) {
+
+        public TemporalRetrievalConfig {
+            SimpleTemporalRetrievalOptions.validateTemporalShape(
+                    maxWindowCandidates, channelWeight, timeout);
+        }
+
+        public static TemporalRetrievalConfig defaults() {
+            var defaults = SimpleTemporalRetrievalOptions.defaults();
+            return new TemporalRetrievalConfig(
+                    defaults.enabled(),
+                    defaults.maxWindowCandidates(),
+                    defaults.channelWeight(),
+                    defaults.timeout());
+        }
+
+        @JsonCreator
+        public static TemporalRetrievalConfig fromJson(
+                @JsonProperty("enabled") Boolean enabled,
+                @JsonProperty("maxWindowCandidates") Integer maxWindowCandidates,
+                @JsonProperty("channelWeight") Double channelWeight,
+                @JsonProperty("timeout") Duration timeout) {
+            var defaults = defaults();
+            return new TemporalRetrievalConfig(
+                    enabled != null ? enabled : defaults.enabled(),
+                    maxWindowCandidates != null
+                            ? maxWindowCandidates
+                            : defaults.maxWindowCandidates(),
+                    channelWeight != null ? channelWeight : defaults.channelWeight(),
+                    timeout != null ? timeout : defaults.timeout());
+        }
+
+        public TemporalItemChannelSettings toSettings() {
+            return new TemporalItemChannelSettings(
+                    enabled, maxWindowCandidates, channelWeight, timeout);
+        }
+    }
+
+    public record GraphAssistConfig(
+            boolean enabled,
+            RetrievalGraphMode mode,
+            int maxSeedItems,
+            int maxExpandedItems,
+            int maxSemanticNeighborsPerSeed,
+            int maxTemporalNeighborsPerSeed,
+            int maxCausalNeighborsPerSeed,
+            int maxEntitySiblingItemsPerSeed,
+            int maxItemsPerEntity,
+            double graphChannelWeight,
+            double minLinkStrength,
+            float minMentionConfidence,
+            int protectDirectTopK,
+            double semanticEvidenceDecayFactor,
+            Duration timeout)
+            implements RetrievalGraphSettings {
+
+        public GraphAssistConfig {
+            Objects.requireNonNull(mode, "mode");
+            SimpleRetrievalGraphOptions.validateGraphAssistShape(
+                    maxSeedItems,
+                    maxExpandedItems,
+                    maxSemanticNeighborsPerSeed,
+                    maxTemporalNeighborsPerSeed,
+                    maxCausalNeighborsPerSeed,
+                    maxEntitySiblingItemsPerSeed,
+                    maxItemsPerEntity,
+                    graphChannelWeight,
+                    minLinkStrength,
+                    minMentionConfidence,
+                    protectDirectTopK,
+                    semanticEvidenceDecayFactor,
+                    timeout);
+        }
+
+        public static GraphAssistConfig defaults() {
+            var defaults = SimpleRetrievalGraphOptions.defaults();
+            return new GraphAssistConfig(
+                    defaults.enabled(),
+                    defaults.mode(),
+                    defaults.maxSeedItems(),
+                    defaults.maxExpandedItems(),
+                    defaults.maxSemanticNeighborsPerSeed(),
+                    defaults.maxTemporalNeighborsPerSeed(),
+                    defaults.maxCausalNeighborsPerSeed(),
+                    defaults.maxEntitySiblingItemsPerSeed(),
+                    defaults.maxItemsPerEntity(),
+                    defaults.graphChannelWeight(),
+                    defaults.minLinkStrength(),
+                    defaults.minMentionConfidence(),
+                    defaults.protectDirectTopK(),
+                    defaults.semanticEvidenceDecayFactor(),
+                    defaults.timeout());
+        }
+
+        @JsonCreator
+        public static GraphAssistConfig fromJson(
+                @JsonProperty("enabled") Boolean enabled,
+                @JsonProperty("mode") RetrievalGraphMode mode,
+                @JsonProperty("maxSeedItems") Integer maxSeedItems,
+                @JsonProperty("maxExpandedItems") Integer maxExpandedItems,
+                @JsonProperty("maxSemanticNeighborsPerSeed") Integer maxSemanticNeighborsPerSeed,
+                @JsonProperty("maxTemporalNeighborsPerSeed") Integer maxTemporalNeighborsPerSeed,
+                @JsonProperty("maxCausalNeighborsPerSeed") Integer maxCausalNeighborsPerSeed,
+                @JsonProperty("maxEntitySiblingItemsPerSeed") Integer maxEntitySiblingItemsPerSeed,
+                @JsonProperty("maxItemsPerEntity") Integer maxItemsPerEntity,
+                @JsonProperty("graphChannelWeight") Double graphChannelWeight,
+                @JsonProperty("minLinkStrength") Double minLinkStrength,
+                @JsonProperty("minMentionConfidence") Float minMentionConfidence,
+                @JsonProperty("protectDirectTopK") Integer protectDirectTopK,
+                @JsonProperty("semanticEvidenceDecayFactor") Double semanticEvidenceDecayFactor,
+                @JsonProperty("timeout") Duration timeout) {
+            var defaults = defaults();
+            return new GraphAssistConfig(
+                    enabled != null ? enabled : defaults.enabled(),
+                    mode != null ? mode : defaults.mode(),
+                    maxSeedItems != null ? maxSeedItems : defaults.maxSeedItems(),
+                    maxExpandedItems != null ? maxExpandedItems : defaults.maxExpandedItems(),
+                    maxSemanticNeighborsPerSeed != null
+                            ? maxSemanticNeighborsPerSeed
+                            : defaults.maxSemanticNeighborsPerSeed(),
+                    maxTemporalNeighborsPerSeed != null
+                            ? maxTemporalNeighborsPerSeed
+                            : defaults.maxTemporalNeighborsPerSeed(),
+                    maxCausalNeighborsPerSeed != null
+                            ? maxCausalNeighborsPerSeed
+                            : defaults.maxCausalNeighborsPerSeed(),
+                    maxEntitySiblingItemsPerSeed != null
+                            ? maxEntitySiblingItemsPerSeed
+                            : defaults.maxEntitySiblingItemsPerSeed(),
+                    maxItemsPerEntity != null ? maxItemsPerEntity : defaults.maxItemsPerEntity(),
+                    graphChannelWeight != null ? graphChannelWeight : defaults.graphChannelWeight(),
+                    minLinkStrength != null ? minLinkStrength : defaults.minLinkStrength(),
+                    minMentionConfidence != null
+                            ? minMentionConfidence
+                            : defaults.minMentionConfidence(),
+                    protectDirectTopK != null ? protectDirectTopK : defaults.protectDirectTopK(),
+                    semanticEvidenceDecayFactor != null
+                            ? semanticEvidenceDecayFactor
+                            : defaults.semanticEvidenceDecayFactor(),
+                    timeout != null ? timeout : defaults.timeout());
+        }
+
+        public GraphAssistConfig withEnabled(boolean enabled) {
+            return new GraphAssistConfig(
+                    enabled,
+                    mode,
+                    maxSeedItems,
+                    maxExpandedItems,
+                    maxSemanticNeighborsPerSeed,
+                    maxTemporalNeighborsPerSeed,
+                    maxCausalNeighborsPerSeed,
+                    maxEntitySiblingItemsPerSeed,
+                    maxItemsPerEntity,
+                    graphChannelWeight,
+                    minLinkStrength,
+                    minMentionConfidence,
+                    protectDirectTopK,
+                    semanticEvidenceDecayFactor,
+                    timeout);
+        }
+
+        public GraphAssistConfig withMode(RetrievalGraphMode mode) {
+            return new GraphAssistConfig(
+                    enabled,
+                    mode,
+                    maxSeedItems,
+                    maxExpandedItems,
+                    maxSemanticNeighborsPerSeed,
+                    maxTemporalNeighborsPerSeed,
+                    maxCausalNeighborsPerSeed,
+                    maxEntitySiblingItemsPerSeed,
+                    maxItemsPerEntity,
+                    graphChannelWeight,
+                    minLinkStrength,
+                    minMentionConfidence,
+                    protectDirectTopK,
+                    semanticEvidenceDecayFactor,
+                    timeout);
+        }
+
+        public GraphAssistConfig withMaxSeedItems(int maxSeedItems) {
+            return new GraphAssistConfig(
+                    enabled,
+                    mode,
+                    maxSeedItems,
+                    maxExpandedItems,
+                    maxSemanticNeighborsPerSeed,
+                    maxTemporalNeighborsPerSeed,
+                    maxCausalNeighborsPerSeed,
+                    maxEntitySiblingItemsPerSeed,
+                    maxItemsPerEntity,
+                    graphChannelWeight,
+                    minLinkStrength,
+                    minMentionConfidence,
+                    protectDirectTopK,
+                    semanticEvidenceDecayFactor,
+                    timeout);
+        }
+
+        public GraphAssistConfig withProtectDirectTopK(int protectDirectTopK) {
+            return new GraphAssistConfig(
+                    enabled,
+                    mode,
+                    maxSeedItems,
+                    maxExpandedItems,
+                    maxSemanticNeighborsPerSeed,
+                    maxTemporalNeighborsPerSeed,
+                    maxCausalNeighborsPerSeed,
+                    maxEntitySiblingItemsPerSeed,
+                    maxItemsPerEntity,
+                    graphChannelWeight,
+                    minLinkStrength,
+                    minMentionConfidence,
+                    protectDirectTopK,
+                    semanticEvidenceDecayFactor,
+                    timeout);
+        }
+
+        public GraphAssistConfig withTimeout(Duration timeout) {
+            return new GraphAssistConfig(
+                    enabled,
+                    mode,
+                    maxSeedItems,
+                    maxExpandedItems,
+                    maxSemanticNeighborsPerSeed,
+                    maxTemporalNeighborsPerSeed,
+                    maxCausalNeighborsPerSeed,
+                    maxEntitySiblingItemsPerSeed,
+                    maxItemsPerEntity,
+                    graphChannelWeight,
+                    minLinkStrength,
+                    minMentionConfidence,
+                    protectDirectTopK,
+                    semanticEvidenceDecayFactor,
+                    timeout);
+        }
+    }
+
+    /** Runtime memory-thread assist configuration for simple retrieval. */
+    public record MemoryThreadAssistConfig(
+            boolean enabled,
+            int maxThreads,
+            int maxMembersPerThread,
+            int protectDirectTopK,
+            Duration timeout)
+            implements RetrievalMemoryThreadSettings {
+
+        public MemoryThreadAssistConfig {
+            SimpleMemoryThreadAssistOptions.validateAssistShape(
+                    maxThreads, maxMembersPerThread, protectDirectTopK, timeout);
+        }
+
+        public static MemoryThreadAssistConfig defaults() {
+            var defaults = SimpleMemoryThreadAssistOptions.defaults();
+            return new MemoryThreadAssistConfig(
+                    defaults.enabled(),
+                    defaults.maxThreads(),
+                    defaults.maxMembersPerThread(),
+                    defaults.protectDirectTopK(),
+                    defaults.timeout());
+        }
+
+        @JsonCreator
+        public static MemoryThreadAssistConfig fromJson(
+                @JsonProperty("enabled") Boolean enabled,
+                @JsonProperty("maxThreads") Integer maxThreads,
+                @JsonProperty("maxMembersPerThread") Integer maxMembersPerThread,
+                @JsonProperty("protectDirectTopK") Integer protectDirectTopK,
+                @JsonProperty("timeout") Duration timeout) {
+            var defaults = defaults();
+            return new MemoryThreadAssistConfig(
+                    enabled != null ? enabled : defaults.enabled(),
+                    maxThreads != null ? maxThreads : defaults.maxThreads(),
+                    maxMembersPerThread != null
+                            ? maxMembersPerThread
+                            : defaults.maxMembersPerThread(),
+                    protectDirectTopK != null ? protectDirectTopK : defaults.protectDirectTopK(),
+                    timeout != null ? timeout : defaults.timeout());
+        }
     }
 }

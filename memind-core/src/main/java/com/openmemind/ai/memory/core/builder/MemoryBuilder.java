@@ -25,6 +25,7 @@ import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 
 /**
@@ -57,6 +58,10 @@ public interface MemoryBuilder {
     MemoryBuilder bubbleTrackerStore(BubbleTrackerStore bubbleTrackerStore);
 
     MemoryBuilder options(MemoryBuildOptions options);
+
+    default MemoryBuilder memoryObserver(MemoryObserver observer) {
+        return this;
+    }
 
     MemoryBuilder externallyManaged(boolean externallyManaged);
 

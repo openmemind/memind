@@ -38,4 +38,12 @@ class PromptDefaultsTest {
                     .isNotNull();
         }
     }
+
+    @Test
+    void longQueryCondenseDefaultPromptShouldRenderWithoutUnresolvedVariables() {
+        var prompt = PromptDefaults.build(PromptType.LONG_QUERY_CONDENSE).render("English");
+
+        assertThat(prompt.systemPrompt()).contains("retrieval-focused");
+        assertThat(prompt.userPrompt()).doesNotContain("{{");
+    }
 }

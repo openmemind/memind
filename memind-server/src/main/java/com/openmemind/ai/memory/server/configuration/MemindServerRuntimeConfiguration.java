@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.server.configuration;
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.core.builder.MemoryBuildOptionsSanitizer;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
@@ -26,6 +27,7 @@ import com.openmemind.ai.memory.core.resource.DefaultContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeFactory;
@@ -73,28 +75,35 @@ public class MemindServerRuntimeConfiguration {
             ObjectProvider<ContentParser> contentParserProvider,
             ObjectProvider<RawDataPlugin> rawDataPluginProvider,
             ObjectProvider<ResourceFetcher> resourceFetcherProvider,
-            ObjectProvider<BubbleTrackerStore> bubbleTrackerStoreProvider) {
+            ObjectProvider<BubbleTrackerStore> bubbleTrackerStoreProvider,
+            ObjectProvider<MemoryObserver> memoryObserverProvider) {
         return options -> {
             StructuredChatClient structuredChatClient =
                     requireRuntimeDependency(structuredChatClientProvider);
             MemoryStore memoryStore = requireRuntimeDependency(memoryStoreProvider);
             MemoryBuffer memoryBuffer = requireRuntimeDependency(memoryBufferProvider);
             MemoryVector memoryVector = requireRuntimeDependency(memoryVectorProvider);
+            MemoryBuildOptions effectiveOptions =
+                    new MemoryBuildOptionsSanitizer().sanitize(options, memoryStore).options();
             List<ContentParser> parsers = resolveContentParsers(contentParserProvider);
             ContentParserRegistry contentParserRegistry =
                     parsers.isEmpty() ? null : new DefaultContentParserRegistry(parsers);
             ResourceFetcher resourceFetcher = resourceFetcherProvider.getIfAvailable();
             BubbleTrackerStore bubbleTrackerStore = bubbleTrackerStoreProvider.getIfAvailable();
+            MemoryObserver memoryObserver = memoryObserverProvider.getIfAvailable();
             var builder =
                     Memory.builder()
                             .chatClient(structuredChatClient)
                             .store(memoryStore)
                             .buffer(memoryBuffer)
                             .vector(memoryVector)
-                            .options(options)
+                            .options(effectiveOptions)
                             .externallyManaged(true);
             if (bubbleTrackerStore != null) {
                 builder.bubbleTrackerStore(bubbleTrackerStore);
+            }
+            if (memoryObserver != null) {
+                builder.memoryObserver(memoryObserver);
             }
             if (contentParserRegistry != null) {
                 builder.contentParserRegistry(contentParserRegistry);
@@ -111,7 +120,7 @@ public class MemindServerRuntimeConfiguration {
             if (rerankerBean != null) {
                 builder.reranker(rerankerBean);
             }
-            return builder.build();
+            return new MemoryRuntimeFactory.CreationResult(builder.build(), effectiveOptions);
         };
     }
 
@@ -135,8 +144,9 @@ public class MemindServerRuntimeConfiguration {
         return arguments -> {
             InitialRuntimeState state = loadOrInitialize(repository, codec);
             try {
-                runtimeManager.swap(
-                        runtimeFactory.create(state.options()), state.options(), state.version());
+                MemoryRuntimeFactory.CreationResult created =
+                        runtimeFactory.create(state.options());
+                runtimeManager.swap(created.memory(), created.effectiveOptions(), state.version());
             } catch (MemoryRuntimeUnavailableException exception) {
                 log.warn("Memory runtime is unavailable at startup: {}", exception.getMessage());
             }

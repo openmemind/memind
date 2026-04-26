@@ -25,7 +25,10 @@ import static com.openmemind.ai.memory.core.tracing.MemorySpanNames.EXTRACTION_I
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.data.InsightPoint;
@@ -206,6 +209,102 @@ class TracingInsightGeneratorTest {
                 .containsEntry(EXTRACTION_INSIGHT_ADD_COUNT, 0)
                 .containsEntry(EXTRACTION_INSIGHT_UPDATE_COUNT, 1)
                 .containsEntry(EXTRACTION_INSIGHT_DELETE_COUNT, 0);
+    }
+
+    @Test
+    void generateBranchPointOpsForwardsAdditionalContextOverload() {
+        var observer = new RecordingMemoryObserver();
+        var delegate = mock(InsightGenerator.class);
+        var response = new InsightPointOpsResponse(List.of());
+        when(delegate.generateBranchPointOps(any(), anyList(), anyList(), anyInt(), any(), any()))
+                .thenReturn(Mono.just(response));
+        var insightType = insightType();
+
+        var traced = new TracingInsightGenerator(delegate, observer);
+
+        StepVerifier.create(
+                        traced.generateBranchPointOps(
+                                insightType,
+                                List.of(),
+                                List.of(memoryInsight()),
+                                100,
+                                "GraphBranchHints: shared entity project-x",
+                                "zh-CN"))
+                .expectNext(response)
+                .verifyComplete();
+
+        verify(delegate)
+                .generateBranchPointOps(
+                        eq(insightType),
+                        anyList(),
+                        anyList(),
+                        eq(100),
+                        eq("GraphBranchHints: shared entity project-x"),
+                        eq("zh-CN"));
+    }
+
+    @Test
+    void generateBranchSummaryForwardsAdditionalContextOverload() {
+        var observer = new RecordingMemoryObserver();
+        var delegate = mock(InsightGenerator.class);
+        var response = new InsightPointGenerateResponse(List.of());
+        when(delegate.generateBranchSummary(any(), anyList(), anyList(), anyInt(), any(), any()))
+                .thenReturn(Mono.just(response));
+        var insightType = insightType();
+
+        var traced = new TracingInsightGenerator(delegate, observer);
+
+        StepVerifier.create(
+                        traced.generateBranchSummary(
+                                insightType,
+                                List.of(),
+                                List.of(memoryInsight()),
+                                100,
+                                "GraphBranchHints: shared entity project-x",
+                                "zh-CN"))
+                .expectNext(response)
+                .verifyComplete();
+
+        verify(delegate)
+                .generateBranchSummary(
+                        eq(insightType),
+                        anyList(),
+                        anyList(),
+                        eq(100),
+                        eq("GraphBranchHints: shared entity project-x"),
+                        eq("zh-CN"));
+    }
+
+    @Test
+    void generateRootSynthesisForwardsAdditionalContextOverload() {
+        var observer = new RecordingMemoryObserver();
+        var delegate = mock(InsightGenerator.class);
+        var response = new InsightPointGenerateResponse(List.of());
+        when(delegate.generateRootSynthesis(any(), anyList(), anyList(), anyInt(), any(), any()))
+                .thenReturn(Mono.just(response));
+        var insightType = insightType();
+
+        var traced = new TracingInsightGenerator(delegate, observer);
+
+        StepVerifier.create(
+                        traced.generateRootSynthesis(
+                                insightType,
+                                List.of(),
+                                List.of(memoryInsight()),
+                                100,
+                                "GraphRootHints: weak bridge between branches",
+                                "zh-CN"))
+                .expectNext(response)
+                .verifyComplete();
+
+        verify(delegate)
+                .generateRootSynthesis(
+                        eq(insightType),
+                        anyList(),
+                        anyList(),
+                        eq(100),
+                        eq("GraphRootHints: weak bridge between branches"),
+                        eq("zh-CN"));
     }
 
     private static MemoryInsightType insightType() {

@@ -28,6 +28,8 @@ import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import com.openmemind.ai.memory.core.tracing.MemoryObserver;
+import com.openmemind.ai.memory.core.tracing.NoopMemoryObserver;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -35,8 +37,12 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class DefaultMemoryBuilder implements MemoryBuilder {
+
+    private static final Logger log = LoggerFactory.getLogger(DefaultMemoryBuilder.class);
 
     private StructuredChatClient chatClient;
     private final Map<ChatClientSlot, StructuredChatClient> slotClients =
@@ -52,6 +58,7 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     private BubbleTrackerStore bubbleTrackerStore;
     private final List<RawDataPlugin> rawDataPlugins = new ArrayList<>();
     private MemoryBuildOptions options = MemoryBuildOptions.defaults();
+    private MemoryObserver memoryObserver = new NoopMemoryObserver();
     private boolean externallyManaged;
 
     @Override
@@ -141,6 +148,12 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     }
 
     @Override
+    public MemoryBuilder memoryObserver(MemoryObserver observer) {
+        this.memoryObserver = Objects.requireNonNull(observer, "observer");
+        return this;
+    }
+
+    @Override
     public MemoryBuilder externallyManaged(boolean externallyManaged) {
         this.externallyManaged = externallyManaged;
         return this;
@@ -150,6 +163,9 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     public Memory build() {
         validateRequiredComponents();
 
+        var sanitization = new MemoryBuildOptionsSanitizer().sanitize(options, store);
+        sanitization.warnings().forEach(log::warn);
+        MemoryBuildOptions effectiveOptions = sanitization.options();
         ChatClientRegistry registry = new ChatClientRegistry(chatClient, slotClients);
         MemoryAssemblyContext context =
                 new MemoryAssemblyContext(
@@ -160,11 +176,13 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
                         vector,
                         reranker,
                         promptRegistry,
-                        options,
+                        effectiveOptions,
                         contentParserRegistry,
                         resourceFetcher,
                         List.copyOf(rawDataPlugins),
-                        bubbleTrackerStore);
+                        bubbleTrackerStore,
+                        memoryObserver,
+                        sanitization.memoryThreadForcedDisableReason());
         MemoryExtractionAssembly extractionAssembly =
                 new MemoryExtractionAssembler().assemble(context);
         var memoryRetriever = new MemoryRetrievalAssembler().assemble(context);
@@ -186,7 +204,8 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
                 context.memoryVector(),
                 extractionAssembly.insightLayer(),
                 lifecycle,
-                options);
+                effectiveOptions,
+                extractionAssembly.memoryThreadLayer());
     }
 
     MemoryBuildOptions buildOptions() {

@@ -125,6 +125,20 @@ public interface InsightGenerator {
             String language);
 
     /**
+     * Aggregate all LEAFs under InsightType to generate BRANCH summary with additional context.
+     */
+    default Mono<InsightPointGenerateResponse> generateBranchSummary(
+            MemoryInsightType insightType,
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> leafInsights,
+            int targetTokens,
+            String additionalContext,
+            String language) {
+        return generateBranchSummary(
+                insightType, existingPoints, leafInsights, targetTokens, language);
+    }
+
+    /**
      * Generate BRANCH point operations against the current branch point list.
      */
     default Mono<InsightPointOpsResponse> generateBranchPointOps(
@@ -134,6 +148,21 @@ public interface InsightGenerator {
             int targetTokens,
             String language) {
         return Mono.error(new UnsupportedOperationException("Branch point ops not implemented"));
+    }
+
+    /**
+     * Generate BRANCH point operations against the current branch point list with additional
+     * context.
+     */
+    default Mono<InsightPointOpsResponse> generateBranchPointOps(
+            MemoryInsightType insightType,
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> leafInsights,
+            int targetTokens,
+            String additionalContext,
+            String language) {
+        return generateBranchPointOps(
+                insightType, existingPoints, leafInsights, targetTokens, language);
     }
 
     /**
@@ -164,4 +193,18 @@ public interface InsightGenerator {
             List<MemoryInsight> branchInsights,
             int targetTokens,
             String language);
+
+    /**
+     * Synthesize all BRANCHes to generate ROOT deep insight with additional context.
+     */
+    default Mono<InsightPointGenerateResponse> generateRootSynthesis(
+            MemoryInsightType rootInsightType,
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> branchInsights,
+            int targetTokens,
+            String additionalContext,
+            String language) {
+        return generateRootSynthesis(
+                rootInsightType, existingPoints, branchInsights, targetTokens, language);
+    }
 }

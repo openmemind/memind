@@ -15,6 +15,8 @@ package com.openmemind.ai.memory.core.extraction.insight.group;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -56,6 +58,41 @@ class InsightGroupRouterTest {
             StepVerifier.create(router.group(insightType, MemoryCategory.PROFILE, items, List.of()))
                     .assertNext(result -> assertThat(result).isEqualTo(expected))
                     .verifyComplete();
+        }
+
+        @Test
+        @DisplayName("Should delegate additional context only for semantic grouping")
+        void shouldDelegateAdditionalContextForSemanticGrouping() {
+            var insightType = createInsightType();
+            var items = List.<MemoryItem>of();
+            var expected = Map.<String, List<MemoryItem>>of("group1", items);
+
+            when(llmClassifier.classify(
+                            any(),
+                            any(),
+                            any(),
+                            eq("GraphGroupingHints: cluster alpha"),
+                            eq("English")))
+                    .thenReturn(Mono.just(expected));
+
+            StepVerifier.create(
+                            router.group(
+                                    insightType,
+                                    MemoryCategory.PROFILE,
+                                    items,
+                                    List.of(),
+                                    "GraphGroupingHints: cluster alpha",
+                                    "English"))
+                    .assertNext(result -> assertThat(result).isEqualTo(expected))
+                    .verifyComplete();
+
+            verify(llmClassifier)
+                    .classify(
+                            eq(insightType),
+                            eq(items),
+                            eq(List.of()),
+                            eq("GraphGroupingHints: cluster alpha"),
+                            eq("English"));
         }
     }
 
