@@ -54,8 +54,8 @@
 
 - Modify: `memind-core/src/test/java/com/openmemind/ai/memory/core/retrieval/graph/DefaultRetrievalGraphAssistantTest.java`
   - Keep fusion behavior tests in this file.
-  - Remove or relocate low-level expansion assertions that belong to `GraphExpansionEngineTest`.
-  - Add stats-copying test for assistant-owned vs engine-owned stats.
+  - Keep existing low-level assistant tests as integration coverage for this refactor unless they fail or duplicate new engine-only assertions exactly.
+  - Add explicit overlap no-boost and stats-copying assertions for assistant-owned vs engine-owned behavior.
 
 ---
 
@@ -63,7 +63,6 @@
 
 **Files:**
 - Modify: `memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/graph/GraphExpansionResult.java`
-- Modify: `memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/graph/GraphExpansionEngine.java`
 - Modify: `memind-core/src/test/java/com/openmemind/ai/memory/core/retrieval/graph/DefaultGraphItemChannelTest.java`
 
 - [ ] **Step 1: Update the failing test assertion name**
@@ -345,10 +344,10 @@ class GraphExpansionEngineTest {
         graphOperations.upsertItemEntityMentions(
                 MEMORY_ID,
                 List.of(
-                        mention(101L, "entity:openai", 0.95f),
-                        mention(401L, "entity:openai", 0.95f),
-                        mention(402L, "entity:openai", 0.95f),
-                        mention(403L, "entity:openai", 0.95f)));
+                        mention(101L, "organization:openai", 0.95f),
+                        mention(401L, "organization:openai", 0.95f),
+                        mention(402L, "organization:openai", 0.95f),
+                        mention(403L, "organization:openai", 0.95f)));
     }
 
     private ItemEntityMention mention(long itemId, String entityKey, float confidence) {
@@ -784,7 +783,35 @@ rescore
 countDisplacedDirectItems
 ```
 
-- [ ] **Step 5: Add assistant stats-copy test**
+- [ ] **Step 5: Make overlap no-boost behavior explicit**
+
+This refactor intentionally changes assistant fusion so direct-overlap graph candidates are tracked for diagnostics but are not returned in `GraphExpansionResult.graphItems()`. As a result, `buildFusionCandidates(...)` no longer receives overlap candidates and does not apply `boundedGraphBonus(...)` to direct items. This matches the design: overlap is diagnostic only, not a direct-score boost.
+
+Add a dedicated test that places the overlapping direct item in the unprotected tail. This test fails before the refactor because `buildFusionCandidates(...)` can apply `boundedGraphBonus(...)` when overlap candidates are present in `rankedGraph`; it passes after `GraphExpansionEngine` excludes direct ids from `graphItems()`.
+
+```java
+@Test
+void unprotectedDirectOverlapIsTrackedButNotBoosted() {
+    var settings = OVERLAP_CONFIG.graphAssist().withProtectDirectTopK(0);
+
+    StepVerifier.create(assistant.assist(CONTEXT, CONFIG, settings, directWithOverlap()))
+            .assertNext(
+                    result -> {
+                        var overlappingDirect =
+                                result.items().stream()
+                                        .filter(item -> item.sourceId().equals("102"))
+                                        .findFirst()
+                                        .orElseThrow();
+                        assertThat(overlappingDirect.finalScore()).isEqualTo(0.9d);
+                        assertThat(result.stats().overlapCount()).isEqualTo(1);
+                    })
+            .verifyComplete();
+}
+```
+
+Keep the existing `overlappingDirectCandidatesAreTrackedButNeverBoosted` test for pinned-prefix behavior and duplicate protection.
+
+- [ ] **Step 6: Add assistant stats-copy test**
 
 In `DefaultRetrievalGraphAssistantTest`, add:
 
@@ -804,7 +831,7 @@ void assistantCopiesEngineStatsAndComputesFusionStats() {
 }
 ```
 
-- [ ] **Step 6: Run assistant tests**
+- [ ] **Step 7: Run assistant tests**
 
 Run:
 
@@ -814,7 +841,7 @@ mvn -pl memind-core -Dtest=DefaultRetrievalGraphAssistantTest test
 
 Expected: tests pass.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/graph/DefaultRetrievalGraphAssistant.java \
