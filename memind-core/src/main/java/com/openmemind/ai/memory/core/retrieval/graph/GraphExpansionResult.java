@@ -24,7 +24,7 @@ public record GraphExpansionResult(
         int seedCount,
         int linkExpansionCount,
         int entityExpansionCount,
-        int rawCandidateCount,
+        int dedupedCandidateCount,
         int overlapCount,
         int skippedOverFanoutEntityCount) {
 

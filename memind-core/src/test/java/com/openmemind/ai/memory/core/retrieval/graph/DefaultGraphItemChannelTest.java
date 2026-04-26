@@ -88,7 +88,7 @@ class DefaultGraphItemChannelTest {
         assertThat(result).isNotNull();
         assertThat(result.graphItems()).extracting(ScoredResult::sourceId).containsExactly("2");
         assertThat(result.seedCount()).isEqualTo(1);
-        assertThat(result.rawCandidateCount()).isEqualTo(1);
+        assertThat(result.dedupedCandidateCount()).isEqualTo(1);
     }
 
     @Test
