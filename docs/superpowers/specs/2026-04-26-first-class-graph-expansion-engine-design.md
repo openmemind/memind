@@ -126,7 +126,9 @@ expand(context, config, settings, seeds)
 
 For SIMPLE Graph Channel semantics, `GraphExpansionResult.graphItems()` should exclude all direct input ids. This makes the graph channel represent only incremental graph expansion contribution.
 
-Assistant fusion can still account for overlap internally if it needs to preserve existing assist semantics, but graph channel output should remain graph-only.
+`GraphExpansionEngine` may still collect direct-overlap candidates for diagnostics. In that case, overlap candidates contribute to `overlapCount`, but they must not appear in `graphItems`. Assistant fusion must not rely on `graphItems` containing direct overlaps for direct-item boosting.
+
+This keeps the first-class graph channel pure: graph output represents new graph expansion candidates, while overlap tracking remains a diagnostic signal.
 
 ## 7. GraphExpansionResult Semantics
 
@@ -158,6 +160,29 @@ The first-class engine must define these semantics explicitly:
 - `dedupedCandidateCount` is the number of graph candidates after deduplication and item guard filtering, before ranking output is limited by downstream consumers.
 - `overlapCount` is diagnostic only and does not imply overlap items are returned by the graph channel.
 - `skippedOverFanoutEntityCount` counts entity keys skipped by fanout protection.
+
+Stats ownership must stay explicit:
+
+```text
+Engine-owned graph expansion stats:
+  seedCount
+  linkExpansionCount
+  entityExpansionCount
+  dedupedCandidateCount
+  overlapCount
+  skippedOverFanoutEntityCount
+
+Assistant-owned fusion stats:
+  admittedGraphCandidateCount
+  displacedDirectCount
+
+Shared status flags:
+  graphEnabled
+  degraded
+  timedOut
+```
+
+`DefaultRetrievalGraphAssistant` should copy engine-owned stats from `GraphExpansionResult` and compute assistant-owned fusion stats from its final fused output.
 
 ## 8. DefaultGraphItemChannel Behavior
 
@@ -206,6 +231,8 @@ expandAndFuse(...)
 ```
 
 This keeps existing assistant behavior while removing low-level graph candidate collection from the assistant class.
+
+If a custom `RetrievalGraphAssistant` is supplied by users or tests, it must remain untouched. This refactor should only change `DefaultRetrievalGraphAssistant`. The assembler may share one engine between the default assistant and default graph item channel, but it must not require custom assistant implementations to accept or expose a `GraphExpansionEngine`.
 
 ## 10. Scoring Policy
 
@@ -310,7 +337,8 @@ Internal compatibility:
 
 - Keep `DefaultRetrievalGraphAssistant(MemoryStore store)`.
 - Add an internal constructor that accepts `GraphExpansionEngine` for tests and assembly.
-- Let `MemoryRetrievalAssembler` create one shared `GraphExpansionEngine` and pass it to assistant and channel.
+- Let `MemoryRetrievalAssembler` create one shared `GraphExpansionEngine` when it owns the default assistant and default channel.
+- If a custom `RetrievalGraphAssistant` is supplied, keep that assistant unchanged and build the default `GraphItemChannel` from `MemoryStore` directly.
 - Preserve no-op and legacy assistant behavior.
 
 ## 14. Error Handling
@@ -365,6 +393,8 @@ Cover channel boundary behavior:
 - Timeout returns degraded timed-out result.
 - Engine error returns degraded non-timeout result.
 - Disabled settings or no seeds does not call the engine.
+
+Do not introduce a new public engine interface only for mocking in v1. Channel tests should use in-memory or fake `MemoryStore` / `GraphOperations` implementations to exercise timeout and error paths. Keeping `GraphExpansionEngine` concrete avoids adding an abstraction that has no production need yet.
 
 ### DefaultRetrievalGraphAssistantTest
 
