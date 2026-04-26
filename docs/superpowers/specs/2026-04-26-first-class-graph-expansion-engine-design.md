@@ -204,6 +204,18 @@ The only behavioral change is that `engine.expand()` no longer calls `graphAssis
 
 `DefaultGraphItemChannel` must open `GraphQueryBudgetContext` around `engine.expand(...)` using the same effective timeout as its reactive timeout boundary. The reactive timeout protects the caller, while `GraphQueryBudgetContext` lets store implementations such as the MyBatis statement timeout interceptor apply the same budget to graph SQL.
 
+Because `GraphQueryBudgetContext` is ThreadLocal-based, `GraphQueryBudgetContext.open(...)` must be called inside the same `Mono.fromCallable(...)` lambda that invokes `engine.expand(...)`. Opening the context before `subscribeOn(...)` would set it on the caller thread rather than the boundedElastic worker that runs graph store operations.
+
+```java
+Mono.fromCallable(() -> {
+    try (var ignored = GraphQueryBudgetContext.open(effectiveTimeout)) {
+        return engine.expand(context, config, settings, seeds);
+    }
+})
+.subscribeOn(Schedulers.boundedElastic())
+.timeout(effectiveTimeout);
+```
+
 This makes SIMPLE graph retrieval a true independent channel:
 
 ```text
