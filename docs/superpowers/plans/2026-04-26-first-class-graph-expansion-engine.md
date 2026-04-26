@@ -1198,18 +1198,10 @@ Expected: all selected tests pass. If unrelated tests are included and fail for 
 Run:
 
 ```bash
-rg "RetrievalGraphAssistant" memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/graph/GraphExpansionEngine.java
+rg "RetrievalGraphAssistant|\.assist\(" memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/graph/GraphExpansionEngine.java
 ```
 
-Expected: no output.
-
-Run:
-
-```bash
-rg "new GraphExpansionEngine\(graphAssistant|assist\(context, config, settings, seeds\)" memind-core/src/main/java memind-core/src/test/java
-```
-
-Expected: no output.
+Expected: no output. This precisely verifies that `GraphExpansionEngine` no longer depends on `RetrievalGraphAssistant` or calls any assistant `assist(...)` method, without matching legitimate assistant usage elsewhere.
 
 - [ ] **Step 4: Commit test-only cleanups if needed**
 
