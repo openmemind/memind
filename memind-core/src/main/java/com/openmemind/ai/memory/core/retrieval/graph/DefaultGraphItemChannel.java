@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core.retrieval.graph;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
+import com.openmemind.ai.memory.core.store.graph.GraphQueryBudgetContext;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
@@ -44,9 +45,15 @@ public final class DefaultGraphItemChannel implements GraphItemChannel {
         if (!enabled || seeds == null || seeds.isEmpty() || engine == null) {
             return Mono.just(GraphExpansionResult.empty(enabled));
         }
-        return Mono.fromCallable(() -> engine.expand(context, config, settings, seeds))
+        Duration effectiveTimeout = shorterPositive(settings.timeout(), config.timeout());
+        return Mono.fromCallable(
+                        () -> {
+                            try (var ignored = GraphQueryBudgetContext.open(effectiveTimeout)) {
+                                return engine.expand(context, config, settings, seeds);
+                            }
+                        })
                 .subscribeOn(Schedulers.boundedElastic())
-                .timeout(shorterPositive(settings.timeout(), config.timeout()))
+                .timeout(effectiveTimeout)
                 .onErrorResume(
                         TimeoutException.class,
                         error -> Mono.just(GraphExpansionResult.degraded(true, true)))

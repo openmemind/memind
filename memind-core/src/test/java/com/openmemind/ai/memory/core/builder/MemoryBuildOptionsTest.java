@@ -134,7 +134,10 @@ class MemoryBuildOptionsTest {
                                 new ExtractionOptions(
                                         ExtractionCommonOptions.defaults(),
                                         RawDataExtractionOptions.defaults(),
-                                        ItemExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults().withEnabled(false)),
                                         InsightExtractionOptions.defaults()))
                         .memoryThread(
                                 MemoryThreadOptions.defaults()
@@ -416,10 +419,10 @@ class MemoryBuildOptionsTest {
     }
 
     @Test
-    void itemGraphOptionsDefaultsToDisabledAndKeepsPhaseOneCaps() {
+    void itemGraphOptionsDefaultsToEnabledAndKeepsPhaseOneCaps() {
         var options = ItemGraphOptions.defaults();
 
-        assertThat(options.enabled()).isFalse();
+        assertThat(options.enabled()).isTrue();
         assertThat(options.maxEntitiesPerItem()).isEqualTo(8);
         assertThat(options.maxCausalReferencesPerItem()).isEqualTo(2);
         assertThat(options.maxTemporalLinksPerItem()).isEqualTo(10);
@@ -451,7 +454,7 @@ class MemoryBuildOptionsTest {
     }
 
     @Test
-    void legacyItemExtractionOptionsConstructorStillBuildsDisabledGraphConfig() {
+    void legacyItemExtractionOptionsConstructorStillBuildsDefaultGraphConfig() {
         var options = new ItemExtractionOptions(false);
 
         assertThat(options.graph()).isEqualTo(ItemGraphOptions.defaults());
@@ -477,10 +480,10 @@ class MemoryBuildOptionsTest {
     }
 
     @Test
-    void simpleRetrievalGraphOptionsDefaultToDisabledAndBounded() {
+    void simpleRetrievalGraphOptionsDefaultToEnabledAndBounded() {
         var options = SimpleRetrievalGraphOptions.defaults();
 
-        assertThat(options.enabled()).isFalse();
+        assertThat(options.enabled()).isTrue();
         assertThat(options.mode()).isEqualTo(RetrievalGraphMode.ASSIST);
         assertThat(options.maxSeedItems()).isEqualTo(6);
         assertThat(options.maxExpandedItems()).isEqualTo(12);
@@ -498,7 +501,7 @@ class MemoryBuildOptionsTest {
     }
 
     @Test
-    void legacySimpleRetrievalOptionsConstructorStillBuildsDisabledGraphAssist() {
+    void legacySimpleRetrievalOptionsConstructorStillBuildsDefaultGraphAssist() {
         var options = new SimpleRetrievalOptions(Duration.ofSeconds(10), 5, 15, 5, true);
 
         assertThat(options.graphAssist()).isEqualTo(SimpleRetrievalGraphOptions.defaults());

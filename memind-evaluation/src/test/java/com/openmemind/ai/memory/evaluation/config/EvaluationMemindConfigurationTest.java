@@ -28,6 +28,7 @@ import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
+import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
@@ -37,6 +38,9 @@ import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.lang.reflect.Proxy;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -83,6 +87,26 @@ class EvaluationMemindConfigurationTest {
         assertThat(options.extraction().rawdata())
                 .extracting(RawDataExtractionOptions::vectorBatchSize)
                 .isEqualTo(64);
+    }
+
+    @Test
+    void retrievalConfigUsesConfiguredSimpleMode() {
+        var props =
+                bindProperties(
+                        Map.of(
+                                "evaluation.system.memind.retrieval.mode",
+                                "simple",
+                                "evaluation.system.memind.retrieval.rerank.enabled",
+                                "false"));
+
+        var retrievalConfig = configuration.retrievalConfig(props);
+
+        assertThat(retrievalConfig.strategyName()).isEqualTo("simple");
+        assertThat(
+                        ((SimpleStrategyConfig) retrievalConfig.strategyConfig())
+                                .graphAssist()
+                                .enabled())
+                .isTrue();
     }
 
     @SuppressWarnings("unchecked")
@@ -138,6 +162,12 @@ class EvaluationMemindConfigurationTest {
                 proxy(InsightBuffer.class),
                 proxy(PendingConversationBuffer.class),
                 proxy(RecentConversationBuffer.class));
+    }
+
+    private static EvaluationProperties bindProperties(Map<String, String> values) {
+        return new Binder(new MapConfigurationPropertySource(values))
+                .bind("evaluation", Bindable.of(EvaluationProperties.class))
+                .orElseThrow(IllegalStateException::new);
     }
 
     @SuppressWarnings("unchecked")

@@ -65,9 +65,9 @@ final class MemoryRetrievalAssembler {
         TypedQueryExpander typedQueryExpander =
                 new LlmTypedQueryExpander(
                         registry.resolve(ChatClientSlot.QUERY_EXPANDER), context.promptRegistry());
-        RetrievalGraphAssistant graphAssistant = buildGraphAssistant(context);
-        var graphItemChannel =
-                new DefaultGraphItemChannel(new GraphExpansionEngine(graphAssistant));
+        var graphExpansionEngine = new GraphExpansionEngine(context.memoryStore());
+        RetrievalGraphAssistant graphAssistant = buildGraphAssistant(context, graphExpansionEngine);
+        var graphItemChannel = new DefaultGraphItemChannel(graphExpansionEngine);
         MemoryThreadAssistant memoryThreadAssistant = buildMemoryThreadAssistant(context);
         SimpleStrategyConfig simpleStrategyConfig = simpleStrategyConfig(context.options());
         DeepStrategyConfig deepStrategyConfig = deepStrategyConfig(context.options());
@@ -119,10 +119,10 @@ final class MemoryRetrievalAssembler {
         return memoryRetriever;
     }
 
-    private RetrievalGraphAssistant buildGraphAssistant(MemoryAssemblyContext context) {
+    private RetrievalGraphAssistant buildGraphAssistant(
+            MemoryAssemblyContext context, GraphExpansionEngine graphExpansionEngine) {
         return new TracingRetrievalGraphAssistant(
-                new DefaultRetrievalGraphAssistant(context.memoryStore()),
-                context.memoryObserver());
+                new DefaultRetrievalGraphAssistant(graphExpansionEngine), context.memoryObserver());
     }
 
     private MemoryThreadAssistant buildMemoryThreadAssistant(MemoryAssemblyContext context) {

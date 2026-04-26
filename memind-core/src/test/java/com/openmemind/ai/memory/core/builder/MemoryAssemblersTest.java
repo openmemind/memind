@@ -670,7 +670,11 @@ class MemoryAssemblersTest {
                                         new ExtractionOptions(
                                                 ExtractionCommonOptions.defaults(),
                                                 RawDataExtractionOptions.defaults(),
-                                                ItemExtractionOptions.defaults(),
+                                                new ItemExtractionOptions(
+                                                        false,
+                                                        PromptBudgetOptions.defaults(),
+                                                        ItemGraphOptions.defaults()
+                                                                .withEnabled(false)),
                                                 new InsightExtractionOptions(
                                                         true,
                                                         InsightBuildConfig.defaults(),

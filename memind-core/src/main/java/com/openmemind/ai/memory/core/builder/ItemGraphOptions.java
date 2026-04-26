@@ -140,7 +140,7 @@ public record ItemGraphOptions(
     }
 
     public static ItemGraphOptions defaults() {
-        return new ItemGraphOptions(false, 8, 2, 10, 5, 0.82d, 4, 1, 128);
+        return new ItemGraphOptions(true, 8, 2, 10, 5, 0.82d, 4, 1, 128);
     }
 
     public static Builder builder() {

@@ -161,7 +161,7 @@ public class MemindAdapter {
     /** Extraction configuration used by ADD stage */
     private final ExtractionConfig extractionConfig;
 
-    /** Retrieval configuration: Deep mode, disable Tier1 Insight retrieval */
+    /** Retrieval configuration: configured mode, disable Tier1 Insight retrieval when insight is off */
     private final RetrievalConfig retrievalConfig;
 
     public MemindAdapter(

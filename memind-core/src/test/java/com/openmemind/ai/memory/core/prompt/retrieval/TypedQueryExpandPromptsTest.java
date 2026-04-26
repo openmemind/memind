@@ -50,6 +50,24 @@ class TypedQueryExpandPromptsTest {
     }
 
     @Test
+    @DisplayName("typed query expand should request queries object wrapper")
+    void shouldRequestQueriesObjectWrapper() {
+        var prompt =
+                TypedQueryExpandPrompts.build(
+                                "What does the user do for exercise?",
+                                List.of(),
+                                List.of(),
+                                List.of(),
+                                3)
+                        .render("English");
+
+        assertThat(prompt.systemPrompt())
+                .contains("\"queries\"")
+                .contains("Return a JSON object")
+                .doesNotContain("Return a JSON array");
+    }
+
+    @Test
     @DisplayName("build default should show the most complete typed expansion skeleton")
     void buildDefaultShowsMostCompleteTypedQueryExpandSkeleton() {
         String preview = TypedQueryExpandPrompts.buildDefault().previewSystemPrompt("English");

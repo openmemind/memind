@@ -70,19 +70,23 @@ public final class TypedQueryExpandPrompts {
             Gaps: ["No information about programming language proficiency levels"]
 
             Good expansions:
-            [
-              {"type": "lex", "text": "programming language proficiency level expert"},
-              {"type": "hyde", "text": "User is proficient in Python and has intermediate Java skills"}
-            ]
+            {
+              "queries": [
+                {"type": "lex", "text": "programming language proficiency level expert"},
+                {"type": "hyde", "text": "User is proficient in Python and has intermediate Java skills"}
+              ]
+            }
 
             Original query: "When did the user start their current job?"
             Gaps: ["Missing job start date"]
 
             Good expansions:
-            [
-              {"type": "lex", "text": "job start date joined company"},
-              {"type": "hyde", "text": "User started working at the company in March 2024"}
-            ]
+            {
+              "queries": [
+                {"type": "lex", "text": "job start date joined company"},
+                {"type": "hyde", "text": "User started working at the company in March 2024"}
+              ]
+            }
 
             Bad expansions (DO NOT do this):
             - {"type": "vec", "text": "programming languages"} → too vague, same as original
@@ -128,11 +132,13 @@ public final class TypedQueryExpandPrompts {
             Original query: "What does the user do for exercise?"
 
             Good expansions:
-            [
-              {"type": "lex", "text": "exercise workout gym running fitness"},
-              {"type": "vec", "text": "user's physical activity habits and sports routine"},
-              {"type": "hyde", "text": "User goes running three times a week in the morning"}
-            ]
+            {
+              "queries": [
+                {"type": "lex", "text": "exercise workout gym running fitness"},
+                {"type": "vec", "text": "user's physical activity habits and sports routine"},
+                {"type": "hyde", "text": "User goes running three times a week in the morning"}
+              ]
+            }
 
             Bad expansions:
             - {"type": "vec", "text": "user exercise"} → too short, same angle as original
@@ -157,7 +163,8 @@ public final class TypedQueryExpandPrompts {
 
             # Output Format
 
-            Return a JSON array. Each element: {"type": "<lex|vec|hyde>", "text": "<query text>"}
+            Return a JSON object with a "queries" array.
+            Each query: {"type": "<lex|vec|hyde>", "text": "<query text>"}
             Maximum {{max_expansions}} queries. No duplicates. No explanations outside JSON.
             """;
 

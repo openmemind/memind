@@ -52,7 +52,7 @@ evaluation:
   auto-run: true
   output-dir: ./eval-data/results
   run-name: default-01
-  stages: search,answer,evaluate
+  stages: add,search,answer,evaluate
   from-conv: 0
   to-conv: -1
   smoke: false
@@ -75,15 +75,16 @@ evaluation:
         boundary:
           max-messages: 30
       retrieval:
+        mode: simple
         timeout: 5m
         rerank:
           enabled: true
-          base-url: ${RERANK_BASE_URL:}
+          base-url: ${RERANK_BASE_URL:https://aihubmix.com}
           api-key: ${RERANK_API_KEY:}
           model: ${RERANK_MODEL:jina-reranker-v3}
           blend-with-retrieval: true
     answer:
       max-retries: 3
     llm:
-      eval-model: openai/gpt-4.1-mini
+      eval-model: openai/gpt-4o-mini
       num-runs: 3

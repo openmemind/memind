@@ -94,7 +94,12 @@ public class EvaluationMemindConfiguration {
                                 ? RetrievalConfig.RerankConfig.blend(topK)
                                 : RetrievalConfig.RerankConfig.pure(topK))
                         : RetrievalConfig.RerankConfig.disabled();
-        return RetrievalConfig.deep().withRerank(rerankConfig).withTimeout(retrieval.getTimeout());
+        var baseConfig =
+                switch (retrieval.getMode()) {
+                    case SIMPLE -> RetrievalConfig.simple();
+                    case DEEP -> RetrievalConfig.deep();
+                };
+        return baseConfig.withRerank(rerankConfig).withTimeout(retrieval.getTimeout());
     }
 
     @Bean

@@ -159,7 +159,7 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
         if (!graphHintsEnabled) {
             return;
         }
-        log.info(
+        log.debug(
                 "Item graph prompt: enabled={} causeIndex={} effectIndex={} goodEntities={}"
                         + " badCausal={}",
                 true,
@@ -179,7 +179,7 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
             var item = response.items().get(itemIndex);
             int entityCount = item.entities() == null ? 0 : item.entities().size();
             int causalCount = item.causalRelations() == null ? 0 : item.causalRelations().size();
-            log.info(
+            log.debug(
                     "Item graph raw response item[{}]: content='{}' entities={} causalRelations={}",
                     itemIndex,
                     abbreviate(item.content()),
@@ -189,7 +189,7 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
                 item.entities()
                         .forEach(
                                 entity ->
-                                        log.info(
+                                        log.debug(
                                                 "  raw entity item[{}]: name='{}' type={}"
                                                         + " salience={} aliases={}",
                                                 itemIndex,
@@ -204,7 +204,7 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
                 item.causalRelations()
                         .forEach(
                                 relation ->
-                                        log.info(
+                                        log.debug(
                                                 "  raw causal item[{}]: causeIndex={}"
                                                     + " effectIndex={} relationType={} strength={}",
                                                 itemIndex,
@@ -225,7 +225,7 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
             int entryIndex = index;
             var entry = entries.get(entryIndex);
             var graphHints = entry.graphHints();
-            log.info(
+            log.debug(
                     "Item graph extracted entry[{}]: content='{}' entities={} causalRelations={}",
                     entryIndex,
                     abbreviate(entry.content()),
@@ -235,7 +235,7 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
                     .entities()
                     .forEach(
                             entity ->
-                                    log.info(
+                                    log.debug(
                                             "  extracted entity entry[{}]: name='{}' type={}"
                                                     + " salience={} aliases={}",
                                             entryIndex,
@@ -247,7 +247,7 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
                     .causalRelations()
                     .forEach(
                             relation ->
-                                    log.info(
+                                    log.debug(
                                             "  extracted causal entry[{}]: causeIndex={}"
                                                     + " effectIndex={} relationType={} strength={}",
                                             entryIndex,

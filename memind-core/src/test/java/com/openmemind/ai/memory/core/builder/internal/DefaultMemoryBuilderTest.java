@@ -152,6 +152,15 @@ class DefaultMemoryBuilderTest {
     void builderPropagatesConfiguredBuildOptionsIntoDefaultMemory() {
         var configured =
                 MemoryBuildOptions.builder()
+                        .extraction(
+                                new ExtractionOptions(
+                                        ExtractionCommonOptions.defaults(),
+                                        RawDataExtractionOptions.defaults(),
+                                        new ItemExtractionOptions(
+                                                false,
+                                                PromptBudgetOptions.defaults(),
+                                                ItemGraphOptions.defaults().withEnabled(false)),
+                                        InsightExtractionOptions.defaults()))
                         .retrieval(
                                 new RetrievalOptions(
                                         new RetrievalCommonOptions(false),
@@ -217,7 +226,7 @@ class DefaultMemoryBuilderTest {
     void defaultBuilderShouldKeepStage1aGraphHardeningEnabledOnlyThroughBuiltInDefaults() {
         var graph = MemoryBuildOptions.defaults().extraction().item().graph();
 
-        assertThat(graph.enabled()).isFalse();
+        assertThat(graph.enabled()).isTrue();
         assertThat(graph.maxEntitiesPerItem()).isEqualTo(8);
     }
 

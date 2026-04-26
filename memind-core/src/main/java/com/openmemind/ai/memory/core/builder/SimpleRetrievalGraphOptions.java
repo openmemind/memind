@@ -99,7 +99,7 @@ public record SimpleRetrievalGraphOptions(
 
     public static SimpleRetrievalGraphOptions defaults() {
         return new SimpleRetrievalGraphOptions(
-                false,
+                true,
                 RetrievalGraphMode.ASSIST,
                 6,
                 12,

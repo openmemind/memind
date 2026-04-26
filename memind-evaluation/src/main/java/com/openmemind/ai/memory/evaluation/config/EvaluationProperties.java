@@ -27,6 +27,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "evaluation")
 public class EvaluationProperties {
 
+    public enum RetrievalMode {
+        SIMPLE,
+        DEEP
+    }
+
     private String outputDir = "results";
     private int fromConv = 0;
     private int toConv = -1;
@@ -485,8 +490,17 @@ public class EvaluationProperties {
 
             public static class RetrievalProperties {
 
+                private RetrievalMode mode = RetrievalMode.DEEP;
                 private Duration timeout = Duration.ofMinutes(5);
                 private RerankProperties rerank = new RerankProperties();
+
+                public RetrievalMode getMode() {
+                    return mode;
+                }
+
+                public void setMode(RetrievalMode mode) {
+                    this.mode = mode == null ? RetrievalMode.DEEP : mode;
+                }
 
                 public Duration getTimeout() {
                     return timeout;

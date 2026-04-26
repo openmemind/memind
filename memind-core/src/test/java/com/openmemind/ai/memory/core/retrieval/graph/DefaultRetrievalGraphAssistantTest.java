@@ -226,9 +226,14 @@ class DefaultRetrievalGraphAssistantTest {
                         assistant.assist(
                                 CONTEXT,
                                 CONFIG,
-                                SimpleStrategyConfig.defaults().graphAssist(),
+                                SimpleStrategyConfig.GraphAssistConfig.defaults()
+                                        .withEnabled(false),
                                 direct))
-                .assertNext(result -> assertThat(result.items()).containsExactlyElementsOf(direct))
+                .assertNext(
+                        result -> {
+                            assertThat(result.items()).containsExactlyElementsOf(direct);
+                            assertThat(result.stats().graphEnabled()).isFalse();
+                        })
                 .verifyComplete();
     }
 

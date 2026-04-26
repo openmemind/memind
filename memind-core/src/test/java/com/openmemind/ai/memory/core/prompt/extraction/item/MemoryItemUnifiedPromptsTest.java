@@ -50,7 +50,7 @@ class MemoryItemUnifiedPromptsTest {
                                 Instant.parse("2026-04-16T00:00:00Z"),
                                 null,
                                 Set.of(MemoryCategory.EVENT),
-                                ItemGraphOptions.defaults())
+                                ItemGraphOptions.defaults().withEnabled(false))
                         .render("English");
 
         assertThat(enabled.systemPrompt())
