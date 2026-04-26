@@ -306,10 +306,16 @@ public class DefaultMemory implements Memory {
         return switch (strategy) {
             case SIMPLE -> {
                 var graph = retrieval.simple().graphAssist();
+                var temporal = retrieval.simple().temporalRetrieval();
                 var base =
                         RetrievalConfig.simple(
                                 new SimpleStrategyConfig(
                                         retrieval.simple().keywordSearchEnabled(),
+                                        new SimpleStrategyConfig.TemporalRetrievalConfig(
+                                                temporal.enabled(),
+                                                temporal.maxWindowCandidates(),
+                                                temporal.channelWeight(),
+                                                temporal.timeout()),
                                         new SimpleStrategyConfig.GraphAssistConfig(
                                                 graph.enabled(),
                                                 graph.mode(),

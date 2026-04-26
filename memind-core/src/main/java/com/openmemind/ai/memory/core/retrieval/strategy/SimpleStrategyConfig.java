@@ -17,8 +17,10 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.openmemind.ai.memory.core.builder.SimpleMemoryThreadAssistOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalGraphOptions;
+import com.openmemind.ai.memory.core.builder.SimpleTemporalRetrievalOptions;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphMode;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphSettings;
+import com.openmemind.ai.memory.core.retrieval.temporal.TemporalItemChannelSettings;
 import com.openmemind.ai.memory.core.retrieval.thread.RetrievalMemoryThreadSettings;
 import java.time.Duration;
 import java.util.Objects;
@@ -30,11 +32,14 @@ import java.util.Objects;
  */
 public record SimpleStrategyConfig(
         boolean enableKeywordSearch,
+        TemporalRetrievalConfig temporalRetrieval,
         GraphAssistConfig graphAssist,
         MemoryThreadAssistConfig memoryThreadAssist)
         implements StrategyConfig {
 
     public SimpleStrategyConfig {
+        temporalRetrieval =
+                temporalRetrieval != null ? temporalRetrieval : TemporalRetrievalConfig.defaults();
         graphAssist = graphAssist != null ? graphAssist : GraphAssistConfig.defaults();
         memoryThreadAssist =
                 memoryThreadAssist != null
@@ -45,12 +50,28 @@ public record SimpleStrategyConfig(
     public SimpleStrategyConfig(boolean enableKeywordSearch) {
         this(
                 enableKeywordSearch,
+                TemporalRetrievalConfig.defaults(),
                 GraphAssistConfig.defaults(),
                 MemoryThreadAssistConfig.defaults());
     }
 
     public SimpleStrategyConfig(boolean enableKeywordSearch, GraphAssistConfig graphAssist) {
-        this(enableKeywordSearch, graphAssist, MemoryThreadAssistConfig.defaults());
+        this(
+                enableKeywordSearch,
+                TemporalRetrievalConfig.defaults(),
+                graphAssist,
+                MemoryThreadAssistConfig.defaults());
+    }
+
+    public SimpleStrategyConfig(
+            boolean enableKeywordSearch,
+            GraphAssistConfig graphAssist,
+            MemoryThreadAssistConfig memoryThreadAssist) {
+        this(
+                enableKeywordSearch,
+                TemporalRetrievalConfig.defaults(),
+                graphAssist,
+                memoryThreadAssist);
     }
 
     @Override
@@ -63,16 +84,63 @@ public record SimpleStrategyConfig(
     }
 
     public SimpleStrategyConfig withKeywordSearch(boolean enabled) {
-        return new SimpleStrategyConfig(enabled, graphAssist, memoryThreadAssist);
+        return new SimpleStrategyConfig(
+                enabled, temporalRetrieval, graphAssist, memoryThreadAssist);
+    }
+
+    public SimpleStrategyConfig withTemporalRetrieval(TemporalRetrievalConfig temporalRetrieval) {
+        return new SimpleStrategyConfig(
+                enableKeywordSearch, temporalRetrieval, graphAssist, memoryThreadAssist);
     }
 
     public SimpleStrategyConfig withGraphAssist(GraphAssistConfig graphAssist) {
-        return new SimpleStrategyConfig(enableKeywordSearch, graphAssist, memoryThreadAssist);
+        return new SimpleStrategyConfig(
+                enableKeywordSearch, temporalRetrieval, graphAssist, memoryThreadAssist);
     }
 
     public SimpleStrategyConfig withMemoryThreadAssist(
             MemoryThreadAssistConfig memoryThreadAssist) {
-        return new SimpleStrategyConfig(enableKeywordSearch, graphAssist, memoryThreadAssist);
+        return new SimpleStrategyConfig(
+                enableKeywordSearch, temporalRetrieval, graphAssist, memoryThreadAssist);
+    }
+
+    public record TemporalRetrievalConfig(
+            boolean enabled, int maxWindowCandidates, double channelWeight, Duration timeout) {
+
+        public TemporalRetrievalConfig {
+            SimpleTemporalRetrievalOptions.validateTemporalShape(
+                    maxWindowCandidates, channelWeight, timeout);
+        }
+
+        public static TemporalRetrievalConfig defaults() {
+            var defaults = SimpleTemporalRetrievalOptions.defaults();
+            return new TemporalRetrievalConfig(
+                    defaults.enabled(),
+                    defaults.maxWindowCandidates(),
+                    defaults.channelWeight(),
+                    defaults.timeout());
+        }
+
+        @JsonCreator
+        public static TemporalRetrievalConfig fromJson(
+                @JsonProperty("enabled") Boolean enabled,
+                @JsonProperty("maxWindowCandidates") Integer maxWindowCandidates,
+                @JsonProperty("channelWeight") Double channelWeight,
+                @JsonProperty("timeout") Duration timeout) {
+            var defaults = defaults();
+            return new TemporalRetrievalConfig(
+                    enabled != null ? enabled : defaults.enabled(),
+                    maxWindowCandidates != null
+                            ? maxWindowCandidates
+                            : defaults.maxWindowCandidates(),
+                    channelWeight != null ? channelWeight : defaults.channelWeight(),
+                    timeout != null ? timeout : defaults.timeout());
+        }
+
+        public TemporalItemChannelSettings toSettings() {
+            return new TemporalItemChannelSettings(
+                    enabled, maxWindowCandidates, channelWeight, timeout);
+        }
     }
 
     public record GraphAssistConfig(

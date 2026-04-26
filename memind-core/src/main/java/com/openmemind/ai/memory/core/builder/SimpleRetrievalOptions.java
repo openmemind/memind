@@ -22,11 +22,16 @@ public record SimpleRetrievalOptions(
         int itemTopK,
         int rawDataTopK,
         boolean keywordSearchEnabled,
+        SimpleTemporalRetrievalOptions temporalRetrieval,
         SimpleRetrievalGraphOptions graphAssist,
         SimpleMemoryThreadAssistOptions memoryThreadAssist) {
 
     public SimpleRetrievalOptions {
         timeout = Objects.requireNonNull(timeout, "timeout");
+        temporalRetrieval =
+                temporalRetrieval != null
+                        ? temporalRetrieval
+                        : SimpleTemporalRetrievalOptions.defaults();
         graphAssist = graphAssist != null ? graphAssist : SimpleRetrievalGraphOptions.defaults();
         memoryThreadAssist =
                 memoryThreadAssist != null
@@ -46,6 +51,7 @@ public record SimpleRetrievalOptions(
                 itemTopK,
                 rawDataTopK,
                 keywordSearchEnabled,
+                SimpleTemporalRetrievalOptions.defaults(),
                 SimpleRetrievalGraphOptions.defaults(),
                 SimpleMemoryThreadAssistOptions.defaults());
     }
@@ -63,8 +69,28 @@ public record SimpleRetrievalOptions(
                 itemTopK,
                 rawDataTopK,
                 keywordSearchEnabled,
+                SimpleTemporalRetrievalOptions.defaults(),
                 graphAssist,
                 SimpleMemoryThreadAssistOptions.defaults());
+    }
+
+    public SimpleRetrievalOptions(
+            Duration timeout,
+            int insightTopK,
+            int itemTopK,
+            int rawDataTopK,
+            boolean keywordSearchEnabled,
+            SimpleRetrievalGraphOptions graphAssist,
+            SimpleMemoryThreadAssistOptions memoryThreadAssist) {
+        this(
+                timeout,
+                insightTopK,
+                itemTopK,
+                rawDataTopK,
+                keywordSearchEnabled,
+                SimpleTemporalRetrievalOptions.defaults(),
+                graphAssist,
+                memoryThreadAssist);
     }
 
     public static SimpleRetrievalOptions defaults() {
@@ -79,6 +105,20 @@ public record SimpleRetrievalOptions(
                 itemTopK,
                 rawDataTopK,
                 keywordSearchEnabled,
+                temporalRetrieval,
+                graphAssist,
+                memoryThreadAssist);
+    }
+
+    public SimpleRetrievalOptions withTemporalRetrieval(
+            SimpleTemporalRetrievalOptions temporalRetrieval) {
+        return new SimpleRetrievalOptions(
+                timeout,
+                insightTopK,
+                itemTopK,
+                rawDataTopK,
+                keywordSearchEnabled,
+                temporalRetrieval,
                 graphAssist,
                 memoryThreadAssist);
     }

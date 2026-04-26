@@ -15,6 +15,8 @@ package com.openmemind.ai.memory.core.retrieval.strategy;
 
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
+import com.openmemind.ai.memory.core.retrieval.graph.GraphExpansionResult;
+import com.openmemind.ai.memory.core.retrieval.graph.GraphItemChannel;
 import com.openmemind.ai.memory.core.retrieval.graph.NoOpRetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistResult;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistant;
@@ -23,6 +25,11 @@ import com.openmemind.ai.memory.core.retrieval.scoring.RawDataAggregator;
 import com.openmemind.ai.memory.core.retrieval.scoring.ResultMerger;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.TimeDecay;
+import com.openmemind.ai.memory.core.retrieval.temporal.DefaultTemporalConstraintExtractor;
+import com.openmemind.ai.memory.core.retrieval.temporal.DefaultTemporalItemChannel;
+import com.openmemind.ai.memory.core.retrieval.temporal.TemporalConstraintExtractor;
+import com.openmemind.ai.memory.core.retrieval.temporal.TemporalItemChannel;
+import com.openmemind.ai.memory.core.retrieval.temporal.TemporalItemChannelResult;
 import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistResult;
 import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistant;
 import com.openmemind.ai.memory.core.retrieval.thread.NoOpMemoryThreadAssistant;
@@ -34,10 +41,12 @@ import com.openmemind.ai.memory.core.retrieval.truncation.AdaptiveTruncator;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.textsearch.TextSearchResult;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -66,6 +75,11 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
     private final SimpleStrategyConfig defaultStrategyConfig;
     private final RetrievalGraphAssistant graphAssistant;
     private final MemoryThreadAssistant memoryThreadAssistant;
+    private final TemporalConstraintExtractor temporalConstraintExtractor;
+    private final TemporalItemChannel temporalItemChannel;
+    private final GraphItemChannel
+            graphItemChannel; // nullable: preserves legacy graph assistant behavior
+    private final Clock clock;
 
     public SimpleRetrievalStrategy(
             InsightTierRetriever insightRetriever,
@@ -75,6 +89,32 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
             SimpleStrategyConfig defaultStrategyConfig,
             RetrievalGraphAssistant graphAssistant,
             MemoryThreadAssistant memoryThreadAssistant) {
+        this(
+                insightRetriever,
+                itemRetriever,
+                textSearch,
+                memoryStore,
+                defaultStrategyConfig,
+                graphAssistant,
+                memoryThreadAssistant,
+                new DefaultTemporalConstraintExtractor(),
+                new DefaultTemporalItemChannel(memoryStore),
+                null,
+                Clock.systemDefaultZone());
+    }
+
+    public SimpleRetrievalStrategy(
+            InsightTierRetriever insightRetriever,
+            ItemTierRetriever itemRetriever,
+            MemoryTextSearch textSearch,
+            MemoryStore memoryStore,
+            SimpleStrategyConfig defaultStrategyConfig,
+            RetrievalGraphAssistant graphAssistant,
+            MemoryThreadAssistant memoryThreadAssistant,
+            TemporalConstraintExtractor temporalConstraintExtractor,
+            TemporalItemChannel temporalItemChannel,
+            GraphItemChannel graphItemChannel,
+            Clock clock) {
         this.insightRetriever =
                 Objects.requireNonNull(insightRetriever, "insightRetriever must not be null");
         this.itemRetriever =
@@ -91,6 +131,16 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
                 memoryThreadAssistant != null
                         ? memoryThreadAssistant
                         : NoOpMemoryThreadAssistant.INSTANCE;
+        this.temporalConstraintExtractor =
+                temporalConstraintExtractor != null
+                        ? temporalConstraintExtractor
+                        : new DefaultTemporalConstraintExtractor();
+        this.temporalItemChannel =
+                temporalItemChannel != null
+                        ? temporalItemChannel
+                        : new DefaultTemporalItemChannel(memoryStore);
+        this.graphItemChannel = graphItemChannel;
+        this.clock = clock != null ? clock : Clock.systemDefaultZone();
     }
 
     public SimpleRetrievalStrategy(
@@ -156,6 +206,10 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
     private Mono<RetrievalResult> executePipeline(QueryContext context, RetrievalConfig config) {
         var simpleConfig = resolveStrategyConfig(config);
 
+        Optional<com.openmemind.ai.memory.core.retrieval.temporal.TemporalConstraint>
+                temporalConstraint =
+                        temporalConstraintExtractor.extract(context.searchQuery(), clock.instant());
+
         // Channel 1: Insight vector search
         Mono<TierResult> insightMono =
                 insightRetriever
@@ -179,18 +233,40 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
         // Channel 3: Item BM25 search
         Mono<List<TextSearchResult>> bm25Mono = executeBm25(context, config, simpleConfig);
 
-        // Three channels in parallel
-        return Mono.zip(insightMono, itemVectorMono, bm25Mono)
+        // Channel 4: Temporal item search, activated only when a temporal constraint exists
+        Mono<TemporalItemChannelResult> temporalMono =
+                temporalItemChannel
+                        .retrieve(
+                                context,
+                                config,
+                                temporalConstraint,
+                                simpleConfig.temporalRetrieval().toSettings())
+                        .onErrorResume(
+                                error -> {
+                                    log.warn("Simple: Temporal item channel failed", error);
+                                    return Mono.just(
+                                            TemporalItemChannelResult.degraded(
+                                                    simpleConfig.temporalRetrieval().enabled(),
+                                                    temporalConstraint.isPresent()));
+                                });
+
+        // Independent channels in parallel
+        return Mono.zip(insightMono, itemVectorMono, bm25Mono, temporalMono)
                 .flatMap(
                         tuple -> {
                             TierResult insightResult = tuple.getT1();
                             TierResult itemVectorResult = tuple.getT2();
                             List<TextSearchResult> bm25Results = tuple.getT3();
+                            TemporalItemChannelResult temporalResult = tuple.getT4();
 
-                            // Item vector + BM25 -> Weighted RRF merge
+                            // Item vector + BM25 + Temporal -> Weighted RRF merge
                             List<ScoredResult> mergedItems =
                                     mergeItemResults(
-                                            itemVectorResult.results(), bm25Results, config);
+                                            itemVectorResult.results(),
+                                            bm25Results,
+                                            temporalResult.items(),
+                                            config,
+                                            simpleConfig);
 
                             // BM25-only results backfill occurredAt
                             mergedItems =
@@ -214,35 +290,67 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
                                             context, config, simpleConfig, directItems)
                                     .flatMap(
                                             candidatePool ->
-                                                    graphAssistant
-                                                            .assist(
+                                                    applyGraphPhase(
                                                                     context,
                                                                     config,
-                                                                    simpleConfig.graphAssist(),
+                                                                    simpleConfig,
                                                                     candidatePool)
-                                                            .onErrorResume(
-                                                                    error -> {
-                                                                        log.warn(
-                                                                                "Simple: Graph"
-                                                                                        + " assist"
-                                                                                        + " failed",
-                                                                                error);
-                                                                        return Mono.just(
-                                                                                RetrievalGraphAssistResult
-                                                                                        .directOnly(
-                                                                                                candidatePool,
-                                                                                                simpleConfig
-                                                                                                        .graphAssist()
-                                                                                                        .enabled()));
-                                                                    })
                                                             .map(
-                                                                    result ->
+                                                                    items ->
                                                                             new PipelineInputs(
                                                                                     insightResult,
-                                                                                    result
-                                                                                            .items())));
+                                                                                    items)));
                         })
                 .map(inputs -> finalizeResult(context, config, inputs));
+    }
+
+    private Mono<List<ScoredResult>> applyGraphPhase(
+            QueryContext context,
+            RetrievalConfig config,
+            SimpleStrategyConfig simpleConfig,
+            List<ScoredResult> candidatePool) {
+        if (candidatePool.isEmpty() || !simpleConfig.graphAssist().enabled()) {
+            return Mono.just(candidatePool);
+        }
+        if (graphItemChannel == null) {
+            return graphAssistant
+                    .assist(context, config, simpleConfig.graphAssist(), candidatePool)
+                    .onErrorResume(
+                            error -> {
+                                log.warn("Simple: Graph assist failed", error);
+                                return Mono.just(
+                                        RetrievalGraphAssistResult.directOnly(
+                                                candidatePool,
+                                                simpleConfig.graphAssist().enabled()));
+                            })
+                    .map(RetrievalGraphAssistResult::items);
+        }
+        return graphItemChannel
+                .retrieve(context, config, simpleConfig.graphAssist(), candidatePool)
+                .onErrorResume(
+                        error -> {
+                            log.warn("Simple: Graph item channel failed", error);
+                            return Mono.just(GraphExpansionResult.degraded(true, false));
+                        })
+                .map(
+                        result ->
+                                mergeGraphChannelResults(
+                                        candidatePool, result.graphItems(), config, simpleConfig));
+    }
+
+    private List<ScoredResult> mergeGraphChannelResults(
+            List<ScoredResult> directItems,
+            List<ScoredResult> graphItems,
+            RetrievalConfig config,
+            SimpleStrategyConfig simpleConfig) {
+        if (graphItems == null || graphItems.isEmpty()) {
+            return directItems;
+        }
+        return ResultMerger.merge(
+                config.scoring(),
+                List.of(directItems, graphItems),
+                1.0d,
+                simpleConfig.graphAssist().graphChannelWeight());
     }
 
     private SimpleStrategyConfig resolveStrategyConfig(RetrievalConfig config) {
@@ -368,7 +476,9 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
     private List<ScoredResult> mergeItemResults(
             List<ScoredResult> vectorResults,
             List<TextSearchResult> bm25Results,
-            RetrievalConfig config) {
+            List<ScoredResult> temporalResults,
+            RetrievalConfig config,
+            SimpleStrategyConfig simpleConfig) {
 
         // BM25 results to ScoredResult
         List<ScoredResult> bm25Scored =
@@ -383,22 +493,31 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
                                                 ResultMerger.sigmoidNormalize(tr.score())))
                         .toList();
 
-        if (vectorResults.isEmpty() && bm25Scored.isEmpty()) {
+        List<List<ScoredResult>> rankedLists = new ArrayList<>();
+        List<Double> weights = new ArrayList<>();
+        if (!vectorResults.isEmpty()) {
+            rankedLists.add(vectorResults);
+            weights.add(config.scoring().fusion().vectorWeight());
+        }
+        if (!bm25Scored.isEmpty()) {
+            rankedLists.add(bm25Scored);
+            weights.add(config.scoring().fusion().keywordWeight());
+        }
+        if (temporalResults != null && !temporalResults.isEmpty()) {
+            rankedLists.add(temporalResults);
+            weights.add(simpleConfig.temporalRetrieval().channelWeight());
+        }
+        if (rankedLists.isEmpty()) {
             return List.of();
         }
-        if (bm25Scored.isEmpty()) {
-            return vectorResults;
-        }
-        if (vectorResults.isEmpty()) {
-            return bm25Scored;
+        if (rankedLists.size() == 1) {
+            return rankedLists.getFirst();
         }
 
-        // Weighted RRF: vector 1.5, BM25 1.0
         return ResultMerger.merge(
                 config.scoring(),
-                List.of(vectorResults, bm25Scored),
-                config.scoring().fusion().vectorWeight(),
-                config.scoring().fusion().keywordWeight());
+                rankedLists,
+                weights.stream().mapToDouble(Double::doubleValue).toArray());
     }
 
     /** Build result: insights and items returned separately, along with expandedInsights and rawDataResults */

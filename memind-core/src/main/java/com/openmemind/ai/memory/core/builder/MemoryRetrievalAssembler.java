@@ -21,7 +21,9 @@ import com.openmemind.ai.memory.core.retrieval.cache.CaffeineRetrievalCache;
 import com.openmemind.ai.memory.core.retrieval.cache.RetrievalCache;
 import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.deep.TypedQueryExpander;
+import com.openmemind.ai.memory.core.retrieval.graph.DefaultGraphItemChannel;
 import com.openmemind.ai.memory.core.retrieval.graph.DefaultRetrievalGraphAssistant;
+import com.openmemind.ai.memory.core.retrieval.graph.GraphExpansionEngine;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.retrieval.query.LlmLongQueryCondenser;
 import com.openmemind.ai.memory.core.retrieval.query.LongQueryCondenser;
@@ -64,6 +66,8 @@ final class MemoryRetrievalAssembler {
                 new LlmTypedQueryExpander(
                         registry.resolve(ChatClientSlot.QUERY_EXPANDER), context.promptRegistry());
         RetrievalGraphAssistant graphAssistant = buildGraphAssistant(context);
+        var graphItemChannel =
+                new DefaultGraphItemChannel(new GraphExpansionEngine(graphAssistant));
         MemoryThreadAssistant memoryThreadAssistant = buildMemoryThreadAssistant(context);
         SimpleStrategyConfig simpleStrategyConfig = simpleStrategyConfig(context.options());
         DeepStrategyConfig deepStrategyConfig = deepStrategyConfig(context.options());
@@ -86,7 +90,13 @@ final class MemoryRetrievalAssembler {
                         context.memoryStore(),
                         simpleStrategyConfig,
                         graphAssistant,
-                        memoryThreadAssistant);
+                        memoryThreadAssistant,
+                        new com.openmemind.ai.memory.core.retrieval.temporal
+                                .DefaultTemporalConstraintExtractor(),
+                        new com.openmemind.ai.memory.core.retrieval.temporal
+                                .DefaultTemporalItemChannel(context.memoryStore()),
+                        graphItemChannel,
+                        java.time.Clock.systemDefaultZone());
 
         RetrievalCache retrievalCache = new CaffeineRetrievalCache();
         var admissionOptions = context.options().retrieval().common().admission();
@@ -128,8 +138,14 @@ final class MemoryRetrievalAssembler {
 
     private SimpleStrategyConfig simpleStrategyConfig(MemoryBuildOptions options) {
         var graph = options.retrieval().simple().graphAssist();
+        var temporal = options.retrieval().simple().temporalRetrieval();
         return new SimpleStrategyConfig(
                 options.retrieval().simple().keywordSearchEnabled(),
+                new SimpleStrategyConfig.TemporalRetrievalConfig(
+                        temporal.enabled(),
+                        temporal.maxWindowCandidates(),
+                        temporal.channelWeight(),
+                        temporal.timeout()),
                 new SimpleStrategyConfig.GraphAssistConfig(
                         graph.enabled(),
                         graph.mode(),
