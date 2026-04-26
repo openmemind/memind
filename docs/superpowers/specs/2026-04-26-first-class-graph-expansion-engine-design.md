@@ -151,7 +151,7 @@ GraphExpansionResult
 The first-class engine must define these semantics explicitly:
 
 - `graphItems` contains ranked graph-only candidates and excludes direct input ids.
-- `graphEnabled` mirrors the effective graph setting.
+- `graphEnabled` mirrors the effective graph setting. The current `GraphExpansionResult.enabled()` accessor may remain if renaming it would create unnecessary churn; the semantic name in docs and stats mapping is `graphEnabled`.
 - `degraded` means expansion failed or timed out at the caller boundary.
 - `timedOut` is set by the reactive caller layer, not by synchronous engine logic.
 - `seedCount` is the number of materialized eligible seeds.
@@ -160,6 +160,8 @@ The first-class engine must define these semantics explicitly:
 - `dedupedCandidateCount` is the number of graph candidates after deduplication and item guard filtering, before ranking output is limited by downstream consumers.
 - `overlapCount` is diagnostic only and does not imply overlap items are returned by the graph channel.
 - `skippedOverFanoutEntityCount` counts entity keys skipped by fanout protection.
+
+Implementation note: rename the current `GraphExpansionResult.rawCandidateCount` field to `dedupedCandidateCount`. The current value already maps from `RetrievalGraphAssistResult.GraphAssistStats.dedupedCandidateCount()`, so the field name should match the actual semantics and avoid implying a pre-filter raw count.
 
 Stats ownership must stay explicit:
 
@@ -200,6 +202,8 @@ retrieve(context, config, settings, seeds)
 
 The only behavioral change is that `engine.expand()` no longer calls `graphAssistant.assist()`.
 
+`DefaultGraphItemChannel` must open `GraphQueryBudgetContext` around `engine.expand(...)` using the same effective timeout as its reactive timeout boundary. The reactive timeout protects the caller, while `GraphQueryBudgetContext` lets store implementations such as the MyBatis statement timeout interceptor apply the same budget to graph SQL.
+
 This makes SIMPLE graph retrieval a true independent channel:
 
 ```text
@@ -231,6 +235,8 @@ expandAndFuse(...)
 ```
 
 This keeps existing assistant behavior while removing low-level graph candidate collection from the assistant class.
+
+`DefaultRetrievalGraphAssistant` must continue to open `GraphQueryBudgetContext` around `graphExpansionEngine.expand(...)`, using the same timeout as the assistant reactive timeout boundary. `GraphExpansionEngine` itself should not open the context; the caller owns timeout policy and the engine remains synchronous and caller-agnostic.
 
 If a custom `RetrievalGraphAssistant` is supplied by users or tests, it must remain untouched. This refactor should only change `DefaultRetrievalGraphAssistant`. The assembler may share one engine between the default assistant and default graph item channel, but it must not require custom assistant implementations to accept or expose a `GraphExpansionEngine`.
 
@@ -361,6 +367,7 @@ Engine behavior:
 
 - Do not swallow exceptions.
 - Do not implement reactive timeout inside the engine.
+- Do not open `GraphQueryBudgetContext` inside the engine.
 - Do not return partial results in the first version.
 - Return empty for disabled settings, no seeds, or no eligible graph operations.
 
