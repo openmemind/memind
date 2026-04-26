@@ -217,22 +217,22 @@ class GraphExpansionEngineTest {
             new QueryContext(
                     MEMORY_ID, "what changed this week", null, List.of(), Map.of(), null, null);
     private static final SimpleStrategyConfig.GraphAssistConfig SETTINGS =
-            SimpleStrategyConfig.GraphAssistConfig.defaults()
-                    .withEnabled(true)
-                    .withMode(RetrievalGraphMode.ASSIST)
-                    .withMaxSeedItems(2)
-                    .withMaxExpandedItems(6)
-                    .withMaxSemanticNeighborsPerSeed(2)
-                    .withMaxTemporalNeighborsPerSeed(2)
-                    .withMaxCausalNeighborsPerSeed(2)
-                    .withMaxEntitySiblingItemsPerSeed(2)
-                    .withMaxItemsPerEntity(2)
-                    .withGraphChannelWeight(0.35d)
-                    .withMinLinkStrength(0.55d)
-                    .withMinMentionConfidence(0.70f)
-                    .withProtectDirectTopK(2)
-                    .withSemanticEvidenceDecayFactor(0.5d)
-                    .withTimeout(Duration.ofMillis(200));
+            new SimpleStrategyConfig.GraphAssistConfig(
+                    true,
+                    RetrievalGraphMode.ASSIST,
+                    2,
+                    6,
+                    2,
+                    2,
+                    2,
+                    2,
+                    2,
+                    0.35d,
+                    0.55d,
+                    0.70f,
+                    2,
+                    0.5d,
+                    Duration.ofMillis(200));
     private static final Instant NOW = Instant.parse("2026-04-17T00:00:00Z");
 
     @Mock private MemoryStore store;
@@ -282,21 +282,46 @@ class GraphExpansionEngineTest {
     }
 
     private MemoryItem item(long id, String content, Instant occurredAt) {
-        return MemoryItem.builder()
-                .id(id)
-                .memoryId(MEMORY_ID)
-                .content(content)
-                .scope(MemoryScope.WORK)
-                .category(MemoryCategory.FACT)
-                .type(MemoryItemType.FACT)
-                .occurredAt(occurredAt)
-                .createdAt(occurredAt)
-                .updatedAt(occurredAt)
-                .build();
+        return new MemoryItem(
+                id,
+                MEMORY_ID.toIdentifier(),
+                content,
+                MemoryScope.WORK,
+                MemoryCategory.FACT,
+                null,
+                null,
+                null,
+                null,
+                occurredAt,
+                null,
+                Map.of(),
+                occurredAt,
+                MemoryItemType.FACT);
     }
 
     private ItemLink link(long sourceId, long targetId, ItemLinkType type, double strength) {
-        return new ItemLink(MEMORY_ID, sourceId, targetId, type, strength, null, NOW, NOW);
+        return new ItemLink(
+                MEMORY_ID.toIdentifier(),
+                sourceId,
+                targetId,
+                type,
+                defaultRelationCode(type),
+                defaultEvidenceSource(type),
+                strength,
+                Map.of(),
+                NOW);
+    }
+
+    private static String defaultRelationCode(ItemLinkType type) {
+        return switch (type) {
+            case SEMANTIC -> null;
+            case TEMPORAL -> "before";
+            case CAUSAL -> "caused_by";
+        };
+    }
+
+    private static String defaultEvidenceSource(ItemLinkType type) {
+        return type == ItemLinkType.SEMANTIC ? "vector_search" : null;
     }
 
     private void seedItems() {
@@ -328,7 +353,7 @@ class GraphExpansionEngineTest {
 
     private ItemEntityMention mention(long itemId, String entityKey, float confidence) {
         return new ItemEntityMention(
-                MEMORY_ID, itemId, entityKey, "OpenAI", "ORG", confidence, NOW, NOW);
+                MEMORY_ID.toIdentifier(), itemId, entityKey, confidence, Map.of(), NOW);
     }
 }
 ```
@@ -646,7 +671,7 @@ public DefaultRetrievalGraphAssistant(MemoryStore store) {
     this(new GraphExpansionEngine(store));
 }
 
-DefaultRetrievalGraphAssistant(GraphExpansionEngine graphExpansionEngine) {
+public DefaultRetrievalGraphAssistant(GraphExpansionEngine graphExpansionEngine) {
     this.graphExpansionEngine = Objects.requireNonNull(graphExpansionEngine, "graphExpansionEngine");
 }
 ```
@@ -851,11 +876,11 @@ return Mono.fromCallable(
         .timeout(effectiveTimeout)
 ```
 
-- [ ] **Step 2: Update channel tests to use store-backed engine**
+- [ ] **Step 2: Update channel tests to use store-backed engines**
 
-Replace tests that construct `new GraphExpansionEngine((RetrievalGraphAssistant) ...)` with store-backed fake stores where needed.
+Replace all tests that construct `new GraphExpansionEngine((RetrievalGraphAssistant) ...)`.
 
-For disabled/no-seeds tests, create a helper:
+For disabled/no-seeds tests, create this helper:
 
 ```java
 private static GraphExpansionEngine noOpEngine() {
@@ -867,6 +892,83 @@ Then use:
 
 ```java
 var channel = new DefaultGraphItemChannel(noOpEngine());
+```
+
+Replace `returnsGraphOnlyCandidatesAndExcludesSeeds` with a store-backed graph fixture:
+
+```java
+@Test
+void returnsGraphOnlyCandidatesAndExcludesSeeds() {
+    var store = new com.openmemind.ai.memory.core.store.InMemoryMemoryStore();
+    var occurredAt = java.time.Instant.parse("2026-04-17T00:00:00Z");
+    var seedItem = item(1L, "seed", occurredAt);
+    var graphItem = item(2L, "graph", occurredAt);
+    store.itemOperations().insertItems(MEMORY_ID, List.of(seedItem, graphItem));
+    store.graphOperations()
+            .upsertItemLinks(
+                    MEMORY_ID,
+                    List.of(
+                            new com.openmemind.ai.memory.core.store.graph.ItemLink(
+                                    MEMORY_ID.toIdentifier(),
+                                    1L,
+                                    2L,
+                                    com.openmemind.ai.memory.core.store.graph.ItemLinkType.SEMANTIC,
+                                    null,
+                                    "vector_search",
+                                    0.90d,
+                                    Map.of(),
+                                    occurredAt)));
+    var channel = new DefaultGraphItemChannel(new GraphExpansionEngine(store));
+
+    var result =
+            channel.retrieve(CONTEXT, CONFIG, ENABLED_SETTINGS, List.of(seed("1"))).block();
+
+    assertThat(result).isNotNull();
+    assertThat(result.graphItems()).extracting(ScoredResult::sourceId).containsExactly("2");
+    assertThat(result.seedCount()).isEqualTo(1);
+    assertThat(result.dedupedCandidateCount()).isEqualTo(1);
+}
+```
+
+Add this helper to `DefaultGraphItemChannelTest`:
+
+```java
+private static MemoryItem item(long id, String content, java.time.Instant occurredAt) {
+    return new MemoryItem(
+            id,
+            MEMORY_ID.toIdentifier(),
+            content,
+            MemoryScope.WORK,
+            MemoryCategory.FACT,
+            null,
+            null,
+            null,
+            null,
+            occurredAt,
+            null,
+            Map.of(),
+            occurredAt,
+            MemoryItemType.FACT);
+}
+```
+
+Replace `assistantFailureReturnsDegradedEmptyResult` with a store-backed failure test:
+
+```java
+@Test
+void engineFailureReturnsDegradedEmptyResult() {
+    MemoryStore store = mock(MemoryStore.class);
+    when(store.itemOperations()).thenThrow(new IllegalStateException("boom"));
+    var channel = new DefaultGraphItemChannel(new GraphExpansionEngine(store));
+
+    var result =
+            channel.retrieve(CONTEXT, CONFIG, ENABLED_SETTINGS, List.of(seed("1"))).block();
+
+    assertThat(result).isNotNull();
+    assertThat(result.degraded()).isTrue();
+    assertThat(result.timedOut()).isFalse();
+    assertThat(result.graphItems()).isEmpty();
+}
 ```
 
 - [ ] **Step 3: Add Mockito imports for ThreadLocal budget test**
@@ -890,6 +992,7 @@ import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 ```
 
@@ -906,17 +1009,21 @@ void opensGraphQueryBudgetContextInsideWorkerThread() {
     GraphOperations graphOperations = mock(GraphOperations.class);
     var occurredAt = Instant.parse("2026-04-17T00:00:00Z");
     var seedItem =
-            MemoryItem.builder()
-                    .id(1L)
-                    .memoryId(MEMORY_ID)
-                    .content("seed")
-                    .scope(MemoryScope.WORK)
-                    .category(MemoryCategory.FACT)
-                    .type(MemoryItemType.FACT)
-                    .occurredAt(occurredAt)
-                    .createdAt(occurredAt)
-                    .updatedAt(occurredAt)
-                    .build();
+            new MemoryItem(
+                    1L,
+                    MEMORY_ID.toIdentifier(),
+                    "seed",
+                    MemoryScope.WORK,
+                    MemoryCategory.FACT,
+                    null,
+                    null,
+                    null,
+                    null,
+                    occurredAt,
+                    null,
+                    Map.of(),
+                    occurredAt,
+                    MemoryItemType.FACT);
 
     when(store.itemOperations()).thenReturn(itemOperations);
     when(store.graphOperations()).thenReturn(graphOperations);
