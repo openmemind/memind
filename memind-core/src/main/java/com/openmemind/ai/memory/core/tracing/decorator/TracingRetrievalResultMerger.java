@@ -13,9 +13,16 @@
  */
 package com.openmemind.ai.memory.core.tracing.decorator;
 
+import com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder;
+import com.openmemind.ai.memory.core.metrics.NoopMemoryMetricsRecorder;
+import com.openmemind.ai.memory.core.metrics.RetrievalMergeMetrics;
+import com.openmemind.ai.memory.core.metrics.RetrievalMetricsSupport;
 import com.openmemind.ai.memory.core.retrieval.scoring.RetrievalResultMerger;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoringConfig;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalMergeTrace;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceCollector;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceContext;
 import com.openmemind.ai.memory.core.tracing.MemoryAttributes;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.tracing.MemorySpanNames;
@@ -30,10 +37,20 @@ public final class TracingRetrievalResultMerger extends TracingSupport
         implements RetrievalResultMerger {
 
     private final RetrievalResultMerger delegate;
+    private final MemoryMetricsRecorder metricsRecorder;
 
     public TracingRetrievalResultMerger(RetrievalResultMerger delegate, MemoryObserver observer) {
+        this(delegate, observer, NoopMemoryMetricsRecorder.INSTANCE);
+    }
+
+    public TracingRetrievalResultMerger(
+            RetrievalResultMerger delegate,
+            MemoryObserver observer,
+            MemoryMetricsRecorder metricsRecorder) {
         super(Objects.requireNonNull(observer, "observer"));
         this.delegate = Objects.requireNonNull(delegate, "delegate");
+        this.metricsRecorder =
+                metricsRecorder == null ? NoopMemoryMetricsRecorder.INSTANCE : metricsRecorder;
     }
 
     @Override
@@ -43,7 +60,58 @@ public final class TracingRetrievalResultMerger extends TracingSupport
                 MemorySpanNames.RETRIEVAL_RESULT_MERGE,
                 requestAttributes(rankedLists, weights),
                 result -> resultAttributes(rankedLists, result),
-                () -> delegate.merge(scoring, rankedLists, weights));
+                () ->
+                        Mono.deferContextual(
+                                context -> {
+                                    RetrievalTraceCollector collector =
+                                            RetrievalTraceContext.collector(context);
+                                    return delegate.merge(scoring, rankedLists, weights)
+                                            .doOnNext(
+                                                    result ->
+                                                            recordMerge(
+                                                                    collector,
+                                                                    rankedLists,
+                                                                    result,
+                                                                    "success"))
+                                            .doOnError(
+                                                    ignored ->
+                                                            recordMerge(
+                                                                    collector,
+                                                                    rankedLists,
+                                                                    null,
+                                                                    "error"));
+                                }));
+    }
+
+    private void recordMerge(
+            RetrievalTraceCollector collector,
+            List<List<ScoredResult>> rankedLists,
+            List<ScoredResult> result,
+            String status) {
+        int inputCount = candidateCount(rankedLists);
+        int outputCount = result == null ? 0 : result.size();
+        RetrievalMetricsSupport.safeRecord(
+                () ->
+                        metricsRecorder.recordRetrievalMerge(
+                                new RetrievalMergeMetrics(
+                                        null,
+                                        inputCount,
+                                        outputCount,
+                                        RetrievalMetricsSupport.deduplicatedCount(
+                                                inputCount, outputCount),
+                                        rankedLists == null ? 0 : rankedLists.size(),
+                                        status,
+                                        "core")));
+        RetrievalMetricsSupport.safeRecord(
+                () ->
+                        collector.mergeCompleted(
+                                new RetrievalMergeTrace(
+                                        inputCount,
+                                        outputCount,
+                                        RetrievalMetricsSupport.deduplicatedCount(
+                                                inputCount, outputCount),
+                                        rankedLists == null ? 0 : rankedLists.size(),
+                                        status)));
     }
 
     private Map<String, Object> requestAttributes(

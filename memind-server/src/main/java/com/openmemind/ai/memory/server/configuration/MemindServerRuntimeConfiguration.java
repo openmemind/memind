@@ -20,6 +20,7 @@ import com.openmemind.ai.memory.core.builder.MemoryBuildOptionsSanitizer;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
+import com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
@@ -42,6 +43,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
@@ -49,6 +51,7 @@ import org.springframework.core.annotation.Order;
 import tools.jackson.databind.ObjectMapper;
 
 @Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(MemindServerObservabilityProperties.class)
 public class MemindServerRuntimeConfiguration {
 
     private static final Logger log =
@@ -76,7 +79,8 @@ public class MemindServerRuntimeConfiguration {
             ObjectProvider<RawDataPlugin> rawDataPluginProvider,
             ObjectProvider<ResourceFetcher> resourceFetcherProvider,
             ObjectProvider<BubbleTrackerStore> bubbleTrackerStoreProvider,
-            ObjectProvider<MemoryObserver> memoryObserverProvider) {
+            ObjectProvider<MemoryObserver> memoryObserverProvider,
+            ObjectProvider<MemoryMetricsRecorder> memoryMetricsRecorderProvider) {
         return options -> {
             StructuredChatClient structuredChatClient =
                     requireRuntimeDependency(structuredChatClientProvider);
@@ -91,6 +95,10 @@ public class MemindServerRuntimeConfiguration {
             ResourceFetcher resourceFetcher = resourceFetcherProvider.getIfAvailable();
             BubbleTrackerStore bubbleTrackerStore = bubbleTrackerStoreProvider.getIfAvailable();
             MemoryObserver memoryObserver = memoryObserverProvider.getIfAvailable();
+            MemoryMetricsRecorder memoryMetricsRecorder =
+                    memoryMetricsRecorderProvider == null
+                            ? null
+                            : memoryMetricsRecorderProvider.getIfAvailable();
             var builder =
                     Memory.builder()
                             .chatClient(structuredChatClient)
@@ -104,6 +112,9 @@ public class MemindServerRuntimeConfiguration {
             }
             if (memoryObserver != null) {
                 builder.memoryObserver(memoryObserver);
+            }
+            if (memoryMetricsRecorder != null) {
+                builder.memoryMetricsRecorder(memoryMetricsRecorder);
             }
             if (contentParserRegistry != null) {
                 builder.contentParserRegistry(contentParserRegistry);
@@ -122,6 +133,33 @@ public class MemindServerRuntimeConfiguration {
             }
             return new MemoryRuntimeFactory.CreationResult(builder.build(), effectiveOptions);
         };
+    }
+
+    MemoryRuntimeFactory memoryRuntimeFactory(
+            ObjectProvider<StructuredChatClient> structuredChatClientProvider,
+            ObjectProvider<MemoryStore> memoryStoreProvider,
+            ObjectProvider<MemoryBuffer> memoryBufferProvider,
+            ObjectProvider<MemoryVector> memoryVectorProvider,
+            ObjectProvider<MemoryTextSearch> memoryTextSearch,
+            ObjectProvider<Reranker> reranker,
+            ObjectProvider<ContentParser> contentParserProvider,
+            ObjectProvider<RawDataPlugin> rawDataPluginProvider,
+            ObjectProvider<ResourceFetcher> resourceFetcherProvider,
+            ObjectProvider<BubbleTrackerStore> bubbleTrackerStoreProvider,
+            ObjectProvider<MemoryObserver> memoryObserverProvider) {
+        return memoryRuntimeFactory(
+                structuredChatClientProvider,
+                memoryStoreProvider,
+                memoryBufferProvider,
+                memoryVectorProvider,
+                memoryTextSearch,
+                reranker,
+                contentParserProvider,
+                rawDataPluginProvider,
+                resourceFetcherProvider,
+                bubbleTrackerStoreProvider,
+                memoryObserverProvider,
+                null);
     }
 
     private static List<ContentParser> resolveContentParsers(

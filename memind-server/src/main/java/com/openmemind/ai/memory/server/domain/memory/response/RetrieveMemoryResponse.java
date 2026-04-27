@@ -22,7 +22,18 @@ public record RetrieveMemoryResponse(
         List<RetrievedRawDataView> rawData,
         List<String> evidences,
         String strategy,
-        String query) {
+        String query,
+        RetrievalTraceView trace) {
+
+    public RetrieveMemoryResponse(
+            List<RetrievedItemView> items,
+            List<RetrievedInsightView> insights,
+            List<RetrievedRawDataView> rawData,
+            List<String> evidences,
+            String strategy,
+            String query) {
+        this(items, insights, rawData, evidences, strategy, query, null);
+    }
 
     public record RetrievedItemView(
             String id, String text, float vectorScore, double finalScore, Instant occurredAt) {}

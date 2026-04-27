@@ -19,6 +19,11 @@ import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import com.openmemind.ai.memory.core.metrics.ExtractionMetrics;
+import com.openmemind.ai.memory.core.metrics.ExtractionMetricsExtractor;
+import com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder;
+import com.openmemind.ai.memory.core.metrics.NoopMemoryMetricsRecorder;
+import com.openmemind.ai.memory.core.metrics.RetrievalMetricsSupport;
 import com.openmemind.ai.memory.core.tracing.MemoryAttributes;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.tracing.MemorySpanNames;
@@ -34,10 +39,20 @@ import reactor.core.publisher.Mono;
 public class TracingMemoryExtractor extends TracingSupport implements MemoryExtractor {
 
     private final MemoryExtractor delegate;
+    private final MemoryMetricsRecorder metricsRecorder;
 
     public TracingMemoryExtractor(MemoryExtractor delegate, MemoryObserver observer) {
+        this(delegate, observer, NoopMemoryMetricsRecorder.INSTANCE);
+    }
+
+    public TracingMemoryExtractor(
+            MemoryExtractor delegate,
+            MemoryObserver observer,
+            MemoryMetricsRecorder metricsRecorder) {
         super(observer);
         this.delegate = delegate;
+        this.metricsRecorder =
+                metricsRecorder == null ? NoopMemoryMetricsRecorder.INSTANCE : metricsRecorder;
     }
 
     @Override
@@ -45,7 +60,7 @@ public class TracingMemoryExtractor extends TracingSupport implements MemoryExtr
         return trace(
                 MemorySpanNames.EXTRACTION,
                 Map.of(MemoryAttributes.MEMORY_ID, request.memoryId().toIdentifier()),
-                () -> delegate.extract(request));
+                () -> recordExtraction(delegate.extract(request)));
     }
 
     @Override
@@ -54,6 +69,25 @@ public class TracingMemoryExtractor extends TracingSupport implements MemoryExtr
         return trace(
                 MemorySpanNames.EXTRACTION,
                 Map.of(MemoryAttributes.MEMORY_ID, memoryId.toIdentifier()),
-                () -> delegate.addMessage(memoryId, message, config));
+                () -> recordExtraction(delegate.addMessage(memoryId, message, config)));
+    }
+
+    private Mono<ExtractionResult> recordExtraction(Mono<ExtractionResult> operation) {
+        return operation
+                .doOnNext(
+                        result ->
+                                RetrievalMetricsSupport.safeRecord(
+                                        () ->
+                                                metricsRecorder.recordExtractionSummary(
+                                                        ExtractionMetricsExtractor.extract(
+                                                                result, "core"))))
+                .doOnError(
+                        ignored ->
+                                RetrievalMetricsSupport.safeRecord(
+                                        () ->
+                                                metricsRecorder.recordExtractionSummary(
+                                                        new ExtractionMetrics(
+                                                                "error", 0, null, 0, null, 0, null,
+                                                                null, null, "core"))));
     }
 }

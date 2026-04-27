@@ -41,6 +41,9 @@ import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalFinalTrace;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceContext;
+import com.openmemind.ai.memory.server.configuration.MemindServerObservabilityProperties;
 import com.openmemind.ai.memory.server.domain.memory.request.AddMessageRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.CommitMemoryRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.ExtractMemoryRequest;
@@ -181,6 +184,29 @@ class OpenMemoryApplicationServiceTest {
         assertThat(runtimeManager.currentHandle().inFlightRequests()).hasValue(0);
     }
 
+    @Test
+    void retrieveIncludesDebugTraceWhenEnabledAndRequested() {
+        RecordingMemory memory = new RecordingMemory();
+        memory.retrieveResult = RetrievalResult.empty("SIMPLE", "coffee");
+        memory.recordTrace = true;
+        MemoryRuntimeManager runtimeManager =
+                new MemoryRuntimeManager(
+                        new RuntimeHandle(memory, MemoryBuildOptions.defaults(), 1));
+        MemindServerObservabilityProperties properties = new MemindServerObservabilityProperties();
+        properties.getRetrievalTrace().setEnabled(true);
+        OpenMemoryApplicationService service =
+                new OpenMemoryApplicationService(runtimeManager, properties);
+
+        var response =
+                service.retrieve(
+                        new RetrieveMemoryRequest(
+                                "u1", "a1", "coffee", RetrievalConfig.Strategy.SIMPLE, true));
+
+        assertThat(response.trace()).isNotNull();
+        assertThat(response.trace().finalResults().strategy()).isEqualTo("SIMPLE");
+        assertThat(response.trace().traceId()).isNotBlank();
+    }
+
     private static ExtractionResult extractionResult() {
         MemoryId memoryId = DefaultMemoryId.of("u1", "a1");
         return new ExtractionResult(
@@ -268,6 +294,7 @@ class OpenMemoryApplicationServiceTest {
         private final CountDownLatch addMessageInvoked = new CountDownLatch(1);
         private final CountDownLatch commitInvoked = new CountDownLatch(1);
         private RetrievalResult retrieveResult;
+        private boolean recordTrace;
 
         @Override
         public Mono<ExtractionResult> extract(MemoryId memoryId, RawContent content) {
@@ -327,7 +354,15 @@ class OpenMemoryApplicationServiceTest {
         public Mono<RetrievalResult> retrieve(
                 MemoryId memoryId, String query, RetrievalConfig.Strategy strategy) {
             this.lastMemoryId = memoryId;
-            return Mono.just(retrieveResult);
+            return Mono.deferContextual(
+                    context -> {
+                        if (recordTrace) {
+                            RetrievalTraceContext.collector(context)
+                                    .finalResults(
+                                            new RetrievalFinalTrace("SIMPLE", "empty", 0, 0, 0, 0));
+                        }
+                        return Mono.just(retrieveResult);
+                    });
         }
 
         @Override

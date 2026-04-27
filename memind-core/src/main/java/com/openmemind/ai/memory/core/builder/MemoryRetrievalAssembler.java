@@ -15,6 +15,8 @@ package com.openmemind.ai.memory.core.builder;
 
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
+import com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder;
+import com.openmemind.ai.memory.core.metrics.NoopMemoryMetricsRecorder;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.admission.DefaultRetrievalAdmissionPolicy;
 import com.openmemind.ai.memory.core.retrieval.cache.CaffeineRetrievalCache;
@@ -71,14 +73,16 @@ final class MemoryRetrievalAssembler {
                 tracingInsightTierRetriever(
                         new InsightTierRetriever(
                                 context.memoryStore(), context.memoryVector(), insightTypeRouter),
-                        context.memoryObserver());
+                        context.memoryObserver(),
+                        context.memoryMetricsRecorder());
         ItemTierSearch itemTierRetriever =
                 tracingItemTierRetriever(
                         new ItemTierRetriever(
                                 context.memoryStore(),
                                 context.memoryVector(),
                                 context.textSearch()),
-                        context.memoryObserver());
+                        context.memoryObserver(),
+                        context.memoryMetricsRecorder());
         SufficiencyGate sufficiencyGate =
                 new LlmSufficiencyGate(
                         registry.resolve(ChatClientSlot.SUFFICIENCY_GATE),
@@ -91,11 +95,14 @@ final class MemoryRetrievalAssembler {
         GraphItemChannel graphItemChannel =
                 tracingGraphItemChannel(
                         new DefaultGraphItemChannel(graphExpansionEngine),
-                        context.memoryObserver());
+                        context.memoryObserver(),
+                        context.memoryMetricsRecorder());
         MemoryThreadAssistant memoryThreadAssistant = buildMemoryThreadAssistant(context);
         RetrievalResultMerger resultMerger =
                 tracingRetrievalResultMerger(
-                        DefaultRetrievalResultMerger.INSTANCE, context.memoryObserver());
+                        DefaultRetrievalResultMerger.INSTANCE,
+                        context.memoryObserver(),
+                        context.memoryMetricsRecorder());
         SimpleStrategyConfig simpleStrategyConfig = simpleStrategyConfig(context.options());
         DeepStrategyConfig deepStrategyConfig = deepStrategyConfig(context.options());
         DeepRetrievalStrategy deepRetrievalStrategy =
@@ -122,7 +129,8 @@ final class MemoryRetrievalAssembler {
                         new DefaultTemporalConstraintExtractor(),
                         tracingTemporalItemChannel(
                                 new DefaultTemporalItemChannel(context.memoryStore()),
-                                context.memoryObserver()),
+                                context.memoryObserver(),
+                                context.memoryMetricsRecorder()),
                         graphItemChannel,
                         resultMerger,
                         java.time.Clock.systemDefaultZone());
@@ -155,47 +163,52 @@ final class MemoryRetrievalAssembler {
     }
 
     private InsightTierSearch tracingInsightTierRetriever(
-            InsightTierSearch retriever, MemoryObserver observer) {
-        if (observer instanceof NoopMemoryObserver
+            InsightTierSearch retriever, MemoryObserver observer, MemoryMetricsRecorder recorder) {
+        if (!hasObservability(observer, recorder)
                 || retriever instanceof TracingInsightTierRetriever) {
             return retriever;
         }
-        return new TracingInsightTierRetriever(retriever, observer);
+        return new TracingInsightTierRetriever(retriever, observer, recorder);
     }
 
     private ItemTierSearch tracingItemTierRetriever(
-            ItemTierSearch retriever, MemoryObserver observer) {
-        if (observer instanceof NoopMemoryObserver
+            ItemTierSearch retriever, MemoryObserver observer, MemoryMetricsRecorder recorder) {
+        if (!hasObservability(observer, recorder)
                 || retriever instanceof TracingItemTierRetriever) {
             return retriever;
         }
-        return new TracingItemTierRetriever(retriever, observer);
+        return new TracingItemTierRetriever(retriever, observer, recorder);
     }
 
     private GraphItemChannel tracingGraphItemChannel(
-            GraphItemChannel channel, MemoryObserver observer) {
-        if (observer instanceof NoopMemoryObserver || channel instanceof TracingGraphItemChannel) {
+            GraphItemChannel channel, MemoryObserver observer, MemoryMetricsRecorder recorder) {
+        if (!hasObservability(observer, recorder) || channel instanceof TracingGraphItemChannel) {
             return channel;
         }
-        return new TracingGraphItemChannel(channel, observer);
+        return new TracingGraphItemChannel(channel, observer, recorder);
     }
 
     private TemporalItemChannel tracingTemporalItemChannel(
-            TemporalItemChannel channel, MemoryObserver observer) {
-        if (observer instanceof NoopMemoryObserver
+            TemporalItemChannel channel, MemoryObserver observer, MemoryMetricsRecorder recorder) {
+        if (!hasObservability(observer, recorder)
                 || channel instanceof TracingTemporalItemChannel) {
             return channel;
         }
-        return new TracingTemporalItemChannel(channel, observer);
+        return new TracingTemporalItemChannel(channel, observer, recorder);
     }
 
     private RetrievalResultMerger tracingRetrievalResultMerger(
-            RetrievalResultMerger merger, MemoryObserver observer) {
-        if (observer instanceof NoopMemoryObserver
+            RetrievalResultMerger merger, MemoryObserver observer, MemoryMetricsRecorder recorder) {
+        if (!hasObservability(observer, recorder)
                 || merger instanceof TracingRetrievalResultMerger) {
             return merger;
         }
-        return new TracingRetrievalResultMerger(merger, observer);
+        return new TracingRetrievalResultMerger(merger, observer, recorder);
+    }
+
+    private boolean hasObservability(MemoryObserver observer, MemoryMetricsRecorder recorder) {
+        return !(observer instanceof NoopMemoryObserver)
+                || !(recorder instanceof NoopMemoryMetricsRecorder);
     }
 
     private MemoryThreadAssistant buildMemoryThreadAssistant(MemoryAssemblyContext context) {

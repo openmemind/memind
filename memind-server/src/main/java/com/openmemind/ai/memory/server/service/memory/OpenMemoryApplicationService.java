@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.server.service.memory;
 
+import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
@@ -21,12 +22,18 @@ import com.openmemind.ai.memory.core.data.MemoryRawData;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
+import com.openmemind.ai.memory.core.retrieval.trace.BoundedRetrievalTraceCollector;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalDebugTrace;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceContext;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceOptions;
+import com.openmemind.ai.memory.server.configuration.MemindServerObservabilityProperties;
 import com.openmemind.ai.memory.server.domain.memory.request.AddMessageRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.CommitMemoryRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.ExtractMemoryRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.RetrieveMemoryRequest;
 import com.openmemind.ai.memory.server.domain.memory.response.AddMessageResponse;
 import com.openmemind.ai.memory.server.domain.memory.response.ExtractMemoryResponse;
+import com.openmemind.ai.memory.server.domain.memory.response.RetrievalTraceView;
 import com.openmemind.ai.memory.server.domain.memory.response.RetrieveMemoryResponse;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeManager;
 import java.time.Duration;
@@ -35,6 +42,7 @@ import java.util.Objects;
 import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -46,9 +54,18 @@ public class OpenMemoryApplicationService {
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
 
     private final MemoryRuntimeManager runtimeManager;
+    private final MemindServerObservabilityProperties observabilityProperties;
 
     public OpenMemoryApplicationService(MemoryRuntimeManager runtimeManager) {
+        this(runtimeManager, new MemindServerObservabilityProperties());
+    }
+
+    @Autowired
+    public OpenMemoryApplicationService(
+            MemoryRuntimeManager runtimeManager,
+            MemindServerObservabilityProperties observabilityProperties) {
         this.runtimeManager = runtimeManager;
+        this.observabilityProperties = observabilityProperties;
     }
 
     public void extractAsync(ExtractMemoryRequest request) {
@@ -116,18 +133,43 @@ public class OpenMemoryApplicationService {
 
     public RetrieveMemoryResponse retrieve(RetrieveMemoryRequest request) {
         try (var lease = runtimeManager.acquire()) {
+            BoundedRetrievalTraceCollector traceCollector = traceCollector(request);
             RetrievalResult result =
                     Objects.requireNonNull(
-                            lease.handle()
-                                    .memory()
-                                    .retrieve(
-                                            DefaultMemoryId.of(request.userId(), request.agentId()),
-                                            request.query(),
-                                            request.strategy())
+                            retrievalMono(lease.handle().memory(), request, traceCollector)
                                     .block(REQUEST_TIMEOUT),
                             "Memory retrieve returned no result");
-            return toRetrieveResponse(result);
+            return toRetrieveResponse(result, traceCollector);
         }
+    }
+
+    private Mono<RetrievalResult> retrievalMono(
+            Memory memory,
+            RetrieveMemoryRequest request,
+            BoundedRetrievalTraceCollector traceCollector) {
+        Mono<RetrievalResult> operation =
+                memory.retrieve(
+                        DefaultMemoryId.of(request.userId(), request.agentId()),
+                        request.query(),
+                        request.strategy());
+        if (traceCollector == null) {
+            return operation;
+        }
+        return operation.contextWrite(
+                context -> RetrievalTraceContext.withCollector(context, traceCollector));
+    }
+
+    private BoundedRetrievalTraceCollector traceCollector(RetrieveMemoryRequest request) {
+        if (!Boolean.TRUE.equals(request.trace())
+                || !observabilityProperties.getRetrievalTrace().isEnabled()) {
+            return null;
+        }
+        var properties = observabilityProperties.getRetrievalTrace();
+        return new BoundedRetrievalTraceCollector(
+                new RetrievalTraceOptions(
+                        properties.getMaxStages(),
+                        properties.getMaxCandidatesPerStage(),
+                        properties.getMaxTextLength()));
     }
 
     private void dispatchAsync(
@@ -182,7 +224,8 @@ public class OpenMemoryApplicationService {
         return result.insightResult().insights().stream().map(MemoryInsight::id).toList();
     }
 
-    private static RetrieveMemoryResponse toRetrieveResponse(RetrievalResult result) {
+    private static RetrieveMemoryResponse toRetrieveResponse(
+            RetrievalResult result, BoundedRetrievalTraceCollector traceCollector) {
         return new RetrieveMemoryResponse(
                 result.items() == null
                         ? List.of()
@@ -214,7 +257,41 @@ public class OpenMemoryApplicationService {
                                 .toList(),
                 result.evidences() == null ? List.of() : result.evidences(),
                 result.strategy(),
-                result.query());
+                result.query(),
+                traceCollector == null
+                        ? null
+                        : traceCollector
+                                .snapshot()
+                                .map(OpenMemoryApplicationService::toTraceView)
+                                .orElse(null));
+    }
+
+    private static RetrievalTraceView toTraceView(RetrievalDebugTrace trace) {
+        return new RetrievalTraceView(
+                trace.traceId(),
+                trace.startedAt(),
+                trace.completedAt(),
+                trace.truncated(),
+                trace.stages().stream()
+                        .map(
+                                stage ->
+                                        new RetrievalTraceView.StageView(
+                                                stage.stage(),
+                                                stage.tier(),
+                                                stage.method(),
+                                                stage.status(),
+                                                stage.inputCount(),
+                                                stage.candidateCount(),
+                                                stage.resultCount(),
+                                                stage.degraded(),
+                                                stage.skipped(),
+                                                stage.startedAt(),
+                                                stage.durationMillis(),
+                                                stage.attributes(),
+                                                stage.candidates()))
+                        .toList(),
+                RetrievalTraceView.MergeView.from(trace.merge()),
+                RetrievalTraceView.FinalView.from(trace.finalResults()));
     }
 
     private static RetrieveMemoryResponse.RetrievedItemView toRetrievedItemView(ScoredResult item) {
