@@ -31,6 +31,7 @@ import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.builder.PromptBudgetOptions;
 import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
 import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
+import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
@@ -59,6 +60,7 @@ import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.tracing.ObservationContext;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingItemGraphMaterializer;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryExtractor;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import com.openmemind.ai.memory.plugin.rawdata.audio.content.AudioContent;
 import com.openmemind.ai.memory.plugin.rawdata.audio.parser.TranscriptionAudioContentParser;
@@ -107,8 +109,7 @@ class MemindServerRuntimeConfigurationTest {
                         emptyProvider(MemoryObserver.class));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults()).memory();
-        var extractor =
-                readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
+        var extractor = underlyingExtractor((DefaultMemory) memory);
         var insightLayer = readField(extractor, "insightStep", InsightLayer.class);
         var scheduler = readField(insightLayer, "scheduler", InsightBuildScheduler.class);
         var reorganizer = readField(scheduler, "treeReorganizer", InsightTreeReorganizer.class);
@@ -137,7 +138,7 @@ class MemindServerRuntimeConfigurationTest {
                         provider(MemoryObserver.class, observer));
 
         var memory = (DefaultMemory) factory.create(graphEnabledBuildOptions()).memory();
-        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
+        var extractor = underlyingExtractor(memory);
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
 
         assertThat(readField(itemLayer, "graphMaterializer", ItemGraphMaterializer.class))
@@ -260,8 +261,7 @@ class MemindServerRuntimeConfigurationTest {
                         emptyProvider(MemoryObserver.class));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults()).memory();
-        var extractor =
-                readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
+        var extractor = underlyingExtractor((DefaultMemory) memory);
         ContentParserRegistry registry =
                 readField(extractor, "contentParserRegistry", ContentParserRegistry.class);
 
@@ -325,8 +325,7 @@ class MemindServerRuntimeConfigurationTest {
                         emptyProvider(MemoryObserver.class));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults()).memory();
-        var extractor =
-                readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
+        var extractor = underlyingExtractor((DefaultMemory) memory);
 
         RawContentProcessorRegistry registry =
                 readField(
@@ -367,8 +366,7 @@ class MemindServerRuntimeConfigurationTest {
                         emptyProvider(MemoryObserver.class));
 
         Memory memory = factory.create(MemoryBuildOptions.defaults()).memory();
-        var extractor =
-                readField((DefaultMemory) memory, "extractor", DefaultMemoryExtractor.class);
+        var extractor = underlyingExtractor((DefaultMemory) memory);
         ContentParserRegistry registry =
                 readField(extractor, "contentParserRegistry", ContentParserRegistry.class);
 
@@ -648,5 +646,13 @@ class MemindServerRuntimeConfigurationTest {
         } catch (ReflectiveOperationException e) {
             throw new AssertionError(e);
         }
+    }
+
+    private static DefaultMemoryExtractor underlyingExtractor(DefaultMemory memory) {
+        MemoryExtractor extractor = readField(memory, "extractor", MemoryExtractor.class);
+        if (extractor instanceof TracingMemoryExtractor tracing) {
+            return readField(tracing, "delegate", DefaultMemoryExtractor.class);
+        }
+        return DefaultMemoryExtractor.class.cast(extractor);
     }
 }

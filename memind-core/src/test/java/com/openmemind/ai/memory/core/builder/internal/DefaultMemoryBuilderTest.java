@@ -43,6 +43,7 @@ import com.openmemind.ai.memory.core.builder.SimpleRetrievalGraphOptions;
 import com.openmemind.ai.memory.core.builder.SimpleRetrievalOptions;
 import com.openmemind.ai.memory.core.builder.SufficiencyOptions;
 import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
+import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.context.LlmContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
@@ -65,6 +66,7 @@ import com.openmemind.ai.memory.core.prompt.PromptType;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
+import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphMode;
@@ -79,7 +81,11 @@ import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.support.RecordingMemoryObserver;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import com.openmemind.ai.memory.core.tracing.MemoryObserver;
+import com.openmemind.ai.memory.core.tracing.NoopMemoryObserver;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingItemGraphMaterializer;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryExtractor;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryRetriever;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.lang.reflect.Proxy;
 import java.util.Map;
@@ -220,6 +226,37 @@ class DefaultMemoryBuilderTest {
                                 .derivation()
                                 .enabled())
                 .isFalse();
+    }
+
+    @Test
+    void builderWrapsExtractorWithTracingDecoratorWhenObserverConfigured() {
+        var observer = new RecordingMemoryObserver();
+
+        var memory = buildMinimalMemory(observer);
+
+        var extractor = readField(memory, "extractor", MemoryExtractor.class);
+        assertThat(extractor).isInstanceOf(TracingMemoryExtractor.class);
+    }
+
+    @Test
+    void builderWrapsRetrieverWithTracingDecoratorWhenObserverConfigured() {
+        var observer = new RecordingMemoryObserver();
+
+        var memory = buildMinimalMemory(observer);
+
+        var retriever = readField(memory, "retriever", MemoryRetriever.class);
+        assertThat(retriever).isInstanceOf(TracingMemoryRetriever.class);
+    }
+
+    @Test
+    void builderKeepsTopLevelDelegatesUnwrappedForNoopObserver() {
+        var memory = buildMinimalMemory(new NoopMemoryObserver());
+
+        var extractor = readField(memory, "extractor", MemoryExtractor.class);
+        var retriever = readField(memory, "retriever", MemoryRetriever.class);
+
+        assertThat(extractor).isNotInstanceOf(TracingMemoryExtractor.class);
+        assertThat(retriever).isNotInstanceOf(TracingMemoryRetriever.class);
     }
 
     @Test
@@ -365,13 +402,13 @@ class DefaultMemoryBuilderTest {
                                 .vector(MEMORY_VECTOR)
                                 .build();
 
-        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
+        var extractor = underlyingExtractor(memory);
         var memoryItemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
         var itemExtractor =
                 readField(memoryItemLayer, "extractor", DefaultMemoryItemExtractor.class);
         var itemStrategy =
                 readField(itemExtractor, "defaultStrategy", LlmItemExtractionStrategy.class);
-        var retriever = readField(memory, "retriever", DefaultMemoryRetriever.class);
+        var retriever = underlyingRetriever(memory);
         @SuppressWarnings("unchecked")
         var strategies = readField(retriever, "strategies", Map.class);
         var deepStrategy =
@@ -405,7 +442,7 @@ class DefaultMemoryBuilderTest {
                                 .resourceFetcher(fetcher)
                                 .build();
 
-        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
+        var extractor = underlyingExtractor(memory);
 
         assertThat(readField(extractor, "contentParserRegistry", ContentParserRegistry.class))
                 .isSameAs(registry);
@@ -427,7 +464,7 @@ class DefaultMemoryBuilderTest {
                                 .bubbleTrackerStore(customBubbleTracker)
                                 .build();
 
-        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
+        var extractor = underlyingExtractor(memory);
         var insightLayer = readField(extractor, "insightStep", InsightLayer.class);
         var scheduler = readField(insightLayer, "scheduler", InsightBuildScheduler.class);
         var reorganizer = readField(scheduler, "treeReorganizer", InsightTreeReorganizer.class);
@@ -453,12 +490,12 @@ class DefaultMemoryBuilderTest {
                                 .promptRegistry(promptRegistry)
                                 .build();
 
-        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
+        var extractor = underlyingExtractor(memory);
         var contextCommitDetector =
                 readField(extractor, "contextCommitDetector", LlmContextCommitDetector.class);
         var extractionPromptRegistry =
                 readField(contextCommitDetector, "promptRegistry", PromptRegistry.class);
-        var retriever = readField(memory, "retriever", DefaultMemoryRetriever.class);
+        var retriever = underlyingRetriever(memory);
         @SuppressWarnings("unchecked")
         var strategies = readField(retriever, "strategies", Map.class);
         var deepStrategy =
@@ -487,7 +524,7 @@ class DefaultMemoryBuilderTest {
                                 .options(graphEnabledBuildOptions())
                                 .build();
 
-        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
+        var extractor = underlyingExtractor(memory);
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
 
         assertThat(readField(itemLayer, "graphMaterializer", ItemGraphMaterializer.class))
@@ -506,7 +543,7 @@ class DefaultMemoryBuilderTest {
                                 .options(graphEnabledBuildOptions())
                                 .build();
 
-        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
+        var extractor = underlyingExtractor(memory);
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
         var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
         var delegate = readField(tracing, "delegate", DefaultItemGraphMaterializer.class);
@@ -532,7 +569,7 @@ class DefaultMemoryBuilderTest {
                                 .options(MemoryBuildOptions.defaults())
                                 .build();
 
-        var extractor = readField(memory, "extractor", DefaultMemoryExtractor.class);
+        var extractor = underlyingExtractor(memory);
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
 
         assertThat(readField(itemLayer, "graphMaterializer", ItemGraphMaterializer.class))
@@ -897,6 +934,33 @@ class DefaultMemoryBuilderTest {
                             }
                             return null;
                         });
+    }
+
+    private DefaultMemory buildMinimalMemory(MemoryObserver observer) {
+        return (DefaultMemory)
+                Memory.builder()
+                        .chatClient(CHAT_CLIENT)
+                        .store(new InMemoryMemoryStore())
+                        .buffer(MEMORY_BUFFER)
+                        .vector(MEMORY_VECTOR)
+                        .memoryObserver(observer)
+                        .build();
+    }
+
+    private static DefaultMemoryExtractor underlyingExtractor(DefaultMemory memory) {
+        MemoryExtractor extractor = readField(memory, "extractor", MemoryExtractor.class);
+        if (extractor instanceof TracingMemoryExtractor tracing) {
+            return readField(tracing, "delegate", DefaultMemoryExtractor.class);
+        }
+        return DefaultMemoryExtractor.class.cast(extractor);
+    }
+
+    private static DefaultMemoryRetriever underlyingRetriever(DefaultMemory memory) {
+        MemoryRetriever retriever = readField(memory, "retriever", MemoryRetriever.class);
+        if (retriever instanceof TracingMemoryRetriever tracing) {
+            return readField(tracing, "delegate", DefaultMemoryRetriever.class);
+        }
+        return DefaultMemoryRetriever.class.cast(retriever);
     }
 
     @SuppressWarnings("unchecked")

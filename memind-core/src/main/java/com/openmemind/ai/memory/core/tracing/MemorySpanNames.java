@@ -54,16 +54,19 @@ public final class MemorySpanNames {
     public static final String RETRIEVAL_INTENT = "memind.retrieval.intent";
     public static final String RETRIEVAL_REWRITE = "memind.retrieval.rewrite";
     public static final String RETRIEVAL_STRATEGY = "memind.retrieval.strategy";
-    public static final String RETRIEVAL_TIER_INSIGHT = "memind.retrieval.sufficiency.insight";
-    public static final String RETRIEVAL_TIER_ITEM = "memind.retrieval.sufficiency.item";
-    public static final String RETRIEVAL_TIER_RAWDATA = "memind.retrieval.sufficiency.rawdata";
+    public static final String RETRIEVAL_TIER_INSIGHT = "memind.retrieval.tier.insight";
+    public static final String RETRIEVAL_TIER_ITEM = "memind.retrieval.tier.item";
+    public static final String RETRIEVAL_TIER_RAWDATA = "memind.retrieval.tier.rawdata";
     public static final String RETRIEVAL_SUFFICIENCY = "memind.retrieval.sufficiency";
     public static final String RETRIEVAL_VECTOR_SEARCH = "memind.retrieval.vector_search";
+    public static final String RETRIEVAL_RESULT_MERGE = "memind.retrieval.result_merge";
     public static final String RETRIEVAL_RERANK = "memind.retrieval.rerank";
     public static final String RETRIEVAL_KEYWORD_SEARCH = "memind.retrieval.keyword_search";
     public static final String RETRIEVAL_MEMORY_THREAD_ASSIST =
             "memind.retrieval.memory_thread.assist";
     public static final String RETRIEVAL_GRAPH_ASSIST = "memind.retrieval.graph.assist";
+    public static final String RETRIEVAL_GRAPH_CHANNEL = "memind.retrieval.channel.graph";
+    public static final String RETRIEVAL_TEMPORAL_CHANNEL = "memind.retrieval.channel.temporal";
     public static final String RETRIEVAL_INSIGHT_TYPE_ROUTING =
             "memind.retrieval.insight_type_routing";
     public static final String RETRIEVAL_MULTI_QUERY_EXPAND = "memind.retrieval.multi_query_expand";

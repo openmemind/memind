@@ -19,14 +19,17 @@ import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassifier;
 import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicator;
+import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.step.InsightExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.deep.TypedQueryExpander;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategy;
 import com.openmemind.ai.memory.core.retrieval.sufficiency.SufficiencyGate;
+import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistant;
 import com.openmemind.ai.memory.core.retrieval.tier.InsightTypeRouter;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.tracing.NoopMemoryObserver;
@@ -34,12 +37,15 @@ import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightExtractStep
 import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightGenerator;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightGroupClassifier;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightTypeRouter;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingItemGraphMaterializer;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryExtractor;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryItemDeduplicator;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryItemExtractStep;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryRetriever;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryThreadAssistant;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingRawDataExtractStep;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingReranker;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingRetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingRetrievalStrategy;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingSufficiencyGate;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingTypedQueryExpander;
@@ -144,11 +150,35 @@ class TracingBeanPostProcessorTest {
         }
 
         @Test
+        @DisplayName("wraps ItemGraphMaterializer")
+        void wrapsItemGraphMaterializer() {
+            var bean = proxy(ItemGraphMaterializer.class);
+            var result = processor.postProcessAfterInitialization(bean, "test");
+            assertThat(result).isInstanceOf(TracingItemGraphMaterializer.class);
+        }
+
+        @Test
         @DisplayName("wraps MemoryRetriever")
         void wrapsMemoryRetriever() {
             var bean = proxy(MemoryRetriever.class);
             var result = processor.postProcessAfterInitialization(bean, "test");
             assertThat(result).isInstanceOf(TracingMemoryRetriever.class);
+        }
+
+        @Test
+        @DisplayName("wraps RetrievalGraphAssistant")
+        void wrapsRetrievalGraphAssistant() {
+            var bean = proxy(RetrievalGraphAssistant.class);
+            var result = processor.postProcessAfterInitialization(bean, "test");
+            assertThat(result).isInstanceOf(TracingRetrievalGraphAssistant.class);
+        }
+
+        @Test
+        @DisplayName("wraps MemoryThreadAssistant")
+        void wrapsMemoryThreadAssistant() {
+            var bean = proxy(MemoryThreadAssistant.class);
+            var result = processor.postProcessAfterInitialization(bean, "test");
+            assertThat(result).isInstanceOf(TracingMemoryThreadAssistant.class);
         }
 
         @Test
