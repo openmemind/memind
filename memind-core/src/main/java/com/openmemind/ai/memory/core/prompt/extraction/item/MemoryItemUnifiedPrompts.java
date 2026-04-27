@@ -82,12 +82,18 @@ public final class MemoryItemUnifiedPrompts {
             """
             # Extraction Scope & What NOT to Extract
             - Extract from BOTH user AND assistant messages.
+            - Extract only information that is likely to remain useful beyond the current \
+            turn or immediate coordination context, such as over future days, weeks, or months.
+            - Do not create a memory item just because a sentence is factual. Create a memory \
+            only when it has durable retrieval value.
             - User messages mainly reveal profile, behavior, and event memories.
             - Keep assistant content ONLY when it contains durable agent instructions, \
             reusable task workflows, resolved problem knowledge, or concrete tool guidance \
             with future reuse value.
-            - Do NOT extract: greetings, small talk, praise toward the assistant, or vague \
-            platitudes without user-specific context.
+            - Do NOT extract: generic greetings, pure acknowledgements, filler and small talk, \
+            process chatter, repeated facts in the same source text, temporary status updates \
+            useful only inside the current session, one-off control messages, or vague \
+            summaries without actionable or retrievable detail.
             - Do NOT extract assistant emotional support, encouragement, validation, reflective \
             coaching questions, or therapeutic phrasing unless the user explicitly adopts them \
             as a lasting routine, preference, or instruction.
@@ -97,16 +103,34 @@ public final class MemoryItemUnifiedPrompts {
             user to", or "At 2026-03-27 the assistant said...".
             - One-off control messages, transient execution commands, and session-management \
             turns are not durable agent memory.
+            - A one-off command can still be extracted if it reveals a durable directive, \
+            reusable playbook, project context, or resolution.
+            - Temporary project status can still be extracted as event when it is important \
+            context likely to matter later.
             """;
 
     private static final String EXTRACTION_BIAS =
             """
             # Extraction Bias
-            - For profile, behavior, and event, extract clearly stated facts even if they \
-            seem minor.
-            - For directive, playbook, and resolution, use strict precision.
+            - For USER-scope categories (`profile`, `behavior`, `event`), extract clearly \
+            stated facts even if they seem minor, as long as they have future retrieval value.
+            - For AGENT-scope categories (`tool`, `directive`, `playbook`, `resolution`), \
+            use strict precision. If the item is merely a one-off command, loose suggestion, \
+            unresolved discussion, or temporary execution status, do not extract it.
             - If there is no clear evidence, do not extract.
-            - if uncertain between agent memory and nothing, prefer nothing
+            - If uncertain between AGENT memory and nothing, prefer nothing.
+            """;
+
+    private static final String CONTENT_PRESERVATION =
+            """
+            # Content Preservation
+            Preserve who, what, when, where, and why when those details affect future retrieval \
+            or interpretation.
+            Preserve important relationships, locations, causes, motivations, comparisons, \
+            capabilities, attitudes, constraints, and user intent.
+            Do not compress away the detail that makes the memory useful.
+            Do not turn a specific memory into a vague summary.
+            Prefer one complete, self-contained sentence over fragments.
             """;
 
     private static final String CATEGORY_CONTEXT_SECTION = "{{CATEGORY_CONTEXT}}";
@@ -347,6 +371,34 @@ public final class MemoryItemUnifiedPrompts {
             -> Wrong: this is profile. Stable professional identity, not a time-bound situation.
 
 
+            ## tool
+
+            Good:
+            {
+              "items": [
+                {
+                  "content": "For the code search tool, use ripgrep with file globs to narrow large repository searches",
+                  "confidence": 0.95,
+                  "time": null,
+                  "insightTypes": ["tool_usage"],
+                  "category_reason": "Specific reusable tool usage guidance with future reuse value.",
+                  "category": "tool"
+                }
+              ]
+            }
+
+            Bad:
+            {
+              "items": [
+                {
+                  "content": "User asked the agent to run a search once",
+                  "category": "tool"
+                }
+              ]
+            }
+            -> Wrong: a one-off tool command is not durable tool usage knowledge.
+
+
             ## directive
 
             Good:
@@ -486,6 +538,7 @@ public final class MemoryItemUnifiedPrompts {
     public static PromptTemplate buildPreview() {
         return defaultBuilder()
                 .variable("CATEGORY_CONTEXT", buildCategoryContext(null, DefaultInsightTypes.all()))
+                .variable("CATEGORY_EXAMPLES", buildCategoryExamples(null))
                 .variable("IDENTITY_CONTEXT", buildIdentityContext("Ada"))
                 .variable("SUBJECT_CONTEXT", buildSubjectClarityContext("Ada"))
                 .variable(
@@ -530,6 +583,7 @@ public final class MemoryItemUnifiedPrompts {
 
         return builder.userPrompt(USER_PROMPT_TEMPLATE)
                 .variable("CATEGORY_CONTEXT", buildCategoryContext(categories, insightTypes))
+                .variable("CATEGORY_EXAMPLES", buildCategoryExamples(categories))
                 .variable("IDENTITY_CONTEXT", buildIdentityContext(userName))
                 .variable("SUBJECT_CONTEXT", buildSubjectClarityContext(userName))
                 .variable("TEMPORAL_CONTEXT", buildTimeContext(segmentText, referenceTime))
@@ -566,6 +620,12 @@ public final class MemoryItemUnifiedPrompts {
         - Use "special" only for conversational role anchors such as self, user, or assistant; do not label arbitrary nouns as special.
         - Good entities: named people, organizations, places, durable objects, and durable concepts central to the item.
         - Bad entities: pronouns, generic nouns, dates, categories, vague topics, or entities not grounded in the source.
+        - Extract entities only when they help link related memories. Prefer concrete named entities and specific durable domain concepts over generic nouns.
+        - Resolve role-only mentions to named entities when the source provides a name.
+        - If "my roommate" and "Emily" refer to the same person, use entity name "Emily" and preserve "user's roommate" in content or alias evidence.
+        - If "the PM" and "Sarah" refer to the same person, use entity name "Sarah" and preserve "PM" as role evidence.
+        - Do not create separate entities for generic role mentions when a named entity is available.
+        - Do not extract generic nouns such as "project", "team", "system", "issue", or "problem" unless grounded as a specific named or durable domain concept.
         - Include `"causalRelations"` only for strong explicit cause/effect links inside this response; keep at most %d per item.
         - Good causal relation: one item states a cause, trigger, enabler, or motivation for another item.
         - Bad causal relation: not for topical similarity, not for ownership or dependency, and not for simple co-occurrence.
@@ -644,25 +704,59 @@ public final class MemoryItemUnifiedPrompts {
                 .section("principles", PRINCIPLES)
                 .section("extractionScope", EXTRACTION_SCOPE)
                 .section("extractionBias", EXTRACTION_BIAS)
+                .section("contentPreservation", CONTENT_PRESERVATION)
                 .section("categoryContext", CATEGORY_CONTEXT_SECTION)
                 .section("identityContext", IDENTITY_CONTEXT_SECTION)
                 .section("subjectContext", SUBJECT_CONTEXT_SECTION)
                 .section("temporalContext", TEMPORAL_CONTEXT_SECTION)
                 .section("scoring", SCORING)
                 .section("output", OUTPUT)
-                .section("examples", CATEGORY_EXAMPLES);
+                .section("examples", "{{CATEGORY_EXAMPLES}}");
     }
 
     // ── Category Context ─────────────────────────────────────────────────────
 
+    static String buildCategoryExamples(Set<MemoryCategory> categories) {
+        Set<MemoryCategory> effectiveCategories = effectiveCategories(categories);
+        if (effectiveCategories.isEmpty()) {
+            return "";
+        }
+        String examples = renderExamplesFor(effectiveCategories);
+        return examples.isBlank() ? "" : "\n\n# Examples by Category\n" + examples;
+    }
+
+    private static Set<MemoryCategory> effectiveCategories(Set<MemoryCategory> categories) {
+        if (categories == null) {
+            return EnumSet.allOf(MemoryCategory.class);
+        }
+        if (categories.isEmpty()) {
+            return EnumSet.noneOf(MemoryCategory.class);
+        }
+        return EnumSet.copyOf(categories);
+    }
+
+    private static String renderExamplesFor(Set<MemoryCategory> categories) {
+        return categories.stream()
+                .map(MemoryCategory::categoryName)
+                .map(MemoryItemUnifiedPrompts::renderExampleFor)
+                .filter(example -> !example.isBlank())
+                .collect(Collectors.joining());
+    }
+
+    private static String renderExampleFor(String categoryName) {
+        String heading = "\n## " + categoryName + "\n";
+        int start = CATEGORY_EXAMPLES.indexOf(heading);
+        if (start < 0) {
+            return "";
+        }
+        int next = CATEGORY_EXAMPLES.indexOf("\n## ", start + heading.length());
+        int end = next < 0 ? CATEGORY_EXAMPLES.length() : next;
+        return CATEGORY_EXAMPLES.substring(start, end);
+    }
+
     static String buildCategoryContext(
             Set<MemoryCategory> categories, List<MemoryInsightType> insightTypes) {
-        Set<MemoryCategory> effectiveCategories =
-                categories == null
-                        ? EnumSet.allOf(MemoryCategory.class)
-                        : categories.isEmpty()
-                                ? EnumSet.noneOf(MemoryCategory.class)
-                                : EnumSet.copyOf(categories);
+        Set<MemoryCategory> effectiveCategories = effectiveCategories(categories);
 
         String userDefs =
                 renderCategoryDefinitions(effectiveCategories, MemoryScope.USER, insightTypes);
