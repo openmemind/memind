@@ -50,8 +50,7 @@ import javax.sql.DataSource;
 import org.jdbi.v3.core.Jdbi;
 import tools.jackson.core.type.TypeReference;
 
-public abstract class AbstractJdbcThreadStore
-        implements ThreadProjectionStore, ThreadEnrichmentInputStore {
+public class JdbcThreadStore implements ThreadProjectionStore, ThreadEnrichmentInputStore {
 
     private static final TypeReference<Map<String, Object>> OBJECT_MAP_TYPE =
             new TypeReference<>() {};
@@ -61,7 +60,7 @@ public abstract class AbstractJdbcThreadStore
     private final JdbcThreadDialect dialect;
     private final JsonCodec jsonCodec = new JsonCodec();
 
-    protected AbstractJdbcThreadStore(
+    protected JdbcThreadStore(
             DataSource dataSource, JdbcThreadDialect dialect, boolean createIfNotExist) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
         this.jdbi = JdbiFactory.create(this.dataSource);

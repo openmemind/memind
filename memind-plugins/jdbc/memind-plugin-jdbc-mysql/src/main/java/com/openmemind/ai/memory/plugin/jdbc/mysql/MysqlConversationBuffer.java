@@ -13,10 +13,16 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.mysql;
 
-import com.openmemind.ai.memory.plugin.jdbc.internal.buffer.AbstractJdbcConversationBuffer;
+import com.openmemind.ai.memory.core.buffer.PendingConversationBuffer;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import com.openmemind.ai.memory.plugin.jdbc.internal.buffer.ConversationBufferRow;
+import java.util.List;
+import java.util.Objects;
 import javax.sql.DataSource;
 
-public class MysqlConversationBuffer extends AbstractJdbcConversationBuffer {
+public class MysqlConversationBuffer implements PendingConversationBuffer {
+
+    private final MysqlConversationBufferAccessor accessor;
 
     public MysqlConversationBuffer(DataSource dataSource) {
         this(dataSource, true);
@@ -27,6 +33,42 @@ public class MysqlConversationBuffer extends AbstractJdbcConversationBuffer {
     }
 
     public MysqlConversationBuffer(MysqlConversationBufferAccessor accessor) {
-        super(accessor);
+        this.accessor = Objects.requireNonNull(accessor, "accessor");
+    }
+
+    @Override
+    public void append(String sessionId, Message message) {
+        accessor.append(
+                Objects.requireNonNull(sessionId, "sessionId"),
+                Objects.requireNonNull(message, "message"));
+    }
+
+    @Override
+    public List<Message> load(String sessionId) {
+        return accessor.selectPending(Objects.requireNonNull(sessionId, "sessionId")).stream()
+                .map(ConversationBufferRow::message)
+                .toList();
+    }
+
+    @Override
+    public void clear(String sessionId) {
+        List<Long> ids =
+                accessor.selectPending(Objects.requireNonNull(sessionId, "sessionId")).stream()
+                        .map(ConversationBufferRow::id)
+                        .toList();
+        if (!ids.isEmpty()) {
+            accessor.markExtractedByIds(ids);
+        }
+    }
+
+    @Override
+    public List<Message> drain(String sessionId) {
+        List<ConversationBufferRow> rows =
+                accessor.selectPending(Objects.requireNonNull(sessionId, "sessionId"));
+        List<Long> ids = rows.stream().map(ConversationBufferRow::id).toList();
+        if (!ids.isEmpty()) {
+            accessor.markExtractedByIds(ids);
+        }
+        return rows.stream().map(ConversationBufferRow::message).toList();
     }
 }

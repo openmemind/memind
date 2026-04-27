@@ -13,10 +13,16 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.mysql;
 
-import com.openmemind.ai.memory.plugin.jdbc.internal.buffer.AbstractJdbcRecentConversationBuffer;
+import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import com.openmemind.ai.memory.plugin.jdbc.internal.buffer.ConversationBufferRow;
+import java.util.List;
+import java.util.Objects;
 import javax.sql.DataSource;
 
-public class MysqlRecentConversationBuffer extends AbstractJdbcRecentConversationBuffer {
+public class MysqlRecentConversationBuffer implements RecentConversationBuffer {
+
+    private final MysqlConversationBufferAccessor accessor;
 
     public MysqlRecentConversationBuffer(DataSource dataSource) {
         this(dataSource, true);
@@ -27,6 +33,28 @@ public class MysqlRecentConversationBuffer extends AbstractJdbcRecentConversatio
     }
 
     public MysqlRecentConversationBuffer(MysqlConversationBufferAccessor accessor) {
-        super(accessor);
+        this.accessor = Objects.requireNonNull(accessor, "accessor");
+    }
+
+    @Override
+    public void append(String sessionId, Message message) {
+        Objects.requireNonNull(sessionId, "sessionId");
+        Objects.requireNonNull(message, "message");
+    }
+
+    @Override
+    public List<Message> loadRecent(String sessionId, int limit) {
+        Objects.requireNonNull(sessionId, "sessionId");
+        if (limit <= 0) {
+            throw new IllegalArgumentException("limit must be positive");
+        }
+        return accessor.selectRecent(sessionId, limit).stream()
+                .map(ConversationBufferRow::message)
+                .toList();
+    }
+
+    @Override
+    public void clear(String sessionId) {
+        Objects.requireNonNull(sessionId, "sessionId");
     }
 }

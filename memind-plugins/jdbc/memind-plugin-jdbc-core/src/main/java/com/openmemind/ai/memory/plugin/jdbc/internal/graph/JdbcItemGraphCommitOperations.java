@@ -35,19 +35,17 @@ import java.util.Objects;
 import java.util.Optional;
 import javax.sql.DataSource;
 
-public abstract class AbstractJdbcItemGraphCommitOperations implements ItemGraphCommitOperations {
+public class JdbcItemGraphCommitOperations implements ItemGraphCommitOperations {
 
     private static final int MAX_ERROR_MESSAGE_LENGTH = 1024;
 
     private final DataSource dataSource;
     private final JdbcGraphDialect dialect;
-    private final AbstractJdbcGraphOperations graphOperations;
+    private final JdbcGraphOperations graphOperations;
     private final JsonCodec jsonCodec = new JsonCodec();
 
-    protected AbstractJdbcItemGraphCommitOperations(
-            DataSource dataSource,
-            JdbcGraphDialect dialect,
-            AbstractJdbcGraphOperations graphOperations) {
+    protected JdbcItemGraphCommitOperations(
+            DataSource dataSource, JdbcGraphDialect dialect, JdbcGraphOperations graphOperations) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
         this.dialect = Objects.requireNonNull(dialect, "dialect");
         this.graphOperations = Objects.requireNonNull(graphOperations, "graphOperations");

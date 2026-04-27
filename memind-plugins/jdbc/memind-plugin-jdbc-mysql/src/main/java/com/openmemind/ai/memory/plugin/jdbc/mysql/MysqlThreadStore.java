@@ -13,11 +13,11 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.mysql;
 
-import com.openmemind.ai.memory.plugin.jdbc.internal.thread.AbstractJdbcThreadStore;
 import com.openmemind.ai.memory.plugin.jdbc.internal.thread.JdbcThreadDialect;
+import com.openmemind.ai.memory.plugin.jdbc.internal.thread.JdbcThreadStore;
 import javax.sql.DataSource;
 
-public final class MysqlThreadStore extends AbstractJdbcThreadStore {
+public final class MysqlThreadStore extends JdbcThreadStore {
 
     public MysqlThreadStore(DataSource dataSource) {
         this(dataSource, true);

@@ -13,11 +13,11 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.sqlite;
 
-import com.openmemind.ai.memory.plugin.jdbc.internal.thread.AbstractJdbcThreadStore;
 import com.openmemind.ai.memory.plugin.jdbc.internal.thread.JdbcThreadDialect;
+import com.openmemind.ai.memory.plugin.jdbc.internal.thread.JdbcThreadStore;
 import javax.sql.DataSource;
 
-public final class SqliteThreadStore extends AbstractJdbcThreadStore {
+public final class SqliteThreadStore extends JdbcThreadStore {
 
     public SqliteThreadStore(DataSource dataSource) {
         this(dataSource, true);

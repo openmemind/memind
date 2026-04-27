@@ -13,11 +13,11 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.sqlite;
 
-import com.openmemind.ai.memory.plugin.jdbc.internal.graph.AbstractJdbcItemGraphCommitOperations;
 import com.openmemind.ai.memory.plugin.jdbc.internal.graph.JdbcGraphDialect;
+import com.openmemind.ai.memory.plugin.jdbc.internal.graph.JdbcItemGraphCommitOperations;
 import javax.sql.DataSource;
 
-public final class SqliteItemGraphCommitOperations extends AbstractJdbcItemGraphCommitOperations {
+public final class SqliteItemGraphCommitOperations extends JdbcItemGraphCommitOperations {
 
     public SqliteItemGraphCommitOperations(DataSource dataSource) {
         super(dataSource, JdbcGraphDialect.SQLITE, new SqliteGraphOperations(dataSource));

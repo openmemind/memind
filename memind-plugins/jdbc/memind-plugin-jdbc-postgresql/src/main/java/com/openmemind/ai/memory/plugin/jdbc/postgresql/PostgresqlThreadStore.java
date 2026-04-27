@@ -13,11 +13,11 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.postgresql;
 
-import com.openmemind.ai.memory.plugin.jdbc.internal.thread.AbstractJdbcThreadStore;
 import com.openmemind.ai.memory.plugin.jdbc.internal.thread.JdbcThreadDialect;
+import com.openmemind.ai.memory.plugin.jdbc.internal.thread.JdbcThreadStore;
 import javax.sql.DataSource;
 
-public final class PostgresqlThreadStore extends AbstractJdbcThreadStore {
+public final class PostgresqlThreadStore extends JdbcThreadStore {
 
     public PostgresqlThreadStore(DataSource dataSource) {
         this(dataSource, true);

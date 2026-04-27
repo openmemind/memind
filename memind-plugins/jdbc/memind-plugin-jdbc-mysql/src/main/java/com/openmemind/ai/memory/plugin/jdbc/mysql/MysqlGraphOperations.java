@@ -13,11 +13,11 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.mysql;
 
-import com.openmemind.ai.memory.plugin.jdbc.internal.graph.AbstractJdbcGraphOperations;
 import com.openmemind.ai.memory.plugin.jdbc.internal.graph.JdbcGraphDialect;
+import com.openmemind.ai.memory.plugin.jdbc.internal.graph.JdbcGraphOperations;
 import javax.sql.DataSource;
 
-public final class MysqlGraphOperations extends AbstractJdbcGraphOperations {
+public final class MysqlGraphOperations extends JdbcGraphOperations {
 
     public MysqlGraphOperations(DataSource dataSource) {
         this(dataSource, true);

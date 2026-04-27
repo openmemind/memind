@@ -13,11 +13,11 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.postgresql;
 
-import com.openmemind.ai.memory.plugin.jdbc.internal.graph.AbstractJdbcGraphOperations;
 import com.openmemind.ai.memory.plugin.jdbc.internal.graph.JdbcGraphDialect;
+import com.openmemind.ai.memory.plugin.jdbc.internal.graph.JdbcGraphOperations;
 import javax.sql.DataSource;
 
-public final class PostgresqlGraphOperations extends AbstractJdbcGraphOperations {
+public final class PostgresqlGraphOperations extends JdbcGraphOperations {
 
     public PostgresqlGraphOperations(DataSource dataSource) {
         this(dataSource, true);

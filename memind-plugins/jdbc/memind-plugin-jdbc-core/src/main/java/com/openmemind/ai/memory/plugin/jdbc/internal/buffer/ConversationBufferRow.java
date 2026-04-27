@@ -15,4 +15,4 @@ package com.openmemind.ai.memory.plugin.jdbc.internal.buffer;
 
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 
-record ConversationBufferRow(long id, String sessionId, Message message) {}
+public record ConversationBufferRow(long id, String sessionId, Message message) {}

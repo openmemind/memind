@@ -46,7 +46,7 @@ import javax.sql.DataSource;
 import org.jdbi.v3.core.Jdbi;
 import tools.jackson.core.type.TypeReference;
 
-public abstract class AbstractJdbcGraphOperations implements GraphOperations {
+public class JdbcGraphOperations implements GraphOperations {
 
     private static final TypeReference<Map<String, Object>> OBJECT_MAP_TYPE =
             new TypeReference<>() {};
@@ -56,7 +56,7 @@ public abstract class AbstractJdbcGraphOperations implements GraphOperations {
     private final JdbcGraphDialect dialect;
     private final JsonCodec jsonCodec = new JsonCodec();
 
-    protected AbstractJdbcGraphOperations(
+    protected JdbcGraphOperations(
             DataSource dataSource, JdbcGraphDialect dialect, boolean createIfNotExist) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
         this.jdbi = JdbiFactory.create(this.dataSource);
