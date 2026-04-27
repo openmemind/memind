@@ -13,7 +13,7 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.internal.schema;
 
-import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiExecutor;
+import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiFactory;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JdbcPluginException;
 import javax.sql.DataSource;
 
@@ -31,7 +31,7 @@ public final class StoreSchemaBootstrap {
                 throw new JdbcPluginException(
                         "Missing required SQLite store table: memory_raw_data");
             }
-            JdbiExecutor.execute(dataSource, "PRAGMA journal_mode = WAL");
+            execute(dataSource, "PRAGMA journal_mode = WAL");
             JdbcSchemaBootstrap.executeSqliteInit(dataSource);
             createdStoreSchema = true;
         }
@@ -163,7 +163,7 @@ public final class StoreSchemaBootstrap {
             throw new JdbcPluginException(
                     "Missing required SQLite bubble schema: memory_insight_bubble_state");
         }
-        JdbiExecutor.execute(
+        execute(
                 dataSource,
                 """
                 CREATE TABLE IF NOT EXISTS memory_insight_bubble_state (
@@ -180,7 +180,7 @@ public final class StoreSchemaBootstrap {
     }
 
     private static void ensureSqliteMultimodalSchema(DataSource dataSource) {
-        JdbiExecutor.execute(
+        execute(
                 dataSource,
                 """
                 CREATE TABLE IF NOT EXISTS memory_resource (
@@ -253,7 +253,7 @@ public final class StoreSchemaBootstrap {
             throw new JdbcPluginException(
                     "Missing required MySQL bubble schema: memory_insight_bubble_state");
         }
-        JdbiExecutor.execute(
+        execute(
                 dataSource,
                 """
                 CREATE TABLE IF NOT EXISTS memory_insight_bubble_state (
@@ -271,7 +271,7 @@ public final class StoreSchemaBootstrap {
     }
 
     private static void ensureMysqlMultimodalSchema(DataSource dataSource) {
-        JdbiExecutor.execute(
+        execute(
                 dataSource,
                 """
                 CREATE TABLE IF NOT EXISTS memory_resource (
@@ -295,7 +295,7 @@ public final class StoreSchemaBootstrap {
                     KEY idx_resource_memory_id (user_id, agent_id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 """);
-        JdbiExecutor.execute(
+        execute(
                 dataSource,
                 """
                 ALTER TABLE memory_raw_data
@@ -336,7 +336,7 @@ public final class StoreSchemaBootstrap {
             throw new JdbcPluginException(
                     "Missing required PostgreSQL bubble schema: memory_insight_bubble_state");
         }
-        JdbiExecutor.execute(
+        execute(
                 dataSource,
                 """
                 CREATE TABLE IF NOT EXISTS memory_insight_bubble_state (
@@ -353,7 +353,7 @@ public final class StoreSchemaBootstrap {
     }
 
     private static void ensurePostgresqlMultimodalSchema(DataSource dataSource) {
-        JdbiExecutor.execute(
+        execute(
                 dataSource,
                 """
                 CREATE TABLE IF NOT EXISTS memory_resource (
@@ -386,7 +386,7 @@ public final class StoreSchemaBootstrap {
                 "idx_resource_memory_id",
                 "CREATE INDEX IF NOT EXISTS idx_resource_memory_id ON"
                         + " memory_resource(user_id, agent_id)");
-        JdbiExecutor.execute(
+        execute(
                 dataSource,
                 """
                 ALTER TABLE memory_raw_data
@@ -427,7 +427,7 @@ public final class StoreSchemaBootstrap {
             throw new JdbcPluginException(
                     "Legacy SQLite insight schema requires confidence column removal");
         }
-        JdbiExecutor.execute(dataSource, "ALTER TABLE memory_insight DROP COLUMN confidence");
+        execute(dataSource, "ALTER TABLE memory_insight DROP COLUMN confidence");
     }
 
     private static void ensureSqliteItemTemporalLookupSchema(
@@ -562,7 +562,7 @@ public final class StoreSchemaBootstrap {
             throw new JdbcPluginException(
                     "Legacy MySQL insight schema requires confidence column removal");
         }
-        JdbiExecutor.execute(dataSource, "ALTER TABLE memory_insight DROP COLUMN confidence");
+        execute(dataSource, "ALTER TABLE memory_insight DROP COLUMN confidence");
     }
 
     private static void ensurePostgresqlInsightConfidenceRemoved(
@@ -574,7 +574,7 @@ public final class StoreSchemaBootstrap {
             throw new JdbcPluginException(
                     "Legacy PostgreSQL insight schema requires confidence column removal");
         }
-        JdbiExecutor.execute(dataSource, "ALTER TABLE memory_insight DROP COLUMN confidence");
+        execute(dataSource, "ALTER TABLE memory_insight DROP COLUMN confidence");
     }
 
     private static boolean hasRequiredSqliteItemTemporalSchema(DataSource dataSource) {
@@ -588,7 +588,7 @@ public final class StoreSchemaBootstrap {
         if (SchemaVerifier.hasSqliteColumn(dataSource, "memory_item", columnName)) {
             return;
         }
-        JdbiExecutor.execute(dataSource, sql);
+        execute(dataSource, sql);
     }
 
     private static void ensureSqliteTableColumn(
@@ -596,7 +596,7 @@ public final class StoreSchemaBootstrap {
         if (SchemaVerifier.hasSqliteColumn(dataSource, tableName, columnName)) {
             return;
         }
-        JdbiExecutor.execute(dataSource, sql);
+        execute(dataSource, sql);
     }
 
     private static boolean hasRequiredSqliteItemTemporalLookupSchema(DataSource dataSource) {
@@ -611,14 +611,14 @@ public final class StoreSchemaBootstrap {
         if (SchemaVerifier.hasSqliteColumn(dataSource, "memory_item", columnName)) {
             return;
         }
-        JdbiExecutor.execute(dataSource, sql);
+        execute(dataSource, sql);
     }
 
     private static void ensureSqliteIndex(DataSource dataSource, String indexName, String sql) {
         if (SchemaVerifier.hasSqliteIndex(dataSource, indexName)) {
             return;
         }
-        JdbiExecutor.execute(dataSource, sql);
+        execute(dataSource, sql);
     }
 
     private static boolean hasRequiredMysqlItemTemporalSchema(DataSource dataSource) {
@@ -632,7 +632,7 @@ public final class StoreSchemaBootstrap {
         if (SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", columnName)) {
             return;
         }
-        JdbiExecutor.execute(dataSource, sql);
+        execute(dataSource, sql);
     }
 
     private static boolean hasRequiredMysqlItemTemporalLookupSchema(DataSource dataSource) {
@@ -647,7 +647,7 @@ public final class StoreSchemaBootstrap {
         if (SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", columnName)) {
             return;
         }
-        JdbiExecutor.execute(dataSource, sql);
+        execute(dataSource, sql);
     }
 
     private static void ensureMysqlIndex(
@@ -655,7 +655,7 @@ public final class StoreSchemaBootstrap {
         if (SchemaVerifier.hasMysqlIndex(dataSource, tableName, indexName)) {
             return;
         }
-        JdbiExecutor.execute(dataSource, sql);
+        execute(dataSource, sql);
     }
 
     private static boolean hasRequiredPostgresqlItemTemporalSchema(DataSource dataSource) {
@@ -670,7 +670,7 @@ public final class StoreSchemaBootstrap {
         if (SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_item", columnName)) {
             return;
         }
-        JdbiExecutor.execute(dataSource, sql);
+        execute(dataSource, sql);
     }
 
     private static boolean hasRequiredPostgresqlItemTemporalLookupSchema(DataSource dataSource) {
@@ -685,7 +685,7 @@ public final class StoreSchemaBootstrap {
         if (SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_item", columnName)) {
             return;
         }
-        JdbiExecutor.execute(dataSource, sql);
+        execute(dataSource, sql);
     }
 
     private static void ensurePostgresqlIndex(
@@ -693,11 +693,11 @@ public final class StoreSchemaBootstrap {
         if (SchemaVerifier.hasPostgresqlIndex(dataSource, tableName, indexName)) {
             return;
         }
-        JdbiExecutor.execute(dataSource, sql);
+        execute(dataSource, sql);
     }
 
     private static void backfillTemporalLookupColumns(DataSource dataSource) {
-        JdbiExecutor.execute(
+        execute(
                 dataSource,
                 """
                 UPDATE memory_item
@@ -716,5 +716,13 @@ public final class StoreSchemaBootstrap {
                           OR temporal_anchor IS NULL
                       )
                 """);
+    }
+
+    private static void execute(DataSource dataSource, String sql) {
+        try {
+            JdbiFactory.create(dataSource).useHandle(handle -> handle.execute(sql));
+        } catch (RuntimeException e) {
+            throw new JdbcPluginException(e);
+        }
     }
 }

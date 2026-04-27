@@ -24,7 +24,7 @@ import com.openmemind.ai.memory.core.store.graph.GraphOperations;
 import com.openmemind.ai.memory.core.store.graph.ItemEntityMention;
 import com.openmemind.ai.memory.core.store.graph.ItemLink;
 import com.openmemind.ai.memory.core.store.graph.ItemLinkType;
-import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiExecutor;
+import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiFactory;
 import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaBootstrap;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JdbcPluginException;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JsonCodec;
@@ -43,6 +43,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
+import org.jdbi.v3.core.Jdbi;
 import tools.jackson.core.type.TypeReference;
 
 public abstract class AbstractJdbcGraphOperations implements GraphOperations {
@@ -51,12 +52,14 @@ public abstract class AbstractJdbcGraphOperations implements GraphOperations {
             new TypeReference<>() {};
 
     private final DataSource dataSource;
+    private final Jdbi jdbi;
     private final JdbcGraphDialect dialect;
     private final JsonCodec jsonCodec = new JsonCodec();
 
     protected AbstractJdbcGraphOperations(
             DataSource dataSource, JdbcGraphDialect dialect, boolean createIfNotExist) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
+        this.jdbi = JdbiFactory.create(this.dataSource);
         this.dialect = Objects.requireNonNull(dialect, "dialect");
         ensureSchema(createIfNotExist);
     }
@@ -67,8 +70,7 @@ public abstract class AbstractJdbcGraphOperations implements GraphOperations {
         if (writePlan == null) {
             return;
         }
-        JdbiExecutor.inTransaction(
-                dataSource,
+        inTransaction(
                 connection -> {
                     applyGraphWritePlan(connection, memoryId, extractionBatchId, writePlan);
                     return null;
@@ -102,8 +104,7 @@ public abstract class AbstractJdbcGraphOperations implements GraphOperations {
         if (entities == null || entities.isEmpty()) {
             return;
         }
-        JdbiExecutor.inTransaction(
-                dataSource,
+        inTransaction(
                 connection -> {
                     upsertEntities(connection, memoryId, entities);
                     return null;
@@ -138,8 +139,7 @@ public abstract class AbstractJdbcGraphOperations implements GraphOperations {
         if (mentions == null || mentions.isEmpty()) {
             return;
         }
-        JdbiExecutor.inTransaction(
-                dataSource,
+        inTransaction(
                 connection -> {
                     upsertItemEntityMentions(connection, memoryId, mentions);
                     return null;
@@ -170,8 +170,7 @@ public abstract class AbstractJdbcGraphOperations implements GraphOperations {
 
     @Override
     public void rebuildEntityCooccurrences(MemoryId memoryId, Collection<String> entityKeys) {
-        JdbiExecutor.inTransaction(
-                dataSource,
+        inTransaction(
                 connection -> {
                     rebuildEntityCooccurrences(connection, memoryId, entityKeys);
                     return null;
@@ -226,8 +225,7 @@ public abstract class AbstractJdbcGraphOperations implements GraphOperations {
         if (links == null || links.isEmpty()) {
             return;
         }
-        JdbiExecutor.inTransaction(
-                dataSource,
+        inTransaction(
                 connection -> {
                     upsertItemLinks(connection, memoryId, links);
                     return null;
@@ -263,8 +261,7 @@ public abstract class AbstractJdbcGraphOperations implements GraphOperations {
         if (aliases == null || aliases.isEmpty()) {
             return;
         }
-        JdbiExecutor.inTransaction(
-                dataSource,
+        inTransaction(
                 connection -> {
                     upsertEntityAliases(connection, memoryId, aliases);
                     return null;
@@ -587,46 +584,45 @@ public abstract class AbstractJdbcGraphOperations implements GraphOperations {
         return metadata == null ? Map.of() : metadata;
     }
 
+    private <T> T inTransaction(TransactionCallback<T> callback) {
+        return jdbi.inTransaction(
+                handle -> {
+                    try {
+                        return callback.execute(handle.getConnection());
+                    } catch (SQLException e) {
+                        throw new JdbcPluginException(e);
+                    }
+                });
+    }
+
     private List<GraphEntity> queryList(
-            String sql, JdbiExecutor.RowMapper<GraphEntity> mapper, Object... params) {
-        return JdbiExecutor.queryList(dataSource, sql, mapper, params);
+            String sql, ResultSetMapper<GraphEntity> mapper, Object... params) {
+        return jdbi.withHandle(handle -> queryList(handle.getConnection(), sql, mapper, params));
     }
 
     private List<GraphEntityAlias> queryList(String sql, AliasMapper mapper, Object... params) {
-        try (Connection connection = dataSource.getConnection()) {
-            return queryList(connection, sql, mapper::map, params);
-        } catch (SQLException e) {
-            throw new JdbcPluginException(e);
-        }
+        return jdbi.withHandle(
+                handle -> queryList(handle.getConnection(), sql, mapper::map, params));
     }
 
     private List<ItemEntityMention> queryList(String sql, MentionMapper mapper, Object... params) {
-        try (Connection connection = dataSource.getConnection()) {
-            return queryList(connection, sql, mapper::map, params);
-        } catch (SQLException e) {
-            throw new JdbcPluginException(e);
-        }
+        return jdbi.withHandle(
+                handle -> queryList(handle.getConnection(), sql, mapper::map, params));
     }
 
     private List<ItemLink> queryList(String sql, ItemLinkMapper mapper, Object... params) {
-        try (Connection connection = dataSource.getConnection()) {
-            return queryList(connection, sql, mapper::map, params);
-        } catch (SQLException e) {
-            throw new JdbcPluginException(e);
-        }
+        return jdbi.withHandle(
+                handle -> queryList(handle.getConnection(), sql, mapper::map, params));
     }
 
     private List<EntityCooccurrence> queryList(
             String sql, CooccurrenceMapper mapper, Object... params) {
-        try (Connection connection = dataSource.getConnection()) {
-            return queryList(connection, sql, mapper::map, params);
-        } catch (SQLException e) {
-            throw new JdbcPluginException(e);
-        }
+        return jdbi.withHandle(
+                handle -> queryList(handle.getConnection(), sql, mapper::map, params));
     }
 
     private static <T> List<T> queryList(
-            Connection connection, String sql, JdbiExecutor.RowMapper<T> mapper, Object... params) {
+            Connection connection, String sql, ResultSetMapper<T> mapper, Object... params) {
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             setParams(statement, params);
             try (ResultSet resultSet = statement.executeQuery()) {
@@ -668,6 +664,16 @@ public abstract class AbstractJdbcGraphOperations implements GraphOperations {
         for (int i = 0; i < params.length; i++) {
             statement.setObject(i + 1, params[i]);
         }
+    }
+
+    @FunctionalInterface
+    private interface ResultSetMapper<T> {
+        T map(ResultSet resultSet) throws SQLException;
+    }
+
+    @FunctionalInterface
+    private interface TransactionCallback<T> {
+        T execute(Connection connection) throws SQLException;
     }
 
     private void ensureSchema(boolean createIfNotExist) {

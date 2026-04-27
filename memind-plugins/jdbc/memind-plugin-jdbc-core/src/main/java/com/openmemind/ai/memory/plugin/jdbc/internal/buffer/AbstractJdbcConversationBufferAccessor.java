@@ -14,7 +14,9 @@
 package com.openmemind.ai.memory.plugin.jdbc.internal.buffer;
 
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
-import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiExecutor;
+import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiFactory;
+import com.openmemind.ai.memory.plugin.jdbc.internal.support.JdbcPluginException;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -23,16 +25,18 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
+import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.core.statement.SqlStatement;
 
 /**
  * Shared JDBC accessor for single-table conversation runtime storage.
  */
 public abstract class AbstractJdbcConversationBufferAccessor {
 
-    private final DataSource dataSource;
+    private final Jdbi jdbi;
 
     protected AbstractJdbcConversationBufferAccessor(DataSource dataSource) {
-        this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
+        this.jdbi = JdbiFactory.create(Objects.requireNonNull(dataSource, "dataSource"));
     }
 
     public void append(String sessionId, Message message) {
@@ -40,8 +44,7 @@ public abstract class AbstractJdbcConversationBufferAccessor {
         Objects.requireNonNull(message, "message");
 
         SessionScope scope = scopeOfSession(sessionId);
-        JdbiExecutor.inTransaction(
-                dataSource,
+        inTransaction(
                 connection -> {
                     try (PreparedStatement statement = connection.prepareStatement(insertSql())) {
                         bindInsert(statement, scope, message);
@@ -61,7 +64,7 @@ public abstract class AbstractJdbcConversationBufferAccessor {
                         + " AND deleted = "
                         + falseLiteral()
                         + " ORDER BY id ASC";
-        return JdbiExecutor.queryList(dataSource, sql, this::mapRecord, sessionId);
+        return queryList(sql, this::mapRecord, sessionId);
     }
 
     public List<ConversationBufferRow> selectRecent(String sessionId, int limit) {
@@ -75,8 +78,7 @@ public abstract class AbstractJdbcConversationBufferAccessor {
                         + "WHERE session_id = ? AND deleted = "
                         + falseLiteral()
                         + " ORDER BY id DESC LIMIT ?";
-        List<ConversationBufferRow> descending =
-                JdbiExecutor.queryList(dataSource, sql, this::mapRecord, sessionId, limit);
+        List<ConversationBufferRow> descending = queryList(sql, this::mapRecord, sessionId, limit);
         java.util.Collections.reverse(descending);
         return descending;
     }
@@ -95,7 +97,7 @@ public abstract class AbstractJdbcConversationBufferAccessor {
                         + " AND id IN ("
                         + placeholders
                         + ")";
-        JdbiExecutor.update(dataSource, sql, ids.toArray());
+        update(sql, ids.toArray());
     }
 
     protected abstract String insertSql();
@@ -154,6 +156,53 @@ public abstract class AbstractJdbcConversationBufferAccessor {
 
     private String normalizeAgentId(String agentId) {
         return agentId == null ? "" : agentId;
+    }
+
+    private <T> T inTransaction(TransactionCallback<T> callback) {
+        return jdbi.inTransaction(
+                handle -> {
+                    try {
+                        return callback.execute(handle.getConnection());
+                    } catch (SQLException e) {
+                        throw new JdbcPluginException(e);
+                    }
+                });
+    }
+
+    private <T> List<T> queryList(String sql, ResultSetMapper<T> mapper, Object... params) {
+        return jdbi.withHandle(
+                handle -> {
+                    var query = handle.createQuery(sql);
+                    bind(query, params);
+                    return query.map((resultSet, context) -> mapper.map(resultSet)).list();
+                });
+    }
+
+    private int update(String sql, Object... params) {
+        return jdbi.withHandle(
+                handle -> {
+                    var update = handle.createUpdate(sql);
+                    bind(update, params);
+                    return update.execute();
+                });
+    }
+
+    private static <StatementT extends SqlStatement<StatementT>> StatementT bind(
+            StatementT statement, Object... params) {
+        for (int i = 0; i < params.length; i++) {
+            statement.bind(i, params[i]);
+        }
+        return statement;
+    }
+
+    @FunctionalInterface
+    private interface ResultSetMapper<T> {
+        T map(ResultSet resultSet) throws SQLException;
+    }
+
+    @FunctionalInterface
+    private interface TransactionCallback<T> {
+        T execute(Connection connection) throws SQLException;
     }
 
     private record SessionScope(String sessionId, String userId, String agentId, String memoryId) {}

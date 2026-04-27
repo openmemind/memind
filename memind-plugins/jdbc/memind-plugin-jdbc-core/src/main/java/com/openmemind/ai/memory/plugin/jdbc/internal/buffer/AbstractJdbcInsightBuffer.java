@@ -16,7 +16,9 @@ package com.openmemind.ai.memory.plugin.jdbc.internal.buffer;
 import com.openmemind.ai.memory.core.buffer.BufferEntry;
 import com.openmemind.ai.memory.core.buffer.InsightBuffer;
 import com.openmemind.ai.memory.core.data.MemoryId;
-import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiExecutor;
+import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiFactory;
+import com.openmemind.ai.memory.plugin.jdbc.internal.support.JdbcPluginException;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -27,13 +29,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import javax.sql.DataSource;
+import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.core.statement.SqlStatement;
 
 public abstract class AbstractJdbcInsightBuffer implements InsightBuffer {
 
-    private final DataSource dataSource;
+    private final Jdbi jdbi;
 
     protected AbstractJdbcInsightBuffer(DataSource dataSource) {
-        this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
+        this.jdbi = JdbiFactory.create(Objects.requireNonNull(dataSource, "dataSource"));
     }
 
     @Override
@@ -43,8 +47,7 @@ public abstract class AbstractJdbcInsightBuffer implements InsightBuffer {
         }
 
         ScopeContext scope = scopeOf(memoryId);
-        JdbiExecutor.inTransaction(
-                dataSource,
+        inTransaction(
                 connection -> {
                     try (PreparedStatement statement = connection.prepareStatement(appendSql())) {
                         for (Long itemId : itemIds) {
@@ -74,8 +77,7 @@ public abstract class AbstractJdbcInsightBuffer implements InsightBuffer {
                         + falseLiteral()
                         + " "
                         + "ORDER BY id ASC";
-        return JdbiExecutor.queryList(
-                dataSource, sql, this::mapEntry, scope.userId(), scope.agentId(), insightTypeName);
+        return queryList(sql, this::mapEntry, scope.userId(), scope.agentId(), insightTypeName);
     }
 
     @Override
@@ -90,9 +92,7 @@ public abstract class AbstractJdbcInsightBuffer implements InsightBuffer {
                         + " "
                         + "AND deleted = "
                         + falseLiteral();
-        return Math.toIntExact(
-                JdbiExecutor.queryCount(
-                        dataSource, sql, scope.userId(), scope.agentId(), insightTypeName));
+        return Math.toIntExact(queryCount(sql, scope.userId(), scope.agentId(), insightTypeName));
     }
 
     @Override
@@ -110,14 +110,8 @@ public abstract class AbstractJdbcInsightBuffer implements InsightBuffer {
                         + falseLiteral()
                         + " "
                         + "ORDER BY id ASC";
-        return JdbiExecutor.queryList(
-                dataSource,
-                sql,
-                this::mapEntry,
-                scope.userId(),
-                scope.agentId(),
-                insightTypeName,
-                groupName);
+        return queryList(
+                sql, this::mapEntry, scope.userId(), scope.agentId(), insightTypeName, groupName);
     }
 
     @Override
@@ -133,13 +127,7 @@ public abstract class AbstractJdbcInsightBuffer implements InsightBuffer {
                         + "AND deleted = "
                         + falseLiteral();
         return Math.toIntExact(
-                JdbiExecutor.queryCount(
-                        dataSource,
-                        sql,
-                        scope.userId(),
-                        scope.agentId(),
-                        insightTypeName,
-                        groupName));
+                queryCount(sql, scope.userId(), scope.agentId(), insightTypeName, groupName));
     }
 
     @Override
@@ -159,8 +147,7 @@ public abstract class AbstractJdbcInsightBuffer implements InsightBuffer {
                         + ") "
                         + "AND deleted = "
                         + falseLiteral();
-        JdbiExecutor.update(
-                dataSource, sql, paramsWithItemIds(groupName, scope, insightTypeName, itemIds));
+        update(sql, paramsWithItemIds(groupName, scope, insightTypeName, itemIds));
     }
 
     @Override
@@ -181,7 +168,7 @@ public abstract class AbstractJdbcInsightBuffer implements InsightBuffer {
                         + ") "
                         + "AND deleted = "
                         + falseLiteral();
-        JdbiExecutor.update(dataSource, sql, paramsWithItemIds(scope, insightTypeName, itemIds));
+        update(sql, paramsWithItemIds(scope, insightTypeName, itemIds));
     }
 
     @Override
@@ -201,13 +188,7 @@ public abstract class AbstractJdbcInsightBuffer implements InsightBuffer {
                         + "ORDER BY group_name ASC, id ASC";
         Map<String, List<BufferEntry>> grouped = new LinkedHashMap<>();
         for (BufferEntry entry :
-                JdbiExecutor.queryList(
-                        dataSource,
-                        sql,
-                        this::mapEntry,
-                        scope.userId(),
-                        scope.agentId(),
-                        insightTypeName)) {
+                queryList(sql, this::mapEntry, scope.userId(), scope.agentId(), insightTypeName)) {
             grouped.computeIfAbsent(entry.groupName(), key -> new java.util.ArrayList<>())
                     .add(entry);
         }
@@ -226,8 +207,7 @@ public abstract class AbstractJdbcInsightBuffer implements InsightBuffer {
                         + falseLiteral()
                         + " "
                         + "ORDER BY group_name ASC";
-        return JdbiExecutor.queryList(
-                        dataSource,
+        return queryList(
                         sql,
                         resultSet -> resultSet.getString(1),
                         scope.userId(),
@@ -249,9 +229,7 @@ public abstract class AbstractJdbcInsightBuffer implements InsightBuffer {
                         + " "
                         + "AND deleted = "
                         + falseLiteral();
-        return JdbiExecutor.queryCount(
-                        dataSource, sql, scope.userId(), scope.agentId(), insightTypeName)
-                > 0;
+        return queryCount(sql, scope.userId(), scope.agentId(), insightTypeName) > 0;
     }
 
     protected abstract String appendSql();
@@ -312,6 +290,64 @@ public abstract class AbstractJdbcInsightBuffer implements InsightBuffer {
                 memoryId.getAttribute("userId"),
                 memoryId.getAttribute("agentId"),
                 memoryId.toIdentifier());
+    }
+
+    private <T> T inTransaction(TransactionCallback<T> callback) {
+        return jdbi.inTransaction(
+                handle -> {
+                    try {
+                        return callback.execute(handle.getConnection());
+                    } catch (SQLException e) {
+                        throw new JdbcPluginException(e);
+                    }
+                });
+    }
+
+    private <T> List<T> queryList(String sql, ResultSetMapper<T> mapper, Object... params) {
+        return jdbi.withHandle(
+                handle -> {
+                    var query = handle.createQuery(sql);
+                    bind(query, params);
+                    return query.map((resultSet, context) -> mapper.map(resultSet)).list();
+                });
+    }
+
+    private long queryCount(String sql, Object... params) {
+        Long count =
+                jdbi.withHandle(
+                        handle -> {
+                            var query = handle.createQuery(sql);
+                            bind(query, params);
+                            return query.mapTo(Long.class).findOne().orElse(0L);
+                        });
+        return count == null ? 0L : count;
+    }
+
+    private int update(String sql, Object... params) {
+        return jdbi.withHandle(
+                handle -> {
+                    var update = handle.createUpdate(sql);
+                    bind(update, params);
+                    return update.execute();
+                });
+    }
+
+    private static <StatementT extends SqlStatement<StatementT>> StatementT bind(
+            StatementT statement, Object... params) {
+        for (int i = 0; i < params.length; i++) {
+            statement.bind(i, params[i]);
+        }
+        return statement;
+    }
+
+    @FunctionalInterface
+    private interface ResultSetMapper<T> {
+        T map(ResultSet resultSet) throws SQLException;
+    }
+
+    @FunctionalInterface
+    private interface TransactionCallback<T> {
+        T execute(Connection connection) throws SQLException;
     }
 
     private record ScopeContext(String userId, String agentId, String memoryId) {}

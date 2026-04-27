@@ -14,25 +14,27 @@
 package com.openmemind.ai.memory.plugin.jdbc.internal.insight;
 
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
-import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiExecutor;
+import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiFactory;
+import com.openmemind.ai.memory.plugin.jdbc.internal.support.JdbcPluginException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Objects;
 import javax.sql.DataSource;
+import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.core.statement.SqlStatement;
 
 public abstract class AbstractJdbcBubbleTrackerStore implements BubbleTrackerStore {
 
-    private final DataSource dataSource;
+    private final Jdbi jdbi;
 
     protected AbstractJdbcBubbleTrackerStore(DataSource dataSource) {
-        this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
+        this.jdbi = JdbiFactory.create(Objects.requireNonNull(dataSource, "dataSource"));
     }
 
     @Override
     public int incrementAndGet(String key, int delta) {
         BubbleStateKey parsed = BubbleStateKey.parse(key);
-        return JdbiExecutor.inTransaction(
-                dataSource,
+        return inTransaction(
                 connection -> {
                     try (var statement = connection.prepareStatement(upsertIncrementSql())) {
                         statement.setString(1, parsed.memoryId());
@@ -49,8 +51,7 @@ public abstract class AbstractJdbcBubbleTrackerStore implements BubbleTrackerSto
     public int getDirtyCount(String key) {
         BubbleStateKey parsed = BubbleStateKey.parse(key);
         Integer count =
-                JdbiExecutor.queryOne(
-                        dataSource,
+                queryOne(
                         """
                         SELECT dirty_count
                         FROM memory_insight_bubble_state
@@ -66,8 +67,7 @@ public abstract class AbstractJdbcBubbleTrackerStore implements BubbleTrackerSto
     @Override
     public void reset(String key) {
         BubbleStateKey parsed = BubbleStateKey.parse(key);
-        JdbiExecutor.update(
-                dataSource,
+        update(
                 """
                 UPDATE memory_insight_bubble_state
                 SET dirty_count = 0, updated_at = CURRENT_TIMESTAMP
@@ -95,6 +95,55 @@ public abstract class AbstractJdbcBubbleTrackerStore implements BubbleTrackerSto
                 return resultSet.next() ? resultSet.getInt(1) : 0;
             }
         }
+    }
+
+    private <T> T inTransaction(TransactionCallback<T> callback) {
+        return jdbi.inTransaction(
+                handle -> {
+                    try {
+                        return callback.execute(handle.getConnection());
+                    } catch (SQLException e) {
+                        throw new JdbcPluginException(e);
+                    }
+                });
+    }
+
+    private <T> T queryOne(String sql, ResultSetMapper<T> mapper, Object... params) {
+        return jdbi.withHandle(
+                handle -> {
+                    var query = handle.createQuery(sql);
+                    bind(query, params);
+                    return query.map((resultSet, context) -> mapper.map(resultSet))
+                            .findOne()
+                            .orElse(null);
+                });
+    }
+
+    private int update(String sql, Object... params) {
+        return jdbi.withHandle(
+                handle -> {
+                    var update = handle.createUpdate(sql);
+                    bind(update, params);
+                    return update.execute();
+                });
+    }
+
+    private static <StatementT extends SqlStatement<StatementT>> StatementT bind(
+            StatementT statement, Object... params) {
+        for (int i = 0; i < params.length; i++) {
+            statement.bind(i, params[i]);
+        }
+        return statement;
+    }
+
+    @FunctionalInterface
+    private interface ResultSetMapper<T> {
+        T map(java.sql.ResultSet resultSet) throws SQLException;
+    }
+
+    @FunctionalInterface
+    private interface TransactionCallback<T> {
+        T execute(Connection connection) throws SQLException;
     }
 
     private record BubbleStateKey(String memoryId, String tier, String insightType) {

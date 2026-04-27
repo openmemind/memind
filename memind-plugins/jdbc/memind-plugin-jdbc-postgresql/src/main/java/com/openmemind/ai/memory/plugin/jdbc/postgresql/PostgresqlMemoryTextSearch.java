@@ -16,11 +16,14 @@ package com.openmemind.ai.memory.plugin.jdbc.postgresql;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.textsearch.TextSearchResult;
-import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiExecutor;
+import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiFactory;
 import com.openmemind.ai.memory.plugin.jdbc.internal.schema.TextSearchSchemaBootstrap;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Objects;
 import javax.sql.DataSource;
+import org.jdbi.v3.core.Jdbi;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -74,15 +77,16 @@ public class PostgresqlMemoryTextSearch implements MemoryTextSearch {
             LIMIT ?
             """;
 
-    private final DataSource dataSource;
+    private final Jdbi jdbi;
 
     public PostgresqlMemoryTextSearch(DataSource dataSource) {
         this(dataSource, true);
     }
 
     public PostgresqlMemoryTextSearch(DataSource dataSource, boolean createIfNotExist) {
-        this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
-        TextSearchSchemaBootstrap.ensurePostgresql(this.dataSource, createIfNotExist);
+        DataSource checkedDataSource = Objects.requireNonNull(dataSource, "dataSource");
+        this.jdbi = JdbiFactory.create(checkedDataSource);
+        TextSearchSchemaBootstrap.ensurePostgresql(checkedDataSource, createIfNotExist);
     }
 
     @Override
@@ -106,8 +110,7 @@ public class PostgresqlMemoryTextSearch implements MemoryTextSearch {
 
     private List<TextSearchResult> doSearch(String sql, String memoryId, String query, int topK) {
         String likePattern = likePattern(query);
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 sql,
                 resultSet ->
                         new TextSearchResult(
@@ -124,5 +127,21 @@ public class PostgresqlMemoryTextSearch implements MemoryTextSearch {
 
     private String likePattern(String query) {
         return "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+    }
+
+    private <T> List<T> queryList(String sql, ResultSetMapper<T> mapper, Object... params) {
+        return jdbi.withHandle(
+                handle -> {
+                    var query = handle.createQuery(sql);
+                    for (int i = 0; i < params.length; i++) {
+                        query.bind(i, params[i]);
+                    }
+                    return query.map((resultSet, context) -> mapper.map(resultSet)).list();
+                });
+    }
+
+    @FunctionalInterface
+    private interface ResultSetMapper<T> {
+        T map(ResultSet resultSet) throws SQLException;
     }
 }

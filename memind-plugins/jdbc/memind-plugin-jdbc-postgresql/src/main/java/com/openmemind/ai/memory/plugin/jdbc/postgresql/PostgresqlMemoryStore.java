@@ -46,9 +46,10 @@ import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentInputStore;
 import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 import com.openmemind.ai.memory.plugin.jdbc.internal.graph.JdbcGraphOperationsCapabilities;
-import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiExecutor;
+import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiFactory;
 import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaBootstrap;
 import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaInitResult;
+import com.openmemind.ai.memory.plugin.jdbc.internal.support.JdbcPluginException;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JsonCodec;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -67,6 +68,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
+import org.jdbi.v3.core.Jdbi;
 import org.postgresql.util.PGobject;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
@@ -87,6 +89,7 @@ public class PostgresqlMemoryStore
             new TypeReference<>() {};
 
     private final DataSource dataSource;
+    private final Jdbi jdbi;
     private final JsonCodec jsonHelper;
     private final ResourceStore resourceStore;
     private final PostgresqlGraphOperations graphOperations;
@@ -112,6 +115,7 @@ public class PostgresqlMemoryStore
             ObjectMapper objectMapper,
             boolean createIfNotExist) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
+        this.jdbi = JdbiFactory.create(this.dataSource);
         this.jsonHelper = new JsonCodec(Objects.requireNonNull(objectMapper, "objectMapper"));
         this.resourceStore = resourceStore;
         StoreSchemaInitResult initResult =
@@ -189,8 +193,7 @@ public class PostgresqlMemoryStore
         }
 
         ScopeContext scope = scopeOf(memoryId);
-        JdbiExecutor.inTransaction(
-                dataSource,
+        inTransaction(
                 connection -> {
                     upsertResources(connection, scope, resources);
                     upsertRawData(connection, scope, rawDataList);
@@ -205,8 +208,7 @@ public class PostgresqlMemoryStore
         }
 
         ScopeContext scope = scopeOf(memoryId);
-        JdbiExecutor.inTransaction(
-                dataSource,
+        inTransaction(
                 connection -> {
                     upsertResources(connection, scope, resources);
                     return null;
@@ -217,8 +219,7 @@ public class PostgresqlMemoryStore
     public Optional<MemoryResource> getResource(MemoryId memoryId, String resourceId) {
         ScopeContext scope = scopeOf(memoryId);
         return Optional.ofNullable(
-                JdbiExecutor.queryOne(
-                        dataSource,
+                queryOne(
                         """
                         SELECT * FROM memory_resource
                         WHERE user_id = ? AND agent_id = ? AND biz_id = ? AND deleted = FALSE
@@ -233,8 +234,7 @@ public class PostgresqlMemoryStore
     @Override
     public List<MemoryResource> listResources(MemoryId memoryId) {
         ScopeContext scope = scopeOf(memoryId);
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 """
                 SELECT * FROM memory_resource
                 WHERE user_id = ? AND agent_id = ? AND deleted = FALSE
@@ -249,8 +249,7 @@ public class PostgresqlMemoryStore
     public Optional<MemoryRawData> getRawData(MemoryId memoryId, String rawDataId) {
         ScopeContext scope = scopeOf(memoryId);
         return Optional.ofNullable(
-                JdbiExecutor.queryOne(
-                        dataSource,
+                queryOne(
                         """
                         SELECT * FROM memory_raw_data
                         WHERE user_id = ? AND agent_id = ? AND biz_id = ? AND deleted = FALSE
@@ -266,8 +265,7 @@ public class PostgresqlMemoryStore
     public Optional<MemoryRawData> getRawDataByContentId(MemoryId memoryId, String contentId) {
         ScopeContext scope = scopeOf(memoryId);
         return Optional.ofNullable(
-                JdbiExecutor.queryOne(
-                        dataSource,
+                queryOne(
                         """
                         SELECT * FROM memory_raw_data
                         WHERE user_id = ? AND agent_id = ? AND content_id = ? AND deleted = FALSE
@@ -283,8 +281,7 @@ public class PostgresqlMemoryStore
     @Override
     public List<MemoryRawData> listRawData(MemoryId memoryId) {
         ScopeContext scope = scopeOf(memoryId);
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 """
                 SELECT * FROM memory_raw_data
                 WHERE user_id = ? AND agent_id = ? AND deleted = FALSE
@@ -303,8 +300,7 @@ public class PostgresqlMemoryStore
         }
 
         ScopeContext scope = scopeOf(memoryId);
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 """
                 SELECT * FROM memory_raw_data
                 WHERE user_id = ? AND agent_id = ? AND deleted = FALSE
@@ -335,8 +331,7 @@ public class PostgresqlMemoryStore
             return;
         }
 
-        JdbiExecutor.inTransaction(
-                dataSource,
+        inTransaction(
                 connection -> {
                     try (PreparedStatement statement =
                             connection.prepareStatement(
@@ -374,8 +369,7 @@ public class PostgresqlMemoryStore
         }
 
         ScopeContext scope = scopeOf(memoryId);
-        JdbiExecutor.inTransaction(
-                dataSource,
+        inTransaction(
                 connection -> {
                     try (PreparedStatement statement =
                             connection.prepareStatement(
@@ -418,8 +412,7 @@ public class PostgresqlMemoryStore
     @Override
     public List<MemoryItem> listItems(MemoryId memoryId) {
         ScopeContext scope = scopeOf(memoryId);
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 """
                 SELECT * FROM memory_item
                 WHERE user_id = ? AND agent_id = ? AND deleted = FALSE
@@ -433,8 +426,7 @@ public class PostgresqlMemoryStore
     @Override
     public boolean hasItems(MemoryId memoryId) {
         ScopeContext scope = scopeOf(memoryId);
-        return JdbiExecutor.queryCount(
-                        dataSource,
+        return queryCount(
                         """
                         SELECT COUNT(*) FROM memory_item
                         WHERE user_id = ? AND agent_id = ? AND deleted = FALSE
@@ -529,8 +521,7 @@ public class PostgresqlMemoryStore
             params.add(value instanceof Instant instant ? setTimestampValue(instant) : value);
         }
         params.add(((Number) temporalParamsAndLimit[temporalParamsAndLimit.length - 1]).intValue());
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 """
                 SELECT * FROM memory_item
                 WHERE deleted = FALSE
@@ -577,8 +568,7 @@ public class PostgresqlMemoryStore
         params.add(scope.userId());
         params.add(scope.agentId());
         params.addAll(itemIds);
-        JdbiExecutor.update(
-                dataSource,
+        update(
                 """
                 UPDATE memory_item
                 SET deleted = TRUE, updated_at = ?
@@ -595,8 +585,7 @@ public class PostgresqlMemoryStore
             return;
         }
 
-        JdbiExecutor.inTransaction(
-                dataSource,
+        inTransaction(
                 connection -> {
                     try (PreparedStatement statement =
                             connection.prepareStatement(
@@ -634,8 +623,7 @@ public class PostgresqlMemoryStore
     @Override
     public Optional<MemoryInsightType> getInsightType(String insightType) {
         return Optional.ofNullable(
-                JdbiExecutor.queryOne(
-                        dataSource,
+                queryOne(
                         """
                         SELECT * FROM memory_insight_type
                         WHERE name = ? AND deleted = FALSE
@@ -647,8 +635,7 @@ public class PostgresqlMemoryStore
 
     @Override
     public List<MemoryInsightType> listInsightTypes() {
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 """
                 SELECT * FROM memory_insight_type
                 WHERE deleted = FALSE
@@ -664,8 +651,7 @@ public class PostgresqlMemoryStore
         }
 
         ScopeContext scope = scopeOf(memoryId);
-        JdbiExecutor.inTransaction(
-                dataSource,
+        inTransaction(
                 connection -> {
                     try (PreparedStatement statement =
                             connection.prepareStatement(
@@ -710,8 +696,7 @@ public class PostgresqlMemoryStore
     public Optional<MemoryInsight> getInsight(MemoryId memoryId, Long insightId) {
         ScopeContext scope = scopeOf(memoryId);
         return Optional.ofNullable(
-                JdbiExecutor.queryOne(
-                        dataSource,
+                queryOne(
                         """
                         SELECT * FROM memory_insight
                         WHERE user_id = ? AND agent_id = ? AND biz_id = ? AND deleted = FALSE
@@ -726,8 +711,7 @@ public class PostgresqlMemoryStore
     @Override
     public List<MemoryInsight> listInsights(MemoryId memoryId) {
         ScopeContext scope = scopeOf(memoryId);
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 """
                 SELECT * FROM memory_insight
                 WHERE user_id = ? AND agent_id = ? AND deleted = FALSE
@@ -741,8 +725,7 @@ public class PostgresqlMemoryStore
     @Override
     public List<MemoryInsight> getInsightsByType(MemoryId memoryId, String insightType) {
         ScopeContext scope = scopeOf(memoryId);
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 """
                 SELECT * FROM memory_insight
                 WHERE user_id = ? AND agent_id = ? AND type = ? AND deleted = FALSE
@@ -761,8 +744,7 @@ public class PostgresqlMemoryStore
         }
 
         ScopeContext scope = scopeOf(memoryId);
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 """
                 SELECT * FROM memory_insight
                 WHERE user_id = ? AND agent_id = ? AND tier = ? AND deleted = FALSE
@@ -801,8 +783,7 @@ public class PostgresqlMemoryStore
         params.add(scope.userId());
         params.add(scope.agentId());
         params.addAll(insightIds);
-        JdbiExecutor.update(
-                dataSource,
+        update(
                 """
                 UPDATE memory_insight
                 SET deleted = TRUE, updated_at = ?
@@ -822,8 +803,7 @@ public class PostgresqlMemoryStore
         params.add(scope.userId());
         params.add(scope.agentId());
         params.addAll(rawDataIds);
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 """
                 SELECT * FROM memory_raw_data
                 WHERE user_id = ? AND agent_id = ? AND deleted = FALSE
@@ -846,8 +826,7 @@ public class PostgresqlMemoryStore
         params.add(scope.userId());
         params.add(scope.agentId());
         params.addAll(values);
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 """
                 SELECT * FROM memory_item
                 WHERE user_id = ? AND agent_id = ? AND deleted = FALSE
@@ -864,8 +843,7 @@ public class PostgresqlMemoryStore
         ScopeContext scope = scopeOf(memoryId);
         if (group == null) {
             return Optional.ofNullable(
-                    JdbiExecutor.queryOne(
-                            dataSource,
+                    queryOne(
                             """
                             SELECT * FROM memory_insight
                             WHERE user_id = ? AND agent_id = ? AND type = ? AND tier = ? AND deleted = FALSE
@@ -879,8 +857,7 @@ public class PostgresqlMemoryStore
                             tier.name()));
         }
         return Optional.ofNullable(
-                JdbiExecutor.queryOne(
-                        dataSource,
+                queryOne(
                         """
                         SELECT * FROM memory_insight
                         WHERE user_id = ? AND agent_id = ? AND type = ? AND tier = ? AND group_name = ?
@@ -894,6 +871,76 @@ public class PostgresqlMemoryStore
                         type,
                         tier.name(),
                         group));
+    }
+
+    private <T> T inTransaction(TransactionCallback<T> callback) {
+        return jdbi.inTransaction(
+                handle -> {
+                    try {
+                        return callback.execute(handle.getConnection());
+                    } catch (SQLException e) {
+                        throw new JdbcPluginException(e);
+                    }
+                });
+    }
+
+    private <T> T queryOne(String sql, ResultSetMapper<T> mapper, Object... params) {
+        List<T> results = queryList(sql, mapper, params);
+        return results.isEmpty() ? null : results.get(0);
+    }
+
+    private <T> List<T> queryList(String sql, ResultSetMapper<T> mapper, Object... params) {
+        return jdbi.withHandle(handle -> queryList(handle.getConnection(), sql, mapper, params));
+    }
+
+    private long queryCount(String sql, Object... params) {
+        Long count = queryOne(sql, resultSet -> resultSet.getLong(1), params);
+        return count == null ? 0L : count;
+    }
+
+    private int update(String sql, Object... params) {
+        return jdbi.withHandle(handle -> executeUpdate(handle.getConnection(), sql, params));
+    }
+
+    private static <T> List<T> queryList(
+            Connection connection, String sql, ResultSetMapper<T> mapper, Object... params) {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            bind(statement, params);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<T> results = new ArrayList<>();
+                while (resultSet.next()) {
+                    results.add(mapper.map(resultSet));
+                }
+                return results;
+            }
+        } catch (SQLException e) {
+            throw new JdbcPluginException(e);
+        }
+    }
+
+    private static int executeUpdate(Connection connection, String sql, Object... params) {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            bind(statement, params);
+            return statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new JdbcPluginException(e);
+        }
+    }
+
+    private static void bind(PreparedStatement statement, Object... params) throws SQLException {
+        for (int i = 0; i < params.length; i++) {
+            statement.setObject(i + 1, params[i]);
+        }
+    }
+
+    @FunctionalInterface
+    private interface ResultSetMapper<T> {
+        T map(ResultSet resultSet) throws SQLException;
+    }
+
+    @FunctionalInterface
+    private interface TransactionCallback<T> {
+        T execute(Connection connection) throws SQLException;
     }
 
     private void upsertRawData(

@@ -31,7 +31,7 @@ import com.openmemind.ai.memory.core.data.thread.MemoryThreadRuntimeState;
 import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentAppendResult;
 import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentInputStore;
 import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
-import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiExecutor;
+import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiFactory;
 import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaBootstrap;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JdbcPluginException;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JsonCodec;
@@ -47,6 +47,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import javax.sql.DataSource;
+import org.jdbi.v3.core.Jdbi;
 import tools.jackson.core.type.TypeReference;
 
 public abstract class AbstractJdbcThreadStore
@@ -56,12 +57,14 @@ public abstract class AbstractJdbcThreadStore
             new TypeReference<>() {};
 
     private final DataSource dataSource;
+    private final Jdbi jdbi;
     private final JdbcThreadDialect dialect;
     private final JsonCodec jsonCodec = new JsonCodec();
 
     protected AbstractJdbcThreadStore(
             DataSource dataSource, JdbcThreadDialect dialect, boolean createIfNotExist) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
+        this.jdbi = JdbiFactory.create(this.dataSource);
         this.dialect = Objects.requireNonNull(dialect, "dialect");
         ensureSchema(createIfNotExist);
     }
@@ -69,8 +72,7 @@ public abstract class AbstractJdbcThreadStore
     @Override
     public void ensureRuntime(MemoryId memoryId, String materializationPolicyVersion) {
         Objects.requireNonNull(materializationPolicyVersion, "materializationPolicyVersion");
-        JdbiExecutor.update(
-                dataSource,
+        update(
                 insertRuntimeIfAbsentSql(),
                 memoryId.toIdentifier(),
                 MemoryThreadProjectionState.REBUILD_REQUIRED.name(),
@@ -85,8 +87,7 @@ public abstract class AbstractJdbcThreadStore
     @Override
     public Optional<MemoryThreadRuntimeState> getRuntime(MemoryId memoryId) {
         return Optional.ofNullable(
-                JdbiExecutor.queryOne(
-                        dataSource,
+                queryOne(
                         "SELECT * FROM memory_thread_runtime WHERE memory_id = ?",
                         this::mapRuntime,
                         memoryId.toIdentifier()));
@@ -94,8 +95,7 @@ public abstract class AbstractJdbcThreadStore
 
     @Override
     public List<MemoryThreadProjection> listThreads(MemoryId memoryId) {
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 "SELECT * FROM memory_thread WHERE memory_id = ? ORDER BY thread_key ASC",
                 this::mapThread,
                 memoryId.toIdentifier());
@@ -104,8 +104,7 @@ public abstract class AbstractJdbcThreadStore
     @Override
     public Optional<MemoryThreadProjection> getThread(MemoryId memoryId, String threadKey) {
         return Optional.ofNullable(
-                JdbiExecutor.queryOne(
-                        dataSource,
+                queryOne(
                         "SELECT * FROM memory_thread WHERE memory_id = ? AND thread_key = ? LIMIT"
                                 + " 1",
                         this::mapThread,
@@ -115,8 +114,7 @@ public abstract class AbstractJdbcThreadStore
 
     @Override
     public List<MemoryThreadEvent> listEvents(MemoryId memoryId, String threadKey) {
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 "SELECT * FROM memory_thread_event WHERE memory_id = ? AND thread_key = ? ORDER BY"
                         + " event_seq ASC, event_key ASC",
                 this::mapEvent,
@@ -126,8 +124,7 @@ public abstract class AbstractJdbcThreadStore
 
     @Override
     public List<MemoryThreadMembership> listMemberships(MemoryId memoryId, String threadKey) {
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 "SELECT * FROM memory_thread_membership WHERE memory_id = ? AND thread_key = ?"
                         + " ORDER BY item_id ASC, role ASC",
                 this::mapMembership,
@@ -137,8 +134,7 @@ public abstract class AbstractJdbcThreadStore
 
     @Override
     public List<MemoryThreadProjection> listThreadsByItemId(MemoryId memoryId, long itemId) {
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 "SELECT t.* FROM memory_thread t JOIN memory_thread_membership m ON t.memory_id ="
                         + " m.memory_id AND t.thread_key = m.thread_key WHERE t.memory_id = ? AND"
                         + " m.item_id = ? ORDER BY t.thread_key ASC",
@@ -159,8 +155,7 @@ public abstract class AbstractJdbcThreadStore
 
     @Override
     public List<MemoryThreadIntakeOutboxEntry> listOutbox(MemoryId memoryId) {
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 "SELECT * FROM thread_intake_outbox WHERE memory_id = ? ORDER BY trigger_item_id"
                         + " ASC",
                 this::mapOutbox,
@@ -173,8 +168,7 @@ public abstract class AbstractJdbcThreadStore
         if (batchSize <= 0) {
             return List.of();
         }
-        return JdbiExecutor.inTransaction(
-                dataSource,
+        return inTransaction(
                 connection -> {
                     List<MemoryThreadIntakeOutboxEntry> pending =
                             queryOutbox(
@@ -211,8 +205,7 @@ public abstract class AbstractJdbcThreadStore
 
     @Override
     public int recoverAbandoned(MemoryId memoryId, Instant now, int maxAttempts) {
-        return JdbiExecutor.inTransaction(
-                dataSource,
+        return inTransaction(
                 connection -> {
                     List<MemoryThreadIntakeOutboxEntry> abandoned =
                             queryOutbox(
@@ -248,8 +241,7 @@ public abstract class AbstractJdbcThreadStore
     @Override
     public void finalizeOutboxSuccess(
             MemoryId memoryId, long triggerItemId, long lastProcessedItemId, Instant finalizedAt) {
-        JdbiExecutor.update(
-                dataSource,
+        update(
                 "UPDATE thread_intake_outbox SET status = ?, last_processed_item_id = ?,"
                     + " finalized_at = ?, updated_at = ? WHERE memory_id = ? AND trigger_item_id ="
                     + " ?",
@@ -269,8 +261,7 @@ public abstract class AbstractJdbcThreadStore
             int maxAttempts,
             Instant finalizedAt) {
         for (MemoryThreadIntakeClaim claim : emptyIfNull(claimedEntries)) {
-            JdbiExecutor.update(
-                    dataSource,
+            update(
                     "UPDATE thread_intake_outbox SET status = ?, failure_reason = ?, finalized_at ="
                             + " ?, updated_at = ? WHERE memory_id = ? AND trigger_item_id = ?",
                     MemoryThreadIntakeStatus.FAILED.name(),
@@ -285,8 +276,7 @@ public abstract class AbstractJdbcThreadStore
     @Override
     public void finalizeOutboxSkippedPrefix(
             MemoryId memoryId, long rebuildCutoffItemId, Instant finalizedAt) {
-        JdbiExecutor.update(
-                dataSource,
+        update(
                 "UPDATE thread_intake_outbox SET status = ?, finalized_at = ?, updated_at = ? WHERE"
                         + " memory_id = ? AND trigger_item_id <= ? AND status <> ?",
                 MemoryThreadIntakeStatus.SKIPPED.name(),
@@ -299,8 +289,7 @@ public abstract class AbstractJdbcThreadStore
 
     @Override
     public void markRebuildRequired(MemoryId memoryId, String reason) {
-        JdbiExecutor.update(
-                dataSource,
+        update(
                 "UPDATE memory_thread_runtime SET projection_state = ?, rebuild_in_progress = ?,"
                         + " invalidation_reason = ?, updated_at = ? WHERE memory_id = ?",
                 MemoryThreadProjectionState.REBUILD_REQUIRED.name(),
@@ -314,8 +303,7 @@ public abstract class AbstractJdbcThreadStore
     public boolean beginRebuild(
             MemoryId memoryId, String materializationPolicyVersion, long rebuildCutoffItemId) {
         ensureRuntime(memoryId, materializationPolicyVersion);
-        return JdbiExecutor.update(
-                        dataSource,
+        return update(
                         "UPDATE memory_thread_runtime SET rebuild_in_progress = ?,"
                                 + " rebuild_cutoff_item_id = ?, materialization_policy_version = ?,"
                                 + " updated_at = ? WHERE memory_id = ? AND rebuild_in_progress = ?",
@@ -348,8 +336,7 @@ public abstract class AbstractJdbcThreadStore
     @Override
     public void releaseClaims(MemoryId memoryId, List<MemoryThreadIntakeClaim> claimedEntries) {
         for (MemoryThreadIntakeClaim claim : emptyIfNull(claimedEntries)) {
-            JdbiExecutor.update(
-                    dataSource,
+            update(
                     "UPDATE thread_intake_outbox SET status = ?, claimed_at = NULL,"
                             + " lease_expires_at = NULL, updated_at = ? WHERE memory_id = ? AND"
                             + " trigger_item_id = ?",
@@ -380,8 +367,7 @@ public abstract class AbstractJdbcThreadStore
             List<MemoryThreadMembership> memberships,
             MemoryThreadRuntimeState runtimeState,
             Instant finalizedAt) {
-        JdbiExecutor.inTransaction(
-                dataSource,
+        inTransaction(
                 connection -> {
                     String memory = memoryId.toIdentifier();
                     executeUpdate(
@@ -418,8 +404,7 @@ public abstract class AbstractJdbcThreadStore
         if (runInputs == null || runInputs.isEmpty()) {
             return ThreadEnrichmentAppendResult.DUPLICATE_EQUIVALENT;
         }
-        return JdbiExecutor.inTransaction(
-                dataSource,
+        return inTransaction(
                 connection -> {
                     boolean insertedAny = false;
                     for (MemoryThreadEnrichmentInput input : runInputs) {
@@ -449,8 +434,7 @@ public abstract class AbstractJdbcThreadStore
         if (cutoffItemId <= 0) {
             return List.of();
         }
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 "SELECT * FROM memory_thread_enrichment_input WHERE memory_id = ? AND"
                         + " basis_cutoff_item_id <= ? AND basis_materialization_policy_version = ?"
                         + " ORDER BY basis_cutoff_item_id ASC, basis_meaningful_event_count ASC,"
@@ -462,8 +446,7 @@ public abstract class AbstractJdbcThreadStore
     }
 
     private void enqueueInternal(MemoryId memoryId, long triggerItemId) {
-        JdbiExecutor.inTransaction(
-                dataSource,
+        inTransaction(
                 connection -> {
                     enqueueInternal(connection, memoryId, triggerItemId);
                     return null;
@@ -700,8 +683,32 @@ public abstract class AbstractJdbcThreadStore
         return queryList(connection, sql, this::mapOutbox, params);
     }
 
+    private <T> T inTransaction(TransactionCallback<T> callback) {
+        return jdbi.inTransaction(
+                handle -> {
+                    try {
+                        return callback.execute(handle.getConnection());
+                    } catch (SQLException e) {
+                        throw new JdbcPluginException(e);
+                    }
+                });
+    }
+
+    private <T> T queryOne(String sql, ResultSetMapper<T> mapper, Object... params) {
+        List<T> results = queryList(sql, mapper, params);
+        return results.isEmpty() ? null : results.get(0);
+    }
+
+    private <T> List<T> queryList(String sql, ResultSetMapper<T> mapper, Object... params) {
+        return jdbi.withHandle(handle -> queryList(handle.getConnection(), sql, mapper, params));
+    }
+
+    private int update(String sql, Object... params) {
+        return jdbi.withHandle(handle -> executeUpdate(handle.getConnection(), sql, params));
+    }
+
     private static <T> List<T> queryList(
-            Connection connection, String sql, JdbiExecutor.RowMapper<T> mapper, Object... params) {
+            Connection connection, String sql, ResultSetMapper<T> mapper, Object... params) {
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             bind(statement, params);
             try (ResultSet rs = statement.executeQuery()) {
@@ -729,6 +736,16 @@ public abstract class AbstractJdbcThreadStore
         for (int i = 0; i < params.length; i++) {
             statement.setObject(i + 1, params[i]);
         }
+    }
+
+    @FunctionalInterface
+    private interface ResultSetMapper<T> {
+        T map(ResultSet resultSet) throws SQLException;
+    }
+
+    @FunctionalInterface
+    private interface TransactionCallback<T> {
+        T execute(Connection connection) throws SQLException;
     }
 
     private String insertRuntimeIfAbsentSql() {

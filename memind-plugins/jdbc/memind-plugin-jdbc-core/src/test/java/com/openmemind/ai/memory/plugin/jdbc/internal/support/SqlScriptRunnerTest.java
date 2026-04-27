@@ -16,7 +16,7 @@ package com.openmemind.ai.memory.plugin.jdbc.internal.support;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiExecutor;
+import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiFactory;
 import java.nio.file.Path;
 import java.util.List;
 import javax.sql.DataSource;
@@ -66,10 +66,15 @@ class SqlScriptRunnerTest {
         SqlScriptRunner.execute(dataSource, "db/jdbc/test/V1__sample.sql");
 
         String tableName =
-                JdbiExecutor.queryOne(
-                        dataSource,
-                        "SELECT name FROM sqlite_master WHERE type='table' AND name='sample_table'",
-                        rs -> rs.getString("name"));
+                JdbiFactory.create(dataSource)
+                        .withHandle(
+                                handle ->
+                                        handle.createQuery(
+                                                        "SELECT name FROM sqlite_master WHERE"
+                                                                + " type='table' AND"
+                                                                + " name='sample_table'")
+                                                .mapTo(String.class)
+                                                .one());
 
         assertThat(tableName).isEqualTo("sample_table");
     }

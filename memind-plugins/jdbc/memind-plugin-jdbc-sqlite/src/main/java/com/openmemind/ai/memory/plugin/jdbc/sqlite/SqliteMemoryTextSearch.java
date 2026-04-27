@@ -16,11 +16,14 @@ package com.openmemind.ai.memory.plugin.jdbc.sqlite;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.textsearch.TextSearchResult;
-import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiExecutor;
+import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiFactory;
 import com.openmemind.ai.memory.plugin.jdbc.internal.schema.TextSearchSchemaBootstrap;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Objects;
 import javax.sql.DataSource;
+import org.jdbi.v3.core.Jdbi;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -62,15 +65,16 @@ public class SqliteMemoryTextSearch implements MemoryTextSearch {
             LIMIT ?
             """;
 
-    private final DataSource dataSource;
+    private final Jdbi jdbi;
 
     public SqliteMemoryTextSearch(DataSource dataSource) {
         this(dataSource, true);
     }
 
     public SqliteMemoryTextSearch(DataSource dataSource, boolean createIfNotExist) {
-        this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
-        TextSearchSchemaBootstrap.ensureSqlite(this.dataSource, createIfNotExist);
+        DataSource checkedDataSource = Objects.requireNonNull(dataSource, "dataSource");
+        this.jdbi = JdbiFactory.create(checkedDataSource);
+        TextSearchSchemaBootstrap.ensureSqlite(checkedDataSource, createIfNotExist);
     }
 
     @Override
@@ -93,8 +97,7 @@ public class SqliteMemoryTextSearch implements MemoryTextSearch {
                 };
         String ftsPhrase = "\"" + query.replace("\"", "\"\"").replace("'", "''") + "\"";
         String sql = sqlTemplate.formatted(ftsPhrase);
-        return JdbiExecutor.queryList(
-                dataSource,
+        return queryList(
                 sql,
                 rs -> {
                     String documentId = rs.getString("biz_id");
@@ -105,5 +108,21 @@ public class SqliteMemoryTextSearch implements MemoryTextSearch {
                 },
                 memoryId,
                 topK);
+    }
+
+    private <T> List<T> queryList(String sql, ResultSetMapper<T> mapper, Object... params) {
+        return jdbi.withHandle(
+                handle -> {
+                    var query = handle.createQuery(sql);
+                    for (int i = 0; i < params.length; i++) {
+                        query.bind(i, params[i]);
+                    }
+                    return query.map((resultSet, context) -> mapper.map(resultSet)).list();
+                });
+    }
+
+    @FunctionalInterface
+    private interface ResultSetMapper<T> {
+        T map(ResultSet resultSet) throws SQLException;
     }
 }
