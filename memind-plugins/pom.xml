@@ -29,7 +29,10 @@
 
     <modules>
         <module>memind-plugin-ai-spring-ai</module>
-        <module>jdbc</module>
+        <module>jdbc/memind-plugin-jdbc-core</module>
+        <module>jdbc/memind-plugin-jdbc-mysql</module>
+        <module>jdbc/memind-plugin-jdbc-postgresql</module>
+        <module>jdbc/memind-plugin-jdbc-sqlite</module>
         <module>memind-plugin-rawdatas</module>
         <module>memind-plugin-spring-boot-starters</module>
         <module>memind-plugin-tracing-opentelemetry</module>
