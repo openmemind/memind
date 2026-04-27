@@ -32,6 +32,212 @@ import org.junit.jupiter.api.parallel.Resources;
 class MemoryItemUnifiedPromptsTest {
 
     @Test
+    @DisplayName("Rendered prompt should preserve user-scope category grouping")
+    void shouldPreserveUserScopeCategoryGrouping() {
+        var categoryDefinitions =
+                categoryDefinitionsSection(renderSystemPrompt(MemoryCategory.userCategories()));
+
+        assertThat(categoryDefinitions)
+                .contains("### [USER Scope]")
+                .contains("**profile**")
+                .contains("**behavior**")
+                .contains("**event**")
+                .doesNotContain("### [AGENT Scope]")
+                .doesNotContain("**tool**")
+                .doesNotContain("**directive**")
+                .doesNotContain("**playbook**")
+                .doesNotContain("**resolution**");
+    }
+
+    @Test
+    @DisplayName("Rendered prompt should preserve agent-scope categories including tool")
+    void shouldPreserveAgentScopeCategoriesIncludingTool() {
+        var categoryDefinitions =
+                categoryDefinitionsSection(renderSystemPrompt(MemoryCategory.agentCategories()));
+
+        assertThat(categoryDefinitions)
+                .contains("### [AGENT Scope]")
+                .contains("**tool**")
+                .contains("**directive**")
+                .contains("**playbook**")
+                .contains("**resolution**")
+                .doesNotContain("### [USER Scope]")
+                .doesNotContain("**profile**")
+                .doesNotContain("**behavior**")
+                .doesNotContain("**event**");
+    }
+
+    @Test
+    @DisplayName("Rendered prompt should preserve all categories and scope grouping")
+    void shouldPreserveAllCategoriesAndScopeGrouping() {
+        var categoryDefinitions =
+                categoryDefinitionsSection(renderSystemPrompt(Set.of(MemoryCategory.values())));
+
+        assertThat(categoryDefinitions)
+                .contains("### [USER Scope]")
+                .contains("### [AGENT Scope]")
+                .contains("**profile**")
+                .contains("**behavior**")
+                .contains("**event**")
+                .contains("**tool**")
+                .contains("**directive**")
+                .contains("**playbook**")
+                .contains("**resolution**");
+    }
+
+    @Test
+    @DisplayName("Rendered examples should not recommend disallowed categories")
+    void shouldRenderExamplesOnlyForAllowedCategories() {
+        var userOnlyExamples = examplesSection(renderSystemPrompt(MemoryCategory.userCategories()));
+        var agentOnlyExamples =
+                examplesSection(renderSystemPrompt(MemoryCategory.agentCategories()));
+        var allExamples = examplesSection(renderSystemPrompt(Set.of(MemoryCategory.values())));
+
+        assertThat(userOnlyExamples)
+                .contains("## profile")
+                .contains("## behavior")
+                .contains("## event")
+                .doesNotContain("## tool")
+                .doesNotContain("## directive")
+                .doesNotContain("## playbook")
+                .doesNotContain("## resolution");
+        assertThat(agentOnlyExamples)
+                .contains("## tool")
+                .doesNotContain("## profile")
+                .doesNotContain("## behavior")
+                .doesNotContain("## event");
+        assertThat(allExamples)
+                .contains("## profile")
+                .contains("## behavior")
+                .contains("## event")
+                .contains("## tool")
+                .contains("## directive")
+                .contains("## playbook")
+                .contains("## resolution");
+    }
+
+    @Test
+    @DisplayName("Rendered prompt should require durable value and filter low-value chatter")
+    void shouldRequireDurableValueAndFilterLowValueChatter() {
+        var systemPrompt = renderSystemPrompt(Set.of(MemoryCategory.values()));
+
+        assertThat(systemPrompt)
+                .contains("likely to remain useful beyond the current turn")
+                .contains("future days, weeks, or months")
+                .contains("Do not create a memory item just because a sentence is factual")
+                .contains("generic greetings")
+                .contains("pure acknowledgements")
+                .contains("process chatter")
+                .contains("temporary status updates")
+                .contains("one-off control messages")
+                .contains("vague summaries without actionable or retrievable detail");
+    }
+
+    @Test
+    @DisplayName("Rendered prompt should preserve user permissive and agent strict extraction bias")
+    void shouldPreserveExtractionBiasGradient() {
+        var systemPrompt = renderSystemPrompt(Set.of(MemoryCategory.values()));
+
+        assertThat(systemPrompt)
+                .contains("For USER-scope categories")
+                .contains("profile")
+                .contains("behavior")
+                .contains("event")
+                .contains("extract clearly stated facts even if they seem minor")
+                .contains("For AGENT-scope categories")
+                .contains("tool")
+                .contains("directive")
+                .contains("playbook")
+                .contains("resolution")
+                .contains("use strict precision")
+                .contains("If uncertain between AGENT memory and nothing, prefer nothing");
+    }
+
+    @Test
+    @DisplayName("Rendered prompt should preserve important semantic dimensions")
+    void shouldRenderContentPreservationChecklist() {
+        var systemPrompt = renderSystemPrompt(Set.of(MemoryCategory.values()));
+
+        assertThat(systemPrompt)
+                .contains("Preserve who")
+                .contains("what")
+                .contains("when")
+                .contains("where")
+                .contains("why")
+                .contains("important relationships")
+                .contains("comparisons")
+                .contains("capabilities")
+                .contains("attitudes")
+                .contains("intent")
+                .contains("Do not compress away the detail that makes the memory useful");
+    }
+
+    @Test
+    @DisplayName("Rendered prompt should keep key common confusion examples")
+    void shouldKeepKeyCommonConfusionExamples() {
+        var systemPrompt = renderSystemPrompt(Set.of(MemoryCategory.values()));
+
+        assertThat(systemPrompt)
+                .contains("We use Redis/Kafka/X for purpose Y")
+                .contains("Currently learning/reading/migrating X")
+                .contains("Teammate Zhang is responsible for backend services")
+                .contains("Assistant says 'be gentle with yourself'")
+                .contains("Do NOT extract unless the user later adopts it")
+                .contains("User follows a fixed process or SOP for X");
+    }
+
+    @Test
+    @DisplayName("Graph-enabled prompt should include entity and coreference quality rules")
+    void graphEnabledPromptShouldIncludeEntityCoreferenceQualityRules() {
+        var systemPrompt = renderSystemPrompt(Set.of(MemoryCategory.EVENT), true);
+
+        assertThat(systemPrompt)
+                .contains("Extract entities only when they help link related memories")
+                .contains("Prefer concrete named entities")
+                .contains("specific durable domain concepts")
+                .contains("Resolve role-only mentions to named entities")
+                .contains("my roommate")
+                .contains("Emily")
+                .contains("Do not create separate entities for generic role mentions")
+                .contains("Do not extract generic nouns such as")
+                .contains("project")
+                .contains("team")
+                .contains("system")
+                .doesNotContain("aliasClass: role")
+                .doesNotContain("role_alias");
+    }
+
+    @Test
+    @DisplayName("Graph-disabled prompt should omit graph rules but keep subject clarity")
+    void graphDisabledPromptShouldOmitGraphRulesButKeepSubjectClarity() {
+        var systemPrompt = renderSystemPrompt(Set.of(MemoryCategory.EVENT), false);
+
+        assertThat(systemPrompt)
+                .doesNotContain("Extract entities only when they help link related memories")
+                .doesNotContain("Resolve role-only mentions to named entities")
+                .doesNotContain("Do not extract generic nouns such as")
+                .doesNotContain("\"entities\"")
+                .doesNotContain("\"causalRelations\"")
+                .contains("# Subject Clarity")
+                .contains("Do NOT use bare pronouns like \"他\", \"她\", \"他们\", or \"自己\"")
+                .contains("If the subject cannot be made explicit from the source text");
+    }
+
+    @Test
+    @DisplayName("Directive example should not duplicate category_reason")
+    void directiveExampleShouldNotDuplicateCategoryReason() {
+        var systemPrompt = renderSystemPrompt(Set.of(MemoryCategory.values()));
+        var directiveStart = systemPrompt.indexOf("## directive");
+        var playbookStart = systemPrompt.indexOf("## playbook");
+
+        assertThat(directiveStart).isGreaterThanOrEqualTo(0);
+        assertThat(playbookStart).isGreaterThan(directiveStart);
+
+        var directiveExample = systemPrompt.substring(directiveStart, playbookStart);
+        assertThat(countOccurrences(directiveExample, "\"category_reason\"")).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("Rendered prompt should include graph schema only when graph is enabled")
     void shouldIncludeGraphSchemaOnlyWhenGraphIsEnabled() {
         var enabled =
@@ -185,8 +391,8 @@ class MemoryItemUnifiedPromptsTest {
         assertThat(template.describeStructure())
                 .contains(
                         "Sections: objective, principles, extractionScope, extractionBias,"
-                                + " categoryContext, identityContext, subjectContext,"
-                                + " temporalContext, scoring, output, examples");
+                                + " contentPreservation, categoryContext, identityContext,"
+                                + " subjectContext, temporalContext, scoring, output, examples");
         assertThat(result.systemPrompt()).contains("## Decision Logic");
         assertThat(result.systemPrompt()).contains("## Category Definitions");
         assertThat(result.systemPrompt()).contains("**profile**");
@@ -220,7 +426,7 @@ class MemoryItemUnifiedPromptsTest {
                 .contains("directive")
                 .contains("playbook")
                 .contains("resolution")
-                .contains("if uncertain between agent memory and nothing, prefer nothing")
+                .contains("If uncertain between AGENT memory and nothing, prefer nothing")
                 .contains("one-off control messages");
     }
 
@@ -399,6 +605,53 @@ class MemoryItemUnifiedPromptsTest {
 
         assertThat(result.systemPrompt()).contains("Custom unified extraction instruction");
         assertThat(result.systemPrompt()).doesNotContain("# Core Principles");
+    }
+
+    private static String renderSystemPrompt(Set<MemoryCategory> categories) {
+        return MemoryItemUnifiedPrompts.build(
+                        List.of(),
+                        "user: Please remember the durable project preference",
+                        Instant.parse("2026-04-16T00:00:00Z"),
+                        "Ada",
+                        categories,
+                        ItemGraphOptions.defaults().withEnabled(true))
+                .render("English")
+                .systemPrompt();
+    }
+
+    private static String renderSystemPrompt(Set<MemoryCategory> categories, boolean graphEnabled) {
+        return MemoryItemUnifiedPrompts.build(
+                        List.of(),
+                        "user: Please remember the durable project preference",
+                        Instant.parse("2026-04-16T00:00:00Z"),
+                        "Ada",
+                        categories,
+                        ItemGraphOptions.defaults().withEnabled(graphEnabled))
+                .render("English")
+                .systemPrompt();
+    }
+
+    private static String categoryDefinitionsSection(String systemPrompt) {
+        var start = systemPrompt.indexOf("## Category Definitions");
+        var end = systemPrompt.indexOf("# Identity", start);
+        assertThat(start).isGreaterThanOrEqualTo(0);
+        assertThat(end).isGreaterThan(start);
+        return systemPrompt.substring(start, end);
+    }
+
+    private static String examplesSection(String systemPrompt) {
+        var start = systemPrompt.indexOf("# Examples by Category");
+        return start < 0 ? "" : systemPrompt.substring(start);
+    }
+
+    private static int countOccurrences(String text, String needle) {
+        var count = 0;
+        var index = 0;
+        while ((index = text.indexOf(needle, index)) >= 0) {
+            count++;
+            index += needle.length();
+        }
+        return count;
     }
 
     private static MemoryInsightType createInsightType(String name, List<String> categories) {
