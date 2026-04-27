@@ -17,14 +17,17 @@ import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassifier;
 import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicator;
+import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.step.InsightExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.deep.TypedQueryExpander;
+import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategy;
 import com.openmemind.ai.memory.core.retrieval.sufficiency.SufficiencyGate;
+import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistant;
 import com.openmemind.ai.memory.core.retrieval.tier.InsightTypeRouter;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.tracing.NoopMemoryObserver;
@@ -32,12 +35,15 @@ import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightExtractStep
 import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightGenerator;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightGroupClassifier;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightTypeRouter;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingItemGraphMaterializer;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryExtractor;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryItemDeduplicator;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryItemExtractStep;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryRetriever;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryThreadAssistant;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingRawDataExtractStep;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingReranker;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingRetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingRetrievalStrategy;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingSufficiencyGate;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingTypedQueryExpander;
@@ -100,9 +106,21 @@ public class TracingBeanPostProcessor implements BeanPostProcessor, Ordered {
                 && !(bean instanceof TracingMemoryItemDeduplicator)) {
             return new TracingMemoryItemDeduplicator(d, observer);
         }
+        if (bean instanceof ItemGraphMaterializer d
+                && !(bean instanceof TracingItemGraphMaterializer)) {
+            return new TracingItemGraphMaterializer(d, observer);
+        }
 
         if (bean instanceof MemoryRetriever d && !(bean instanceof TracingMemoryRetriever)) {
             return new TracingMemoryRetriever(d, observer);
+        }
+        if (bean instanceof RetrievalGraphAssistant d
+                && !(bean instanceof TracingRetrievalGraphAssistant)) {
+            return new TracingRetrievalGraphAssistant(d, observer);
+        }
+        if (bean instanceof MemoryThreadAssistant d
+                && !(bean instanceof TracingMemoryThreadAssistant)) {
+            return new TracingMemoryThreadAssistant(d, observer);
         }
         if (bean instanceof RetrievalStrategy d && !(bean instanceof TracingRetrievalStrategy)) {
             return new TracingRetrievalStrategy(d, observer);
@@ -131,7 +149,10 @@ public class TracingBeanPostProcessor implements BeanPostProcessor, Ordered {
                 || bean instanceof InsightGenerator
                 || bean instanceof InsightGroupClassifier
                 || bean instanceof MemoryItemDeduplicator
+                || bean instanceof ItemGraphMaterializer
                 || bean instanceof MemoryRetriever
+                || bean instanceof RetrievalGraphAssistant
+                || bean instanceof MemoryThreadAssistant
                 || bean instanceof RetrievalStrategy
                 || bean instanceof Reranker
                 || bean instanceof InsightTypeRouter
@@ -147,7 +168,10 @@ public class TracingBeanPostProcessor implements BeanPostProcessor, Ordered {
                 || bean instanceof TracingInsightGenerator
                 || bean instanceof TracingInsightGroupClassifier
                 || bean instanceof TracingMemoryItemDeduplicator
+                || bean instanceof TracingItemGraphMaterializer
                 || bean instanceof TracingMemoryRetriever
+                || bean instanceof TracingRetrievalGraphAssistant
+                || bean instanceof TracingMemoryThreadAssistant
                 || bean instanceof TracingRetrievalStrategy
                 || bean instanceof TracingReranker
                 || bean instanceof TracingInsightTypeRouter

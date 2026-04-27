@@ -177,6 +177,12 @@ public final class MemoryAttributes {
     public static final String RETRIEVAL_INTENT = "memind.retrieval.intent";
     public static final String RETRIEVAL_TIER = "memind.retrieval.sufficiency";
     public static final String RETRIEVAL_RESULT_COUNT = "memind.retrieval.result_count";
+    public static final String RETRIEVAL_CANDIDATE_COUNT = "memind.retrieval.candidate_count";
+    public static final String RETRIEVAL_SOURCE_LIST_COUNT = "memind.retrieval.source_list_count";
+    public static final String RETRIEVAL_DEDUPED_COUNT = "memind.retrieval.deduped_count";
+    public static final String RETRIEVAL_WEIGHT_COUNT = "memind.retrieval.weight_count";
+    public static final String RETRIEVAL_TIER_NAME = "memind.retrieval.tier";
+    public static final String RETRIEVAL_CHANNEL = "memind.retrieval.channel";
     public static final String RETRIEVAL_SUFFICIENT = "memind.retrieval.sufficient";
     public static final String RETRIEVAL_CACHE_HIT = "memind.retrieval.cache_hit";
     public static final String RETRIEVAL_TOP_K = "memind.retrieval.top_k";
@@ -212,4 +218,8 @@ public final class MemoryAttributes {
             "memind.retrieval.graph.skipped_overfanout_entity_count";
     public static final String RETRIEVAL_GRAPH_TIMEOUT = "memind.retrieval.graph.timeout";
     public static final String RETRIEVAL_GRAPH_DEGRADED = "memind.retrieval.graph.degraded";
+    public static final String RETRIEVAL_TEMPORAL_ENABLED = "memind.retrieval.temporal.enabled";
+    public static final String RETRIEVAL_TEMPORAL_CONSTRAINT_PRESENT =
+            "memind.retrieval.temporal.constraint_present";
+    public static final String RETRIEVAL_TEMPORAL_DEGRADED = "memind.retrieval.temporal.degraded";
 }

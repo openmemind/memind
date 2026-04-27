@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core.builder;
 import com.openmemind.ai.memory.core.DefaultMemory;
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
+import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
@@ -26,10 +27,13 @@ import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
+import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.tracing.NoopMemoryObserver;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryExtractor;
+import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryRetriever;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -185,7 +189,11 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
                         sanitization.memoryThreadForcedDisableReason());
         MemoryExtractionAssembly extractionAssembly =
                 new MemoryExtractionAssembler().assemble(context);
-        var memoryRetriever = new MemoryRetrievalAssembler().assemble(context);
+        MemoryExtractor pipeline =
+                tracingExtractor(extractionAssembly.pipeline(), context.memoryObserver());
+        MemoryRetriever memoryRetriever =
+                tracingRetriever(
+                        new MemoryRetrievalAssembler().assemble(context), context.memoryObserver());
         AutoCloseable lifecycle =
                 externallyManaged
                         ? lifecycle(extractionAssembly.lifecycle())
@@ -197,7 +205,7 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
                                 context.memoryBuffer(),
                                 extractionAssembly.lifecycle());
         return new DefaultMemory(
-                extractionAssembly.pipeline(),
+                pipeline,
                 memoryRetriever,
                 context.memoryStore(),
                 context.memoryBuffer(),
@@ -206,6 +214,20 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
                 lifecycle,
                 effectiveOptions,
                 extractionAssembly.memoryThreadLayer());
+    }
+
+    private MemoryExtractor tracingExtractor(MemoryExtractor extractor, MemoryObserver observer) {
+        if (observer instanceof NoopMemoryObserver || extractor instanceof TracingMemoryExtractor) {
+            return extractor;
+        }
+        return new TracingMemoryExtractor(extractor, observer);
+    }
+
+    private MemoryRetriever tracingRetriever(MemoryRetriever retriever, MemoryObserver observer) {
+        if (observer instanceof NoopMemoryObserver || retriever instanceof TracingMemoryRetriever) {
+            return retriever;
+        }
+        return new TracingMemoryRetriever(retriever, observer);
     }
 
     MemoryBuildOptions buildOptions() {

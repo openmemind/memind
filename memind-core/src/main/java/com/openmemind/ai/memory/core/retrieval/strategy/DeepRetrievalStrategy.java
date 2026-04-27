@@ -23,17 +23,19 @@ import com.openmemind.ai.memory.core.retrieval.graph.NoOpRetrievalGraphAssistant
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistResult;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
+import com.openmemind.ai.memory.core.retrieval.scoring.DefaultRetrievalResultMerger;
 import com.openmemind.ai.memory.core.retrieval.scoring.RawDataAggregator;
 import com.openmemind.ai.memory.core.retrieval.scoring.ResultMerger;
+import com.openmemind.ai.memory.core.retrieval.scoring.RetrievalResultMerger;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.TimeDecay;
 import com.openmemind.ai.memory.core.retrieval.sufficiency.SufficiencyGate;
 import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistResult;
 import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistant;
 import com.openmemind.ai.memory.core.retrieval.thread.NoOpMemoryThreadAssistant;
-import com.openmemind.ai.memory.core.retrieval.tier.InsightTierRetriever;
+import com.openmemind.ai.memory.core.retrieval.tier.InsightTierSearch;
 import com.openmemind.ai.memory.core.retrieval.tier.InsightTreeExpander;
-import com.openmemind.ai.memory.core.retrieval.tier.ItemTierRetriever;
+import com.openmemind.ai.memory.core.retrieval.tier.ItemTierSearch;
 import com.openmemind.ai.memory.core.retrieval.tier.TierResult;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
@@ -71,8 +73,8 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
 
     private static final Logger log = LoggerFactory.getLogger(DeepRetrievalStrategy.class);
 
-    private final InsightTierRetriever insightRetriever;
-    private final ItemTierRetriever itemRetriever;
+    private final InsightTierSearch insightRetriever;
+    private final ItemTierSearch itemRetriever;
     private final SufficiencyGate sufficiencyGate;
     private final TypedQueryExpander typedQueryExpander;
     private final Reranker reranker;
@@ -81,14 +83,15 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
     private final DeepStrategyConfig defaultStrategyConfig;
     private final RetrievalGraphAssistant graphAssistant;
     private final MemoryThreadAssistant memoryThreadAssistant;
+    private final RetrievalResultMerger resultMerger;
 
     /** Tier2 initial retrieval result */
     private record Tier2InitResult(
             List<TextSearchResult> bm25ProbeResults, TierResult vectorResult) {}
 
     public DeepRetrievalStrategy(
-            InsightTierRetriever insightRetriever,
-            ItemTierRetriever itemRetriever,
+            InsightTierSearch insightRetriever,
+            ItemTierSearch itemRetriever,
             SufficiencyGate sufficiencyGate,
             TypedQueryExpander typedQueryExpander,
             Reranker reranker,
@@ -106,8 +109,8 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
     }
 
     public DeepRetrievalStrategy(
-            InsightTierRetriever insightRetriever,
-            ItemTierRetriever itemRetriever,
+            InsightTierSearch insightRetriever,
+            ItemTierSearch itemRetriever,
             SufficiencyGate sufficiencyGate,
             TypedQueryExpander typedQueryExpander,
             Reranker reranker,
@@ -123,12 +126,13 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
                 memoryStore,
                 DeepStrategyConfig.defaults(),
                 graphAssistant,
-                memoryThreadAssistant);
+                memoryThreadAssistant,
+                DefaultRetrievalResultMerger.INSTANCE);
     }
 
     public DeepRetrievalStrategy(
-            InsightTierRetriever insightRetriever,
-            ItemTierRetriever itemRetriever,
+            InsightTierSearch insightRetriever,
+            ItemTierSearch itemRetriever,
             SufficiencyGate sufficiencyGate,
             TypedQueryExpander typedQueryExpander,
             Reranker reranker,
@@ -147,8 +151,8 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
     }
 
     public DeepRetrievalStrategy(
-            InsightTierRetriever insightRetriever,
-            ItemTierRetriever itemRetriever,
+            InsightTierSearch insightRetriever,
+            ItemTierSearch itemRetriever,
             SufficiencyGate sufficiencyGate,
             TypedQueryExpander typedQueryExpander,
             Reranker reranker,
@@ -156,6 +160,30 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
             DeepStrategyConfig defaultStrategyConfig,
             RetrievalGraphAssistant graphAssistant,
             MemoryThreadAssistant memoryThreadAssistant) {
+        this(
+                insightRetriever,
+                itemRetriever,
+                sufficiencyGate,
+                typedQueryExpander,
+                reranker,
+                memoryStore,
+                defaultStrategyConfig,
+                graphAssistant,
+                memoryThreadAssistant,
+                DefaultRetrievalResultMerger.INSTANCE);
+    }
+
+    public DeepRetrievalStrategy(
+            InsightTierSearch insightRetriever,
+            ItemTierSearch itemRetriever,
+            SufficiencyGate sufficiencyGate,
+            TypedQueryExpander typedQueryExpander,
+            Reranker reranker,
+            MemoryStore memoryStore,
+            DeepStrategyConfig defaultStrategyConfig,
+            RetrievalGraphAssistant graphAssistant,
+            MemoryThreadAssistant memoryThreadAssistant,
+            RetrievalResultMerger resultMerger) {
         this.insightRetriever =
                 Objects.requireNonNull(insightRetriever, "insightRetriever must not be null");
         this.itemRetriever =
@@ -177,6 +205,8 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
                 memoryThreadAssistant != null
                         ? memoryThreadAssistant
                         : NoOpMemoryThreadAssistant.INSTANCE;
+        this.resultMerger =
+                resultMerger != null ? resultMerger : DefaultRetrievalResultMerger.INSTANCE;
     }
 
     @Override
@@ -493,34 +523,36 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
             }
         }
 
-        // Single-level RRF merge
-        List<ScoredResult> merged;
-        if (rankedLists.isEmpty()) {
-            merged = List.of();
-        } else if (rankedLists.size() == 1) {
-            merged = rankedLists.get(0);
-        } else {
-            double[] weights = weightsList.stream().mapToDouble(Double::doubleValue).toArray();
-            merged = ResultMerger.merge(baseConfig.scoring(), rankedLists, weights);
-        }
+        return mergeRankedLists(baseConfig, rankedLists, weightsList)
+                .flatMap(
+                        merged -> {
+                            // BM25-only results backfill occurredAt
+                            merged =
+                                    RawDataAggregator.backfillOccurredAt(
+                                            merged, context.memoryId(), memoryStore);
 
-        // BM25-only results backfill occurredAt
-        merged = RawDataAggregator.backfillOccurredAt(merged, context.memoryId(), memoryStore);
+                            // BM25-only results apply time decay
+                            merged =
+                                    TimeDecay.applyToBm25Only(
+                                            merged, context, baseConfig.scoring());
+                            merged =
+                                    merged.stream()
+                                            .sorted(
+                                                    Comparator.comparingDouble(
+                                                                    ScoredResult::finalScore)
+                                                            .reversed())
+                                            .toList();
 
-        // BM25-only results apply time decay
-        merged = TimeDecay.applyToBm25Only(merged, context, baseConfig.scoring());
-        merged =
-                merged.stream()
-                        .sorted(Comparator.comparingDouble(ScoredResult::finalScore).reversed())
-                        .toList();
+                            int directWindowSize = baseConfig.tier2().topK();
+                            List<ScoredResult> directWindow =
+                                    merged.size() > directWindowSize
+                                            ? merged.subList(0, directWindowSize)
+                                            : merged;
 
-        int directWindowSize = baseConfig.tier2().topK();
-        List<ScoredResult> directWindow =
-                merged.size() > directWindowSize ? merged.subList(0, directWindowSize) : merged;
+                            log.debug("RRF merged truncation: {} candidates", directWindow.size());
 
-        log.debug("RRF merged truncation: {} candidates", directWindow.size());
-
-        return applyMemoryThreadAssist(context, baseConfig, directWindow)
+                            return applyMemoryThreadAssist(context, baseConfig, directWindow);
+                        })
                 .flatMap(candidatePool -> applyGraphAssist(context, baseConfig, candidatePool))
                 .flatMap(
                         candidatePool -> {
@@ -547,6 +579,20 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
                                                 context);
                                     });
                         });
+    }
+
+    private Mono<List<ScoredResult>> mergeRankedLists(
+            RetrievalConfig baseConfig,
+            List<List<ScoredResult>> rankedLists,
+            List<Double> weightsList) {
+        if (rankedLists.isEmpty()) {
+            return Mono.just(List.of());
+        }
+        if (rankedLists.size() == 1) {
+            return Mono.just(rankedLists.getFirst());
+        }
+        double[] weights = weightsList.stream().mapToDouble(Double::doubleValue).toArray();
+        return resultMerger.merge(baseConfig.scoring(), rankedLists, weights);
     }
 
     /**

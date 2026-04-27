@@ -47,7 +47,7 @@ import reactor.core.publisher.Mono;
  * <p>Vector search MemoryItem, output scopeHints = list of rawDataId matching items
  *
  */
-public class ItemTierRetriever implements TierSearchable {
+public class ItemTierRetriever implements ItemTierSearch {
 
     private static final Logger log = LoggerFactory.getLogger(ItemTierRetriever.class);
 

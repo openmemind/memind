@@ -21,8 +21,10 @@ import com.openmemind.ai.memory.core.retrieval.graph.NoOpRetrievalGraphAssistant
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistResult;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
+import com.openmemind.ai.memory.core.retrieval.scoring.DefaultRetrievalResultMerger;
 import com.openmemind.ai.memory.core.retrieval.scoring.RawDataAggregator;
 import com.openmemind.ai.memory.core.retrieval.scoring.ResultMerger;
+import com.openmemind.ai.memory.core.retrieval.scoring.RetrievalResultMerger;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.TimeDecay;
 import com.openmemind.ai.memory.core.retrieval.temporal.DefaultTemporalConstraintExtractor;
@@ -33,9 +35,9 @@ import com.openmemind.ai.memory.core.retrieval.temporal.TemporalItemChannelResul
 import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistResult;
 import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistant;
 import com.openmemind.ai.memory.core.retrieval.thread.NoOpMemoryThreadAssistant;
-import com.openmemind.ai.memory.core.retrieval.tier.InsightTierRetriever;
+import com.openmemind.ai.memory.core.retrieval.tier.InsightTierSearch;
 import com.openmemind.ai.memory.core.retrieval.tier.InsightTreeExpander;
-import com.openmemind.ai.memory.core.retrieval.tier.ItemTierRetriever;
+import com.openmemind.ai.memory.core.retrieval.tier.ItemTierSearch;
 import com.openmemind.ai.memory.core.retrieval.tier.TierResult;
 import com.openmemind.ai.memory.core.retrieval.truncation.AdaptiveTruncator;
 import com.openmemind.ai.memory.core.store.MemoryStore;
@@ -68,8 +70,8 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
 
     private static final Logger log = LoggerFactory.getLogger(SimpleRetrievalStrategy.class);
 
-    private final InsightTierRetriever insightRetriever;
-    private final ItemTierRetriever itemRetriever;
+    private final InsightTierSearch insightRetriever;
+    private final ItemTierSearch itemRetriever;
     private final MemoryTextSearch textSearch; // nullable
     private final MemoryStore memoryStore; // nullable
     private final SimpleStrategyConfig defaultStrategyConfig;
@@ -79,11 +81,12 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
     private final TemporalItemChannel temporalItemChannel;
     private final GraphItemChannel
             graphItemChannel; // nullable: preserves legacy graph assistant behavior
+    private final RetrievalResultMerger resultMerger;
     private final Clock clock;
 
     public SimpleRetrievalStrategy(
-            InsightTierRetriever insightRetriever,
-            ItemTierRetriever itemRetriever,
+            InsightTierSearch insightRetriever,
+            ItemTierSearch itemRetriever,
             MemoryTextSearch textSearch,
             MemoryStore memoryStore,
             SimpleStrategyConfig defaultStrategyConfig,
@@ -100,12 +103,13 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
                 new DefaultTemporalConstraintExtractor(),
                 new DefaultTemporalItemChannel(memoryStore),
                 null,
+                DefaultRetrievalResultMerger.INSTANCE,
                 Clock.systemDefaultZone());
     }
 
     public SimpleRetrievalStrategy(
-            InsightTierRetriever insightRetriever,
-            ItemTierRetriever itemRetriever,
+            InsightTierSearch insightRetriever,
+            ItemTierSearch itemRetriever,
             MemoryTextSearch textSearch,
             MemoryStore memoryStore,
             SimpleStrategyConfig defaultStrategyConfig,
@@ -114,6 +118,7 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
             TemporalConstraintExtractor temporalConstraintExtractor,
             TemporalItemChannel temporalItemChannel,
             GraphItemChannel graphItemChannel,
+            RetrievalResultMerger resultMerger,
             Clock clock) {
         this.insightRetriever =
                 Objects.requireNonNull(insightRetriever, "insightRetriever must not be null");
@@ -140,12 +145,14 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
                         ? temporalItemChannel
                         : new DefaultTemporalItemChannel(memoryStore);
         this.graphItemChannel = graphItemChannel;
+        this.resultMerger =
+                resultMerger != null ? resultMerger : DefaultRetrievalResultMerger.INSTANCE;
         this.clock = clock != null ? clock : Clock.systemDefaultZone();
     }
 
     public SimpleRetrievalStrategy(
-            InsightTierRetriever insightRetriever,
-            ItemTierRetriever itemRetriever,
+            InsightTierSearch insightRetriever,
+            ItemTierSearch itemRetriever,
             MemoryTextSearch textSearch,
             MemoryStore memoryStore,
             RetrievalGraphAssistant graphAssistant,
@@ -161,8 +168,8 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
     }
 
     public SimpleRetrievalStrategy(
-            InsightTierRetriever insightRetriever,
-            ItemTierRetriever itemRetriever,
+            InsightTierSearch insightRetriever,
+            ItemTierSearch itemRetriever,
             MemoryTextSearch textSearch,
             MemoryStore memoryStore,
             RetrievalGraphAssistant graphAssistant) {
@@ -177,8 +184,8 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
     }
 
     public SimpleRetrievalStrategy(
-            InsightTierRetriever insightRetriever,
-            ItemTierRetriever itemRetriever,
+            InsightTierSearch insightRetriever,
+            ItemTierSearch itemRetriever,
             MemoryTextSearch textSearch,
             MemoryStore memoryStore) {
         this(
@@ -260,46 +267,54 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
                             TemporalItemChannelResult temporalResult = tuple.getT4();
 
                             // Item vector + BM25 + Temporal -> Weighted RRF merge
-                            List<ScoredResult> mergedItems =
-                                    mergeItemResults(
+                            return mergeItemResults(
                                             itemVectorResult.results(),
                                             bm25Results,
                                             temporalResult.items(),
                                             config,
-                                            simpleConfig);
-
-                            // BM25-only results backfill occurredAt
-                            mergedItems =
-                                    RawDataAggregator.backfillOccurredAt(
-                                            mergedItems, context.memoryId(), memoryStore);
-
-                            // BM25-only results apply time decay
-                            mergedItems =
-                                    TimeDecay.applyToBm25Only(
-                                            mergedItems, context, config.scoring());
-                            mergedItems =
-                                    mergedItems.stream()
-                                            .sorted(
-                                                    Comparator.comparingDouble(
-                                                                    ScoredResult::finalScore)
-                                                            .reversed())
-                                            .toList();
-
-                            var directItems = mergedItems;
-                            return applyMemoryThreadAssist(
-                                            context, config, simpleConfig, directItems)
+                                            simpleConfig)
                                     .flatMap(
-                                            candidatePool ->
-                                                    applyGraphPhase(
-                                                                    context,
-                                                                    config,
-                                                                    simpleConfig,
-                                                                    candidatePool)
-                                                            .map(
-                                                                    items ->
-                                                                            new PipelineInputs(
-                                                                                    insightResult,
-                                                                                    items)));
+                                            mergedItems -> {
+                                                // BM25-only results backfill occurredAt
+                                                mergedItems =
+                                                        RawDataAggregator.backfillOccurredAt(
+                                                                mergedItems,
+                                                                context.memoryId(),
+                                                                memoryStore);
+
+                                                // BM25-only results apply time decay
+                                                mergedItems =
+                                                        TimeDecay.applyToBm25Only(
+                                                                mergedItems,
+                                                                context,
+                                                                config.scoring());
+                                                mergedItems =
+                                                        mergedItems.stream()
+                                                                .sorted(
+                                                                        Comparator.comparingDouble(
+                                                                                        ScoredResult
+                                                                                                ::finalScore)
+                                                                                .reversed())
+                                                                .toList();
+
+                                                return applyMemoryThreadAssist(
+                                                                context,
+                                                                config,
+                                                                simpleConfig,
+                                                                mergedItems)
+                                                        .flatMap(
+                                                                candidatePool ->
+                                                                        applyGraphPhase(
+                                                                                        context,
+                                                                                        config,
+                                                                                        simpleConfig,
+                                                                                        candidatePool)
+                                                                                .map(
+                                                                                        items ->
+                                                                                                new PipelineInputs(
+                                                                                                        insightResult,
+                                                                                                        items)));
+                                            });
                         })
                 .map(inputs -> finalizeResult(context, config, inputs));
     }
@@ -332,21 +347,21 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
                             log.warn("Simple: Graph item channel failed", error);
                             return Mono.just(GraphExpansionResult.degraded(true, false));
                         })
-                .map(
+                .flatMap(
                         result ->
                                 mergeGraphChannelResults(
                                         candidatePool, result.graphItems(), config, simpleConfig));
     }
 
-    private List<ScoredResult> mergeGraphChannelResults(
+    private Mono<List<ScoredResult>> mergeGraphChannelResults(
             List<ScoredResult> directItems,
             List<ScoredResult> graphItems,
             RetrievalConfig config,
             SimpleStrategyConfig simpleConfig) {
         if (graphItems == null || graphItems.isEmpty()) {
-            return directItems;
+            return Mono.just(directItems);
         }
-        return ResultMerger.merge(
+        return resultMerger.merge(
                 config.scoring(),
                 List.of(directItems, graphItems),
                 1.0d,
@@ -473,7 +488,7 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
     private record PipelineInputs(TierResult insightResult, List<ScoredResult> items) {}
 
     /** Merge Item vector results with BM25 results */
-    private List<ScoredResult> mergeItemResults(
+    private Mono<List<ScoredResult>> mergeItemResults(
             List<ScoredResult> vectorResults,
             List<TextSearchResult> bm25Results,
             List<ScoredResult> temporalResults,
@@ -508,13 +523,13 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
             weights.add(simpleConfig.temporalRetrieval().channelWeight());
         }
         if (rankedLists.isEmpty()) {
-            return List.of();
+            return Mono.just(List.of());
         }
         if (rankedLists.size() == 1) {
-            return rankedLists.getFirst();
+            return Mono.just(rankedLists.getFirst());
         }
 
-        return ResultMerger.merge(
+        return resultMerger.merge(
                 config.scoring(),
                 rankedLists,
                 weights.stream().mapToDouble(Double::doubleValue).toArray());

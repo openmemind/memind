@@ -54,7 +54,7 @@ import reactor.core.publisher.Mono;
  * </ul>
  *
  */
-public class InsightTierRetriever {
+public class InsightTierRetriever implements InsightTierSearch {
 
     private static final Logger log = LoggerFactory.getLogger(InsightTierRetriever.class);
 
