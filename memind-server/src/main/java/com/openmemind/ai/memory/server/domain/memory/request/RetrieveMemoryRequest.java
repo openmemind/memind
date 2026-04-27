@@ -21,4 +21,11 @@ public record RetrieveMemoryRequest(
         @NotBlank String userId,
         @NotBlank String agentId,
         @NotBlank String query,
-        @NotNull RetrievalConfig.Strategy strategy) {}
+        @NotNull RetrievalConfig.Strategy strategy,
+        Boolean trace) {
+
+    public RetrieveMemoryRequest(
+            String userId, String agentId, String query, RetrievalConfig.Strategy strategy) {
+        this(userId, agentId, query, strategy, null);
+    }
+}

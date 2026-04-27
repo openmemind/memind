@@ -13,12 +13,19 @@
  */
 package com.openmemind.ai.memory.core.tracing.decorator;
 
+import com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder;
+import com.openmemind.ai.memory.core.metrics.NoopMemoryMetricsRecorder;
+import com.openmemind.ai.memory.core.metrics.RetrievalMetricsSupport;
+import com.openmemind.ai.memory.core.metrics.RetrievalStageMetrics;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.graph.GraphExpansionResult;
 import com.openmemind.ai.memory.core.retrieval.graph.GraphItemChannel;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphSettings;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalStageTrace;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceOptions;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceSupport;
 import com.openmemind.ai.memory.core.tracing.MemoryAttributes;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.tracing.MemorySpanNames;
@@ -32,10 +39,20 @@ import reactor.core.publisher.Mono;
 public final class TracingGraphItemChannel extends TracingSupport implements GraphItemChannel {
 
     private final GraphItemChannel delegate;
+    private final MemoryMetricsRecorder metricsRecorder;
 
     public TracingGraphItemChannel(GraphItemChannel delegate, MemoryObserver observer) {
+        this(delegate, observer, NoopMemoryMetricsRecorder.INSTANCE);
+    }
+
+    public TracingGraphItemChannel(
+            GraphItemChannel delegate,
+            MemoryObserver observer,
+            MemoryMetricsRecorder metricsRecorder) {
         super(Objects.requireNonNull(observer, "observer"));
         this.delegate = Objects.requireNonNull(delegate, "delegate");
+        this.metricsRecorder =
+                metricsRecorder == null ? NoopMemoryMetricsRecorder.INSTANCE : metricsRecorder;
     }
 
     @Override
@@ -73,6 +90,94 @@ public final class TracingGraphItemChannel extends TracingSupport implements Gra
                                 result.timedOut(),
                                 MemoryAttributes.RETRIEVAL_GRAPH_DEGRADED,
                                 result.degraded()),
-                () -> delegate.retrieve(context, config, settings, seeds));
+                () ->
+                        RetrievalTraceSupport.traceStage(
+                                        delegate.retrieve(context, config, settings, seeds),
+                                        "channel",
+                                        "item",
+                                        "graph",
+                                        seeds == null ? 0 : seeds.size(),
+                                        this::graphStageTrace)
+                                .doOnNext(
+                                        result ->
+                                                recordStage(
+                                                        seeds,
+                                                        result == null
+                                                                ? 0
+                                                                : result.dedupedCandidateCount(),
+                                                        result == null
+                                                                        || result.graphItems()
+                                                                                == null
+                                                                ? 0
+                                                                : result.graphItems().size(),
+                                                        result != null && result.degraded(),
+                                                        result == null || !result.enabled(),
+                                                        result != null && result.degraded()
+                                                                ? "degraded"
+                                                                : "success"))
+                                .doOnError(
+                                        ignored ->
+                                                recordStage(seeds, 0, 0, false, false, "error")));
+    }
+
+    private void recordStage(
+            List<ScoredResult> seeds,
+            int candidateCount,
+            int resultCount,
+            boolean degraded,
+            boolean skipped,
+            String status) {
+        RetrievalMetricsSupport.safeRecord(
+                () ->
+                        metricsRecorder.recordRetrievalStage(
+                                new RetrievalStageMetrics(
+                                        null,
+                                        "channel",
+                                        "item",
+                                        "graph",
+                                        status,
+                                        seeds == null ? 0 : seeds.size(),
+                                        candidateCount,
+                                        resultCount,
+                                        degraded,
+                                        skipped,
+                                        "core")));
+    }
+
+    private RetrievalStageTrace graphStageTrace(
+            GraphExpansionResult result,
+            String stage,
+            String tier,
+            String method,
+            Integer inputCount,
+            java.time.Instant startedAt,
+            long durationMillis,
+            RetrievalTraceOptions options) {
+        List<ScoredResult> results = result == null ? List.of() : result.graphItems();
+        return new RetrievalStageTrace(
+                stage,
+                tier,
+                method,
+                result != null && result.degraded() ? "degraded" : "success",
+                inputCount,
+                result == null ? 0 : result.dedupedCandidateCount(),
+                results == null ? 0 : results.size(),
+                result != null && result.degraded(),
+                result == null || !result.enabled(),
+                startedAt,
+                durationMillis,
+                result == null
+                        ? Map.of()
+                        : Map.of(
+                                "linkExpansionCount",
+                                result.linkExpansionCount(),
+                                "entityExpansionCount",
+                                result.entityExpansionCount(),
+                                "overlapCount",
+                                result.overlapCount(),
+                                "timedOut",
+                                result.timedOut()),
+                RetrievalTraceSupport.candidates(
+                        results, options.maxCandidatesPerStage(), options.maxTextLength()));
     }
 }

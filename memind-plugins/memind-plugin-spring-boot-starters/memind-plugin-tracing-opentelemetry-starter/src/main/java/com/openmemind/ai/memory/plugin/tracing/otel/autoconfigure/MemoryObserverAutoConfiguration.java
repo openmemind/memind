@@ -13,7 +13,9 @@
  */
 package com.openmemind.ai.memory.plugin.tracing.otel.autoconfigure;
 
+import com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
+import com.openmemind.ai.memory.plugin.tracing.otel.OpenTelemetryMemoryMetricsRecorder;
 import com.openmemind.ai.memory.plugin.tracing.otel.OpenTelemetryMemoryObserver;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.api.trace.Tracer;
@@ -40,8 +42,15 @@ public class MemoryObserverAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(MemoryMetricsRecorder.class)
+    public MemoryMetricsRecorder openTelemetryMemoryMetricsRecorder(Meter meter) {
+        return new OpenTelemetryMemoryMetricsRecorder(meter);
+    }
+
+    @Bean
     public static TracingBeanPostProcessor tracingBeanPostProcessor(
-            ObjectProvider<MemoryObserver> observerProvider) {
-        return new TracingBeanPostProcessor(observerProvider);
+            ObjectProvider<MemoryObserver> observerProvider,
+            ObjectProvider<MemoryMetricsRecorder> metricsRecorderProvider) {
+        return new TracingBeanPostProcessor(observerProvider, metricsRecorderProvider);
     }
 }

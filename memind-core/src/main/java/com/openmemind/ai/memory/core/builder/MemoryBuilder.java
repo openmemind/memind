@@ -19,6 +19,7 @@ import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
+import com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
@@ -60,6 +61,10 @@ public interface MemoryBuilder {
     MemoryBuilder options(MemoryBuildOptions options);
 
     default MemoryBuilder memoryObserver(MemoryObserver observer) {
+        return this;
+    }
+
+    default MemoryBuilder memoryMetricsRecorder(MemoryMetricsRecorder recorder) {
         return this;
     }
 

@@ -17,10 +17,17 @@ import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.MEMORY_ID;
 import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.RETRIEVAL_RESULT_COUNT;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder;
+import com.openmemind.ai.memory.core.metrics.NoopMemoryMetricsRecorder;
+import com.openmemind.ai.memory.core.metrics.RetrievalMetricsSupport;
+import com.openmemind.ai.memory.core.metrics.RetrievalSummaryMetrics;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategy;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalFinalTrace;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceCollector;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceContext;
 import com.openmemind.ai.memory.core.tracing.MemoryAttributes;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.tracing.MemorySpanNames;
@@ -37,10 +44,20 @@ import reactor.core.publisher.Mono;
 public class TracingRetrievalStrategy extends TracingSupport implements RetrievalStrategy {
 
     private final RetrievalStrategy delegate;
+    private final MemoryMetricsRecorder metricsRecorder;
 
     public TracingRetrievalStrategy(RetrievalStrategy delegate, MemoryObserver observer) {
+        this(delegate, observer, NoopMemoryMetricsRecorder.INSTANCE);
+    }
+
+    public TracingRetrievalStrategy(
+            RetrievalStrategy delegate,
+            MemoryObserver observer,
+            MemoryMetricsRecorder metricsRecorder) {
         super(observer);
         this.delegate = delegate;
+        this.metricsRecorder =
+                metricsRecorder == null ? NoopMemoryMetricsRecorder.INSTANCE : metricsRecorder;
     }
 
     @Override
@@ -58,11 +75,45 @@ public class TracingRetrievalStrategy extends TracingSupport implements Retrieva
                         MemoryAttributes.RETRIEVAL_STRATEGY,
                         delegate.name()),
                 r -> Map.of(RETRIEVAL_RESULT_COUNT, r.items().size()),
-                () -> delegate.retrieve(context, config));
+                () ->
+                        Mono.deferContextual(
+                                reactorContext -> {
+                                    RetrievalTraceCollector collector =
+                                            RetrievalTraceContext.collector(reactorContext);
+                                    return delegate.retrieve(context, config)
+                                            .doOnNext(result -> recordSummary(collector, result))
+                                            .doOnError(ignored -> recordSummaryError(collector));
+                                }));
     }
 
     @Override
     public void onDataChanged(MemoryId memoryId) {
         delegate.onDataChanged(memoryId);
+    }
+
+    private void recordSummary(RetrievalTraceCollector collector, RetrievalResult result) {
+        RetrievalSummaryMetrics metrics =
+                RetrievalMetricsSupport.summary(delegate.name(), result, "core");
+        RetrievalMetricsSupport.safeRecord(() -> metricsRecorder.recordRetrievalSummary(metrics));
+        RetrievalMetricsSupport.safeRecord(
+                () ->
+                        collector.finalResults(
+                                new RetrievalFinalTrace(
+                                        metrics.strategy(),
+                                        metrics.status(),
+                                        metrics.itemCount(),
+                                        metrics.insightCount(),
+                                        metrics.rawDataCount(),
+                                        metrics.evidenceCount())));
+    }
+
+    private void recordSummaryError(RetrievalTraceCollector collector) {
+        RetrievalSummaryMetrics metrics =
+                new RetrievalSummaryMetrics(delegate.name(), "error", 0, 0, 0, 0, "core");
+        RetrievalMetricsSupport.safeRecord(() -> metricsRecorder.recordRetrievalSummary(metrics));
+        RetrievalMetricsSupport.safeRecord(
+                () ->
+                        collector.finalResults(
+                                new RetrievalFinalTrace(metrics.strategy(), "error", 0, 0, 0, 0)));
     }
 }

@@ -18,12 +18,19 @@ import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.RETRIEVAL_R
 import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.RETRIEVAL_TIER_NAME;
 import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.RETRIEVAL_TOP_K;
 
+import com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder;
+import com.openmemind.ai.memory.core.metrics.NoopMemoryMetricsRecorder;
+import com.openmemind.ai.memory.core.metrics.RetrievalMetricsSupport;
+import com.openmemind.ai.memory.core.metrics.RetrievalStageMetrics;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoringConfig;
 import com.openmemind.ai.memory.core.retrieval.tier.ItemTierSearch;
 import com.openmemind.ai.memory.core.retrieval.tier.TierResult;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalStageTrace;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceOptions;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceSupport;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.tracing.MemorySpanNames;
@@ -36,10 +43,20 @@ import reactor.core.publisher.Mono;
 public class TracingItemTierRetriever extends TracingSupport implements ItemTierSearch {
 
     private final ItemTierSearch delegate;
+    private final MemoryMetricsRecorder metricsRecorder;
 
     public TracingItemTierRetriever(ItemTierSearch delegate, MemoryObserver observer) {
+        this(delegate, observer, NoopMemoryMetricsRecorder.INSTANCE);
+    }
+
+    public TracingItemTierRetriever(
+            ItemTierSearch delegate,
+            MemoryObserver observer,
+            MemoryMetricsRecorder metricsRecorder) {
         super(observer);
         this.delegate = delegate;
+        this.metricsRecorder =
+                metricsRecorder == null ? NoopMemoryMetricsRecorder.INSTANCE : metricsRecorder;
     }
 
     @Override
@@ -54,7 +71,29 @@ public class TracingItemTierRetriever extends TracingSupport implements ItemTier
                         RETRIEVAL_TOP_K,
                         config.tier2().topK()),
                 result -> Map.of(RETRIEVAL_RESULT_COUNT, result.results().size()),
-                () -> delegate.searchByVector(context, config));
+                () ->
+                        RetrievalTraceSupport.traceStage(
+                                        delegate.searchByVector(context, config),
+                                        "tier",
+                                        "item",
+                                        "vector",
+                                        null,
+                                        this::tierStageTrace)
+                                .doOnNext(
+                                        result ->
+                                                recordStage(
+                                                        "tier",
+                                                        "vector",
+                                                        null,
+                                                        result.results().size(),
+                                                        false,
+                                                        false,
+                                                        "success"))
+                                .doOnError(
+                                        ignored ->
+                                                recordStage(
+                                                        "tier", "vector", null, 0, false, false,
+                                                        "error")));
     }
 
     @Override
@@ -75,7 +114,11 @@ public class TracingItemTierRetriever extends TracingSupport implements ItemTier
                         RETRIEVAL_TOP_K,
                         tier.topK()),
                 result -> Map.of(RETRIEVAL_RESULT_COUNT, result.size()),
-                () -> delegate.searchByVector(context, tier, scoring));
+                () ->
+                        recordListStage(
+                                delegate.searchByVector(context, tier, scoring),
+                                context,
+                                "vector"));
     }
 
     @Override
@@ -91,7 +134,11 @@ public class TracingItemTierRetriever extends TracingSupport implements ItemTier
                         RETRIEVAL_TOP_K,
                         tier.topK()),
                 result -> Map.of(RETRIEVAL_RESULT_COUNT, result.size()),
-                () -> delegate.searchByKeyword(context, tier, scoring));
+                () ->
+                        recordListStage(
+                                delegate.searchByKeyword(context, tier, scoring),
+                                context,
+                                "keyword"));
     }
 
     @Override
@@ -107,6 +154,103 @@ public class TracingItemTierRetriever extends TracingSupport implements ItemTier
                         RETRIEVAL_TOP_K,
                         tier.topK()),
                 result -> Map.of(RETRIEVAL_RESULT_COUNT, result.size()),
-                () -> delegate.searchHybrid(context, tier, scoring));
+                () ->
+                        recordListStage(
+                                delegate.searchHybrid(context, tier, scoring), context, "hybrid"));
+    }
+
+    private Mono<List<ScoredResult>> recordListStage(
+            Mono<List<ScoredResult>> operation, QueryContext context, String method) {
+        return RetrievalTraceSupport.traceStage(
+                        operation, "tier", "item", method, null, this::listStageTrace)
+                .doOnNext(
+                        result ->
+                                recordStage(
+                                        "tier",
+                                        method,
+                                        null,
+                                        result == null ? 0 : result.size(),
+                                        false,
+                                        false,
+                                        "success"))
+                .doOnError(ignored -> recordStage("tier", method, null, 0, false, false, "error"));
+    }
+
+    private void recordStage(
+            String stage,
+            String method,
+            Integer candidateCount,
+            Integer resultCount,
+            boolean degraded,
+            boolean skipped,
+            String status) {
+        RetrievalMetricsSupport.safeRecord(
+                () ->
+                        metricsRecorder.recordRetrievalStage(
+                                new RetrievalStageMetrics(
+                                        null,
+                                        stage,
+                                        "item",
+                                        method,
+                                        status,
+                                        null,
+                                        candidateCount,
+                                        resultCount,
+                                        degraded,
+                                        skipped,
+                                        "core")));
+    }
+
+    private RetrievalStageTrace tierStageTrace(
+            TierResult result,
+            String stage,
+            String tier,
+            String method,
+            Integer inputCount,
+            java.time.Instant startedAt,
+            long durationMillis,
+            RetrievalTraceOptions options) {
+        List<ScoredResult> results = result == null ? List.of() : result.results();
+        return new RetrievalStageTrace(
+                stage,
+                tier,
+                method,
+                "success",
+                inputCount,
+                null,
+                results == null ? 0 : results.size(),
+                false,
+                false,
+                startedAt,
+                durationMillis,
+                Map.of(),
+                RetrievalTraceSupport.candidates(
+                        results, options.maxCandidatesPerStage(), options.maxTextLength()));
+    }
+
+    private RetrievalStageTrace listStageTrace(
+            List<ScoredResult> result,
+            String stage,
+            String tier,
+            String method,
+            Integer inputCount,
+            java.time.Instant startedAt,
+            long durationMillis,
+            RetrievalTraceOptions options) {
+        return new RetrievalStageTrace(
+                stage,
+                tier,
+                method,
+                "success",
+                inputCount,
+                null,
+                result == null ? 0 : result.size(),
+                false,
+                false,
+                startedAt,
+                durationMillis,
+                Map.of(),
+                RetrievalTraceSupport.candidates(
+                        result, options.maxCandidatesPerStage(), options.maxTextLength()));
     }
 }

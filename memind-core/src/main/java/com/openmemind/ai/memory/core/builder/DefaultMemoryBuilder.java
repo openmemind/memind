@@ -23,6 +23,8 @@ import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
+import com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder;
+import com.openmemind.ai.memory.core.metrics.NoopMemoryMetricsRecorder;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
@@ -63,6 +65,7 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     private final List<RawDataPlugin> rawDataPlugins = new ArrayList<>();
     private MemoryBuildOptions options = MemoryBuildOptions.defaults();
     private MemoryObserver memoryObserver = new NoopMemoryObserver();
+    private MemoryMetricsRecorder memoryMetricsRecorder = NoopMemoryMetricsRecorder.INSTANCE;
     private boolean externallyManaged;
 
     @Override
@@ -158,6 +161,12 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
     }
 
     @Override
+    public MemoryBuilder memoryMetricsRecorder(MemoryMetricsRecorder recorder) {
+        this.memoryMetricsRecorder = Objects.requireNonNull(recorder, "recorder");
+        return this;
+    }
+
+    @Override
     public MemoryBuilder externallyManaged(boolean externallyManaged) {
         this.externallyManaged = externallyManaged;
         return this;
@@ -186,14 +195,20 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
                         List.copyOf(rawDataPlugins),
                         bubbleTrackerStore,
                         memoryObserver,
+                        memoryMetricsRecorder,
                         sanitization.memoryThreadForcedDisableReason());
         MemoryExtractionAssembly extractionAssembly =
                 new MemoryExtractionAssembler().assemble(context);
         MemoryExtractor pipeline =
-                tracingExtractor(extractionAssembly.pipeline(), context.memoryObserver());
+                tracingExtractor(
+                        extractionAssembly.pipeline(),
+                        context.memoryObserver(),
+                        context.memoryMetricsRecorder());
         MemoryRetriever memoryRetriever =
                 tracingRetriever(
-                        new MemoryRetrievalAssembler().assemble(context), context.memoryObserver());
+                        new MemoryRetrievalAssembler().assemble(context),
+                        context.memoryObserver(),
+                        context.memoryMetricsRecorder());
         AutoCloseable lifecycle =
                 externallyManaged
                         ? lifecycle(extractionAssembly.lifecycle())
@@ -216,18 +231,25 @@ public final class DefaultMemoryBuilder implements MemoryBuilder {
                 extractionAssembly.memoryThreadLayer());
     }
 
-    private MemoryExtractor tracingExtractor(MemoryExtractor extractor, MemoryObserver observer) {
-        if (observer instanceof NoopMemoryObserver || extractor instanceof TracingMemoryExtractor) {
+    private MemoryExtractor tracingExtractor(
+            MemoryExtractor extractor, MemoryObserver observer, MemoryMetricsRecorder recorder) {
+        if (!hasObservability(observer, recorder) || extractor instanceof TracingMemoryExtractor) {
             return extractor;
         }
-        return new TracingMemoryExtractor(extractor, observer);
+        return new TracingMemoryExtractor(extractor, observer, recorder);
     }
 
-    private MemoryRetriever tracingRetriever(MemoryRetriever retriever, MemoryObserver observer) {
-        if (observer instanceof NoopMemoryObserver || retriever instanceof TracingMemoryRetriever) {
+    private MemoryRetriever tracingRetriever(
+            MemoryRetriever retriever, MemoryObserver observer, MemoryMetricsRecorder recorder) {
+        if (!hasObservability(observer, recorder) || retriever instanceof TracingMemoryRetriever) {
             return retriever;
         }
         return new TracingMemoryRetriever(retriever, observer);
+    }
+
+    private boolean hasObservability(MemoryObserver observer, MemoryMetricsRecorder recorder) {
+        return !(observer instanceof NoopMemoryObserver)
+                || !(recorder instanceof NoopMemoryMetricsRecorder);
     }
 
     MemoryBuildOptions buildOptions() {

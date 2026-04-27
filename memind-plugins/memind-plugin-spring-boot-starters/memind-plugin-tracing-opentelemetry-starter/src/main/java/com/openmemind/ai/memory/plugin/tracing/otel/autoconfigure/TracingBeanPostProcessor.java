@@ -22,6 +22,8 @@ import com.openmemind.ai.memory.core.extraction.step.InsightExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
+import com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder;
+import com.openmemind.ai.memory.core.metrics.NoopMemoryMetricsRecorder;
 import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.deep.TypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistant;
@@ -61,9 +63,17 @@ import org.springframework.core.Ordered;
 public class TracingBeanPostProcessor implements BeanPostProcessor, Ordered {
 
     private final ObjectProvider<MemoryObserver> observerProvider;
+    private final ObjectProvider<MemoryMetricsRecorder> metricsRecorderProvider;
 
     public TracingBeanPostProcessor(ObjectProvider<MemoryObserver> observerProvider) {
+        this(observerProvider, null);
+    }
+
+    public TracingBeanPostProcessor(
+            ObjectProvider<MemoryObserver> observerProvider,
+            ObjectProvider<MemoryMetricsRecorder> metricsRecorderProvider) {
         this.observerProvider = observerProvider;
+        this.metricsRecorderProvider = metricsRecorderProvider;
     }
 
     @Override
@@ -78,12 +88,21 @@ public class TracingBeanPostProcessor implements BeanPostProcessor, Ordered {
         }
 
         MemoryObserver observer = observerProvider.getIfAvailable();
-        if (observer == null || observer instanceof NoopMemoryObserver) {
+        if (observer == null) {
+            observer = new NoopMemoryObserver();
+        }
+        MemoryMetricsRecorder metricsRecorder =
+                metricsRecorderProvider == null
+                        ? NoopMemoryMetricsRecorder.INSTANCE
+                        : metricsRecorderProvider.getIfAvailable(
+                                () -> NoopMemoryMetricsRecorder.INSTANCE);
+        if ((observer == null || observer instanceof NoopMemoryObserver)
+                && metricsRecorder instanceof NoopMemoryMetricsRecorder) {
             return bean;
         }
 
         if (bean instanceof MemoryExtractor d && !(bean instanceof TracingMemoryExtractor)) {
-            return new TracingMemoryExtractor(d, observer);
+            return new TracingMemoryExtractor(d, observer, metricsRecorder);
         }
         if (bean instanceof RawDataExtractStep d && !(bean instanceof TracingRawDataExtractStep)) {
             return new TracingRawDataExtractStep(d, observer);
@@ -123,7 +142,7 @@ public class TracingBeanPostProcessor implements BeanPostProcessor, Ordered {
             return new TracingMemoryThreadAssistant(d, observer);
         }
         if (bean instanceof RetrievalStrategy d && !(bean instanceof TracingRetrievalStrategy)) {
-            return new TracingRetrievalStrategy(d, observer);
+            return new TracingRetrievalStrategy(d, observer, metricsRecorder);
         }
         if (bean instanceof Reranker d && !(bean instanceof TracingReranker)) {
             return new TracingReranker(d, observer);
