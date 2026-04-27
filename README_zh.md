@@ -150,7 +150,7 @@ mvn -pl memind-examples/memind-example-java -am -DskipTests exec:java \
 
 ### 将 Memind 接入你的应用
 
-先导入 memind BOM，再引入 core runtime、Spring AI 插件、JDBC 插件，以及数据库对应的 JDBC Driver。默认的 SQLite 配置如下：
+先导入 memind BOM，再引入 core runtime、Spring AI 插件以及一个 JDBC 方言插件。默认的 SQLite 配置如下：
 
 ```xml
 <dependencyManagement>
@@ -176,16 +176,12 @@ mvn -pl memind-examples/memind-example-java -am -DskipTests exec:java \
   </dependency>
   <dependency>
     <groupId>com.openmemind.ai</groupId>
-    <artifactId>memind-plugin-jdbc</artifactId>
-  </dependency>
-  <dependency>
-    <groupId>org.xerial</groupId>
-    <artifactId>sqlite-jdbc</artifactId>
+    <artifactId>memind-plugin-jdbc-sqlite</artifactId>
   </dependency>
 </dependencies>
 ```
 
-如果你使用 MySQL 或 PostgreSQL，只需把 `sqlite-jdbc` 替换为对应驱动，并将 `JdbcStore.sqlite(...)` 改成 `JdbcStore.mysql(...)` 或 `JdbcStore.postgresql(...)`。
+如果你使用 MySQL 或 PostgreSQL，把 SQLite 模块替换为 `memind-plugin-jdbc-mysql` 或 `memind-plugin-jdbc-postgresql`，然后使用对应工厂。纯 Java 场景下方言工厂会直接创建 `HikariDataSource`；Spring Boot 场景下使用 `memind-plugin-jdbc-starter`，配置 `spring.datasource.*` 以及可选的 `spring.datasource.hikari.*`，由 Boot 创建 `HikariDataSource`，starter 只消费这个连接池。
 
 在非 Spring Boot 场景下，可以直接组装运行时对象，然后交给 `Memory.builder()`：
 
@@ -206,7 +202,7 @@ EmbeddingModel embeddingModel = new OpenAiEmbeddingModel(
         MetadataMode.NONE,
         OpenAiEmbeddingOptions.builder().model("text-embedding-3-small").build());
 
-JdbcMemoryAccess jdbc = JdbcStore.sqlite("./data/memind.db");
+JdbcMemoryAccess jdbc = SqliteJdbcPlugin.create("./data/memind.db");
 
 Memory memory = Memory.builder()
         .chatClient(new SpringAiStructuredChatClient(ChatClient.builder(chatModel).build()))

@@ -24,30 +24,14 @@ import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentInputStore;
 import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
-import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlBubbleTrackerStore;
-import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBuffer;
-import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlConversationBufferAccessor;
-import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlInsightBuffer;
-import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlMemoryStore;
-import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlMemoryTextSearch;
-import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlRecentConversationBuffer;
-import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlBubbleTrackerStore;
-import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlConversationBuffer;
-import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlConversationBufferAccessor;
-import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlInsightBuffer;
-import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlMemoryStore;
-import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlMemoryTextSearch;
-import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlRecentConversationBuffer;
-import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteBubbleTrackerStore;
-import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteConversationBuffer;
-import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteConversationBufferAccessor;
-import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteInsightBuffer;
-import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryStore;
-import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryTextSearch;
-import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteRecentConversationBuffer;
+import com.openmemind.ai.memory.plugin.jdbc.JdbcMemoryAccess;
+import com.openmemind.ai.memory.plugin.jdbc.JdbcPluginOptions;
+import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlJdbcPlugin;
+import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlJdbcPlugin;
+import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteJdbcPlugin;
+import com.zaxxer.hikari.HikariDataSource;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
-import javax.sql.DataSource;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -62,34 +46,42 @@ import tools.jackson.databind.ObjectMapper;
             "org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration",
             "com.openmemind.ai.memory.plugin.store.mybatis.MemoryMybatisPlusAutoConfiguration"
         })
-@ConditionalOnBean(DataSource.class)
+@ConditionalOnBean(HikariDataSource.class)
 public class JdbcPluginAutoConfiguration {
 
     @Bean
-    @ConditionalOnMissingBean(MemoryStore.class)
-    public MemoryStore memoryStore(
-            DataSource dataSource,
+    @ConditionalOnMissingBean(
+            value = {
+                JdbcMemoryAccess.class,
+                MemoryStore.class,
+                MemoryBuffer.class,
+                MemoryTextSearch.class,
+                BubbleTrackerStore.class
+            })
+    public JdbcMemoryAccess jdbcMemoryAccess(
+            HikariDataSource dataSource,
             Environment environment,
             ObjectProvider<ResourceStore> resourceStoreProvider,
             ObjectProvider<ObjectMapper> objectMapperProvider) {
-        boolean createIfNotExist =
-                environment.getProperty("memind.store.init-schema", Boolean.class, true);
-        ResourceStore resourceStore = resourceStoreProvider.getIfAvailable();
-        ObjectMapper objectMapper = resolveObjectMapper(objectMapperProvider);
+        JdbcPluginOptions options =
+                JdbcPluginOptions.externalDataSource()
+                        .withCreateIfNotExist(
+                                environment.getProperty(
+                                        "memind.store.init-schema", Boolean.class, true))
+                        .withResourceStore(resourceStoreProvider.getIfAvailable())
+                        .withObjectMapper(resolveObjectMapper(objectMapperProvider));
         return switch (detectDialect(dataSource)) {
-            case SQLITE -> {
-                yield new SqliteMemoryStore(
-                        dataSource, resourceStore, objectMapper, createIfNotExist);
-            }
-            case MYSQL -> {
-                yield new MysqlMemoryStore(
-                        dataSource, resourceStore, objectMapper, createIfNotExist);
-            }
-            case POSTGRESQL -> {
-                yield new PostgresqlMemoryStore(
-                        dataSource, resourceStore, objectMapper, createIfNotExist);
-            }
+            case SQLITE -> SqliteJdbcPlugin.create(dataSource, options);
+            case MYSQL -> MysqlJdbcPlugin.create(dataSource, options);
+            case POSTGRESQL -> PostgresqlJdbcPlugin.create(dataSource, options);
         };
+    }
+
+    @Bean
+    @ConditionalOnBean(JdbcMemoryAccess.class)
+    @ConditionalOnMissingBean(MemoryStore.class)
+    public MemoryStore memoryStore(JdbcMemoryAccess jdbcMemoryAccess) {
+        return jdbcMemoryAccess.store();
     }
 
     @Bean
@@ -124,60 +116,24 @@ public class JdbcPluginAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(JdbcMemoryAccess.class)
     @ConditionalOnMissingBean(MemoryBuffer.class)
-    public MemoryBuffer memoryBuffer(DataSource dataSource, Environment environment) {
-        boolean createIfNotExist =
-                environment.getProperty("memind.store.init-schema", Boolean.class, true);
-        return switch (detectDialect(dataSource)) {
-            case SQLITE -> {
-                var conversationBufferAccessor =
-                        new SqliteConversationBufferAccessor(dataSource, createIfNotExist);
-                yield MemoryBuffer.of(
-                        new SqliteInsightBuffer(dataSource, createIfNotExist),
-                        new SqliteConversationBuffer(conversationBufferAccessor),
-                        new SqliteRecentConversationBuffer(conversationBufferAccessor));
-            }
-            case MYSQL -> {
-                var conversationBufferAccessor =
-                        new MysqlConversationBufferAccessor(dataSource, createIfNotExist);
-                yield MemoryBuffer.of(
-                        new MysqlInsightBuffer(dataSource, createIfNotExist),
-                        new MysqlConversationBuffer(conversationBufferAccessor),
-                        new MysqlRecentConversationBuffer(conversationBufferAccessor));
-            }
-            case POSTGRESQL -> {
-                var conversationBufferAccessor =
-                        new PostgresqlConversationBufferAccessor(dataSource, createIfNotExist);
-                yield MemoryBuffer.of(
-                        new PostgresqlInsightBuffer(dataSource, createIfNotExist),
-                        new PostgresqlConversationBuffer(conversationBufferAccessor),
-                        new PostgresqlRecentConversationBuffer(conversationBufferAccessor));
-            }
-        };
+    public MemoryBuffer memoryBuffer(JdbcMemoryAccess jdbcMemoryAccess) {
+        return jdbcMemoryAccess.buffer();
     }
 
     @Bean
+    @ConditionalOnBean(JdbcMemoryAccess.class)
     @ConditionalOnMissingBean(MemoryTextSearch.class)
-    public MemoryTextSearch memoryTextSearch(DataSource dataSource, Environment environment) {
-        boolean createIfNotExist =
-                environment.getProperty("memind.store.init-schema", Boolean.class, true);
-        return switch (detectDialect(dataSource)) {
-            case SQLITE -> new SqliteMemoryTextSearch(dataSource, createIfNotExist);
-            case MYSQL -> new MysqlMemoryTextSearch(dataSource, createIfNotExist);
-            case POSTGRESQL -> new PostgresqlMemoryTextSearch(dataSource, createIfNotExist);
-        };
+    public MemoryTextSearch memoryTextSearch(JdbcMemoryAccess jdbcMemoryAccess) {
+        return jdbcMemoryAccess.textSearch();
     }
 
     @Bean
+    @ConditionalOnBean(JdbcMemoryAccess.class)
     @ConditionalOnMissingBean(BubbleTrackerStore.class)
-    public BubbleTrackerStore bubbleTrackerStore(DataSource dataSource, Environment environment) {
-        boolean createIfNotExist =
-                environment.getProperty("memind.store.init-schema", Boolean.class, true);
-        return switch (detectDialect(dataSource)) {
-            case SQLITE -> new SqliteBubbleTrackerStore(dataSource, createIfNotExist);
-            case MYSQL -> new MysqlBubbleTrackerStore(dataSource, createIfNotExist);
-            case POSTGRESQL -> new PostgresqlBubbleTrackerStore(dataSource, createIfNotExist);
-        };
+    public BubbleTrackerStore bubbleTrackerStore(JdbcMemoryAccess jdbcMemoryAccess) {
+        return jdbcMemoryAccess.bubbleTrackerStore();
     }
 
     private <T> T narrowInterface(Class<T> interfaceType, T delegate) {
@@ -195,7 +151,7 @@ public class JdbcPluginAutoConfiguration {
         return interfaceType.cast(proxy);
     }
 
-    private JdbcDialect detectDialect(DataSource dataSource) {
+    private JdbcDialect detectDialect(HikariDataSource dataSource) {
         return new JdbcDialectDetector().detect(dataSource);
     }
 

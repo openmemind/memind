@@ -23,7 +23,9 @@ import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.plugin.ai.spring.SpringAiFileVector;
 import com.openmemind.ai.memory.plugin.ai.spring.SpringAiStructuredChatClient;
 import com.openmemind.ai.memory.plugin.jdbc.JdbcMemoryAccess;
-import com.openmemind.ai.memory.plugin.jdbc.JdbcStore;
+import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlJdbcPlugin;
+import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlJdbcPlugin;
+import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteJdbcPlugin;
 import com.openmemind.ai.memory.plugin.rawdata.document.plugin.DocumentRawDataPlugin;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.plugin.ToolCallRawDataPlugin;
 import io.micrometer.observation.ObservationRegistry;
@@ -148,11 +150,12 @@ public final class ExampleRuntimeFactory {
 
     private static JdbcMemoryAccess createJdbcAccess(ExampleSettings.StoreSettings settings) {
         return switch (detectDialect(settings.jdbcUrl())) {
-            case "sqlite" -> JdbcStore.sqlite(extractSqlitePath(settings.jdbcUrl()));
+            case "sqlite" -> SqliteJdbcPlugin.create(extractSqlitePath(settings.jdbcUrl()));
             case "mysql" ->
-                    JdbcStore.mysql(settings.jdbcUrl(), settings.username(), settings.password());
+                    MysqlJdbcPlugin.create(
+                            settings.jdbcUrl(), settings.username(), settings.password());
             case "postgresql" ->
-                    JdbcStore.postgresql(
+                    PostgresqlJdbcPlugin.create(
                             settings.jdbcUrl(), settings.username(), settings.password());
             default ->
                     throw new IllegalStateException("Unsupported JDBC URL: " + settings.jdbcUrl());
