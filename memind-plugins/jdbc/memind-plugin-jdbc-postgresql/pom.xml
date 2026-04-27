@@ -20,14 +20,14 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>com.openmemind.ai</groupId>
-        <artifactId>memind-plugin-spring-boot-starters</artifactId>
+        <artifactId>memind-plugin-jdbc-modules</artifactId>
         <version>${revision}</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>memind-plugin-jdbc-starter</artifactId>
-    <name>Memind - JDBC Plugin Starter</name>
-    <description>Spring Boot starter for JDBC-based memory store, memory buffer, and text search</description>
+    <artifactId>memind-plugin-jdbc-postgresql</artifactId>
+    <name>Memind - PostgreSQL JDBC Plugin</name>
+    <description>PostgreSQL JDBC dialect implementation for memind</description>
 
     <dependencies>
         <dependency>
@@ -36,38 +36,19 @@
             <version>${revision}</version>
         </dependency>
         <dependency>
-            <groupId>com.openmemind.ai</groupId>
-            <artifactId>memind-plugin-jdbc-sqlite</artifactId>
-            <version>${revision}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.openmemind.ai</groupId>
-            <artifactId>memind-plugin-jdbc-mysql</artifactId>
-            <version>${revision}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.openmemind.ai</groupId>
-            <artifactId>memind-plugin-jdbc-postgresql</artifactId>
-            <version>${revision}</version>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
         </dependency>
 
+        <!-- Test -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-autoconfigure</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-jdbc</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.xerial</groupId>
-            <artifactId>sqlite-jdbc</artifactId>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

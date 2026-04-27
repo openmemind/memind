@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <!--
 
     Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,25 +14,25 @@
     limitations under the License.
 
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>com.openmemind.ai</groupId>
-        <artifactId>memind</artifactId>
+        <artifactId>memind-plugins</artifactId>
         <version>${revision}</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>memind-plugins</artifactId>
+    <artifactId>memind-plugin-jdbc-modules</artifactId>
     <packaging>pom</packaging>
-    <name>Memind - Plugins</name>
+    <name>Memind - JDBC Plugins</name>
 
     <modules>
-        <module>memind-plugin-ai-spring-ai</module>
-        <module>jdbc</module>
-        <module>memind-plugin-rawdatas</module>
-        <module>memind-plugin-spring-boot-starters</module>
-        <module>memind-plugin-tracing-opentelemetry</module>
+        <module>memind-plugin-jdbc-core</module>
+        <module>memind-plugin-jdbc-sqlite</module>
+        <module>memind-plugin-jdbc-mysql</module>
+        <module>memind-plugin-jdbc-postgresql</module>
     </modules>
 </project>

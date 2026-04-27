@@ -247,11 +247,6 @@
             </dependency>
             <dependency>
                 <groupId>com.openmemind.ai</groupId>
-                <artifactId>memind-plugin-jdbc</artifactId>
-                <version>${revision}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.openmemind.ai</groupId>
                 <artifactId>memind-plugin-jdbc-core</artifactId>
                 <version>${revision}</version>
             </dependency>
