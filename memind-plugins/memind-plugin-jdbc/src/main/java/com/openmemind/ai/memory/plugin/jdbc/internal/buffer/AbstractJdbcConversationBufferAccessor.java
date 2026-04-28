@@ -54,7 +54,7 @@ public abstract class AbstractJdbcConversationBufferAccessor {
     public List<ConversationBufferRow> selectPending(String sessionId) {
         Objects.requireNonNull(sessionId, "sessionId");
         String sql =
-                "SELECT id, session_id, role, content, user_name, timestamp "
+                "SELECT id, session_id, role, content, user_name, source_client, timestamp "
                         + "FROM memory_conversation_buffer "
                         + "WHERE session_id = ? AND extracted = "
                         + falseLiteral()
@@ -70,7 +70,7 @@ public abstract class AbstractJdbcConversationBufferAccessor {
             throw new IllegalArgumentException("limit must be positive");
         }
         String sql =
-                "SELECT id, session_id, role, content, user_name, timestamp "
+                "SELECT id, session_id, role, content, user_name, source_client, timestamp "
                         + "FROM memory_conversation_buffer "
                         + "WHERE session_id = ? AND deleted = "
                         + falseLiteral()
@@ -119,13 +119,15 @@ public abstract class AbstractJdbcConversationBufferAccessor {
         statement.setString(5, message.role().name());
         statement.setString(6, message.textContent());
         statement.setString(7, message.userName());
-        bindTimestamp(statement, 8, message.timestamp());
+        statement.setString(8, message.sourceClient());
+        bindTimestamp(statement, 9, message.timestamp());
     }
 
     private ConversationBufferRow mapRecord(ResultSet resultSet) throws SQLException {
         Message.Role role = Message.Role.valueOf(resultSet.getString("role"));
         String content = resultSet.getString("content");
         String userName = resultSet.getString("user_name");
+        String sourceClient = resultSet.getString("source_client");
         Instant timestamp = readTimestamp(resultSet, "timestamp");
         Message message;
         if (role == Message.Role.USER) {
@@ -136,6 +138,7 @@ public abstract class AbstractJdbcConversationBufferAccessor {
         } else {
             message = Message.assistant(content, timestamp);
         }
+        message = message.withSourceClient(sourceClient);
         return new ConversationBufferRow(
                 resultSet.getLong("id"), resultSet.getString("session_id"), message);
     }

@@ -115,6 +115,7 @@ final class MybatisAdminRawDataQueryMapper implements AdminRawDataQueryMapper {
                 dataObject.getAgentId(),
                 dataObject.getMemoryId(),
                 dataObject.getType(),
+                dataObject.getSourceClient(),
                 dataObject.getContentId(),
                 dataObject.getSegment(),
                 dataObject.getCaption(),

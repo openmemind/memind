@@ -28,6 +28,7 @@ import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.ExtractionConfig;
+import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
 import com.openmemind.ai.memory.core.extraction.ExtractionStatus;
 import com.openmemind.ai.memory.core.extraction.context.ContextRequest;
@@ -78,10 +79,13 @@ class OpenMemoryApplicationServiceTest {
                         "u1",
                         "a1",
                         new com.openmemind.ai.memory.core.extraction.rawdata.content
-                                .ConversationContent(List.of())));
+                                .ConversationContent(List.of()),
+                        "claude-code"));
 
         assertThat(memory.extractInvoked.await(1, TimeUnit.SECONDS)).isTrue();
         assertThat(memory.lastMemoryId).isEqualTo(DefaultMemoryId.of("u1", "a1"));
+        assertThat(memory.lastExtractionRequest.metadata())
+                .containsEntry("sourceClient", "claude-code");
         assertThat(runtimeManager.currentHandle().inFlightRequests()).hasValue(1);
 
         memory.extractSink.tryEmitValue(extractionResult());
@@ -99,10 +103,12 @@ class OpenMemoryApplicationServiceTest {
         OpenMemoryApplicationService service = new OpenMemoryApplicationService(runtimeManager);
 
         service.addMessageAsync(
-                new AddMessageRequest("u1", "a1", Message.user("hello", Instant.now())));
+                new AddMessageRequest(
+                        "u1", "a1", Message.user("hello", Instant.now()), "claude-code"));
 
         assertThat(memory.addMessageInvoked.await(1, TimeUnit.SECONDS)).isTrue();
         assertThat(memory.lastMemoryId).isEqualTo(DefaultMemoryId.of("u1", "a1"));
+        assertThat(memory.lastMessage.sourceClient()).isEqualTo("claude-code");
         assertThat(runtimeManager.currentHandle().inFlightRequests()).hasValue(1);
 
         memory.addMessageSink.tryEmitEmpty();
@@ -287,6 +293,8 @@ class OpenMemoryApplicationServiceTest {
     private static final class RecordingMemory implements Memory {
 
         private MemoryId lastMemoryId;
+        private ExtractionRequest lastExtractionRequest;
+        private Message lastMessage;
         private Sinks.One<ExtractionResult> extractSink;
         private Sinks.Empty<ExtractionResult> addMessageSink;
         private Sinks.One<ExtractionResult> commitSink;
@@ -295,6 +303,14 @@ class OpenMemoryApplicationServiceTest {
         private final CountDownLatch commitInvoked = new CountDownLatch(1);
         private RetrievalResult retrieveResult;
         private boolean recordTrace;
+
+        @Override
+        public Mono<ExtractionResult> extract(ExtractionRequest request) {
+            this.lastMemoryId = request.memoryId();
+            this.lastExtractionRequest = request;
+            this.extractInvoked.countDown();
+            return extractSink.asMono();
+        }
 
         @Override
         public Mono<ExtractionResult> extract(MemoryId memoryId, RawContent content) {
@@ -323,6 +339,7 @@ class OpenMemoryApplicationServiceTest {
         @Override
         public Mono<ExtractionResult> addMessage(MemoryId memoryId, Message message) {
             this.lastMemoryId = memoryId;
+            this.lastMessage = message;
             this.addMessageInvoked.countDown();
             return addMessageSink.asMono();
         }

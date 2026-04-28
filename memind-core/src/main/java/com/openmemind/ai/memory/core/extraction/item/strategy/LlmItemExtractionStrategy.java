@@ -350,6 +350,10 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
 
         var observedAt = resolveObservedAt(segment);
         var metadata = new LinkedHashMap<String, Object>();
+        if (segment.metadata() != null) {
+            metadata.putAll(segment.metadata());
+            metadata.remove("messages");
+        }
         if (item.evidence() != null && !item.evidence().isBlank()) {
             metadata.put("evidence", item.evidence());
         }

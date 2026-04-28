@@ -385,8 +385,8 @@ public class PostgresqlMemoryStore
                                          vector_id, raw_data_id, content_hash, occurred_at,
                                          occurred_start, occurred_end, time_granularity, observed_at,
                                          temporal_start, temporal_end_or_anchor, temporal_anchor,
-                                         type, raw_data_type, metadata, created_at, updated_at, deleted)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)
+                                         type, raw_data_type, source_client, metadata, created_at, updated_at, deleted)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)
                                     """)) {
                         Instant now = Instant.now();
                         for (MemoryItem item : items) {
@@ -906,14 +906,15 @@ public class PostgresqlMemoryStore
                 connection.prepareStatement(
                         """
                         INSERT INTO memory_raw_data
-                            (biz_id, user_id, agent_id, memory_id, type, content_id, segment,
-                             caption, caption_vector_id, metadata, resource_id, mime_type,
+                            (biz_id, user_id, agent_id, memory_id, type, content_id, source_client,
+                             segment, caption, caption_vector_id, metadata, resource_id, mime_type,
                              start_time, end_time, created_at, updated_at, deleted)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)
                         ON CONFLICT (user_id, agent_id, biz_id) DO UPDATE SET
                             memory_id = EXCLUDED.memory_id,
                             type = EXCLUDED.type,
                             content_id = EXCLUDED.content_id,
+                            source_client = EXCLUDED.source_client,
                             segment = EXCLUDED.segment,
                             caption = EXCLUDED.caption,
                             caption_vector_id = EXCLUDED.caption_vector_id,
@@ -981,16 +982,17 @@ public class PostgresqlMemoryStore
                 5,
                 rawData.contentType() != null ? rawData.contentType() : ConversationContent.TYPE);
         statement.setString(6, rawData.contentId());
-        setJsonb(statement, 7, toSegmentJson(rawData.segment()));
-        statement.setString(8, rawData.caption());
-        statement.setString(9, rawData.captionVectorId());
-        setJsonb(statement, 10, jsonHelper.toJson(rawData.metadata()));
-        statement.setString(11, rawData.resourceId());
-        statement.setString(12, rawData.mimeType());
-        setTimestamp(statement, 13, rawData.startTime());
-        setTimestamp(statement, 14, rawData.endTime());
-        setTimestamp(statement, 15, rawData.createdAt() != null ? rawData.createdAt() : now);
-        setTimestamp(statement, 16, now);
+        statement.setString(7, rawData.sourceClient());
+        setJsonb(statement, 8, toSegmentJson(rawData.segment()));
+        statement.setString(9, rawData.caption());
+        statement.setString(10, rawData.captionVectorId());
+        setJsonb(statement, 11, jsonHelper.toJson(rawData.metadata()));
+        statement.setString(12, rawData.resourceId());
+        statement.setString(13, rawData.mimeType());
+        setTimestamp(statement, 14, rawData.startTime());
+        setTimestamp(statement, 15, rawData.endTime());
+        setTimestamp(statement, 16, rawData.createdAt() != null ? rawData.createdAt() : now);
+        setTimestamp(statement, 17, now);
     }
 
     private void bindResourceUpsert(
@@ -1046,9 +1048,10 @@ public class PostgresqlMemoryStore
                 19, item.type() != null ? item.type().name() : MemoryItemType.FACT.name());
         statement.setString(
                 20, item.contentType() != null ? item.contentType() : ConversationContent.TYPE);
-        setJsonb(statement, 21, jsonHelper.toJson(item.metadata()));
-        setTimestamp(statement, 22, item.createdAt() != null ? item.createdAt() : now);
-        setTimestamp(statement, 23, now);
+        statement.setString(21, item.sourceClient());
+        setJsonb(statement, 22, jsonHelper.toJson(item.metadata()));
+        setTimestamp(statement, 23, item.createdAt() != null ? item.createdAt() : now);
+        setTimestamp(statement, 24, now);
     }
 
     private void bindInsightTypeUpsert(
@@ -1102,6 +1105,7 @@ public class PostgresqlMemoryStore
                 resultSet.getString("biz_id"),
                 resultSet.getString("memory_id"),
                 parseContentType(resultSet.getString("type")),
+                resultSet.getString("source_client"),
                 resultSet.getString("content_id"),
                 fromSegmentJson(resultSet.getString("segment")),
                 resultSet.getString("caption"),
@@ -1145,6 +1149,7 @@ public class PostgresqlMemoryStore
                 parseScope(resultSet.getString("scope")),
                 parseCategory(resultSet.getString("category")),
                 parseContentType(resultSet.getString("raw_data_type")),
+                resultSet.getString("source_client"),
                 resultSet.getString("vector_id"),
                 resultSet.getString("raw_data_id"),
                 resultSet.getString("content_hash"),

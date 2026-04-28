@@ -62,6 +62,10 @@ class StoreSchemaBootstrapTest {
         StoreSchemaInitResult result = StoreSchemaBootstrap.ensureSqlite(dataSource, true);
 
         assertThat(result.createdInsightTypeTable()).isTrue();
+        assertThat(columnExists(dataSource, "memory_raw_data", "source_client")).isTrue();
+        assertThat(columnExists(dataSource, "memory_item", "source_client")).isTrue();
+        assertThat(columnExists(dataSource, "memory_conversation_buffer", "source_client"))
+                .isTrue();
     }
 
     @Test
@@ -74,6 +78,8 @@ class StoreSchemaBootstrapTest {
         assertThat(columnExists(dataSource, "memory_insight", "confidence")).isTrue();
         assertThat(columnExists(dataSource, "memory_raw_data", "resource_id")).isFalse();
         assertThat(columnExists(dataSource, "memory_raw_data", "mime_type")).isFalse();
+        assertThat(columnExists(dataSource, "memory_raw_data", "source_client")).isFalse();
+        assertThat(columnExists(dataSource, "memory_item", "source_client")).isFalse();
 
         StoreSchemaInitResult result = StoreSchemaBootstrap.ensureSqlite(dataSource, true);
 
@@ -81,6 +87,8 @@ class StoreSchemaBootstrapTest {
         assertThat(columnExists(dataSource, "memory_insight", "confidence")).isFalse();
         assertThat(columnExists(dataSource, "memory_raw_data", "resource_id")).isTrue();
         assertThat(columnExists(dataSource, "memory_raw_data", "mime_type")).isTrue();
+        assertThat(columnExists(dataSource, "memory_raw_data", "source_client")).isTrue();
+        assertThat(columnExists(dataSource, "memory_item", "source_client")).isTrue();
         assertThat(columnExists(dataSource, "memory_item", "occurred_start")).isTrue();
         assertThat(columnExists(dataSource, "memory_item", "occurred_end")).isTrue();
         assertThat(columnExists(dataSource, "memory_item", "time_granularity")).isTrue();

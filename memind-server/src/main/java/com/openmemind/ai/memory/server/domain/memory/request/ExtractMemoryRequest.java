@@ -18,4 +18,12 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 public record ExtractMemoryRequest(
-        @NotBlank String userId, @NotBlank String agentId, @NotNull RawContent rawContent) {}
+        @NotBlank String userId,
+        @NotBlank String agentId,
+        @NotNull RawContent rawContent,
+        String sourceClient) {
+
+    public ExtractMemoryRequest(String userId, String agentId, RawContent rawContent) {
+        this(userId, agentId, rawContent, null);
+    }
+}

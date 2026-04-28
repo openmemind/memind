@@ -4,6 +4,7 @@
   "userId": null,
   "agentId": "claude-code",
   "agentIdMode": "project",
+  "sourceClient": "claude-code",
   "autoRetrieve": true,
   "autoIngest": true,
   "retrieveStrategy": "SIMPLE",

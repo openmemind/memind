@@ -41,6 +41,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -126,13 +127,99 @@ class MemoryItemLayerRuntimeContextTest {
                 .isEqualTo(Instant.parse("2026-03-27T02:20:00Z"));
     }
 
+    @Test
+    void selfVerificationMissedEntriesInheritSourceClientFromSegments() {
+        MemoryItemExtractor extractor = mock(MemoryItemExtractor.class);
+        MemoryItemDeduplicator deduplicator = mock(MemoryItemDeduplicator.class);
+        MemoryStore memoryStore = mock(MemoryStore.class);
+        InsightOperations insightOperations = mock(InsightOperations.class);
+        ItemOperations itemOperations = mock(ItemOperations.class);
+        MemoryVector vector = mock(MemoryVector.class);
+        var missedEntry =
+                new ExtractedMemoryEntry(
+                        "missed source-scoped memory",
+                        1.0f,
+                        null,
+                        Instant.parse("2026-03-27T02:18:00Z"),
+                        "raw-1",
+                        null,
+                        List.of(),
+                        java.util.Map.of(),
+                        null,
+                        null);
+        var selfVerificationStep = new CapturingSelfVerificationStep(List.of(missedEntry));
+        when(memoryStore.itemOperations()).thenReturn(itemOperations);
+        when(memoryStore.insightOperations()).thenReturn(insightOperations);
+        when(insightOperations.listInsightTypes()).thenReturn(DefaultInsightTypes.all());
+        var layer =
+                new MemoryItemLayer(
+                        extractor, deduplicator, memoryStore, vector, selfVerificationStep);
+
+        var segment =
+                new ParsedSegment(
+                        "seg-1",
+                        "caption-1",
+                        0,
+                        1,
+                        "raw-1",
+                        java.util.Map.of("sourceClient", "claude-code"),
+                        null);
+        var config =
+                new ItemExtractionConfig(
+                        MemoryScope.USER,
+                        ConversationContent.TYPE,
+                        MemoryCategory.userCategories(),
+                        false,
+                        "zh-CN");
+        var initialEntry =
+                new ExtractedMemoryEntry(
+                        "initial memory",
+                        1.0f,
+                        null,
+                        Instant.parse("2026-03-27T02:18:00Z"),
+                        "raw-1",
+                        null,
+                        List.of(),
+                        java.util.Map.of(),
+                        null,
+                        null);
+        var memoryId = DefaultMemoryId.of("user1", "agent1");
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ExtractedMemoryEntry>> entriesCaptor =
+                ArgumentCaptor.forClass(List.class);
+
+        when(extractor.extract(eq(List.of(segment)), anyList(), eq(config)))
+                .thenReturn(Mono.just(List.of(initialEntry)));
+        when(deduplicator.deduplicate(eq(memoryId), entriesCaptor.capture()))
+                .thenReturn(Mono.just(new DeduplicationResult(List.of(), List.of())));
+        when(deduplicator.spanName()).thenReturn("test");
+
+        StepVerifier.create(
+                        layer.extract(
+                                memoryId,
+                                new RawDataResult(List.of(), List.of(segment), false),
+                                config))
+                .assertNext(result -> assertThat(result.isEmpty()).isTrue())
+                .verifyComplete();
+
+        assertThat(entriesCaptor.getValue())
+                .extracting(entry -> entry.metadata().get("sourceClient"))
+                .containsExactly("claude-code", "claude-code");
+    }
+
     private static final class CapturingSelfVerificationStep extends LlmSelfVerificationStep {
 
+        private final List<ExtractedMemoryEntry> missedEntries;
         private String capturedUserName;
         private Instant capturedObservedAt;
 
         private CapturingSelfVerificationStep() {
+            this(List.of());
+        }
+
+        private CapturingSelfVerificationStep(List<ExtractedMemoryEntry> missedEntries) {
             super(mock(StructuredChatClient.class));
+            this.missedEntries = List.copyOf(missedEntries);
         }
 
         @Override
@@ -148,7 +235,7 @@ class MemoryItemLayerRuntimeContextTest {
                 Instant observedAt) {
             capturedUserName = userName;
             capturedObservedAt = observedAt;
-            return Mono.just(List.of());
+            return Mono.just(missedEntries);
         }
 
         private String capturedUserName() {

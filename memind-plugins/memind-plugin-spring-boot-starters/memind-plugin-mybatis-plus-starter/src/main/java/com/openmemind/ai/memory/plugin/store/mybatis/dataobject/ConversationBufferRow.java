@@ -20,6 +20,7 @@ public class ConversationBufferRow {
     private String role;
     private String content;
     private String userName;
+    private String sourceClient;
     private Object timestamp;
 
     public Long getId() {
@@ -60,6 +61,14 @@ public class ConversationBufferRow {
 
     public void setUserName(String userName) {
         this.userName = userName;
+    }
+
+    public String getSourceClient() {
+        return sourceClient;
+    }
+
+    public void setSourceClient(String sourceClient) {
+        this.sourceClient = sourceClient;
     }
 
     public Object getTimestamp() {

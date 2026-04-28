@@ -23,8 +23,14 @@ import java.util.List;
  * @param startTime first timestamp seen in the segment
  * @param observedAt last timestamp seen in the segment
  * @param userName first non-blank user name seen in the segment
+ * @param sourceClient first non-blank source client seen in the segment
  */
-public record SegmentRuntimeContext(Instant startTime, Instant observedAt, String userName) {
+public record SegmentRuntimeContext(
+        Instant startTime, Instant observedAt, String userName, String sourceClient) {
+
+    public SegmentRuntimeContext(Instant startTime, Instant observedAt, String userName) {
+        this(startTime, observedAt, userName, null);
+    }
 
     public static SegmentRuntimeContext fromConversationMessages(List<Message> messages) {
         if (messages == null || messages.isEmpty()) {
@@ -34,6 +40,7 @@ public record SegmentRuntimeContext(Instant startTime, Instant observedAt, Strin
         Instant startTime = null;
         Instant observedAt = null;
         String userName = null;
+        String sourceClient = null;
 
         for (Message message : messages) {
             if (startTime == null && message.timestamp() != null) {
@@ -45,14 +52,19 @@ public record SegmentRuntimeContext(Instant startTime, Instant observedAt, Strin
                     && !message.userName().isBlank()) {
                 userName = message.userName();
             }
+            if (sourceClient == null
+                    && message.sourceClient() != null
+                    && !message.sourceClient().isBlank()) {
+                sourceClient = message.sourceClient();
+            }
             if (message.timestamp() != null) {
                 observedAt = message.timestamp();
             }
         }
 
-        if (startTime == null && observedAt == null && userName == null) {
+        if (startTime == null && observedAt == null && userName == null && sourceClient == null) {
             return null;
         }
-        return new SegmentRuntimeContext(startTime, observedAt, userName);
+        return new SegmentRuntimeContext(startTime, observedAt, userName, sourceClient);
     }
 }

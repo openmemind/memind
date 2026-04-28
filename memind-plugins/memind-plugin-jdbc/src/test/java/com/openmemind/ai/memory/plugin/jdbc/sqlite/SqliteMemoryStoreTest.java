@@ -84,6 +84,10 @@ class SqliteMemoryStoreTest {
         assertThat(columnExists(emptyDataSource, "memory_insight", "confidence")).isFalse();
         assertThat(columnExists(emptyDataSource, "memory_raw_data", "resource_id")).isTrue();
         assertThat(columnExists(emptyDataSource, "memory_raw_data", "mime_type")).isTrue();
+        assertThat(columnExists(emptyDataSource, "memory_raw_data", "source_client")).isTrue();
+        assertThat(columnExists(emptyDataSource, "memory_item", "source_client")).isTrue();
+        assertThat(columnExists(emptyDataSource, "memory_conversation_buffer", "source_client"))
+                .isTrue();
         assertThat(columnExists(emptyDataSource, "memory_item", "occurred_start")).isTrue();
         assertThat(columnExists(emptyDataSource, "memory_item", "occurred_end")).isTrue();
         assertThat(columnExists(emptyDataSource, "memory_item", "time_granularity")).isTrue();
@@ -105,6 +109,7 @@ class SqliteMemoryStoreTest {
                         "rd-1",
                         memoryId.toIdentifier(),
                         ConversationContent.TYPE,
+                        "claude-code",
                         "content-1",
                         new Segment(
                                 "hello world",
@@ -124,6 +129,7 @@ class SqliteMemoryStoreTest {
 
         MemoryRawData inserted = store.getRawData(memoryId, "rd-1").orElseThrow();
         assertThat(inserted.contentId()).isEqualTo("content-1");
+        assertThat(inserted.sourceClient()).isEqualTo("claude-code");
         assertThat(inserted.segment()).isEqualTo(rawData.segment());
         assertThat(inserted.caption()).isEqualTo("caption-1");
 
@@ -132,6 +138,7 @@ class SqliteMemoryStoreTest {
                         "rd-1",
                         memoryId.toIdentifier(),
                         ToolCallContent.TYPE,
+                        "codex",
                         "content-1",
                         new Segment(
                                 "updated content",
@@ -151,6 +158,7 @@ class SqliteMemoryStoreTest {
 
         MemoryRawData byContent = store.getRawDataByContentId(memoryId, "content-1").orElseThrow();
         assertThat(byContent.contentType()).isEqualTo(ToolCallContent.TYPE);
+        assertThat(byContent.sourceClient()).isEqualTo("codex");
         assertThat(byContent.caption()).isEqualTo("caption-2");
         assertThat(byContent.segment()).isEqualTo(updated.segment());
         assertThat(store.listRawData(memoryId)).hasSize(1);
@@ -349,8 +357,12 @@ class SqliteMemoryStoreTest {
         store.insertItems(memoryId, List.of(first, second));
 
         assertThat(store.getItemsByIds(memoryId, List.of(101L, 999L)))
-                .extracting(MemoryItem::id)
-                .containsExactly(101L);
+                .singleElement()
+                .satisfies(
+                        item -> {
+                            assertThat(item.id()).isEqualTo(101L);
+                            assertThat(item.sourceClient()).isEqualTo("claude-code");
+                        });
         assertThat(store.getItemsByVectorIds(memoryId, List.of("vec-102")))
                 .extracting(MemoryItem::id)
                 .containsExactly(102L);
@@ -690,6 +702,7 @@ class SqliteMemoryStoreTest {
                 id,
                 memoryId.toIdentifier(),
                 ConversationContent.TYPE,
+                "claude-code",
                 contentId,
                 new Segment(
                         "content-" + id,
@@ -715,6 +728,7 @@ class SqliteMemoryStoreTest {
                 MemoryScope.USER,
                 MemoryCategory.PROFILE,
                 ConversationContent.TYPE,
+                "claude-code",
                 vectorId,
                 rawDataId,
                 contentHash,

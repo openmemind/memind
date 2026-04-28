@@ -44,8 +44,9 @@ public class SqliteConversationBufferAccessor extends AbstractJdbcConversationBu
     protected String insertSql() {
         return """
         INSERT INTO memory_conversation_buffer
-            (session_id, user_id, agent_id, memory_id, role, content, user_name, timestamp, extracted, deleted)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+            (session_id, user_id, agent_id, memory_id, role, content, user_name, source_client,
+             timestamp, extracted, deleted)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
         """;
     }
 

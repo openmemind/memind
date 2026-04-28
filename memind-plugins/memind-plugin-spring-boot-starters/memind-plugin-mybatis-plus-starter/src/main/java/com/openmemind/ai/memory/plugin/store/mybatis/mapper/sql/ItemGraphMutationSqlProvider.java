@@ -51,6 +51,7 @@ public final class ItemGraphMutationSqlProvider {
             metadata,
             type,
             raw_data_type,
+            source_client,
             extraction_batch_id,
             created_at,
             updated_at
@@ -78,6 +79,7 @@ public final class ItemGraphMutationSqlProvider {
                 #{item.metadata, typeHandler=%2$s},
                 #{item.type},
                 #{item.rawDataType},
+                #{item.sourceClient},
                 #{item.extractionBatchId},
                 #{item.createdAt, typeHandler=%1$s},
                 #{item.updatedAt, typeHandler=%1$s}

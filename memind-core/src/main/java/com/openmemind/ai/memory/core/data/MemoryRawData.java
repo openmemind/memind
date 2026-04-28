@@ -26,6 +26,9 @@ public record MemoryRawData(
         /* Content type identifier (e.g. ConversationContent.TYPE) */
         String contentType,
 
+        /* Source client that produced this raw data */
+        String sourceClient,
+
         /* Original content ID */
         String contentId,
 
@@ -57,6 +60,7 @@ public record MemoryRawData(
         Instant endTime) {
 
     public MemoryRawData {
+        sourceClient = normalizeString(sourceClient);
         var normalizedMetadata = new LinkedHashMap<String, Object>();
         if (metadata != null) {
             normalizedMetadata.putAll(metadata);
@@ -70,6 +74,37 @@ public record MemoryRawData(
         metadata = Map.copyOf(normalizedMetadata);
         resourceId = projectString(metadata, "resourceId");
         mimeType = projectString(metadata, "mimeType");
+    }
+
+    public MemoryRawData(
+            String id,
+            String memoryId,
+            String contentType,
+            String contentId,
+            Segment segment,
+            String caption,
+            String captionVectorId,
+            Map<String, Object> metadata,
+            String resourceId,
+            String mimeType,
+            Instant createdAt,
+            Instant startTime,
+            Instant endTime) {
+        this(
+                id,
+                memoryId,
+                contentType,
+                null,
+                contentId,
+                segment,
+                caption,
+                captionVectorId,
+                metadata,
+                resourceId,
+                mimeType,
+                createdAt,
+                startTime,
+                endTime);
     }
 
     /**
@@ -88,6 +123,7 @@ public record MemoryRawData(
                 id,
                 memoryId,
                 contentType,
+                sourceClient,
                 contentId,
                 segment,
                 caption,
@@ -108,6 +144,7 @@ public record MemoryRawData(
                 id,
                 memoryId,
                 contentType,
+                sourceClient,
                 contentId,
                 segment,
                 caption,
@@ -130,5 +167,13 @@ public record MemoryRawData(
         }
         String text = value.toString();
         return text.isBlank() ? null : text;
+    }
+
+    private static String normalizeString(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 }

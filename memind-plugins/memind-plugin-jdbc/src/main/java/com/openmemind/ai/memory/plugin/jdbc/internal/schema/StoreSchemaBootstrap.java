@@ -42,6 +42,7 @@ public final class StoreSchemaBootstrap {
             }
             ensureSqliteMultimodalSchema(dataSource);
         }
+        ensureSqliteSourceClientSchema(dataSource, createIfNotExist);
         ensureSqliteBubbleStateSchema(dataSource, createIfNotExist);
         ensureSqliteItemTemporalSchema(dataSource, createIfNotExist);
         ensureSqliteItemTemporalLookupSchema(dataSource, createIfNotExist);
@@ -72,6 +73,7 @@ public final class StoreSchemaBootstrap {
             }
             ensureMysqlMultimodalSchema(dataSource);
         }
+        ensureMysqlSourceClientSchema(dataSource, createIfNotExist);
         ensureMysqlBubbleStateSchema(dataSource, createIfNotExist);
         ensureMysqlItemTemporalSchema(dataSource, createIfNotExist);
         ensureMysqlItemTemporalLookupSchema(dataSource, createIfNotExist);
@@ -102,6 +104,7 @@ public final class StoreSchemaBootstrap {
             }
             ensurePostgresqlMultimodalSchema(dataSource);
         }
+        ensurePostgresqlSourceClientSchema(dataSource, createIfNotExist);
         ensurePostgresqlBubbleStateSchema(dataSource, createIfNotExist);
         ensurePostgresqlItemTemporalSchema(dataSource, createIfNotExist);
         ensurePostgresqlItemTemporalLookupSchema(dataSource, createIfNotExist);
@@ -418,6 +421,91 @@ public final class StoreSchemaBootstrap {
                 "ALTER TABLE memory_item ADD COLUMN time_granularity VARCHAR(16)");
     }
 
+    private static void ensureSqliteSourceClientSchema(
+            DataSource dataSource, boolean createIfNotExist) {
+        if (hasRequiredSqliteSourceClientSchema(dataSource)) {
+            return;
+        }
+        if (!createIfNotExist) {
+            throw new JdbcPluginException(
+                    "Missing required SQLite source client schema: source_client");
+        }
+        ensureSqliteTableColumn(
+                dataSource,
+                "memory_raw_data",
+                "source_client",
+                "ALTER TABLE memory_raw_data ADD COLUMN source_client TEXT");
+        ensureSqliteTableColumn(
+                dataSource,
+                "memory_item",
+                "source_client",
+                "ALTER TABLE memory_item ADD COLUMN source_client TEXT");
+        if (SchemaVerifier.hasSqliteTable(dataSource, "memory_conversation_buffer")) {
+            ensureSqliteTableColumn(
+                    dataSource,
+                    "memory_conversation_buffer",
+                    "source_client",
+                    "ALTER TABLE memory_conversation_buffer ADD COLUMN source_client TEXT");
+        }
+    }
+
+    private static void ensureMysqlSourceClientSchema(
+            DataSource dataSource, boolean createIfNotExist) {
+        if (hasRequiredMysqlSourceClientSchema(dataSource)) {
+            return;
+        }
+        if (!createIfNotExist) {
+            throw new JdbcPluginException(
+                    "Missing required MySQL source client schema: source_client");
+        }
+        ensureMysqlTableColumn(
+                dataSource,
+                "memory_raw_data",
+                "source_client",
+                "ALTER TABLE memory_raw_data ADD COLUMN source_client VARCHAR(64) NULL");
+        ensureMysqlTableColumn(
+                dataSource,
+                "memory_item",
+                "source_client",
+                "ALTER TABLE memory_item ADD COLUMN source_client VARCHAR(64) NULL");
+        if (SchemaVerifier.hasMysqlTable(dataSource, "memory_conversation_buffer")) {
+            ensureMysqlTableColumn(
+                    dataSource,
+                    "memory_conversation_buffer",
+                    "source_client",
+                    "ALTER TABLE memory_conversation_buffer ADD COLUMN source_client VARCHAR(64)"
+                            + " NULL");
+        }
+    }
+
+    private static void ensurePostgresqlSourceClientSchema(
+            DataSource dataSource, boolean createIfNotExist) {
+        if (hasRequiredPostgresqlSourceClientSchema(dataSource)) {
+            return;
+        }
+        if (!createIfNotExist) {
+            throw new JdbcPluginException(
+                    "Missing required PostgreSQL source client schema: source_client");
+        }
+        ensurePostgresqlTableColumn(
+                dataSource,
+                "memory_raw_data",
+                "source_client",
+                "ALTER TABLE memory_raw_data ADD COLUMN source_client VARCHAR(64)");
+        ensurePostgresqlTableColumn(
+                dataSource,
+                "memory_item",
+                "source_client",
+                "ALTER TABLE memory_item ADD COLUMN source_client VARCHAR(64)");
+        if (SchemaVerifier.hasPostgresqlTable(dataSource, "memory_conversation_buffer")) {
+            ensurePostgresqlTableColumn(
+                    dataSource,
+                    "memory_conversation_buffer",
+                    "source_client",
+                    "ALTER TABLE memory_conversation_buffer ADD COLUMN source_client VARCHAR(64)");
+        }
+    }
+
     private static void ensureSqliteInsightConfidenceRemoved(
             DataSource dataSource, boolean createIfNotExist) {
         if (!SchemaVerifier.hasSqliteColumn(dataSource, "memory_insight", "confidence")) {
@@ -583,6 +671,14 @@ public final class StoreSchemaBootstrap {
                 && SchemaVerifier.hasSqliteColumn(dataSource, "memory_item", "time_granularity");
     }
 
+    private static boolean hasRequiredSqliteSourceClientSchema(DataSource dataSource) {
+        return SchemaVerifier.hasSqliteColumn(dataSource, "memory_raw_data", "source_client")
+                && SchemaVerifier.hasSqliteColumn(dataSource, "memory_item", "source_client")
+                && (!SchemaVerifier.hasSqliteTable(dataSource, "memory_conversation_buffer")
+                        || SchemaVerifier.hasSqliteColumn(
+                                dataSource, "memory_conversation_buffer", "source_client"));
+    }
+
     private static void ensureSqliteItemTemporalColumn(
             DataSource dataSource, String columnName, String sql) {
         if (SchemaVerifier.hasSqliteColumn(dataSource, "memory_item", columnName)) {
@@ -635,6 +731,22 @@ public final class StoreSchemaBootstrap {
         JdbcExecutor.execute(dataSource, sql);
     }
 
+    private static boolean hasRequiredMysqlSourceClientSchema(DataSource dataSource) {
+        return SchemaVerifier.hasMysqlColumn(dataSource, "memory_raw_data", "source_client")
+                && SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", "source_client")
+                && (!SchemaVerifier.hasMysqlTable(dataSource, "memory_conversation_buffer")
+                        || SchemaVerifier.hasMysqlColumn(
+                                dataSource, "memory_conversation_buffer", "source_client"));
+    }
+
+    private static void ensureMysqlTableColumn(
+            DataSource dataSource, String tableName, String columnName, String sql) {
+        if (SchemaVerifier.hasMysqlColumn(dataSource, tableName, columnName)) {
+            return;
+        }
+        JdbcExecutor.execute(dataSource, sql);
+    }
+
     private static boolean hasRequiredMysqlItemTemporalLookupSchema(DataSource dataSource) {
         return SchemaVerifier.hasMysqlColumn(dataSource, "memory_item", "temporal_start")
                 && SchemaVerifier.hasMysqlColumn(
@@ -668,6 +780,22 @@ public final class StoreSchemaBootstrap {
     private static void ensurePostgresqlItemTemporalColumn(
             DataSource dataSource, String columnName, String sql) {
         if (SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_item", columnName)) {
+            return;
+        }
+        JdbcExecutor.execute(dataSource, sql);
+    }
+
+    private static boolean hasRequiredPostgresqlSourceClientSchema(DataSource dataSource) {
+        return SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_raw_data", "source_client")
+                && SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_item", "source_client")
+                && (!SchemaVerifier.hasPostgresqlTable(dataSource, "memory_conversation_buffer")
+                        || SchemaVerifier.hasPostgresqlColumn(
+                                dataSource, "memory_conversation_buffer", "source_client"));
+    }
+
+    private static void ensurePostgresqlTableColumn(
+            DataSource dataSource, String tableName, String columnName, String sql) {
+        if (SchemaVerifier.hasPostgresqlColumn(dataSource, tableName, columnName)) {
             return;
         }
         JdbcExecutor.execute(dataSource, sql);

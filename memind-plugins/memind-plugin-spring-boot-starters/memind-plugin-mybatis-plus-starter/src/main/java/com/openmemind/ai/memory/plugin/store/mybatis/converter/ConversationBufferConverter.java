@@ -49,6 +49,7 @@ public final class ConversationBufferConverter {
         dataObject.setRole(message.role().name());
         dataObject.setContent(message.textContent());
         dataObject.setUserName(message.userName());
+        dataObject.setSourceClient(message.sourceClient());
         dataObject.setTimestamp(message.timestamp());
         dataObject.setExtracted(Boolean.FALSE);
         return dataObject;
@@ -69,6 +70,7 @@ public final class ConversationBufferConverter {
                 dataObject.getRole(),
                 dataObject.getContent(),
                 dataObject.getUserName(),
+                dataObject.getSourceClient(),
                 dataObject.getTimestamp());
     }
 
@@ -80,7 +82,12 @@ public final class ConversationBufferConverter {
     }
 
     public static Message toMessage(ConversationBufferRow row) {
-        return toMessage(row.getRole(), row.getContent(), row.getUserName(), row.getTimestamp());
+        return toMessage(
+                row.getRole(),
+                row.getContent(),
+                row.getUserName(),
+                row.getSourceClient(),
+                row.getTimestamp());
     }
 
     public static List<Message> toMessagesFromRows(List<ConversationBufferRow> rows) {
@@ -102,15 +109,21 @@ public final class ConversationBufferConverter {
     }
 
     private static Message toMessage(
-            String roleValue, String content, String userName, Object timestamp) {
+            String roleValue,
+            String content,
+            String userName,
+            String sourceClient,
+            Object timestamp) {
         Message.Role role = Message.Role.valueOf(roleValue);
         Instant instant = parseTimestamp(timestamp);
         if (role == Message.Role.USER) {
-            return userName == null
-                    ? Message.user(content, instant)
-                    : Message.user(content, instant, userName);
+            Message message =
+                    userName == null
+                            ? Message.user(content, instant)
+                            : Message.user(content, instant, userName);
+            return message.withSourceClient(sourceClient);
         }
-        return Message.assistant(content, instant);
+        return Message.assistant(content, instant).withSourceClient(sourceClient);
     }
 
     private static Instant parseTimestamp(Object timestamp) {

@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS memory_raw_data (
     agent_id          VARCHAR(64)              NOT NULL,
     memory_id         VARCHAR(200)             NOT NULL,
     type              VARCHAR(32)              NOT NULL,
+    source_client     VARCHAR(64),
     content_id        VARCHAR(200),
     segment           JSONB,
     caption           TEXT,
@@ -63,6 +64,7 @@ CREATE TABLE IF NOT EXISTS memory_item (
     observed_at   TIMESTAMPTZ,
     type          VARCHAR(16)              NOT NULL DEFAULT 'FACT',
     raw_data_type VARCHAR(32)              NOT NULL DEFAULT 'CONVERSATION',
+    source_client VARCHAR(64),
     metadata      JSONB,
     created_at    TIMESTAMPTZ              NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMPTZ              NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -133,6 +135,7 @@ CREATE TABLE IF NOT EXISTS memory_conversation_buffer (
     role       VARCHAR(16)              NOT NULL,
     content    TEXT                     NOT NULL,
     user_name  VARCHAR(64),
+    source_client VARCHAR(64),
     timestamp  TIMESTAMPTZ,
     extracted  BOOLEAN                  NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ              NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -621,6 +624,5 @@ CREATE INDEX IF NOT EXISTS idx_memory_thread_enrichment_input_replay
         input_run_key,
         entry_seq
     );
-
 
 

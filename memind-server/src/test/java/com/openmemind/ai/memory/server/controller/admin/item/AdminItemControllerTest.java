@@ -203,6 +203,7 @@ class AdminItemControllerTest {
                 Map.of(),
                 "FACT",
                 "conversation",
+                "api",
                 Instant.parse("2026-03-31T10:00:02Z"),
                 Instant.parse("2026-03-31T10:00:03Z"));
     }

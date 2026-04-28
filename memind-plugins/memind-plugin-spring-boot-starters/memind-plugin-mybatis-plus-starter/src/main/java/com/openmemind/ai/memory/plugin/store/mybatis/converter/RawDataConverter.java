@@ -37,6 +37,7 @@ public final class RawDataConverter {
         dataObject.setMemoryId(memoryId.toIdentifier());
         dataObject.setType(
                 record.contentType() != null ? record.contentType() : ConversationContent.TYPE);
+        dataObject.setSourceClient(record.sourceClient());
         dataObject.setContentId(record.contentId());
         dataObject.setCaption(record.caption());
         dataObject.setCaptionVectorId(record.captionVectorId());
@@ -62,6 +63,7 @@ public final class RawDataConverter {
                 dataObject.getBizId(),
                 dataObject.getMemoryId(),
                 parseContentType(dataObject.getType()),
+                dataObject.getSourceClient(),
                 dataObject.getContentId(),
                 segment,
                 dataObject.getCaption(),

@@ -267,6 +267,8 @@ public class DefaultMemoryExtractor implements MemoryExtractor {
         }
 
         var startTime = Instant.now();
+        Map<String, Object> effectiveMetadata =
+                mergeSourceClientMetadata(sealMetadata, sourceClientFromMessages(messages));
 
         // Build Segment, merge sealMetadata into segment.metadata()
         String content =
@@ -280,13 +282,17 @@ public class DefaultMemoryExtractor implements MemoryExtractor {
                         content,
                         null,
                         new MessageBoundary(startMessage, endMessage),
-                        sealMetadata,
+                        effectiveMetadata,
                         SegmentRuntimeContext.fromConversationMessages(messages));
         String contentId = HashUtils.sampledSha256(content);
 
         var request =
                 resolvedRequest(
-                        memoryId, new ConversationContent(messages), Map.of(), config, null);
+                        memoryId,
+                        new ConversationContent(messages),
+                        effectiveMetadata,
+                        config,
+                        null);
 
         return segmentProcessor
                 .processSegment(
@@ -398,6 +404,30 @@ public class DefaultMemoryExtractor implements MemoryExtractor {
     }
 
     private record PendingExtraction(List<Message> messages, Map<String, Object> sealMetadata) {}
+
+    private static Map<String, Object> mergeSourceClientMetadata(
+            Map<String, Object> metadata, String sourceClient) {
+        if (sourceClient == null || sourceClient.isBlank()) {
+            return metadata == null ? Map.of() : Map.copyOf(metadata);
+        }
+        Map<String, Object> merged = new HashMap<>();
+        if (metadata != null) {
+            merged.putAll(metadata);
+        }
+        merged.putIfAbsent("sourceClient", sourceClient);
+        return Map.copyOf(merged);
+    }
+
+    private static String sourceClientFromMessages(List<Message> messages) {
+        if (messages == null) {
+            return null;
+        }
+        return messages.stream()
+                .map(Message::sourceClient)
+                .filter(value -> value != null && !value.isBlank())
+                .findFirst()
+                .orElse(null);
+    }
 
     private Mono<ExtractionResult> executeResolvedRequest(
             ResolvedExtractionRequest resolved, Instant startTime) {

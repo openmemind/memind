@@ -41,6 +41,7 @@ public final class ItemConverter {
         dataObject.setContent(record.content());
         dataObject.setScope(record.scope() != null ? record.scope().name() : null);
         dataObject.setCategory(record.category() != null ? record.category().name() : null);
+        dataObject.setSourceClient(record.sourceClient());
         dataObject.setRawDataType(
                 record.contentType() != null ? record.contentType() : ConversationContent.TYPE);
         dataObject.setVectorId(record.vectorId());
@@ -94,6 +95,7 @@ public final class ItemConverter {
                 dataObject.getScope() != null ? MemoryScope.valueOf(dataObject.getScope()) : null,
                 parseMemoryCategory(dataObject.getCategory()),
                 parseContentType(dataObject.getRawDataType()),
+                dataObject.getSourceClient(),
                 dataObject.getVectorId(),
                 dataObject.getRawDataId(),
                 dataObject.getContentHash(),

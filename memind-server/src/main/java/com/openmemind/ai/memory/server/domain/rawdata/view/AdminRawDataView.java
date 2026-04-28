@@ -22,6 +22,7 @@ public record AdminRawDataView(
         String agentId,
         String memoryId,
         String type,
+        String sourceClient,
         String contentId,
         Map<String, Object> segment,
         String caption,

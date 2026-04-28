@@ -68,16 +68,22 @@ class MemindClient:
             require_data=True,
         )
 
-    def add_message(self, user_id, agent_id, message):
+    def add_message(self, user_id, agent_id, message, source_client=None):
+        payload = {"userId": user_id, "agentId": agent_id, "message": message}
+        if source_client:
+            payload["sourceClient"] = source_client
         return self._request(
             "POST",
             "/open/v1/memory/add-message",
-            {"userId": user_id, "agentId": agent_id, "message": message},
+            payload,
         )
 
-    def commit(self, user_id, agent_id):
+    def commit(self, user_id, agent_id, source_client=None):
+        payload = {"userId": user_id, "agentId": agent_id}
+        if source_client:
+            payload["sourceClient"] = source_client
         return self._request(
             "POST",
             "/open/v1/memory/commit",
-            {"userId": user_id, "agentId": agent_id},
+            payload,
         )
