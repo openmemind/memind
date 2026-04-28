@@ -15,13 +15,13 @@ package com.openmemind.ai.memory.plugin.rawdata.audio.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.audio.config.AudioExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.audio.content.AudioContent;
-import com.openmemind.ai.memory.plugin.rawdata.audio.parser.TranscriptionAudioContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.audio.plugin.AudioRawDataPlugin;
 import com.openmemind.ai.memory.plugin.rawdata.jackson.autoconfigure.RawDataJacksonAutoConfiguration;
 import java.util.List;
@@ -122,6 +122,22 @@ class AudioRawDataAutoConfigurationTest {
                             assertThat(readField(plugin, "parsers", List.class)).isEmpty();
                             assertThat(context).doesNotHaveBean(ContentParser.class);
                         });
+    }
+
+    @Test
+    void parserRegistrationDoesNotResolveTranscriptionModelProvider() {
+        var transcriptionModelProvider =
+                mock(org.springframework.beans.factory.ObjectProvider.class);
+        var plugin =
+                (AudioRawDataPlugin)
+                        new AudioRawDataAutoConfiguration()
+                                .audioRawDataPlugin(
+                                        new AudioRawDataProperties(), transcriptionModelProvider);
+
+        assertThat(readField(plugin, "parsers", List.class))
+                .singleElement()
+                .isInstanceOf(TranscriptionAudioContentParser.class);
+        verifyNoInteractions(transcriptionModelProvider);
     }
 
     @Test

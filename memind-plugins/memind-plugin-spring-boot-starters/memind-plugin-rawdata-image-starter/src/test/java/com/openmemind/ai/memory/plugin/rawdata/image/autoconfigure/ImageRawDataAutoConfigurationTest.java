@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.plugin.rawdata.image.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
@@ -26,7 +27,6 @@ import com.openmemind.ai.memory.core.plugin.RawDataPluginContext;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.plugin.rawdata.image.config.ImageExtractionOptions;
 import com.openmemind.ai.memory.plugin.rawdata.image.content.ImageContent;
-import com.openmemind.ai.memory.plugin.rawdata.image.parser.VisionImageContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.image.plugin.ImageRawDataPlugin;
 import com.openmemind.ai.memory.plugin.rawdata.jackson.autoconfigure.RawDataJacksonAutoConfiguration;
 import java.util.List;
@@ -82,8 +82,23 @@ class ImageRawDataAutoConfigurationTest {
 
                             assertThat(plugin.parsers(pluginContext()))
                                     .singleElement()
-                                    .isInstanceOf(VisionImageContentParser.class);
+                                    .isInstanceOf(ImageContentParser.class);
                         });
+    }
+
+    @Test
+    void parserRegistrationDoesNotResolveChatModelProvider() {
+        var chatModelProvider = mock(org.springframework.beans.factory.ObjectProvider.class);
+        var plugin =
+                (ImageRawDataPlugin)
+                        new ImageRawDataAutoConfiguration()
+                                .imageRawDataPlugin(
+                                        new ImageRawDataProperties(), chatModelProvider);
+
+        assertThat(plugin.parsers(pluginContext()))
+                .singleElement()
+                .isInstanceOf(ImageContentParser.class);
+        verifyNoInteractions(chatModelProvider);
     }
 
     @Test

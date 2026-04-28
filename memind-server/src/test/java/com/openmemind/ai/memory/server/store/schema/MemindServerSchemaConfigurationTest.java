@@ -60,7 +60,7 @@ class MemindServerSchemaConfigurationTest {
                                     .anyMatch(
                                             files ->
                                                     files.contains(
-                                                            "db/migration/sqlite/V3__init_memind_server.sql"));
+                                                            "db/migration/sqlite/V1__init_memind_server.sql"));
 
                             DdlApplicationRunner runner =
                                     context.getBean(DdlApplicationRunner.class);

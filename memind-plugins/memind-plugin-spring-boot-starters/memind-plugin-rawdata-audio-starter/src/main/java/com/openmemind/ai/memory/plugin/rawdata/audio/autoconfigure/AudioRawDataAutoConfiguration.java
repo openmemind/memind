@@ -15,7 +15,6 @@ package com.openmemind.ai.memory.plugin.rawdata.audio.autoconfigure;
 
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.resource.ContentParser;
-import com.openmemind.ai.memory.plugin.rawdata.audio.parser.TranscriptionAudioContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.audio.plugin.AudioRawDataPlugin;
 import java.util.List;
 import org.springframework.ai.audio.transcription.TranscriptionModel;
@@ -44,10 +43,9 @@ public class AudioRawDataAutoConfiguration {
     RawDataPlugin audioRawDataPlugin(
             AudioRawDataProperties properties,
             ObjectProvider<TranscriptionModel> transcriptionModelProvider) {
-        TranscriptionModel transcriptionModel = transcriptionModelProvider.getIfAvailable();
         List<ContentParser> parsers =
-                properties.isParserEnabled() && transcriptionModel != null
-                        ? List.of(new TranscriptionAudioContentParser(transcriptionModel))
+                properties.isParserEnabled()
+                        ? List.of(new TranscriptionAudioContentParser(transcriptionModelProvider))
                         : List.of();
         return new AudioRawDataPlugin(properties.extractionOptions(), parsers);
     }

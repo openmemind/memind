@@ -36,7 +36,7 @@ class MemindServerDdlTest {
         assertThat(
                         new MemindServerDdl(dataSource("SQLite", "jdbc:sqlite::memory:"), detector)
                                 .getSqlFiles())
-                .containsExactly("db/migration/sqlite/V3__init_memind_server.sql");
+                .containsExactly("db/migration/sqlite/V1__init_memind_server.sql");
     }
 
     @Test
@@ -47,7 +47,7 @@ class MemindServerDdlTest {
                                         dataSource("MySQL", "jdbc:mysql://localhost:3306/memind"),
                                         detector)
                                 .getSqlFiles())
-                .containsExactly("db/migration/mysql/V3__init_memind_server.sql");
+                .containsExactly("db/migration/mysql/V1__init_memind_server.sql");
     }
 
     @Test
@@ -60,7 +60,7 @@ class MemindServerDdlTest {
                                                 "jdbc:postgresql://localhost:5432/memind"),
                                         detector)
                                 .getSqlFiles())
-                .containsExactly("db/migration/postgresql/V3__init_memind_server.sql");
+                .containsExactly("db/migration/postgresql/V1__init_memind_server.sql");
     }
 
     private DataSource dataSource(String productName, String url) {

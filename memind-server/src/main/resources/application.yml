@@ -43,12 +43,12 @@ spring:
       api-key: ${OPENAI_API_KEY:}
       chat:
         options:
-          model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+          model: ${OPENAI_CHAT_MODEL:openai/gpt-4o-mini}
       embedding:
         base-url: ${EMBEDDING_BASE_URL:${OPENAI_BASE_URL:}}
         api-key: ${EMBEDDING_API_KEY:${OPENAI_API_KEY:}}
         options:
-          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+          model: ${OPENAI_EMBEDDING_MODEL:openai/text-embedding-3-small}
 
 server:
   port: ${SERVER_PORT:8366}

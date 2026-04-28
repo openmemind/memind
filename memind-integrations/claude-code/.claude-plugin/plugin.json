@@ -1,0 +1,11 @@
+{
+  "name": "memind-memory",
+  "description": "Use Memind as persistent memory for Claude Code sessions.",
+  "version": "0.1.0",
+  "author": {
+    "name": "OpenMemind",
+    "url": "https://github.com/openmemind/memind"
+  },
+  "license": "Apache-2.0",
+  "keywords": ["memory", "memind", "claude-code"]
+}
