@@ -23,8 +23,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class InsightPointEvidenceNormalizer {
+
+    private static final Logger log = LoggerFactory.getLogger(InsightPointEvidenceNormalizer.class);
 
     public List<InsightPoint> normalizeLeafPoints(List<InsightPoint> points) {
         return safe(points).stream()
@@ -58,14 +62,9 @@ public final class InsightPointEvidenceNormalizer {
         return safe(points).stream()
                 .map(
                         point -> {
-                            var refs = normalizeRefs(point.sourcePointRefs());
-                            for (var ref : refs) {
-                                var pointIds = validRefs.get(ref.insightId());
-                                if (pointIds == null || !pointIds.contains(ref.pointId())) {
-                                    throw new IllegalArgumentException(
-                                            "Dangling sourcePointRef: " + ref);
-                                }
-                            }
+                            var refs =
+                                    filterValidRefs(
+                                            normalizeRefs(point.sourcePointRefs()), validRefs);
                             return new InsightPoint(
                                     point.pointId(),
                                     point.type(),
@@ -75,6 +74,27 @@ public final class InsightPointEvidenceNormalizer {
                                     point.metadata());
                         })
                 .toList();
+    }
+
+    private List<InsightPointRef> filterValidRefs(
+            List<InsightPointRef> refs, Map<Long, Set<String>> validRefs) {
+        return safe(refs).stream().filter(ref -> isValidRef(ref, validRefs)).toList();
+    }
+
+    private boolean isValidRef(InsightPointRef ref, Map<Long, Set<String>> validRefs) {
+        if (ref == null
+                || ref.insightId() == null
+                || ref.pointId() == null
+                || ref.pointId().isBlank()) {
+            log.debug("Dropping malformed sourcePointRef: {}", ref);
+            return false;
+        }
+        var pointIds = validRefs.get(ref.insightId());
+        if (pointIds == null || !pointIds.contains(ref.pointId())) {
+            log.debug("Dropping dangling sourcePointRef: {}", ref);
+            return false;
+        }
+        return true;
     }
 
     private Map<Long, Set<String>> buildValidRefIndex(

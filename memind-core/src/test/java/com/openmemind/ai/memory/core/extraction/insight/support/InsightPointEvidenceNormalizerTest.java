@@ -14,7 +14,6 @@
 package com.openmemind.ai.memory.core.extraction.insight.support;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.InsightPointRef;
@@ -78,7 +77,7 @@ class InsightPointEvidenceNormalizerTest {
     }
 
     @Test
-    void normalizeRootPointsShouldRejectDanglingBranchRefs() {
+    void normalizeRootPointsShouldDropDanglingBranchRefs() {
         var branch =
                 insight(
                         20L,
@@ -90,22 +89,53 @@ class InsightPointEvidenceNormalizerTest {
                                         "Branch point",
                                         List.of())));
 
-        assertThatThrownBy(
-                        () ->
-                                normalizer.normalizeRootPoints(
+        var normalized =
+                normalizer.normalizeRootPoints(
+                        List.of(
+                                new InsightPoint(
+                                        null,
+                                        InsightPoint.PointType.REASONING,
+                                        "Root point",
+                                        List.of(),
+                                        List.of(new InsightPointRef(20L, "pt_missing")),
+                                        null)),
+                        List.of(branch));
+
+        assertThat(normalized).hasSize(1);
+        assertThat(normalized.getFirst().content()).isEqualTo("Root point");
+        assertThat(normalized.getFirst().sourcePointRefs()).isEmpty();
+    }
+
+    @Test
+    void normalizeBranchPointsShouldKeepValidRefsWhenMixedWithDanglingRefs() {
+        var leaf =
+                insight(
+                        10L,
+                        InsightTier.LEAF,
+                        List.of(
+                                new InsightPoint(
+                                        "pt_leaf_1",
+                                        InsightPoint.PointType.SUMMARY,
+                                        "Leaf point",
+                                        List.of("1"))));
+
+        var normalized =
+                normalizer.normalizeBranchPoints(
+                        List.of(
+                                new InsightPoint(
+                                        null,
+                                        InsightPoint.PointType.REASONING,
+                                        "Branch point",
+                                        List.of(),
                                         List.of(
-                                                new InsightPoint(
-                                                        null,
-                                                        InsightPoint.PointType.REASONING,
-                                                        "Root point",
-                                                        List.of(),
-                                                        List.of(
-                                                                new InsightPointRef(
-                                                                        20L, "pt_missing")),
-                                                        null)),
-                                        List.of(branch)))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Dangling sourcePointRef");
+                                                new InsightPointRef(10L, "pt_missing"),
+                                                new InsightPointRef(10L, "pt_leaf_1"),
+                                                new InsightPointRef(99L, "pt_unknown")),
+                                        null)),
+                        List.of(leaf));
+
+        assertThat(normalized.getFirst().sourcePointRefs())
+                .containsExactly(new InsightPointRef(10L, "pt_leaf_1"));
     }
 
     @Test

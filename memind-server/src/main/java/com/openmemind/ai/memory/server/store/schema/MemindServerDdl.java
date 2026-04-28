@@ -33,9 +33,9 @@ public class MemindServerDdl implements IDdl, Ordered {
     @Override
     public List<String> getSqlFiles() {
         return switch (databaseDialectDetector.detect(dataSource)) {
-            case SQLITE -> List.of("db/migration/sqlite/V3__init_memind_server.sql");
-            case MYSQL -> List.of("db/migration/mysql/V3__init_memind_server.sql");
-            case POSTGRESQL -> List.of("db/migration/postgresql/V3__init_memind_server.sql");
+            case SQLITE -> List.of("db/migration/sqlite/V1__init_memind_server.sql");
+            case MYSQL -> List.of("db/migration/mysql/V1__init_memind_server.sql");
+            case POSTGRESQL -> List.of("db/migration/postgresql/V1__init_memind_server.sql");
         };
     }
 

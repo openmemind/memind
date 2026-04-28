@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "memind-plugins",
+  "description": "Official Memind integrations for Claude Code",
+  "owner": {
+    "name": "OpenMemind"
+  },
+  "plugins": [
+    {
+      "name": "memind-memory",
+      "description": "Use Memind as persistent memory for Claude Code sessions.",
+      "source": "./memind-integrations/claude-code",
+      "version": "0.1.0"
+    }
+  ]
+}

@@ -51,6 +51,10 @@ CLAUDE.md
 ##Log
 logs/
 
+## Local runtime data
+/data/
+memind-server/data/
+
 ## Example
 example-data
 !memind-examples/data/
