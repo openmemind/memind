@@ -294,8 +294,11 @@
                     <excludes>
                         <exclude>LICENSE</exclude>
                         <exclude>NOTICE</exclude>
+                        <exclude>.worktrees/**</exclude>
+                        <exclude>data/**</exclude>
                         <exclude>etc/**</exclude>
                         <exclude>eval-data/**</exclude>
+                        <exclude>memind-cli/**</exclude>
                         <exclude>memind-evaluation/data/**</exclude>
                     </excludes>
                 </configuration>

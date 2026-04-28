@@ -29,9 +29,9 @@ import com.openmemind.ai.memory.plugin.jdbc.JdbcPluginOptions;
 import com.openmemind.ai.memory.plugin.jdbc.mysql.MysqlJdbcPlugin;
 import com.openmemind.ai.memory.plugin.jdbc.postgresql.PostgresqlJdbcPlugin;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteJdbcPlugin;
-import com.zaxxer.hikari.HikariDataSource;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
+import javax.sql.DataSource;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -46,7 +46,6 @@ import tools.jackson.databind.ObjectMapper;
             "org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration",
             "com.openmemind.ai.memory.plugin.store.mybatis.MemoryMybatisPlusAutoConfiguration"
         })
-@ConditionalOnBean(HikariDataSource.class)
 public class JdbcPluginAutoConfiguration {
 
     @Bean
@@ -59,7 +58,7 @@ public class JdbcPluginAutoConfiguration {
                 BubbleTrackerStore.class
             })
     public JdbcMemoryAccess jdbcMemoryAccess(
-            HikariDataSource dataSource,
+            DataSource dataSource,
             Environment environment,
             ObjectProvider<ResourceStore> resourceStoreProvider,
             ObjectProvider<ObjectMapper> objectMapperProvider) {
@@ -151,7 +150,7 @@ public class JdbcPluginAutoConfiguration {
         return interfaceType.cast(proxy);
     }
 
-    private JdbcDialect detectDialect(HikariDataSource dataSource) {
+    private JdbcDialect detectDialect(DataSource dataSource) {
         return new JdbcDialectDetector().detect(dataSource);
     }
 

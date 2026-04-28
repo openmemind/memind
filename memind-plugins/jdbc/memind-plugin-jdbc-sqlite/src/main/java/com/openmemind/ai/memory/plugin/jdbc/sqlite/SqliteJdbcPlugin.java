@@ -23,6 +23,7 @@ import com.openmemind.ai.memory.plugin.jdbc.internal.support.JsonCodec;
 import com.zaxxer.hikari.HikariDataSource;
 import java.util.List;
 import java.util.Objects;
+import javax.sql.DataSource;
 import tools.jackson.databind.ObjectMapper;
 
 public final class SqliteJdbcPlugin {
@@ -46,11 +47,11 @@ public final class SqliteJdbcPlugin {
         return create(dataSource, Objects.requireNonNull(options, "options"));
     }
 
-    public static JdbcMemoryAccess create(HikariDataSource dataSource) {
+    public static JdbcMemoryAccess create(DataSource dataSource) {
         return create(dataSource, JdbcPluginOptions.externalDataSource());
     }
 
-    public static JdbcMemoryAccess create(HikariDataSource dataSource, JdbcPluginOptions options) {
+    public static JdbcMemoryAccess create(DataSource dataSource, JdbcPluginOptions options) {
         Objects.requireNonNull(dataSource, "dataSource");
         Objects.requireNonNull(options, "options");
         ObjectMapper objectMapper =
@@ -79,7 +80,14 @@ public final class SqliteJdbcPlugin {
                 new SqliteMemoryTextSearch(dataSource, options.createIfNotExist()),
                 bubbleTrackerStore,
                 dataSource,
-                options.closeDataSourceOnClose() ? List.of(dataSource) : List.of());
+                options.closeDataSourceOnClose()
+                        ? List.of(
+                                () -> {
+                                    if (dataSource instanceof AutoCloseable ds) {
+                                        ds.close();
+                                    }
+                                })
+                        : List.of());
     }
 
     private static String requireText(String value, String fieldName) {
