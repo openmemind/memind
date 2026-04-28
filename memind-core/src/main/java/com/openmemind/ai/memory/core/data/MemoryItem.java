@@ -38,6 +38,9 @@ public record MemoryItem(
         /* Content type identifier (e.g. ConversationContent.TYPE) */
         String contentType,
 
+        /* Source client that produced this memory item */
+        String sourceClient,
+
         /* Vector ID (null when not indexed) */
         String vectorId,
 
@@ -72,6 +75,86 @@ public record MemoryItem(
         /* Item type (FACT / FORESIGHT) */
         MemoryItemType type) {
 
+    public MemoryItem {
+        sourceClient = normalizeString(sourceClient);
+    }
+
+    public MemoryItem(
+            Long id,
+            String memoryId,
+            String content,
+            MemoryScope scope,
+            MemoryCategory category,
+            String contentType,
+            String vectorId,
+            String rawDataId,
+            String contentHash,
+            Instant occurredAt,
+            Instant occurredStart,
+            Instant occurredEnd,
+            String timeGranularity,
+            Instant observedAt,
+            Map<String, Object> metadata,
+            Instant createdAt,
+            MemoryItemType type) {
+        this(
+                id,
+                memoryId,
+                content,
+                scope,
+                category,
+                contentType,
+                null,
+                vectorId,
+                rawDataId,
+                contentHash,
+                occurredAt,
+                occurredStart,
+                occurredEnd,
+                timeGranularity,
+                observedAt,
+                metadata,
+                createdAt,
+                type);
+    }
+
+    public MemoryItem(
+            Long id,
+            String memoryId,
+            String content,
+            MemoryScope scope,
+            MemoryCategory category,
+            String contentType,
+            String sourceClient,
+            String vectorId,
+            String rawDataId,
+            String contentHash,
+            Instant occurredAt,
+            Instant observedAt,
+            Map<String, Object> metadata,
+            Instant createdAt,
+            MemoryItemType type) {
+        this(
+                id,
+                memoryId,
+                content,
+                scope,
+                category,
+                contentType,
+                sourceClient,
+                vectorId,
+                rawDataId,
+                contentHash,
+                occurredAt,
+                null,
+                null,
+                null,
+                observedAt,
+                metadata,
+                createdAt,
+                type);
+    }
+
     public MemoryItem(
             Long id,
             String memoryId,
@@ -94,6 +177,7 @@ public record MemoryItem(
                 scope,
                 category,
                 contentType,
+                null,
                 vectorId,
                 rawDataId,
                 contentHash,
@@ -105,5 +189,13 @@ public record MemoryItem(
                 metadata,
                 createdAt,
                 type);
+    }
+
+    private static String normalizeString(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 }

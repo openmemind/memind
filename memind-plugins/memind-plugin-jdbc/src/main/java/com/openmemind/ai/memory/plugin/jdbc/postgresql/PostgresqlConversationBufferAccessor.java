@@ -37,8 +37,9 @@ public class PostgresqlConversationBufferAccessor extends AbstractJdbcConversati
     protected String insertSql() {
         return """
         INSERT INTO memory_conversation_buffer
-            (session_id, user_id, agent_id, memory_id, role, content, user_name, timestamp, extracted, deleted)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, FALSE, FALSE)
+            (session_id, user_id, agent_id, memory_id, role, content, user_name, source_client,
+             timestamp, extracted, deleted)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, FALSE)
         """;
     }
 

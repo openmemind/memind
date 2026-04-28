@@ -37,6 +37,7 @@ public class ConversationBufferDO extends BaseDO {
     private String role;
     private String content;
     private String userName;
+    private String sourceClient;
 
     @TableField(typeHandler = InstantTypeHandler.class)
     private Instant timestamp;
@@ -105,6 +106,14 @@ public class ConversationBufferDO extends BaseDO {
 
     public void setUserName(String userName) {
         this.userName = userName;
+    }
+
+    public String getSourceClient() {
+        return sourceClient;
+    }
+
+    public void setSourceClient(String sourceClient) {
+        this.sourceClient = sourceClient;
     }
 
     public Instant getTimestamp() {

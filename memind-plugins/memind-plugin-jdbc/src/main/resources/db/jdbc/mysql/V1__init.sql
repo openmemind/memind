@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS memory_raw_data (
     agent_id          VARCHAR(64)  NOT NULL,
     memory_id         VARCHAR(200) NOT NULL,
     type              VARCHAR(32)  NOT NULL,
+    source_client     VARCHAR(64),
     content_id        VARCHAR(200),
     segment           JSON,
     caption           TEXT,
@@ -64,6 +65,7 @@ CREATE TABLE IF NOT EXISTS memory_item (
     observed_at   DATETIME(3),
     type          VARCHAR(16)  NOT NULL DEFAULT 'FACT',
     raw_data_type VARCHAR(32)  NOT NULL DEFAULT 'CONVERSATION',
+    source_client VARCHAR(64),
     metadata      JSON,
     created_at    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     updated_at    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
@@ -137,6 +139,7 @@ CREATE TABLE IF NOT EXISTS memory_conversation_buffer (
     role       VARCHAR(16)  NOT NULL,
     content    TEXT         NOT NULL,
     user_name  VARCHAR(64),
+    source_client VARCHAR(64),
     timestamp  DATETIME(3),
     extracted  TINYINT      NOT NULL DEFAULT 0,
     created_at DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -653,6 +656,5 @@ CREATE TABLE IF NOT EXISTS memory_thread_enrichment_input (
         entry_seq
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 
 

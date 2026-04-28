@@ -34,6 +34,7 @@ public class MemoryItemDO extends BaseDO {
     private String content;
     private String scope;
     private String category;
+    private String sourceClient;
     private String vectorId;
     private String rawDataId;
     private String contentHash;
@@ -131,6 +132,14 @@ public class MemoryItemDO extends BaseDO {
 
     public void setCategory(String category) {
         this.category = category;
+    }
+
+    public String getSourceClient() {
+        return sourceClient;
+    }
+
+    public void setSourceClient(String sourceClient) {
+        this.sourceClient = sourceClient;
     }
 
     public String getVectorId() {

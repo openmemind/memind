@@ -53,13 +53,18 @@ def main():
                 payload = spool.load_claimed(claimed)
                 replay_client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=10)
                 if payload.get("kind") == "add-message":
-                    replay_client.add_message(payload["userId"], payload["agentId"], payload["message"])
+                    replay_client.add_message(
+                        payload["userId"],
+                        payload["agentId"],
+                        payload["message"],
+                        payload.get("sourceClient"),
+                    )
                     if payload.get("sessionId") and payload.get("fingerprint"):
                         with SessionStateStore(state_root()).locked(payload["sessionId"]) as state:
                             state.mark_submitted([payload["fingerprint"]])
                     spool.complete(claimed)
                 elif payload.get("kind") == "commit":
-                    replay_client.commit(payload["userId"], payload["agentId"])
+                    replay_client.commit(payload["userId"], payload["agentId"], payload.get("sourceClient"))
                     spool.complete(claimed)
                 else:
                     spool.complete(claimed)

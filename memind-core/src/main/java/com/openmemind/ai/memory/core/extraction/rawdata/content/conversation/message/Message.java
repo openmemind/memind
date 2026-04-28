@@ -24,14 +24,31 @@ import java.util.stream.Collectors;
  * @param content List of message content blocks
  * @param timestamp Message timestamp (optional, null means unknown)
  * @param userName User name (optional, used to replace "User" during extraction)
+ * @param sourceClient Source client that produced this message (optional)
  */
-public record Message(Role role, List<ContentBlock> content, Instant timestamp, String userName) {
+public record Message(
+        Role role,
+        List<ContentBlock> content,
+        Instant timestamp,
+        String userName,
+        String sourceClient) {
+
+    public Message {
+        sourceClient = normalizeSourceClient(sourceClient);
+    }
 
     /**
      * Backward compatible 3-parameter constructor (userName defaults to null)
      */
     public Message(Role role, List<ContentBlock> content, Instant timestamp) {
-        this(role, content, timestamp, null);
+        this(role, content, timestamp, null, null);
+    }
+
+    /**
+     * Backward compatible 4-parameter constructor (sourceClient defaults to null)
+     */
+    public Message(Role role, List<ContentBlock> content, Instant timestamp, String userName) {
+        this(role, content, timestamp, userName, null);
     }
 
     /**
@@ -143,6 +160,24 @@ public record Message(Role role, List<ContentBlock> content, Instant timestamp, 
      * @return New Message
      */
     public Message withUserName(String userName) {
-        return new Message(role, content, timestamp, userName);
+        return new Message(role, content, timestamp, userName, sourceClient);
+    }
+
+    /**
+     * Return a new Message with the sourceClient set
+     *
+     * @param sourceClient Source client
+     * @return New Message
+     */
+    public Message withSourceClient(String sourceClient) {
+        return new Message(role, content, timestamp, userName, sourceClient);
+    }
+
+    private static String normalizeSourceClient(String sourceClient) {
+        if (sourceClient == null) {
+            return null;
+        }
+        String normalized = sourceClient.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 }

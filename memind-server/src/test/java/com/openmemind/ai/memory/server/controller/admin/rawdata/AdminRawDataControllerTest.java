@@ -138,6 +138,7 @@ class AdminRawDataControllerTest {
                 "a1",
                 "u1:a1",
                 "conversation",
+                "api",
                 "content-1",
                 Map.of("type", "conversation"),
                 "caption",

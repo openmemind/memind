@@ -19,6 +19,7 @@ import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
+import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
@@ -52,6 +53,7 @@ public class OpenMemoryApplicationService {
 
     private static final Logger log = LoggerFactory.getLogger(OpenMemoryApplicationService.class);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
+    private static final String DEFAULT_SOURCE_CLIENT = "api";
 
     private final MemoryRuntimeManager runtimeManager;
     private final MemindServerObservabilityProperties observabilityProperties;
@@ -73,7 +75,7 @@ public class OpenMemoryApplicationService {
         dispatchAsync(
                 "extract",
                 memoryId,
-                lease -> lease.handle().memory().extract(memoryId, request.rawContent()));
+                lease -> lease.handle().memory().extract(extractionRequest(memoryId, request)));
     }
 
     public ExtractMemoryResponse extract(ExtractMemoryRequest request) {
@@ -83,8 +85,10 @@ public class OpenMemoryApplicationService {
                             lease.handle()
                                     .memory()
                                     .extract(
-                                            DefaultMemoryId.of(request.userId(), request.agentId()),
-                                            request.rawContent())
+                                            extractionRequest(
+                                                    DefaultMemoryId.of(
+                                                            request.userId(), request.agentId()),
+                                                    request))
                                     .block(REQUEST_TIMEOUT),
                             "Memory extract returned no result");
             return toExtractResponse(result);
@@ -96,7 +100,15 @@ public class OpenMemoryApplicationService {
         dispatchAsync(
                 "add-message",
                 memoryId,
-                lease -> lease.handle().memory().addMessage(memoryId, request.message()));
+                lease ->
+                        lease.handle()
+                                .memory()
+                                .addMessage(
+                                        memoryId,
+                                        request.message()
+                                                .withSourceClient(
+                                                        normalizeSourceClient(
+                                                                request.sourceClient()))));
     }
 
     public AddMessageResponse addMessage(AddMessageRequest request) {
@@ -106,7 +118,9 @@ public class OpenMemoryApplicationService {
                             .memory()
                             .addMessage(
                                     DefaultMemoryId.of(request.userId(), request.agentId()),
-                                    request.message())
+                                    request.message()
+                                            .withSourceClient(
+                                                    normalizeSourceClient(request.sourceClient())))
                             .blockOptional(REQUEST_TIMEOUT);
             return result.map(value -> new AddMessageResponse(true, toExtractResponse(value)))
                     .orElseGet(() -> new AddMessageResponse(false, null));
@@ -115,7 +129,13 @@ public class OpenMemoryApplicationService {
 
     public void commitAsync(CommitMemoryRequest request) {
         MemoryId memoryId = DefaultMemoryId.of(request.userId(), request.agentId());
-        dispatchAsync("commit", memoryId, lease -> lease.handle().memory().commit(memoryId));
+        dispatchAsync(
+                "commit",
+                memoryId,
+                lease ->
+                        lease.handle()
+                                .memory()
+                                .commit(memoryId, normalizeSourceClient(request.sourceClient())));
     }
 
     public ExtractMemoryResponse commit(CommitMemoryRequest request) {
@@ -124,7 +144,9 @@ public class OpenMemoryApplicationService {
                     Objects.requireNonNull(
                             lease.handle()
                                     .memory()
-                                    .commit(DefaultMemoryId.of(request.userId(), request.agentId()))
+                                    .commit(
+                                            DefaultMemoryId.of(request.userId(), request.agentId()),
+                                            normalizeSourceClient(request.sourceClient()))
                                     .block(REQUEST_TIMEOUT),
                             "Memory commit returned no result");
             return toExtractResponse(result);
@@ -157,6 +179,19 @@ public class OpenMemoryApplicationService {
         }
         return operation.contextWrite(
                 context -> RetrievalTraceContext.withCollector(context, traceCollector));
+    }
+
+    private static ExtractionRequest extractionRequest(
+            MemoryId memoryId, ExtractMemoryRequest request) {
+        return ExtractionRequest.of(memoryId, request.rawContent())
+                .withMetadata("sourceClient", normalizeSourceClient(request.sourceClient()));
+    }
+
+    private static String normalizeSourceClient(String sourceClient) {
+        if (sourceClient == null || sourceClient.isBlank()) {
+            return DEFAULT_SOURCE_CLIENT;
+        }
+        return sourceClient.trim();
     }
 
     private BoundedRetrievalTraceCollector traceCollector(RetrieveMemoryRequest request) {

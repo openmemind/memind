@@ -76,10 +76,12 @@ class ClientTest(unittest.TestCase):
         Handler.responses.append((200, {"code": "200", "data": None}))
         client = MemindClient(self.base_url, timeout=2)
         message = {"role": "USER", "content": [{"type": "text", "text": "hello"}], "timestamp": None}
-        client.add_message("u", "a", message)
-        client.commit("u", "a")
+        client.add_message("u", "a", message, "claude-code")
+        client.commit("u", "a", "claude-code")
         self.assertEqual(Handler.requests[0][1], "/open/v1/memory/add-message")
+        self.assertEqual(Handler.requests[0][2]["sourceClient"], "claude-code")
         self.assertEqual(Handler.requests[1][1], "/open/v1/memory/commit")
+        self.assertEqual(Handler.requests[1][2]["sourceClient"], "claude-code")
 
     def test_retrieve_requires_data(self):
         Handler.responses.append((200, {"code": "success", "data": {"items": [], "insights": []}}))

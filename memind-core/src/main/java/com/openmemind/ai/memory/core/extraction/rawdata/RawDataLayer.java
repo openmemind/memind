@@ -22,6 +22,7 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.extraction.step.RawDataExtractStep;
 import com.openmemind.ai.memory.core.extraction.step.SegmentProcessor;
@@ -395,12 +396,19 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
                                     Map<String, Object> mergedMetadata =
                                             mergeSegmentMetadata(
                                                     requestMetadata, segment.metadata());
+                                    String sourceClient =
+                                            resolveSourceClient(
+                                                    mergedMetadata, segment.runtimeContext());
+                                    if (sourceClient != null) {
+                                        mergedMetadata.put("sourceClient", sourceClient);
+                                    }
                                     String resourceId = resolveString(mergedMetadata, "resourceId");
                                     String mimeType = resolveString(mergedMetadata, "mimeType");
                                     return new MemoryRawData(
                                             UUID.randomUUID().toString(),
                                             memoryId.toIdentifier(),
                                             input.contentType(),
+                                            sourceClient,
                                             contentId,
                                             durableSegment,
                                             segment.caption(),
@@ -545,7 +553,7 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
         if (segmentMetadata != null) {
             merged.putAll(segmentMetadata);
         }
-        return Map.copyOf(merged);
+        return merged;
     }
 
     private boolean isProjectedResourceKey(String key) {
@@ -579,6 +587,19 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
         }
         String text = value.toString();
         return text.isBlank() ? null : text;
+    }
+
+    private String resolveSourceClient(
+            Map<String, Object> metadata, SegmentRuntimeContext runtimeContext) {
+        String fromMetadata = resolveString(metadata, "sourceClient");
+        if (fromMetadata != null) {
+            return fromMetadata;
+        }
+        if (runtimeContext == null || runtimeContext.sourceClient() == null) {
+            return null;
+        }
+        String sourceClient = runtimeContext.sourceClient().trim();
+        return sourceClient.isBlank() ? null : sourceClient;
     }
 
     private Long resolveLong(Map<String, Object> metadata, String key) {

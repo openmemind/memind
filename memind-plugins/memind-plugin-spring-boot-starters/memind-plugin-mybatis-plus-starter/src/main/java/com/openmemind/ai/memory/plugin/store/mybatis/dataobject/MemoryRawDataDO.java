@@ -32,6 +32,7 @@ public class MemoryRawDataDO extends BaseDO {
     private String agentId;
     private String memoryId;
     private String type;
+    private String sourceClient;
     private String contentId;
 
     @TableField(typeHandler = Jackson3TypeHandler.class)
@@ -98,6 +99,14 @@ public class MemoryRawDataDO extends BaseDO {
 
     public void setType(String type) {
         this.type = type;
+    }
+
+    public String getSourceClient() {
+        return sourceClient;
+    }
+
+    public void setSourceClient(String sourceClient) {
+        this.sourceClient = sourceClient;
     }
 
     public String getContentId() {

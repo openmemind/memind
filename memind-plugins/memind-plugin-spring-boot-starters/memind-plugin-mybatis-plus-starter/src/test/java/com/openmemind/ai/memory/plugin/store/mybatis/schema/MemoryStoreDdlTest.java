@@ -198,6 +198,10 @@ class MemoryStoreDdlTest {
 
         assertThat(count).isEqualTo(DefaultInsightTypes.all().size());
         assertThat(columnExists(dataSource, "memory_insight", "confidence")).isFalse();
+        assertThat(columnExists(dataSource, "memory_raw_data", "source_client")).isTrue();
+        assertThat(columnExists(dataSource, "memory_item", "source_client")).isTrue();
+        assertThat(columnExists(dataSource, "memory_conversation_buffer", "source_client"))
+                .isTrue();
     }
 
     @Test

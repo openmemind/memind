@@ -50,18 +50,19 @@ def ingest_messages(config, hook_input, commit=False, max_messages=None):
     store = SessionStateStore(state_root())
     submitted = []
     session_id = hook_input.get("session_id") or "unknown-session"
+    source_client = config.get("sourceClient")
     with store.locked(session_id) as state:
         new_messages = [message for message in messages if not state.is_submitted(message["fingerprint"])]
         for raw_message in new_messages[:limit]:
             fingerprint = raw_message["fingerprint"]
             message = {key: value for key, value in raw_message.items() if key != "fingerprint"}
             try:
-                client.add_message(identity["userId"], identity["agentId"], message)
+                client.add_message(identity["userId"], identity["agentId"], message, source_client)
                 submitted.append(fingerprint)
             except Exception:
                 try:
                     time.sleep(0.5)
-                    client.add_message(identity["userId"], identity["agentId"], message)
+                    client.add_message(identity["userId"], identity["agentId"], message, source_client)
                     submitted.append(fingerprint)
                 except Exception:
                     if retry_spool is not None:
@@ -71,6 +72,7 @@ def ingest_messages(config, hook_input, commit=False, max_messages=None):
                                 "userId": identity["userId"],
                                 "agentId": identity["agentId"],
                                 "message": message,
+                                "sourceClient": source_client,
                                 "sessionId": session_id,
                                 "fingerprint": fingerprint,
                             }
@@ -79,11 +81,18 @@ def ingest_messages(config, hook_input, commit=False, max_messages=None):
     committed = False
     if commit:
         try:
-            client.commit(identity["userId"], identity["agentId"])
+            client.commit(identity["userId"], identity["agentId"], source_client)
             committed = True
         except Exception:
             if retry_spool is not None:
-                retry_spool.enqueue({"kind": "commit", "userId": identity["userId"], "agentId": identity["agentId"]})
+                retry_spool.enqueue(
+                    {
+                        "kind": "commit",
+                        "userId": identity["userId"],
+                        "agentId": identity["agentId"],
+                        "sourceClient": source_client,
+                    }
+                )
     return {"submitted": len(submitted), "committed": committed}
 
 

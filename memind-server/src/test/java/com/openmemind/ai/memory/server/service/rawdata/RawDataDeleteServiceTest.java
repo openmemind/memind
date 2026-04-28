@@ -112,6 +112,7 @@ class RawDataDeleteServiceTest {
                 agentId,
                 memoryId,
                 "conversation",
+                "api",
                 "content-1",
                 Map.of("type", "conversation"),
                 "caption",
@@ -141,6 +142,7 @@ class RawDataDeleteServiceTest {
                 Map.of(),
                 "FACT",
                 "conversation",
+                "api",
                 Instant.parse("2026-03-31T10:00:02Z"),
                 Instant.parse("2026-03-31T10:00:03Z"));
     }

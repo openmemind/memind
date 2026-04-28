@@ -48,6 +48,7 @@ public class MemoryStoreDdl implements IDdl, Ordered {
         boolean hadInsightTypeTable = tableExists("memory_insight_type");
         consumer.accept(dataSource);
         dropInsightConfidenceIfPresent();
+        ensureSourceClientColumnsPresent();
         ensureItemTemporalColumnsPresent();
         ensureItemTemporalLookupSchemaPresent();
         if (!hadInsightTypeTable && tableExists("memory_insight_type")) {
@@ -222,6 +223,55 @@ public class MemoryStoreDdl implements IDdl, Ordered {
         }
     }
 
+    private void ensureSourceClientColumnsPresent() {
+        switch (databaseDialectDetector.detect(dataSource)) {
+            case SQLITE -> {
+                ensureColumnIfTableExists(
+                        "memory_raw_data",
+                        "source_client",
+                        "ALTER TABLE memory_raw_data ADD COLUMN source_client TEXT");
+                ensureColumnIfTableExists(
+                        "memory_item",
+                        "source_client",
+                        "ALTER TABLE memory_item ADD COLUMN source_client TEXT");
+                ensureColumnIfTableExists(
+                        "memory_conversation_buffer",
+                        "source_client",
+                        "ALTER TABLE memory_conversation_buffer ADD COLUMN source_client TEXT");
+            }
+            case MYSQL -> {
+                ensureColumnIfTableExists(
+                        "memory_raw_data",
+                        "source_client",
+                        "ALTER TABLE memory_raw_data ADD COLUMN source_client VARCHAR(64) NULL");
+                ensureColumnIfTableExists(
+                        "memory_item",
+                        "source_client",
+                        "ALTER TABLE memory_item ADD COLUMN source_client VARCHAR(64) NULL");
+                ensureColumnIfTableExists(
+                        "memory_conversation_buffer",
+                        "source_client",
+                        "ALTER TABLE memory_conversation_buffer ADD COLUMN source_client"
+                                + " VARCHAR(64) NULL");
+            }
+            case POSTGRESQL -> {
+                ensureColumnIfTableExists(
+                        "memory_raw_data",
+                        "source_client",
+                        "ALTER TABLE memory_raw_data ADD COLUMN source_client VARCHAR(64)");
+                ensureColumnIfTableExists(
+                        "memory_item",
+                        "source_client",
+                        "ALTER TABLE memory_item ADD COLUMN source_client VARCHAR(64)");
+                ensureColumnIfTableExists(
+                        "memory_conversation_buffer",
+                        "source_client",
+                        "ALTER TABLE memory_conversation_buffer ADD COLUMN source_client"
+                                + " VARCHAR(64)");
+            }
+        }
+    }
+
     private void ensureItemTemporalLookupSchemaPresent() {
         if (!tableExists("memory_item")) {
             return;
@@ -250,6 +300,13 @@ public class MemoryStoreDdl implements IDdl, Ordered {
             return;
         }
         new JdbcTemplate(dataSource).execute(sql);
+    }
+
+    private void ensureColumnIfTableExists(String tableName, String columnName, String sql) {
+        if (!tableExists(tableName)) {
+            return;
+        }
+        ensureColumn(tableName, columnName, sql);
     }
 
     private void ensureIndex(String tableName, String indexName, String sql) {

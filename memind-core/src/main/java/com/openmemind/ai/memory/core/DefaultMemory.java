@@ -214,6 +214,17 @@ public class DefaultMemory implements Memory {
 
     @Override
     public Mono<ExtractionResult> commit(MemoryId memoryId, ExtractionConfig config) {
+        return commit(memoryId, config, null);
+    }
+
+    @Override
+    public Mono<ExtractionResult> commit(MemoryId memoryId, String sourceClient) {
+        return commit(memoryId, defaultExtractionConfig(), sourceClient);
+    }
+
+    @Override
+    public Mono<ExtractionResult> commit(
+            MemoryId memoryId, ExtractionConfig config, String sourceClient) {
         Objects.requireNonNull(memoryId, "memoryId is required");
         Objects.requireNonNull(config, "config is required");
 
@@ -235,6 +246,9 @@ public class DefaultMemory implements Memory {
                             Duration.ZERO));
         }
 
+        if (sourceClient != null && !sourceClient.isBlank()) {
+            messages = applySourceClient(messages, sourceClient);
+        }
         return extract(memoryId, new ConversationContent(messages), config);
     }
 
@@ -244,6 +258,16 @@ public class DefaultMemory implements Memory {
                 .map(Message::textContent)
                 .filter(t -> t != null && !t.isBlank())
                 .collect(Collectors.joining(" "));
+    }
+
+    private static List<Message> applySourceClient(List<Message> messages, String sourceClient) {
+        return messages.stream()
+                .map(
+                        message ->
+                                message.sourceClient() == null
+                                        ? message.withSourceClient(sourceClient)
+                                        : message)
+                .toList();
     }
 
     private static List<Message> trimRecentMessages(List<Message> messages, int maxTokens) {

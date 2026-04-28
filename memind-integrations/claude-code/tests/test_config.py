@@ -43,6 +43,7 @@ class ConfigTest(unittest.TestCase):
     def test_defaults_match_spec(self):
         self.assertEqual(DEFAULT_SETTINGS["retrieveContextTurns"], 0)
         self.assertEqual(DEFAULT_SETTINGS["ingestionMode"], "add-message")
+        self.assertEqual(DEFAULT_SETTINGS["sourceClient"], "claude-code")
         self.assertEqual(DEFAULT_SETTINGS["ingestionMaxMessagesPerHook"], 20)
         self.assertEqual(DEFAULT_SETTINGS["stateMaxAgeDays"], 14)
 

@@ -398,8 +398,8 @@ public class SqliteMemoryStore
                                          vector_id, raw_data_id, content_hash, occurred_at,
                                          occurred_start, occurred_end, time_granularity, observed_at,
                                          temporal_start, temporal_end_or_anchor, temporal_anchor,
-                                         type, raw_data_type, metadata, created_at, updated_at, deleted)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                                         type, raw_data_type, source_client, metadata, created_at, updated_at, deleted)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                                     """)) {
                         Instant now = Instant.now();
                         for (MemoryItem item : items) {
@@ -916,14 +916,15 @@ public class SqliteMemoryStore
                 connection.prepareStatement(
                         """
                         INSERT INTO memory_raw_data
-                            (biz_id, user_id, agent_id, memory_id, type, content_id, segment,
-                             caption, caption_vector_id, metadata, resource_id, mime_type,
+                            (biz_id, user_id, agent_id, memory_id, type, content_id, source_client,
+                             segment, caption, caption_vector_id, metadata, resource_id, mime_type,
                              start_time, end_time, created_at, updated_at, deleted)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
                         ON CONFLICT(user_id, agent_id, biz_id) DO UPDATE SET
                             memory_id = excluded.memory_id,
                             type = excluded.type,
                             content_id = excluded.content_id,
+                            source_client = excluded.source_client,
                             segment = excluded.segment,
                             caption = excluded.caption,
                             caption_vector_id = excluded.caption_vector_id,
@@ -991,17 +992,18 @@ public class SqliteMemoryStore
                 5,
                 rawData.contentType() != null ? rawData.contentType() : ConversationContent.TYPE);
         statement.setString(6, rawData.contentId());
-        statement.setString(7, toSegmentJson(rawData.segment()));
-        statement.setString(8, rawData.caption());
-        statement.setString(9, rawData.captionVectorId());
-        statement.setString(10, jsonHelper.toJson(rawData.metadata()));
-        statement.setString(11, rawData.resourceId());
-        statement.setString(12, rawData.mimeType());
-        statement.setString(13, writeInstant(rawData.startTime()));
-        statement.setString(14, writeInstant(rawData.endTime()));
+        statement.setString(7, rawData.sourceClient());
+        statement.setString(8, toSegmentJson(rawData.segment()));
+        statement.setString(9, rawData.caption());
+        statement.setString(10, rawData.captionVectorId());
+        statement.setString(11, jsonHelper.toJson(rawData.metadata()));
+        statement.setString(12, rawData.resourceId());
+        statement.setString(13, rawData.mimeType());
+        statement.setString(14, writeInstant(rawData.startTime()));
+        statement.setString(15, writeInstant(rawData.endTime()));
         statement.setString(
-                15, writeInstant(rawData.createdAt() != null ? rawData.createdAt() : now));
-        statement.setString(16, writeInstant(now));
+                16, writeInstant(rawData.createdAt() != null ? rawData.createdAt() : now));
+        statement.setString(17, writeInstant(now));
     }
 
     private void bindResourceUpsert(
@@ -1058,9 +1060,10 @@ public class SqliteMemoryStore
                 19, item.type() != null ? item.type().name() : MemoryItemType.FACT.name());
         statement.setString(
                 20, item.contentType() != null ? item.contentType() : ConversationContent.TYPE);
-        statement.setString(21, jsonHelper.toJson(item.metadata()));
-        statement.setString(22, writeInstant(item.createdAt() != null ? item.createdAt() : now));
-        statement.setString(23, writeInstant(now));
+        statement.setString(21, item.sourceClient());
+        statement.setString(22, jsonHelper.toJson(item.metadata()));
+        statement.setString(23, writeInstant(item.createdAt() != null ? item.createdAt() : now));
+        statement.setString(24, writeInstant(now));
     }
 
     private void bindInsightTypeUpsert(
@@ -1115,6 +1118,7 @@ public class SqliteMemoryStore
                 resultSet.getString("biz_id"),
                 resultSet.getString("memory_id"),
                 parseContentType(resultSet.getString("type")),
+                resultSet.getString("source_client"),
                 resultSet.getString("content_id"),
                 fromSegmentJson(resultSet.getString("segment")),
                 resultSet.getString("caption"),
@@ -1158,6 +1162,7 @@ public class SqliteMemoryStore
                 parseScope(resultSet.getString("scope")),
                 parseCategory(resultSet.getString("category")),
                 parseContentType(resultSet.getString("raw_data_type")),
+                resultSet.getString("source_client"),
                 resultSet.getString("vector_id"),
                 resultSet.getString("raw_data_id"),
                 resultSet.getString("content_hash"),

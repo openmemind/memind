@@ -18,4 +18,12 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 public record AddMessageRequest(
-        @NotBlank String userId, @NotBlank String agentId, @NotNull Message message) {}
+        @NotBlank String userId,
+        @NotBlank String agentId,
+        @NotNull Message message,
+        String sourceClient) {
+
+    public AddMessageRequest(String userId, String agentId, Message message) {
+        this(userId, agentId, message, null);
+    }
+}

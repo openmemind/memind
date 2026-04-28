@@ -125,6 +125,7 @@ final class MybatisAdminItemQueryMapper implements AdminItemQueryMapper {
                 dataObject.getMetadata(),
                 dataObject.getType(),
                 dataObject.getRawDataType(),
+                dataObject.getSourceClient(),
                 dataObject.getCreatedAt(),
                 dataObject.getUpdatedAt());
     }

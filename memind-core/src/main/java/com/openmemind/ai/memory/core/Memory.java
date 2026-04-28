@@ -190,6 +190,32 @@ public interface Memory extends AutoCloseable {
      */
     Mono<ExtractionResult> commit(MemoryId memoryId, ExtractionConfig config);
 
+    /**
+     * Manually commits the current conversation buffer with a source-client fallback.
+     *
+     * <p>Implementations that do not track source clients may ignore this value.
+     *
+     * @param memoryId identifies whose buffer to commit
+     * @param sourceClient source client to apply to buffered messages that do not already carry one
+     * @return an {@link ExtractionResult} describing what was extracted
+     */
+    default Mono<ExtractionResult> commit(MemoryId memoryId, String sourceClient) {
+        return commit(memoryId);
+    }
+
+    /**
+     * Manually commits the current conversation buffer with a custom extraction config and source-client fallback.
+     *
+     * @param memoryId identifies whose buffer to commit
+     * @param config custom extraction configuration
+     * @param sourceClient source client to apply to buffered messages that do not already carry one
+     * @return an {@link ExtractionResult} describing what was extracted
+     */
+    default Mono<ExtractionResult> commit(
+            MemoryId memoryId, ExtractionConfig config, String sourceClient) {
+        return commit(memoryId, config);
+    }
+
     // ===== Retrieval =====
 
     /**

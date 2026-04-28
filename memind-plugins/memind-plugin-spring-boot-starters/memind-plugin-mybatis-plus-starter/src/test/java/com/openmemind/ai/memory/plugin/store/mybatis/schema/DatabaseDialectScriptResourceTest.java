@@ -63,6 +63,7 @@ class DatabaseDialectScriptResourceTest {
                         "memory_thread_runtime",
                         "memory_thread_enrichment_input",
                         "thread_intake_outbox");
+        assertThat(sql).contains("source_client");
         assertThat(sql.toUpperCase()).contains("IF NOT EXISTS");
     }
 }

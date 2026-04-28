@@ -167,6 +167,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                                         resolvedInsightTypes,
                                         config.allowedCategories(),
                                         config.language()))
+                .map(entries -> applySourceClient(entries, rawDataResult.segments()))
                 .map(
                         entries ->
                                 filterEntries(
@@ -312,6 +313,74 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 .onErrorResume(ex -> Mono.just(entries));
     }
 
+    private List<ExtractedMemoryEntry> applySourceClient(
+            List<ExtractedMemoryEntry> entries, List<ParsedSegment> segments) {
+        String sourceClient = resolveSourceClient(segments);
+        if (sourceClient == null || entries.isEmpty()) {
+            return entries;
+        }
+        return entries.stream().map(entry -> entryWithSourceClient(entry, sourceClient)).toList();
+    }
+
+    private ExtractedMemoryEntry entryWithSourceClient(
+            ExtractedMemoryEntry entry, String sourceClient) {
+        if (entry.metadata() != null) {
+            Object existing = entry.metadata().get("sourceClient");
+            if (existing != null && !existing.toString().isBlank()) {
+                return entry;
+            }
+        }
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (entry.metadata() != null) {
+            metadata.putAll(entry.metadata());
+        }
+        metadata.put("sourceClient", sourceClient);
+        return new ExtractedMemoryEntry(
+                entry.content(),
+                entry.confidence(),
+                entry.occurredAt(),
+                entry.occurredStart(),
+                entry.occurredEnd(),
+                entry.timeGranularity(),
+                entry.observedAt(),
+                entry.rawDataId(),
+                entry.contentHash(),
+                entry.insightTypes(),
+                Map.copyOf(metadata),
+                entry.type(),
+                entry.category(),
+                entry.graphHints());
+    }
+
+    private String resolveSourceClient(List<ParsedSegment> segments) {
+        if (segments == null || segments.isEmpty()) {
+            return null;
+        }
+        return segments.stream()
+                .map(this::resolveSourceClient)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String resolveSourceClient(ParsedSegment segment) {
+        if (segment == null) {
+            return null;
+        }
+        if (segment.metadata() != null) {
+            Object value = segment.metadata().get("sourceClient");
+            if (value != null && !value.toString().isBlank()) {
+                return value.toString().trim();
+            }
+        }
+        if (segment.runtimeContext() == null || segment.runtimeContext().sourceClient() == null) {
+            return null;
+        }
+        String sourceClient = segment.runtimeContext().sourceClient().trim();
+        return sourceClient.isBlank() ? null : sourceClient;
+    }
+
     // ===== Phase 3: vectorization + persistence =====
 
     private Mono<MemoryItemResult> vectorizeAndPersist(
@@ -399,6 +468,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 resolvedScope,
                 category,
                 contentType,
+                resolveSourceClient(entry),
                 vectorId,
                 entry.rawDataId(),
                 entry.contentHash(),
@@ -424,6 +494,18 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
             result.put("insightTypes", entry.insightTypes());
         }
         return result.isEmpty() ? Map.of() : Map.copyOf(result);
+    }
+
+    private static String resolveSourceClient(ExtractedMemoryEntry entry) {
+        if (entry == null || entry.metadata() == null) {
+            return null;
+        }
+        Object value = entry.metadata().get("sourceClient");
+        if (value == null) {
+            return null;
+        }
+        String sourceClient = value.toString().trim();
+        return sourceClient.isBlank() ? null : sourceClient;
     }
 
     private boolean shouldPersistWhenToUse(ExtractedMemoryEntry entry) {

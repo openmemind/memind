@@ -15,4 +15,10 @@ package com.openmemind.ai.memory.server.domain.memory.request;
 
 import jakarta.validation.constraints.NotBlank;
 
-public record CommitMemoryRequest(@NotBlank String userId, @NotBlank String agentId) {}
+public record CommitMemoryRequest(
+        @NotBlank String userId, @NotBlank String agentId, String sourceClient) {
+
+    public CommitMemoryRequest(String userId, String agentId) {
+        this(userId, agentId, null);
+    }
+}

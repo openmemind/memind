@@ -27,7 +27,8 @@ public interface ConversationBufferMapper extends BaseMapper<ConversationBufferD
 
     @Select(
             """
-            SELECT id, session_id AS sessionId, role, content, user_name AS userName, timestamp
+            SELECT id, session_id AS sessionId, role, content, user_name AS userName,
+                   source_client AS sourceClient, timestamp
             FROM memory_conversation_buffer
             WHERE session_id = #{sessionId} AND extracted = FALSE AND deleted = FALSE
             ORDER BY id ASC
@@ -36,7 +37,8 @@ public interface ConversationBufferMapper extends BaseMapper<ConversationBufferD
 
     @Select(
             """
-            SELECT id, session_id AS sessionId, role, content, user_name AS userName, timestamp
+            SELECT id, session_id AS sessionId, role, content, user_name AS userName,
+                   source_client AS sourceClient, timestamp
             FROM memory_conversation_buffer
             WHERE session_id = #{sessionId} AND deleted = FALSE
             ORDER BY id DESC

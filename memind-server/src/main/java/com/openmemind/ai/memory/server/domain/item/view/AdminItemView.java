@@ -32,5 +32,6 @@ public record AdminItemView(
         Map<String, Object> metadata,
         String type,
         String rawDataType,
+        String sourceClient,
         Instant createdAt,
         Instant updatedAt) {}

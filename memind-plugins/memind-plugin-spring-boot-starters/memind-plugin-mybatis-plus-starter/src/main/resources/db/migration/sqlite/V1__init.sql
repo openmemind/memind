@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS memory_raw_data (
     agent_id          TEXT         NOT NULL,
     memory_id         TEXT         NOT NULL,
     type              TEXT         NOT NULL,
+    source_client     TEXT,
     content_id        TEXT,
     segment           TEXT,
     caption           TEXT,
@@ -63,6 +64,7 @@ CREATE TABLE IF NOT EXISTS memory_item (
     observed_at   TEXT,
     type          TEXT         NOT NULL DEFAULT 'FACT',
     raw_data_type TEXT         NOT NULL DEFAULT 'CONVERSATION',
+    source_client TEXT,
     metadata      TEXT,
     created_at    TEXT         NOT NULL DEFAULT (datetime('now')),
     updated_at    TEXT         NOT NULL DEFAULT (datetime('now')),
@@ -134,6 +136,7 @@ CREATE TABLE IF NOT EXISTS memory_conversation_buffer (
     role       TEXT         NOT NULL,
     content    TEXT         NOT NULL,
     user_name  TEXT,
+    source_client TEXT,
     timestamp  TEXT,
     extracted  INTEGER      NOT NULL DEFAULT 0,
     created_at TEXT         NOT NULL DEFAULT (datetime('now')),
@@ -662,6 +665,5 @@ CREATE INDEX IF NOT EXISTS idx_memory_thread_enrichment_input_replay
         input_run_key,
         entry_seq
     );
-
 
 
