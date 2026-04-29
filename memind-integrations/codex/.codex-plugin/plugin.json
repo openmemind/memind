@@ -1,0 +1,27 @@
+{
+  "name": "memind",
+  "version": "0.1.0",
+  "description": "Use Memind as persistent memory for Codex CLI coding sessions.",
+  "author": {
+    "name": "OpenMemind",
+    "url": "https://github.com/openmemind/memind"
+  },
+  "homepage": "https://github.com/openmemind/memind",
+  "repository": "https://github.com/openmemind/memind",
+  "license": "Apache-2.0",
+  "keywords": ["memory", "memind", "codex"],
+  "interface": {
+    "displayName": "Memind",
+    "shortDescription": "Persistent memory for Codex CLI",
+    "longDescription": "Memind adds persistent memory to Codex CLI sessions by retrieving relevant context before prompts and appending useful conversation history for extraction.",
+    "developerName": "OpenMemind",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://github.com/openmemind/memind",
+    "defaultPrompt": [
+      "Use Memind memory for this project",
+      "Search prior project context in Memind",
+      "Remember useful decisions from this task"
+    ]
+  }
+}

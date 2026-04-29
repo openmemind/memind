@@ -24,7 +24,7 @@ public record CommitDetectorConfig(int maxMessages, int maxTokens, int minMessag
 
     private static final int DEFAULT_MAX_MESSAGES = 50;
     private static final int DEFAULT_MAX_TOKENS = 8192;
-    private static final int DEFAULT_MIN_MESSAGES_FOR_LLM = 10;
+    private static final int DEFAULT_MIN_MESSAGES_FOR_LLM = 5;
 
     /**
      * Default configuration.
