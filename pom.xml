@@ -296,6 +296,7 @@
                         <exclude>NOTICE</exclude>
                         <exclude>etc/**</exclude>
                         <exclude>eval-data/**</exclude>
+                        <exclude>memind-integrations/codex/**</exclude>
                         <exclude>memind-evaluation/data/**</exclude>
                     </excludes>
                 </configuration>

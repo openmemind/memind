@@ -33,6 +33,17 @@ class LlmContextCommitDetectorTest {
 
     private static final CommitDetectionContext EMPTY_CONTEXT = CommitDetectionContext.empty();
 
+    @Nested
+    @DisplayName("Defaults")
+    class DefaultsTests {
+
+        @Test
+        @DisplayName("Should run LLM boundary detection after five candidate messages by default")
+        void shouldRunLlmBoundaryDetectionAfterFiveCandidateMessagesByDefault() {
+            assertThat(CommitDetectorConfig.defaults().minMessagesForLlm()).isEqualTo(5);
+        }
+    }
+
     private static class StubLlmContextCommitDetector extends LlmContextCommitDetector {
 
         private final Mono<CommitDecision> stubbedResult;
