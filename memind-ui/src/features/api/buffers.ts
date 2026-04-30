@@ -1,5 +1,4 @@
-import { apiDelete, apiGet, apiPatch } from '@/lib/api-client'
-import type { PageResult } from '@/lib/api-client'
+import { apiDelete, apiGet, apiPatch, type PageResult } from '@/lib/api-client'
 import type {
   AdminIdsRequest,
   AdminUpdateResult,

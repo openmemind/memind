@@ -16,7 +16,7 @@ import {
   PageError,
   PageLoading,
 } from '@/features/components/data-state'
-import { readMemoryScopeFromLocation } from '@/features/components/memory-scope-picker'
+import { readMemoryScopeFromLocation } from '@/features/components/memory-scope-location'
 import { formatNumber } from '@/lib/format'
 import type { AdminDashboardView, DailyCount, NamedCount } from '@/features/types'
 

@@ -17,14 +17,12 @@ export function TableLoading({ columns }: { columns: number }) {
     <div className='flex flex-col gap-2' aria-label='Loading table'>
       {Array.from({ length: 5 }).map((_, rowIndex) => (
         <div
-          // eslint-disable-next-line react/no-array-index-key
           key={rowIndex}
           className='grid gap-2'
           style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
         >
           {Array.from({ length: columns }).map((__, columnIndex) => (
             <Skeleton
-              // eslint-disable-next-line react/no-array-index-key
               key={columnIndex}
               className='h-8 w-full'
             />

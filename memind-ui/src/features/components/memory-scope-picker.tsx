@@ -1,30 +1,16 @@
-import { useEffect, useId, useState } from 'react'
+import { useId, useState } from 'react'
 import { SlidersHorizontal } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { parseMemoryScope } from '@/lib/memory-scope'
-
-export const MEMORY_SCOPE_SEARCH_PARAM = 'memoryId'
-export const MEMORY_SCOPE_STORAGE_KEY = 'memind-ui:memory-scope'
-
-export function readMemoryScopeFromLocation() {
-  if (typeof window === 'undefined') return ''
-
-  const params = new URLSearchParams(window.location.search)
-  return (
-    params.get(MEMORY_SCOPE_SEARCH_PARAM) ??
-    window.localStorage.getItem(MEMORY_SCOPE_STORAGE_KEY) ??
-    ''
-  )
-}
+import {
+  readMemoryScopeFromLocation,
+  writeMemoryScopeToLocation,
+} from './memory-scope-location'
 
 export function MemoryScopePicker() {
   const id = useId()
-  const [value, setValue] = useState('')
-
-  useEffect(() => {
-    setValue(readMemoryScopeFromLocation())
-  }, [])
+  const [value, setValue] = useState(() => readMemoryScopeFromLocation())
 
   const scope = parseMemoryScope(value)
   const title = scope.memoryId
@@ -45,28 +31,9 @@ export function MemoryScopePicker() {
         onChange={(event) => {
           const next = event.target.value
           setValue(next)
-          writeMemoryScope(next)
+          writeMemoryScopeToLocation(next)
         }}
       />
     </div>
   )
-}
-
-function writeMemoryScope(value: string) {
-  if (typeof window === 'undefined') return
-
-  const scope = parseMemoryScope(value)
-  const url = new URL(window.location.href)
-  url.searchParams.delete('pageNo')
-
-  if (scope.memoryId) {
-    url.searchParams.set(MEMORY_SCOPE_SEARCH_PARAM, scope.memoryId)
-    window.localStorage.setItem(MEMORY_SCOPE_STORAGE_KEY, scope.memoryId)
-  } else {
-    url.searchParams.delete(MEMORY_SCOPE_SEARCH_PARAM)
-    window.localStorage.removeItem(MEMORY_SCOPE_STORAGE_KEY)
-  }
-
-  window.history.replaceState(window.history.state, '', url)
-  window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }))
 }

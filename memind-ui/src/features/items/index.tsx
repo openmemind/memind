@@ -35,7 +35,7 @@ import {
   TableLoading,
 } from '@/features/components/data-state'
 import { JsonViewer } from '@/features/components/json-viewer'
-import { readMemoryScopeFromLocation } from '@/features/components/memory-scope-picker'
+import { readMemoryScopeFromLocation } from '@/features/components/memory-scope-location'
 import type {
   AdminItemMemoryThreadView,
   AdminItemView,
@@ -303,6 +303,7 @@ function AssociatedThreads({
       'memory-threads',
       scope.userId,
       scope.agentId,
+      scope.hasAgentId,
     ],
     enabled: scope.hasUserId,
     queryFn: () =>

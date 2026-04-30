@@ -32,7 +32,7 @@ import {
   TableLoading,
 } from '@/features/components/data-state'
 import { JsonViewer } from '@/features/components/json-viewer'
-import { readMemoryScopeFromLocation } from '@/features/components/memory-scope-picker'
+import { readMemoryScopeFromLocation } from '@/features/components/memory-scope-location'
 import type { AdminRawDataView } from '@/features/types'
 import { compactJson, formatDateTime, truncateText } from '@/lib/format'
 import { toUserAgentQuery } from '@/lib/memory-scope'
