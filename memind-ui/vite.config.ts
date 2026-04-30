@@ -33,6 +33,9 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    include: ['@tanstack/react-query'],
+  },
   test: {
     silent: 'passed-only',
     unstubEnvs: true,
