@@ -34,7 +34,13 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['@tanstack/react-query'],
+    include: [
+      '@radix-ui/react-dialog',
+      '@radix-ui/react-dropdown-menu',
+      '@radix-ui/react-separator',
+      '@radix-ui/react-tooltip',
+      '@tanstack/react-query',
+    ],
   },
   test: {
     silent: 'passed-only',
