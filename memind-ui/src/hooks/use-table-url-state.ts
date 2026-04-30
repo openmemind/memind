@@ -76,7 +76,7 @@ export function useTableUrlState(
     columnFilters: columnFiltersCfg = [],
   } = params
 
-  const pageKey = paginationCfg?.pageKey ?? ('page' as string)
+  const pageKey = paginationCfg?.pageKey ?? ('pageNo' as string)
   const pageSizeKey = paginationCfg?.pageSizeKey ?? ('pageSize' as string)
   const defaultPage = paginationCfg?.defaultPage ?? 1
   const defaultPageSize = paginationCfg?.defaultPageSize ?? 10

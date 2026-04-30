@@ -1,17 +1,23 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Dashboard } from '@/features/dashboard'
+import { MemoryThreadsPage } from '@/features/memory-threads'
 
-type DashboardSearch = {
+type MemoryThreadsSearch = {
   memoryId?: string
-  days?: number
+  pageNo?: number
+  pageSize?: number
+  status?: string
+  focus?: string
 }
 
-export const Route = createFileRoute('/_app/')({
-  validateSearch: (search): DashboardSearch => ({
+export const Route = createFileRoute('/_app/memory-threads')({
+  validateSearch: (search): MemoryThreadsSearch => ({
     memoryId: readString(search.memoryId),
-    days: readNumber(search.days),
+    pageNo: readNumber(search.pageNo),
+    pageSize: readNumber(search.pageSize),
+    status: readString(search.status),
+    focus: readString(search.focus),
   }),
-  component: Dashboard,
+  component: MemoryThreadsPage,
 })
 
 function readString(value: unknown) {

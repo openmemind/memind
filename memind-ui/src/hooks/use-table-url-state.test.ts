@@ -25,7 +25,7 @@ describe('useTableUrlState', () => {
     const navigate = vi.fn() as Mock<NavigateFn>
     const { result } = await renderHook(() =>
       useTableUrlState({
-        search: { page: 3, pageSize: 25 },
+        search: { pageNo: 3, pageSize: 25 },
         navigate,
         pagination: { defaultPage: 1, defaultPageSize: 10 },
       })
@@ -37,7 +37,7 @@ describe('useTableUrlState', () => {
     })
   })
 
-  it('uses default page and pageSize when search omits them', async () => {
+  it('uses default pageNo and pageSize when search omits them', async () => {
     const navigate = vi.fn() as Mock<NavigateFn>
     const { result } = await renderHook(() =>
       useTableUrlState({
@@ -53,11 +53,11 @@ describe('useTableUrlState', () => {
     })
   })
 
-  it('clamps negative effective page via pageIndex', async () => {
+  it('clamps negative effective pageNo via pageIndex', async () => {
     const navigate = vi.fn() as Mock<NavigateFn>
     const { result } = await renderHook(() =>
       useTableUrlState({
-        search: { page: 0 },
+        search: { pageNo: 0 },
         navigate,
         pagination: { defaultPage: 1, defaultPageSize: 10 },
       })
@@ -66,9 +66,9 @@ describe('useTableUrlState', () => {
     expect(result.current.pagination.pageIndex).toBe(0)
   })
 
-  it('onPaginationChange omits page and pageSize from search when they match defaults', async () => {
+  it('onPaginationChange omits pageNo and pageSize from search when they match defaults', async () => {
     const navigate = vi.fn() as Mock<NavigateFn>
-    const prev = { page: 2, pageSize: 20, filter: 'q' }
+    const prev = { pageNo: 2, pageSize: 20, filter: 'q' }
     const { result, act } = await renderHook(() =>
       useTableUrlState({
         search: prev,
@@ -85,18 +85,18 @@ describe('useTableUrlState', () => {
     })
 
     expect(applyLastSearchFn(navigate, prev)).toMatchObject({
-      page: undefined,
+      pageNo: undefined,
       pageSize: undefined,
       filter: 'q',
     })
   })
 
-  it('onPaginationChange writes non-default page and pageSize', async () => {
+  it('onPaginationChange writes non-default pageNo and pageSize', async () => {
     const navigate = vi.fn() as Mock<NavigateFn>
     const prev = { filter: 'x' }
     const { result, act } = await renderHook(() =>
       useTableUrlState({
-        search: { ...prev, page: 1, pageSize: 10 },
+        search: { ...prev, pageNo: 1, pageSize: 10 },
         navigate,
         pagination: { defaultPage: 1, defaultPageSize: 10 },
       })
@@ -110,7 +110,7 @@ describe('useTableUrlState', () => {
     })
 
     expect(applyLastSearchFn(navigate, prev)).toMatchObject({
-      page: 3,
+      pageNo: 3,
       pageSize: 25,
       filter: 'x',
     })
@@ -137,11 +137,11 @@ describe('useTableUrlState', () => {
     })
   })
 
-  it('reads globalFilter from search and onGlobalFilterChange updates URL and clears page', async () => {
+  it('reads globalFilter from search and onGlobalFilterChange updates URL and clears pageNo', async () => {
     const navigate = vi.fn() as Mock<NavigateFn>
     const { result, act } = await renderHook(() =>
       useTableUrlState({
-        search: { page: 2, filter: 'hello' },
+        search: { pageNo: 2, filter: 'hello' },
         navigate,
         pagination: { defaultPage: 1, defaultPageSize: 10 },
         globalFilter: { enabled: true, key: 'filter' },
@@ -154,8 +154,8 @@ describe('useTableUrlState', () => {
       result.current.onGlobalFilterChange?.('  next  ')
     })
 
-    expect(applyLastSearchFn(navigate, { page: 2, filter: 'hello' })).toEqual({
-      page: undefined,
+    expect(applyLastSearchFn(navigate, { pageNo: 2, filter: 'hello' })).toEqual({
+      pageNo: undefined,
       filter: 'next',
     })
   })
@@ -251,9 +251,9 @@ describe('useTableUrlState', () => {
     ])
   })
 
-  it('onColumnFiltersChange merges serialized filters into search and clears page', async () => {
+  it('onColumnFiltersChange merges serialized filters into search and clears pageNo', async () => {
     const navigate = vi.fn() as Mock<NavigateFn>
-    const prev = { page: 3, status: ['old'], other: 1 }
+    const prev = { pageNo: 3, status: ['old'], other: 1 }
     const { result, act } = await renderHook(() =>
       useTableUrlState({
         search: prev,
@@ -274,18 +274,41 @@ describe('useTableUrlState', () => {
     })
 
     expect(applyLastSearchFn(navigate, prev)).toEqual({
-      page: undefined,
+      pageNo: undefined,
       status: ['todo'],
       priority: undefined,
       other: 1,
     })
   })
 
-  it('ensurePageInRange navigates with replace when current page exceeds pageCount', async () => {
+  it('preserves tab search param when table filters change', async () => {
+    const navigate = vi.fn() as Mock<NavigateFn>
+    const prev = { tab: 'entities', pageNo: 4, q: 'old' }
+    const { result, act } = await renderHook(() =>
+      useTableUrlState({
+        search: prev,
+        navigate,
+        pagination: { defaultPage: 1, defaultPageSize: 20 },
+        columnFilters: [{ columnId: 'entityKey', searchKey: 'q', type: 'string' }],
+      })
+    )
+
+    await act(() => {
+      result.current.onColumnFiltersChange([{ id: 'entityKey', value: 'alice' }])
+    })
+
+    expect(applyLastSearchFn(navigate, prev)).toEqual({
+      tab: 'entities',
+      pageNo: undefined,
+      q: 'alice',
+    })
+  })
+
+  it('ensurePageInRange navigates with replace when current pageNo exceeds pageCount', async () => {
     const navigate = vi.fn() as Mock<NavigateFn>
     const { result, act } = await renderHook(() =>
       useTableUrlState({
-        search: { page: 5 },
+        search: { pageNo: 5 },
         navigate,
         pagination: { defaultPage: 1, defaultPageSize: 10 },
       })
@@ -297,19 +320,19 @@ describe('useTableUrlState', () => {
 
     expect(navigate).toHaveBeenCalledTimes(1)
     expect(lastNavigateOpts(navigate)?.replace).toBe(true)
-    expect(applyLastSearchFn(navigate, { page: 5, filter: 'x' })).toMatchObject(
+    expect(applyLastSearchFn(navigate, { pageNo: 5, filter: 'x' })).toMatchObject(
       {
-        page: undefined,
+        pageNo: undefined,
         filter: 'x',
       }
     )
   })
 
-  it('ensurePageInRange resets to last page when resetTo is last', async () => {
+  it('ensurePageInRange resets to last pageNo when resetTo is last', async () => {
     const navigate = vi.fn() as Mock<NavigateFn>
     const { result, act } = await renderHook(() =>
       useTableUrlState({
-        search: { page: 9 },
+        search: { pageNo: 9 },
         navigate,
         pagination: { defaultPage: 1, defaultPageSize: 10 },
       })
@@ -320,16 +343,16 @@ describe('useTableUrlState', () => {
     })
 
     expect(lastNavigateOpts(navigate)?.replace).toBe(true)
-    expect(applyLastSearchFn(navigate, { page: 9 })).toMatchObject({
-      page: 3,
+    expect(applyLastSearchFn(navigate, { pageNo: 9 })).toMatchObject({
+      pageNo: 3,
     })
   })
 
-  it('ensurePageInRange does not navigate when page is in range', async () => {
+  it('ensurePageInRange does not navigate when pageNo is in range', async () => {
     const navigate = vi.fn() as Mock<NavigateFn>
     const { result, act } = await renderHook(() =>
       useTableUrlState({
-        search: { page: 2 },
+        search: { pageNo: 2 },
         navigate,
         pagination: { defaultPage: 1, defaultPageSize: 10 },
       })

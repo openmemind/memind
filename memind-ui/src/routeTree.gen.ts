@@ -11,6 +11,14 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteRouteImport } from './routes/_app/route'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppRetrieveRouteImport } from './routes/_app/retrieve'
+import { Route as AppRawDataRouteImport } from './routes/_app/raw-data'
+import { Route as AppMemoryThreadsRouteImport } from './routes/_app/memory-threads'
+import { Route as AppItemsRouteImport } from './routes/_app/items'
+import { Route as AppItemGraphRouteImport } from './routes/_app/item-graph'
+import { Route as AppInsightsRouteImport } from './routes/_app/insights'
+import { Route as AppConfigRouteImport } from './routes/_app/config'
+import { Route as AppBuffersRouteImport } from './routes/_app/buffers'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
 import { Route as errors404RouteImport } from './routes/(errors)/404'
@@ -22,6 +30,46 @@ const AppRouteRoute = AppRouteRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppRetrieveRoute = AppRetrieveRouteImport.update({
+  id: '/retrieve',
+  path: '/retrieve',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppRawDataRoute = AppRawDataRouteImport.update({
+  id: '/raw-data',
+  path: '/raw-data',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppMemoryThreadsRoute = AppMemoryThreadsRouteImport.update({
+  id: '/memory-threads',
+  path: '/memory-threads',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppItemsRoute = AppItemsRouteImport.update({
+  id: '/items',
+  path: '/items',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppItemGraphRoute = AppItemGraphRouteImport.update({
+  id: '/item-graph',
+  path: '/item-graph',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppInsightsRoute = AppInsightsRouteImport.update({
+  id: '/insights',
+  path: '/insights',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppConfigRoute = AppConfigRouteImport.update({
+  id: '/config',
+  path: '/config',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppBuffersRoute = AppBuffersRouteImport.update({
+  id: '/buffers',
+  path: '/buffers',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const errors503Route = errors503RouteImport.update({
@@ -45,11 +93,27 @@ export interface FileRoutesByFullPath {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/buffers': typeof AppBuffersRoute
+  '/config': typeof AppConfigRoute
+  '/insights': typeof AppInsightsRoute
+  '/item-graph': typeof AppItemGraphRoute
+  '/items': typeof AppItemsRoute
+  '/memory-threads': typeof AppMemoryThreadsRoute
+  '/raw-data': typeof AppRawDataRoute
+  '/retrieve': typeof AppRetrieveRoute
 }
 export interface FileRoutesByTo {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/buffers': typeof AppBuffersRoute
+  '/config': typeof AppConfigRoute
+  '/insights': typeof AppInsightsRoute
+  '/item-graph': typeof AppItemGraphRoute
+  '/items': typeof AppItemsRoute
+  '/memory-threads': typeof AppMemoryThreadsRoute
+  '/raw-data': typeof AppRawDataRoute
+  '/retrieve': typeof AppRetrieveRoute
   '/': typeof AppIndexRoute
 }
 export interface FileRoutesById {
@@ -58,19 +122,59 @@ export interface FileRoutesById {
   '/(errors)/404': typeof errors404Route
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
+  '/_app/buffers': typeof AppBuffersRoute
+  '/_app/config': typeof AppConfigRoute
+  '/_app/insights': typeof AppInsightsRoute
+  '/_app/item-graph': typeof AppItemGraphRoute
+  '/_app/items': typeof AppItemsRoute
+  '/_app/memory-threads': typeof AppMemoryThreadsRoute
+  '/_app/raw-data': typeof AppRawDataRoute
+  '/_app/retrieve': typeof AppRetrieveRoute
   '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/404' | '/500' | '/503'
+  fullPaths:
+    | '/'
+    | '/404'
+    | '/500'
+    | '/503'
+    | '/buffers'
+    | '/config'
+    | '/insights'
+    | '/item-graph'
+    | '/items'
+    | '/memory-threads'
+    | '/raw-data'
+    | '/retrieve'
   fileRoutesByTo: FileRoutesByTo
-  to: '/404' | '/500' | '/503' | '/'
+  to:
+    | '/404'
+    | '/500'
+    | '/503'
+    | '/buffers'
+    | '/config'
+    | '/insights'
+    | '/item-graph'
+    | '/items'
+    | '/memory-threads'
+    | '/raw-data'
+    | '/retrieve'
+    | '/'
   id:
     | '__root__'
     | '/_app'
     | '/(errors)/404'
     | '/(errors)/500'
     | '/(errors)/503'
+    | '/_app/buffers'
+    | '/_app/config'
+    | '/_app/insights'
+    | '/_app/item-graph'
+    | '/_app/items'
+    | '/_app/memory-threads'
+    | '/_app/raw-data'
+    | '/_app/retrieve'
     | '/_app/'
   fileRoutesById: FileRoutesById
 }
@@ -95,6 +199,62 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/retrieve': {
+      id: '/_app/retrieve'
+      path: '/retrieve'
+      fullPath: '/retrieve'
+      preLoaderRoute: typeof AppRetrieveRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/raw-data': {
+      id: '/_app/raw-data'
+      path: '/raw-data'
+      fullPath: '/raw-data'
+      preLoaderRoute: typeof AppRawDataRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/memory-threads': {
+      id: '/_app/memory-threads'
+      path: '/memory-threads'
+      fullPath: '/memory-threads'
+      preLoaderRoute: typeof AppMemoryThreadsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/items': {
+      id: '/_app/items'
+      path: '/items'
+      fullPath: '/items'
+      preLoaderRoute: typeof AppItemsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/item-graph': {
+      id: '/_app/item-graph'
+      path: '/item-graph'
+      fullPath: '/item-graph'
+      preLoaderRoute: typeof AppItemGraphRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/insights': {
+      id: '/_app/insights'
+      path: '/insights'
+      fullPath: '/insights'
+      preLoaderRoute: typeof AppInsightsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/config': {
+      id: '/_app/config'
+      path: '/config'
+      fullPath: '/config'
+      preLoaderRoute: typeof AppConfigRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/buffers': {
+      id: '/_app/buffers'
+      path: '/buffers'
+      fullPath: '/buffers'
+      preLoaderRoute: typeof AppBuffersRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/(errors)/503': {
@@ -122,10 +282,26 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteRouteChildren {
+  AppBuffersRoute: typeof AppBuffersRoute
+  AppConfigRoute: typeof AppConfigRoute
+  AppInsightsRoute: typeof AppInsightsRoute
+  AppItemGraphRoute: typeof AppItemGraphRoute
+  AppItemsRoute: typeof AppItemsRoute
+  AppMemoryThreadsRoute: typeof AppMemoryThreadsRoute
+  AppRawDataRoute: typeof AppRawDataRoute
+  AppRetrieveRoute: typeof AppRetrieveRoute
   AppIndexRoute: typeof AppIndexRoute
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
+  AppBuffersRoute: AppBuffersRoute,
+  AppConfigRoute: AppConfigRoute,
+  AppInsightsRoute: AppInsightsRoute,
+  AppItemGraphRoute: AppItemGraphRoute,
+  AppItemsRoute: AppItemsRoute,
+  AppMemoryThreadsRoute: AppMemoryThreadsRoute,
+  AppRawDataRoute: AppRawDataRoute,
+  AppRetrieveRoute: AppRetrieveRoute,
   AppIndexRoute: AppIndexRoute,
 }
 

@@ -1,17 +1,23 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Dashboard } from '@/features/dashboard'
+import { RawDataPage } from '@/features/raw-data'
 
-type DashboardSearch = {
+type RawDataSearch = {
   memoryId?: string
-  days?: number
+  pageNo?: number
+  pageSize?: number
+  startTimeFrom?: string
+  startTimeTo?: string
 }
 
-export const Route = createFileRoute('/_app/')({
-  validateSearch: (search): DashboardSearch => ({
+export const Route = createFileRoute('/_app/raw-data')({
+  validateSearch: (search): RawDataSearch => ({
     memoryId: readString(search.memoryId),
-    days: readNumber(search.days),
+    pageNo: readNumber(search.pageNo),
+    pageSize: readNumber(search.pageSize),
+    startTimeFrom: readString(search.startTimeFrom),
+    startTimeTo: readString(search.startTimeTo),
   }),
-  component: Dashboard,
+  component: RawDataPage,
 })
 
 function readString(value: unknown) {

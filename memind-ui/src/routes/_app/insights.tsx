@@ -1,17 +1,25 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Dashboard } from '@/features/dashboard'
+import { InsightsPage } from '@/features/insights'
 
-type DashboardSearch = {
+type InsightsSearch = {
   memoryId?: string
-  days?: number
+  pageNo?: number
+  pageSize?: number
+  scope?: string
+  type?: string
+  tier?: string
 }
 
-export const Route = createFileRoute('/_app/')({
-  validateSearch: (search): DashboardSearch => ({
+export const Route = createFileRoute('/_app/insights')({
+  validateSearch: (search): InsightsSearch => ({
     memoryId: readString(search.memoryId),
-    days: readNumber(search.days),
+    pageNo: readNumber(search.pageNo),
+    pageSize: readNumber(search.pageSize),
+    scope: readString(search.scope),
+    type: readString(search.type),
+    tier: readString(search.tier),
   }),
-  component: Dashboard,
+  component: InsightsPage,
 })
 
 function readString(value: unknown) {
