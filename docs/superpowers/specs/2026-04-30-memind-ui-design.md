@@ -188,8 +188,8 @@ Known server-backed filter options:
 | --- | --- | --- |
 | Conversation buffer `state` | `pending`, `extracted`, `all` | `AdminBufferQueryMapper` |
 | Insight buffer `state` | `unbuilt`, `ungrouped`, `grouped`, `built`, `all` | `AdminBufferQueryMapper` |
-| Memory thread `status` | `ACTIVE`, `DORMANT`, `CLOSED` | `MemoryThreadLifecycleStatus` |
-| Graph batch `state` | `PENDING`, `COMMITTED`, `REPAIR_REQUIRED` | `ExtractionBatchState` |
+| Memory thread `status` | `all` UI option that omits the query param, plus `ACTIVE`, `DORMANT`, `CLOSED` | `MemoryThreadLifecycleStatus` |
+| Graph batch `state` | `all` UI option that omits the query param, plus `PENDING`, `COMMITTED`, `REPAIR_REQUIRED` | `ExtractionBatchState` |
 
 Use these values for select controls where practical, while still allowing the API client to surface `bad_request` responses if the backend later tightens validation.
 
@@ -329,11 +329,11 @@ Activity charts should use `AdminDashboardView.Activity.days` and the three `Dai
 
 Backlog cards should be actionable where the current API surface supports a useful target:
 
-- `conversationPending` links to Buffers > Conversations with `state=pending`
-- `insightUnbuilt` links to Buffers > Insights with `state=unbuilt`
-- `insightUngrouped` links to Buffers > Insights with `state=unbuilt` and preserves scope; do not invent an unsupported `groupName` server filter in version one
+- `conversationPending` links to Buffers with `tab=conversations&state=pending`
+- `insightUnbuilt` links to Buffers with `tab=insights&state=unbuilt`
+- `insightUngrouped` links to Buffers with `tab=insights&state=ungrouped`
 - `threadOutboxPending` and `threadOutboxFailed` link to Memory Threads and focus the status panel for the active scope
-- `graphBatchRepairRequired` links to Item Graph > Batches with `state=REPAIR_REQUIRED`
+- `graphBatchRepairRequired` links to Item Graph with `tab=batches&state=REPAIR_REQUIRED`
 
 Dashboard links must preserve the active `memoryId` scope in the target URL when applicable.
 
@@ -465,6 +465,12 @@ Use tabs:
 - Insights
 - Insight Groups
 
+The active tab must be represented in the URL so Dashboard links can deep-link into a specific buffer view. Use a `tab` search param in version one:
+
+- `tab=conversations`, default
+- `tab=insights`
+- `tab=groups`
+
 Conversation APIs:
 
 - `GET /admin/v1/buffers/conversations`
@@ -570,7 +576,7 @@ Filters:
 
 - `userId`
 - `agentId`
-- `status`
+- `status`, default `all` by omitting the query parameter
 
 List columns:
 
@@ -617,6 +623,16 @@ Use internal tabs:
 - Item Links
 - Cooccurrences
 - Batches
+
+The active tab must be represented in the URL so Dashboard and external links can deep-link into graph views. Use a `tab` search param in version one:
+
+- `tab=summary`, default
+- `tab=entities`
+- `tab=aliases`
+- `tab=mentions`
+- `tab=item-links`
+- `tab=cooccurrences`
+- `tab=batches`
 
 Summary API:
 
@@ -741,7 +757,7 @@ Batches:
 
 - `GET /admin/v1/item-graph/batches`
 
-Filters: `memoryId`, `state`
+Filters: `memoryId`, `state` with default `all` by omitting the query parameter
 
 Batches columns:
 
@@ -798,7 +814,15 @@ Value editor behavior:
 - `string`: text input by default; use select when `constraints` contains an enum/options list
 - unknown or complex types: read-only JSON preview plus an explicit text/JSON edit fallback so unsupported types do not silently corrupt values
 
-Updates must send the current `expectedVersion`. If the server returns `409 conflict`, show a conflict message and ask the user to refresh before saving again.
+Save interaction:
+
+- keep edits in a local draft while the user changes one or more options
+- use one global Save button that sends the complete config object to `PUT /admin/v1/config/memory-options`
+- do not auto-save individual option rows because the backend accepts the full config document
+- show dirty state when the draft differs from the last loaded config, such as a highlighted Save button or modified option count
+- warn before leaving the Config page when there are unsaved changes
+
+Updates must send the current `expectedVersion` with the full config draft. If the server returns `409 conflict`, show a conflict message and ask the user to refresh before saving again.
 
 ### Retrieve
 
