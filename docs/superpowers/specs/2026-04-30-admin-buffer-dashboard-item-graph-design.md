@@ -98,6 +98,13 @@ All list endpoints keep existing server paging behavior:
 
 Delete and patch endpoints use request bodies. Patch endpoints return `AdminUpdateResult(updatedCount, affectedMemoryIds)`. Delete endpoints return the existing `BatchDeleteResult(deletedCount, affectedMemoryIds)` unless the operation needs extra correction details. Entity deletion returns `AdminGraphEntityDeleteResult` because it reports the cascade counts and the number of surviving `entity_overlap` item links that may need explicit review.
 
+Delete semantics must match each table's identity model:
+
+- Conversation buffer rows do not have a business identity unique index and may be deleted through the normal MyBatis Plus logical-delete behavior.
+- Insight buffer and item graph tables have unique identity indexes that do not include the `deleted` marker. Admin correction deletes for those tables must use explicit physical-delete mapper methods, or a documented revive/upsert path, so future extraction can recreate the same identity without hitting a tombstoned unique row.
+- The first implementation should use physical deletes for insight buffer and item graph correction deletes. This keeps the admin behavior simple and matches the user's intent to remove incorrect intermediate graph or buffer facts.
+- Existing raw-data/item/insight delete services are not changed by this design.
+
 All write endpoints that update more than one table must execute inside one service-level transaction. This is required for item graph entity deletion, where entity, alias, mention, and cooccurrence rows must not be partially corrected.
 
 ## Buffer APIs
@@ -309,6 +316,11 @@ Response:
 
 - `BatchDeleteResult`.
 
+Behavior:
+
+- Physically delete requested rows with an explicit mapper method.
+- Do not use MyBatis Plus logical delete here unless the implementation also revives matching tombstoned rows before future `InsightBuffer.append()` inserts. The default implementation should avoid that extra state by physically deleting correction targets.
+
 ## Dashboard API
 
 Base path:
@@ -483,6 +495,7 @@ Behavior:
 - Also delete item mentions for those entities.
 - Also delete cooccurrences where either side is one of those entities.
 - Execute the cascade inside one transaction.
+- Physically delete these graph rows with explicit mapper methods. Graph unique indexes do not include `deleted`, and core graph upserts should be able to recreate the same identity after an admin correction.
 - Do not delete item links by default, because item links are item-to-item relations and may have independent semantic, temporal, or causal evidence.
 - Before deleting mentions, compute the count of surviving `entity_overlap` semantic item links connected to items that mention the target entities. Return that count so administrators can inspect those links through the item link list and delete them explicitly if they are incorrect.
 - Do not rebuild cooccurrences automatically.
@@ -536,6 +549,10 @@ Request:
 }
 ```
 
+Behavior:
+
+- Physically delete requested alias rows.
+
 ### Item Mentions
 
 `GET /admin/v1/item-graph/mentions`
@@ -573,7 +590,7 @@ Request:
 
 Behavior:
 
-- Delete requested mention rows.
+- Physically delete requested mention rows.
 - Do not rebuild cooccurrences automatically in the first version.
 
 ### Item Links
@@ -615,6 +632,10 @@ Request:
 }
 ```
 
+Behavior:
+
+- Physically delete requested item link rows.
+
 ### Cooccurrences
 
 `GET /admin/v1/item-graph/cooccurrences`
@@ -648,6 +669,10 @@ Request:
   "ids": [1, 2, 3]
 }
 ```
+
+Behavior:
+
+- Physically delete requested cooccurrence rows.
 
 ### Graph Batches
 
@@ -704,11 +729,13 @@ Conversation buffer:
 
 - Rows can be marked extracted.
 - Rows cannot be marked pending again in the first version.
+- Correction delete may use logical delete because the table has no business identity unique index.
 
 Insight buffer:
 
 - Rows can be regrouped.
 - Rows can be marked built or unbuilt.
+- Correction delete physically removes rows so the same `(userId, agentId, insightTypeName, itemId)` can be appended later.
 
 Item graph:
 
@@ -718,6 +745,7 @@ Item graph:
 - Mention delete and cooccurrence delete do not trigger cooccurrence rebuild.
 - Graph batches are read-only.
 - Multi-table graph corrections run in one transaction.
+- Graph correction deletes physically remove rows so core graph upserts can recreate the same unique identities later.
 
 This keeps admin correction explicit and avoids surprising extraction or graph side effects.
 
@@ -741,6 +769,8 @@ Minimum coverage:
 - Entity delete cascades to aliases, mentions, and cooccurrences but does not delete item links.
 - Entity delete returns the count of potentially stale `entity_overlap` item links.
 - Item link list can filter by `evidenceSource`.
+- Insight buffer delete allows a later `InsightBuffer.append()` for the same identity to succeed.
+- Graph alias, mention, item link, cooccurrence, and entity deletes allow later core graph upserts for the same identity to succeed.
 - Graph batch list is read-only and filters by state.
 
 ## Implementation Notes
