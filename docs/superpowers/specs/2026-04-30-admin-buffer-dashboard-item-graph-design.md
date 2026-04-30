@@ -88,6 +88,7 @@ Add a small server-local scope helper for admin queries:
 - Resolve `memoryId` into `userId` and `agentId` using the existing `DefaultMemoryId.toIdentifier()` convention: no colon means user-only memory, and the first colon separates user and agent.
 - Prefer `user_id` and `agent_id` predicates in MyBatis queries when the scope is available, because the existing tables and indexes are mostly keyed by `(user_id, agent_id)`.
 - Fall back to `memory_id` predicates only for graph tables or cases where that is already the strongest indexed lookup.
+- Do not use `agent_id IS NULL` for user-only identifiers. The current SQL schema declares `agent_id` as `NOT NULL`; when a user-only memory is filtered through `(user_id, agent_id)`, use the stored empty-string agent key.
 
 This keeps the API simple without forcing full table scans for common dashboard and buffer queries.
 

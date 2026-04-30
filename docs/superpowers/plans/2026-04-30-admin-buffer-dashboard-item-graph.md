@@ -6,6 +6,8 @@
 
 **Architecture:** Follow the existing Spring MVC + service + admin query mapper pattern. Keep public Admin APIs compact while using index-friendly `user_id`/`agent_id` predicates internally. Use physical deletes for insight buffer and item graph correction deletes where table unique identities would conflict with logical-delete tombstones.
 
+`memoryId` is an exact memory scope. `user:agent` maps to `user_id=user` and `agent_id=agent`; user-only `memoryId` maps to `user_id=user` and the stored empty-string `agent_id`, never `agent_id IS NULL`.
+
 **Tech Stack:** Java 17, Spring Boot MVC, Jakarta Validation, MyBatis Plus, SQLite/MySQL-compatible mapper code, JUnit 5, MockMvc, AssertJ, Maven.
 
 ---
@@ -35,6 +37,7 @@ Do not add features outside that spec. In particular, do not add graph rebuild, 
 - Create `memind-server/src/main/java/com/openmemind/ai/memory/server/domain/buffer/query/ConversationBufferPageQuery.java`
 - Create `memind-server/src/main/java/com/openmemind/ai/memory/server/domain/buffer/query/InsightBufferPageQuery.java`
 - Create `memind-server/src/main/java/com/openmemind/ai/memory/server/domain/buffer/request/AdminIdsRequest.java`
+- Create `memind-server/src/main/java/com/openmemind/ai/memory/server/domain/buffer/request/AdminLongIdsRequest.java`
 - Create `memind-server/src/main/java/com/openmemind/ai/memory/server/domain/buffer/request/InsightBufferBuiltUpdateRequest.java`
 - Create `memind-server/src/main/java/com/openmemind/ai/memory/server/domain/buffer/request/InsightBufferGroupUpdateRequest.java`
 - Create `memind-server/src/main/java/com/openmemind/ai/memory/server/domain/buffer/view/ConversationBufferView.java`
@@ -104,6 +107,8 @@ class AdminMemoryScopeTest {
         assertThat(scope.present()).isTrue();
         assertThat(scope.userId()).isEqualTo("user-1");
         assertThat(scope.agentId()).isNull();
+        assertThat(scope.agentScoped()).isFalse();
+        assertThat(scope.databaseAgentId()).isEqualTo("");
         assertThat(scope.memoryId()).isEqualTo("user-1");
     }
 
@@ -114,6 +119,8 @@ class AdminMemoryScopeTest {
         assertThat(scope.present()).isTrue();
         assertThat(scope.userId()).isEqualTo("user-1");
         assertThat(scope.agentId()).isEqualTo("agent-1");
+        assertThat(scope.agentScoped()).isTrue();
+        assertThat(scope.databaseAgentId()).isEqualTo("agent-1");
         assertThat(scope.memoryId()).isEqualTo("user-1:agent-1");
     }
 
@@ -130,6 +137,13 @@ class AdminMemoryScopeTest {
     @Test
     void rejectsBlankUserPart() {
         assertThatThrownBy(() -> AdminMemoryScope.fromMemoryId(":agent-1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("memoryId");
+    }
+
+    @Test
+    void rejectsBlankAgentPart() {
+        assertThatThrownBy(() -> AdminMemoryScope.fromMemoryId("user-1:"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("memoryId");
     }
@@ -169,65 +183,75 @@ package com.openmemind.ai.memory.server.support;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import java.util.function.Function;
+import com.baomidou.mybatisplus.core.toolkit.support.SFunction;
 import org.springframework.util.StringUtils;
 
-public record AdminMemoryScope(String memoryId, String userId, String agentId) {
+public record AdminMemoryScope(String memoryId, String userId, String agentId, boolean agentScoped) {
 
     public static AdminMemoryScope fromMemoryId(String memoryId) {
         if (!StringUtils.hasText(memoryId)) {
-            return new AdminMemoryScope(null, null, null);
+            return new AdminMemoryScope(null, null, null, false);
         }
         String trimmed = memoryId.trim();
         int separator = trimmed.indexOf(':');
         if (separator < 0) {
-            return new AdminMemoryScope(trimmed, trimmed, null);
+            return new AdminMemoryScope(trimmed, trimmed, null, false);
         }
         String userId = trimmed.substring(0, separator);
         String agentId = trimmed.substring(separator + 1);
-        if (!StringUtils.hasText(userId)) {
-            throw new IllegalArgumentException("memoryId must include a non-empty user id");
+        if (!StringUtils.hasText(userId) || !StringUtils.hasText(agentId)) {
+            throw new IllegalArgumentException("memoryId must be user or user:agent");
         }
-        return new AdminMemoryScope(trimmed, userId, StringUtils.hasText(agentId) ? agentId : null);
+        return new AdminMemoryScope(trimmed, userId, agentId, true);
     }
 
     public boolean present() {
         return memoryId != null;
     }
 
-    public <T> void applyToQuery(
+    public String databaseAgentId() {
+        return agentScoped ? agentId : "";
+    }
+
+    public <T> void applyToUserAgentQuery(
             LambdaQueryWrapper<T> wrapper,
-            Function<T, String> userColumn,
-            Function<T, String> agentColumn) {
+            SFunction<T, ?> userColumn,
+            SFunction<T, ?> agentColumn) {
         if (!present()) {
             return;
         }
         wrapper.eq(userColumn, userId);
-        if (agentId != null) {
-            wrapper.eq(agentColumn, agentId);
-        } else {
-            wrapper.isNull(agentColumn);
+        wrapper.eq(agentColumn, databaseAgentId());
+    }
+
+    public <T> void applyToUserAgentUpdate(
+            LambdaUpdateWrapper<T> wrapper,
+            SFunction<T, ?> userColumn,
+            SFunction<T, ?> agentColumn) {
+        if (!present()) {
+            return;
+        }
+        wrapper.eq(userColumn, userId);
+        wrapper.eq(agentColumn, databaseAgentId());
+    }
+
+    public <T> void applyToMemoryIdQuery(
+            LambdaQueryWrapper<T> wrapper, SFunction<T, ?> memoryIdColumn) {
+        if (present()) {
+            wrapper.eq(memoryIdColumn, memoryId);
         }
     }
 
-    public <T> void applyToUpdate(
-            LambdaUpdateWrapper<T> wrapper,
-            Function<T, String> userColumn,
-            Function<T, String> agentColumn) {
-        if (!present()) {
-            return;
-        }
-        wrapper.eq(userColumn, userId);
-        if (agentId != null) {
-            wrapper.eq(agentColumn, agentId);
-        } else {
-            wrapper.isNull(agentColumn);
+    public <T> void applyToMemoryIdUpdate(
+            LambdaUpdateWrapper<T> wrapper, SFunction<T, ?> memoryIdColumn) {
+        if (present()) {
+            wrapper.eq(memoryIdColumn, memoryId);
         }
     }
 }
 ```
 
-If Java method references for MyBatis lambda wrappers do not accept `Function<T, String>` in this codebase, change the two helper methods to return only parsed values and apply predicates directly in each mapper. Keep the `fromMemoryId()` parsing contract and tests unchanged.
+Use `applyToUserAgentQuery` / `applyToUserAgentUpdate` for buffer, raw-data, item, insight, and dashboard counts where the table has indexed `(user_id, agent_id)` columns. Use `applyToMemoryIdQuery` / `applyToMemoryIdUpdate` for graph tables and memory-thread tables where `memory_id` is the stable scope key. Never emit `agent_id IS NULL`; the current SQL schema declares `agent_id` as `NOT NULL`.
 
 - [ ] **Step 4: Run the focused test and verify it passes**
 
@@ -348,7 +372,7 @@ Implement view records with exactly the fields from the spec:
 
 ```java
 public record ConversationBufferView(
-        Integer id,
+        Long id,
         String sessionId,
         String userId,
         String agentId,
@@ -402,7 +426,7 @@ public class AdminBufferController {
     }
 
     @GetMapping("/conversations/{id}")
-    public ApiResult<ConversationBufferView> conversationDetail(@PathVariable Integer id) {
+    public ApiResult<ConversationBufferView> conversationDetail(@PathVariable Long id) {
         return ApiResult.success(queryService.getConversation(id));
     }
 
@@ -431,7 +455,7 @@ public class AdminBufferController {
 Implement `AdminBufferQueryMapper` with a MyBatis component that:
 
 - Uses `ConversationBufferMapper` and `InsightBufferMapper`.
-- Applies `AdminMemoryScope.fromMemoryId(query.memoryId())`.
+- Applies `AdminMemoryScope.fromMemoryId(query.memoryId())` with `applyToUserAgentQuery(...)`.
 - Validates conversation state: `pending`, `extracted`, `all`.
 - Validates insight state: `unbuilt`, `ungrouped`, `grouped`, `built`, `all`.
 - Orders conversation rows by `createdAt DESC, id DESC`.
@@ -470,6 +494,7 @@ git commit -m "feat: add admin buffer query APIs"
 - Modify: `memind-server/src/main/java/com/openmemind/ai/memory/server/mapper/buffer/AdminBufferQueryMapper.java`
 - Modify: `memind-server/src/main/java/com/openmemind/ai/memory/server/service/buffer/BufferManagementService.java`
 - Create: `memind-server/src/main/java/com/openmemind/ai/memory/server/domain/buffer/request/AdminIdsRequest.java`
+- Create: `memind-server/src/main/java/com/openmemind/ai/memory/server/domain/buffer/request/AdminLongIdsRequest.java`
 - Create: `memind-server/src/main/java/com/openmemind/ai/memory/server/domain/buffer/request/InsightBufferBuiltUpdateRequest.java`
 - Create: `memind-server/src/main/java/com/openmemind/ai/memory/server/domain/buffer/request/InsightBufferGroupUpdateRequest.java`
 - Test: `memind-server/src/test/java/com/openmemind/ai/memory/server/controller/admin/buffer/AdminBufferControllerTest.java`
@@ -495,6 +520,16 @@ void markConversationExtractedReturnsUpdateResult() throws Exception {
                     .content("{\"ids\":[1,2]}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.updatedCount").value(2))
+            .andExpect(jsonPath("$.data.affectedMemoryIds[0]").value("u1:a1"));
+}
+
+@Test
+void deleteConversationRowsReturnsBatchDeleteResult() throws Exception {
+    mockMvc.perform(delete("/admin/v1/buffers/conversations")
+                    .contentType(APPLICATION_JSON)
+                    .content("{\"ids\":[1,2]}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.deletedCount").value(2))
             .andExpect(jsonPath("$.data.affectedMemoryIds[0]").value("u1:a1"));
 }
 
@@ -544,6 +579,12 @@ public record AdminIdsRequest(@NotEmpty List<Integer> ids) {
     }
 }
 
+public record AdminLongIdsRequest(@NotEmpty List<Long> ids) {
+    public AdminLongIdsRequest {
+        ids = ids == null ? List.of() : List.copyOf(ids);
+    }
+}
+
 public record InsightBufferGroupUpdateRequest(@NotEmpty List<Integer> ids, String groupName) {
     public InsightBufferGroupUpdateRequest {
         ids = ids == null ? List.of() : List.copyOf(ids);
@@ -564,13 +605,13 @@ Add:
 ```java
 @PatchMapping("/conversations/extracted")
 public ApiResult<AdminUpdateResult> markConversationsExtracted(
-        @Valid @RequestBody AdminIdsRequest request) {
+        @Valid @RequestBody AdminLongIdsRequest request) {
     return ApiResult.success(managementService.markConversationsExtracted(request.ids()));
 }
 
 @DeleteMapping("/conversations")
 public ApiResult<BatchDeleteResult> deleteConversations(
-        @Valid @RequestBody AdminIdsRequest request) {
+        @Valid @RequestBody AdminLongIdsRequest request) {
     return ApiResult.success(managementService.deleteConversations(request.ids()));
 }
 
@@ -597,12 +638,28 @@ public ApiResult<BatchDeleteResult> deleteInsights(@Valid @RequestBody AdminIdsR
 `BufferManagementService` must:
 
 - Load rows first by IDs to compute `affectedMemoryIds`.
+- Conversation methods accept `List<Long>` IDs because `ConversationBufferDO.id` is `Long`.
+- Insight methods accept `List<Integer>` IDs because `InsightBufferDO.id` is `Integer`.
 - Conversation mark extracted: `UPDATE memory_conversation_buffer SET extracted=true WHERE id IN (...)`.
 - Conversation delete: normal mapper delete by IDs is acceptable.
 - Insight group/built: normal update by IDs.
 - Insight delete: explicit physical delete, not MyBatis Plus logical delete.
 
-For physical delete, add mapper method in `AdminBufferQueryMapper` implementation using `SqlRunner` or a mapper `@Delete` method. Use this SQL shape:
+For physical delete, inject `org.springframework.jdbc.core.JdbcTemplate` into `MybatisAdminBufferQueryMapper` and add a fixed-table helper. Import `Collection` and `Collections`. Do not route these deletes through MyBatis Plus mapper delete methods because `BaseDO.deleted` has `@TableLogic`.
+
+```java
+int physicalDeleteInsightBuffers(Collection<Integer> ids) {
+    if (ids == null || ids.isEmpty()) {
+        return 0;
+    }
+    String inClause = String.join(",", Collections.nCopies(ids.size(), "?"));
+    return jdbcTemplate.update(
+            "DELETE FROM memory_insight_buffer WHERE id IN (" + inClause + ")",
+            ids.toArray());
+}
+```
+
+Use this SQL shape:
 
 ```sql
 DELETE FROM memory_insight_buffer WHERE id IN (...)
@@ -774,6 +831,7 @@ Use `MemoryOptionsSnapshot.config()` because that is the public snapshot accesso
 Implement `AdminDashboardQueryMapper.dashboard(String memoryId, int days, boolean graphEnabled, boolean retrievalGraphAssistEnabled)` with these aggregation rules:
 
 - Use `AdminMemoryScope` for scoped counts.
+- Use `applyToUserAgentQuery(...)` for tables with indexed `(user_id, agent_id)` columns and `applyToMemoryIdQuery(...)` for memory-thread and graph tables.
 - Count totals with MyBatis Plus `selectCount`.
 - Count backlog from buffer, outbox, and graph batch tables.
 - Produce daily counts for the last `days` by using grouped SQL. Keep SQLite compatibility by grouping with `substr(created_at, 1, 10)` if values are stored as text.
@@ -1044,7 +1102,7 @@ Use `PageResult.from(...)` for list endpoints. Validate page params the same way
 Implement `AdminItemGraphQueryMapper` with these query rules:
 
 - Use existing graph mappers.
-- Apply `memoryId` scope directly to `memory_id` for graph tables because graph indexes are memory-scoped.
+- Apply `AdminMemoryScope.fromMemoryId(memoryId).applyToMemoryIdQuery(...)` to graph tables because graph identities and indexes are memory-scoped.
 - Implement `q` filters with `LIKE` on `entity_key/display_name` or `normalized_alias`.
 - Filter item links by `itemId` using `(source_item_id = ? OR target_item_id = ?)`.
 - Filter `evidenceSource` with `evidence_source = ?`.
@@ -1115,6 +1173,43 @@ void deleteItemLinksRequiresIds() throws Exception {
                     .contentType(APPLICATION_JSON)
                     .content("{\"ids\":[]}"))
             .andExpect(status().isBadRequest());
+}
+
+@Test
+void deleteAliasesReturnsBatchDeleteResult() throws Exception {
+    mockMvc.perform(delete("/admin/v1/item-graph/aliases")
+                    .contentType(APPLICATION_JSON)
+                    .content("{\"ids\":[10,11]}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.deletedCount").value(2))
+            .andExpect(jsonPath("$.data.affectedMemoryIds[0]").value("u1:a1"));
+}
+
+@Test
+void deleteMentionsReturnsBatchDeleteResult() throws Exception {
+    mockMvc.perform(delete("/admin/v1/item-graph/mentions")
+                    .contentType(APPLICATION_JSON)
+                    .content("{\"ids\":[20]}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.deletedCount").value(1));
+}
+
+@Test
+void deleteItemLinksReturnsBatchDeleteResult() throws Exception {
+    mockMvc.perform(delete("/admin/v1/item-graph/item-links")
+                    .contentType(APPLICATION_JSON)
+                    .content("{\"ids\":[30]}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.deletedCount").value(1));
+}
+
+@Test
+void deleteCooccurrencesReturnsBatchDeleteResult() throws Exception {
+    mockMvc.perform(delete("/admin/v1/item-graph/cooccurrences")
+                    .contentType(APPLICATION_JSON)
+                    .content("{\"ids\":[40]}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.deletedCount").value(1));
 }
 ```
 
@@ -1194,9 +1289,64 @@ Rules:
 
 - Annotate `deleteEntities()` with `@Transactional`.
 - Compute `possiblyStaleEntityOverlapLinks` before deleting mentions.
-- Use physical delete SQL for graph correction deletes.
+- Use `JdbcTemplate` physical delete SQL for graph correction deletes.
 - Do not delete item links during entity delete.
 - Return affected memory IDs from rows loaded before delete.
+
+Add fixed-table physical delete helpers in `AdminItemGraphQueryMapper`; import `ArrayList`, `Collection`, `Collections`, `List`, and `JdbcTemplate`. Do not pass table names from request data:
+
+```java
+int physicalDeleteByIds(String tableName, Collection<Integer> ids) {
+    if (ids == null || ids.isEmpty()) {
+        return 0;
+    }
+    String inClause = String.join(",", Collections.nCopies(ids.size(), "?"));
+    return jdbcTemplate.update(
+            "DELETE FROM " + tableName + " WHERE id IN (" + inClause + ")",
+            ids.toArray());
+}
+
+int physicalDeleteScopedEntityRows(String tableName, String memoryId, Collection<String> entityKeys) {
+    if (entityKeys == null || entityKeys.isEmpty()) {
+        return 0;
+    }
+    String inClause = String.join(",", Collections.nCopies(entityKeys.size(), "?"));
+    List<Object> args = new ArrayList<>();
+    args.add(memoryId);
+    args.addAll(entityKeys);
+    return jdbcTemplate.update(
+            "DELETE FROM " + tableName + " WHERE memory_id = ? AND entity_key IN ("
+                    + inClause + ")",
+            args.toArray());
+}
+
+int physicalDeleteScopedCooccurrences(String memoryId, Collection<String> entityKeys) {
+    if (entityKeys == null || entityKeys.isEmpty()) {
+        return 0;
+    }
+    String inClause = String.join(",", Collections.nCopies(entityKeys.size(), "?"));
+    List<Object> args = new ArrayList<>();
+    args.add(memoryId);
+    args.addAll(entityKeys);
+    args.add(memoryId);
+    args.addAll(entityKeys);
+    return jdbcTemplate.update(
+            "DELETE FROM memory_entity_cooccurrence "
+                    + "WHERE (memory_id = ? AND left_entity_key IN (" + inClause + ")) "
+                    + "OR (memory_id = ? AND right_entity_key IN (" + inClause + "))",
+            args.toArray());
+}
+```
+
+Call `physicalDeleteByIds` only with these internal constants:
+
+```java
+private static final String TABLE_GRAPH_ENTITY = "memory_graph_entity";
+private static final String TABLE_GRAPH_ALIAS = "memory_graph_entity_alias";
+private static final String TABLE_GRAPH_MENTION = "memory_item_entity_mention";
+private static final String TABLE_GRAPH_ITEM_LINK = "memory_item_link";
+private static final String TABLE_GRAPH_COOCCURRENCE = "memory_entity_cooccurrence";
+```
 
 Physical delete SQL shapes:
 
@@ -1281,6 +1431,13 @@ Seed graph entity, alias, mention, cooccurrence, and item link rows. Call entity
 - cooccurrence row is gone.
 - item link row remains.
 - inserting the same entity key again succeeds.
+
+Then call each dedicated graph delete endpoint and assert physical-delete behavior:
+
+- `DELETE /admin/v1/item-graph/aliases`: alias row is gone, then inserting the same `(memory_id, entity_type, entity_key, normalized_alias)` succeeds.
+- `DELETE /admin/v1/item-graph/mentions`: mention row is gone, then inserting the same `(memory_id, item_id, entity_key)` succeeds.
+- `DELETE /admin/v1/item-graph/item-links`: item-link row is gone, then inserting the same `(memory_id, source_item_id, target_item_id, link_type)` succeeds.
+- `DELETE /admin/v1/item-graph/cooccurrences`: cooccurrence row is gone, then inserting the same `(memory_id, left_entity_key, right_entity_key)` succeeds.
 
 - [ ] **Step 4: Run integration test class**
 
@@ -1378,4 +1535,6 @@ Placeholder scan:
 Type consistency:
 
 - `AdminUpdateResult`, `BatchDeleteResult`, and `AdminGraphEntityDeleteResult` match the spec response shapes.
+- `AdminLongIdsRequest` is used only for conversation buffer IDs, which are `Long`; `AdminIdsRequest` and `GraphIdsRequest` use `Integer` for insight buffer and graph row IDs, matching the MyBatis data objects.
+- `AdminMemoryScope` uses MyBatis Plus `SFunction<T, ?>` column references and never relies on standard Java function types for lambda wrapper columns.
 - `memoryId`, `userId`, `agentId`, `entityKey`, `evidenceSource`, `relationCode`, and `retryPromotionSupported` names are consistent across tasks.
