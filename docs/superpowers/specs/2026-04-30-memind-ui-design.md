@@ -51,7 +51,7 @@ Clean template metadata and dependencies so the new module looks and behaves lik
 - keep or add license files and notices required by reused template code and Memind's Apache-2.0 licensing
 - update README content so it documents Memind UI setup, local server assumptions, and development commands
 
-The existing `_authenticated` route group can remain as an app layout container if useful, but it must not enforce or imply authentication.
+Rename the template's `_authenticated` route group to a neutral app-shell route group such as `_app` during migration. Do not keep route directory names, component names, or navigation labels that imply login or authorization in the first version. Regenerate TanStack Router's generated route tree after route files are moved.
 
 ## Backend Integration
 
@@ -73,6 +73,18 @@ This lets the frontend call same-origin paths such as `/admin/v1/items` and `/op
 Production packaging remains a separate frontend build in the first version. Embedding `memind-ui/dist` into `memind-server` static resources is a later packaging step, not part of this design.
 
 The first version is intended for local development use. Because it exposes delete, rebuild, and runtime configuration operations without authentication, project documentation must explicitly warn users not to expose the UI or proxied Memind server endpoints to public networks.
+
+## Server Connection Status
+
+Show a lightweight server status indicator in the sidebar footer or header. It replaces the template's user profile/sign-out footer.
+
+Implementation:
+
+- call `GET /open/v1/health` through the Vite proxy
+- poll every 30 seconds with React Query `refetchInterval`
+- show `connecting` before the first result, `connected` after a successful health response, and `disconnected` after network failure or non-2xx response
+- keep a global API error handler that can also mark the server as disconnected when ordinary page requests fail with connection errors
+- do not block page rendering only because health is disconnected; show inline retry/error states on the affected page
 
 ## API Surface Used
 
@@ -127,6 +139,35 @@ The open ingestion APIs exist but are not first-class UI pages in version one:
 - `POST /open/v1/memory/add-message`
 - `POST /open/v1/memory/commit`
 
+## API Parameter Conventions
+
+Paginated admin list endpoints use one-based pagination:
+
+- `pageNo`, default `1`, minimum `1`
+- `pageSize`, default `20`, minimum `1`, maximum `100`
+
+Use the shadcn-admin `use-table-url-state.ts` pattern for list pages. Configure the hook with `pageKey: "pageNo"` and `pageSizeKey: "pageSize"` so frontend URL state matches the server contract instead of introducing `page` or `limit`. Sync page number, page size, search/filter fields, and any client-side sort state that is useful for a bookmarkable view. Reset `pageNo` to `1` when filters change.
+
+The following detail/relationship endpoints require query parameters beyond the path:
+
+| Endpoint | Required query | Optional query | UI behavior when missing |
+| --- | --- | --- | --- |
+| `GET /admin/v1/memory-threads/{threadKey}` | `userId` | `agentId` | Disable the detail drawer action or show a prompt to set memory scope with a user id. |
+| `GET /admin/v1/memory-threads/{threadKey}/items` | `userId` | `agentId` | Disable thread item loading or show the same scope prompt. |
+| `GET /admin/v1/items/{itemId}/memory-threads` | `userId` | `agentId` | Show the item detail without associated threads, with an inline prompt to set memory scope. |
+
+Destructive operations in version one only delete or update explicitly selected rows. They must never mean "delete every row matching the current filters".
+
+| Operation | Request body | Selection source |
+| --- | --- | --- |
+| Delete memory items | `{ itemIds: number[] }` | selected item rows |
+| Delete raw data | `{ rawDataIds: string[] }` | selected raw data rows |
+| Delete insights | `{ insightIds: number[] }` | selected insight rows |
+| Mark/delete conversation buffers | `{ ids: number[] }` | selected conversation buffer rows |
+| Group/mark/delete insight buffers | `{ ids: number[], ... }` | selected insight buffer rows |
+| Delete graph entities | `{ memoryId: string, entityKeys: string[] }` | selected entity rows plus active `memoryId` |
+| Delete graph aliases, mentions, item links, cooccurrences | `{ ids: number[] }` | selected graph rows |
+
 ## Response Contract
 
 The server wraps responses as:
@@ -154,6 +195,12 @@ type PageResult<T> = {
 ```
 
 Frontend code should unwrap `ApiResult<T>` in one API client layer. Pages should consume typed data and should not duplicate response unwrapping.
+
+## Type Synchronization Strategy
+
+The server currently does not expose an OpenAPI contract. The first implementation should define TypeScript request and response types manually, using the Java controller methods and DTO records as the source of truth. Keep those types centralized under the Memind API/type modules so page components do not invent local response shapes.
+
+For later maintenance, consider adding `springdoc-openapi` to `memind-server` and generating frontend types with `openapi-typescript`. That is a follow-up improvement, not a blocker for the first UI version.
 
 ## App Navigation
 
@@ -190,6 +237,34 @@ When an API requires `userId` and `agentId`, parse `memoryId` into those fields.
 
 For APIs that require explicit `userId`, such as memory thread status and rebuild, the UI must validate that `userId` is present before sending the request. Retrieve is stricter: `POST /open/v1/memory/retrieve` requires both non-empty `userId` and non-empty `agentId`, so the retrieve form must reject a scope that cannot supply both fields.
 
+Use one centralized `memory-scope.ts` helper so parsing rules are identical across pages.
+
+| API group | Accepted scope parameters | UI rule |
+| --- | --- | --- |
+| Dashboard | `memoryId?` | Pass the raw `memoryId` when present. |
+| Buffers | `memoryId?` | Pass the raw `memoryId` when present. |
+| Item Graph summary/lists/batches | `memoryId?` | Pass the raw `memoryId` when present. Entity deletion requires a non-empty `memoryId`. |
+| Items list | `userId?`, `agentId?`, `scope?`, plus item filters | Split `memoryId` into `userId` and optional `agentId`; keep `scope` as its own filter field. |
+| Raw Data list | `userId?`, `agentId?`, plus time filters | Split `memoryId`; omit `agentId` when absent. |
+| Insights list | `userId?`, `agentId?`, `scope?`, plus insight filters | Split `memoryId`; keep `scope` as its own filter field. |
+| Memory Threads list | `userId?`, `agentId?`, `status?` | Split `memoryId`; listing can run without a scope. |
+| Memory Thread detail and thread items | `userId`, `agentId?` | Require parsed `userId`; disable or prompt when missing. |
+| Item associated threads | `userId`, `agentId?` | Require parsed `userId`; render the rest of item detail without this relationship when missing. |
+| Memory Thread status/rebuild | `userId`, `agentId?` | Require parsed `userId`; confirmation happens after validation. |
+| Retrieve | `userId`, `agentId` | Require both parsed fields to be non-empty. |
+| Config and health | no memory scope | Do not apply memory scope. |
+
+## Common UI States
+
+Each page should define explicit loading, empty, and error states instead of relying on a blank table.
+
+- First load: show skeleton rows or compact loading placeholders matching the table/card layout.
+- Empty lists: show a short empty state such as `暂无 Memory Items，请先通过 API 写入数据` and keep filters visible so users can clear them.
+- Empty dashboard: show zero-value metric cards and an inline note that no memory data was found for the selected scope.
+- Detail drawers: show a drawer-level loading state, a not-found state for `not_found`, and a scope-required prompt when the requested relationship needs `userId`.
+- Server unreachable: show a page-level alert with the current server URL assumption and a retry action; keep the sidebar status in `disconnected`.
+- Mutations: disable submit buttons while pending and report server `traceId` when present.
+
 ## Pages
 
 ### Dashboard
@@ -210,6 +285,8 @@ Display:
 - health signals for graph enabled, retrieval graph assist enabled, and thread projection states
 
 Use cards for individual metric summaries and chart/table sections. Avoid marketing hero layout.
+
+Activity charts should use `AdminDashboardView.Activity.days` and the three `DailyCount` series: `rawDataCreated`, `itemsCreated`, and `insightsCreated`. Use either a compact multi-series line chart or grouped bars; the X axis uses the server-provided `DailyCount.date` string in `YYYY-MM-DD` format.
 
 ### Memory Items
 
@@ -249,9 +326,11 @@ Row detail drawer:
 - vector id
 - content hash
 - occurred/observed timestamps
-- associated memory threads
+- associated memory threads loaded from `GET /admin/v1/items/{itemId}/memory-threads?userId=...&agentId=...`
 
-Bulk delete requires confirmation and displays `deletedCount` and `affectedMemoryIds`.
+The associated memory threads section requires a parsed `userId` from the global memory scope. If no `userId` is available, keep the item detail usable and show an inline prompt to set scope before loading related threads.
+
+Bulk delete means deleting selected rows only. The request body is `{ itemIds: number[] }`. The confirmation must show the selected count and must not imply deletion of all currently filtered results. After success, display `deletedCount` and `affectedMemoryIds`.
 
 ### Raw Data
 
@@ -287,7 +366,7 @@ Detail drawer:
 - caption vector id
 - start/end timestamps
 
-Bulk delete requires confirmation. The dialog must state that deleting raw data also deletes associated memory items via server runtime behavior. After success, display `deletedRawDataCount`, `deletedItemCount`, `affectedMemoryIds`, and `insightCleanupRequired`.
+Bulk delete means deleting selected rows only. The request body is `{ rawDataIds: string[] }`. The dialog must state that deleting raw data also deletes associated memory items via server runtime behavior and must not imply deletion of all currently filtered results. After success, display `deletedRawDataCount`, `deletedItemCount`, `affectedMemoryIds`, and `insightCleanupRequired`.
 
 ### Insights
 
@@ -324,7 +403,7 @@ Detail drawer:
 - summary embedding collapsed by default
 - version and timestamps
 
-Bulk delete requires confirmation and displays `deletedCount` and `affectedMemoryIds`.
+Bulk delete means deleting selected rows only. The request body is `{ insightIds: number[] }`. The confirmation must show the selected count and must not imply deletion of all currently filtered results. After success, display `deletedCount` and `affectedMemoryIds`.
 
 ### Buffers
 
@@ -349,8 +428,8 @@ Conversation filters:
 
 Conversation actions:
 
-- mark selected as extracted
-- delete selected
+- mark selected rows as extracted with `{ ids: number[] }`
+- delete selected rows with `{ ids: number[] }`
 
 Insight buffer APIs:
 
@@ -367,9 +446,9 @@ Insight buffer filters:
 
 Insight buffer actions:
 
-- update group name
-- mark built/unbuilt
-- delete selected
+- update group name for selected rows with `{ ids: number[], groupName }`
+- mark selected rows built/unbuilt with `{ ids: number[], built }`
+- delete selected rows with `{ ids: number[] }`
 
 Insight group API:
 
@@ -411,6 +490,8 @@ Detail drawer:
 - opened/closed timestamps
 - thread item memberships
 
+The detail drawer and thread item memberships call `GET /admin/v1/memory-threads/{threadKey}` and `GET /admin/v1/memory-threads/{threadKey}/items` with required `userId` and optional `agentId` query parameters from the global memory scope. If no `userId` is available, disable opening the drawer or show a scope-required prompt before issuing either request.
+
 Status panel:
 
 - projection state
@@ -421,7 +502,7 @@ Status panel:
 - materialization policy version
 - invalidation reason
 
-Rebuild requires explicit confirmation and valid `userId`. After success, refresh status and list.
+Status and rebuild require explicit `userId` and optional `agentId`. Rebuild requires explicit confirmation after scope validation. After success, refresh status and list.
 
 ### Item Graph
 
@@ -451,7 +532,7 @@ Entity filters:
 - `entityType`
 - `q`
 
-Entity delete request requires `memoryId` and `entityKeys`. The confirmation must display that aliases, mentions, and cooccurrences can be removed. Success displays `deletedAliases`, `deletedMentions`, `deletedCooccurrences`, and `possiblyStaleEntityOverlapLinks`.
+Entity delete means deleting selected entity rows only. The request body requires active `memoryId` and selected row `entityKeys`. The confirmation must display that aliases, mentions, and cooccurrences can be removed. Success displays `deletedAliases`, `deletedMentions`, `deletedCooccurrences`, and `possiblyStaleEntityOverlapLinks`.
 
 Aliases:
 
@@ -460,12 +541,16 @@ Aliases:
 
 Filters: `memoryId`, `entityKey`, `q`
 
+Delete aliases by selected alias row ids only with `{ ids: number[] }`.
+
 Mentions:
 
 - `GET /admin/v1/item-graph/mentions`
 - `DELETE /admin/v1/item-graph/mentions`
 
 Filters: `memoryId`, `itemId`, `entityKey`
+
+Delete mentions by selected mention row ids only with `{ ids: number[] }`.
 
 Item links:
 
@@ -474,12 +559,16 @@ Item links:
 
 Filters: `memoryId`, `itemId`, `linkType`, `evidenceSource`
 
+Delete item links by selected item-link row ids only with `{ ids: number[] }`.
+
 Cooccurrences:
 
 - `GET /admin/v1/item-graph/cooccurrences`
 - `DELETE /admin/v1/item-graph/cooccurrences`
 
 Filters: `memoryId`, `entityKey`
+
+Delete cooccurrences by selected cooccurrence row ids only with `{ ids: number[] }`.
 
 Batches:
 
@@ -496,7 +585,26 @@ API:
 - `GET /admin/v1/config/memory-options`
 - `PUT /admin/v1/config/memory-options`
 
-Display config grouped by section key. Each option row shows:
+`GET /admin/v1/config/memory-options` returns `MemoryOptionsGetResponse`:
+
+```ts
+type MemoryOptionsGetResponse = {
+  version: number
+  config: Record<
+    string,
+    Array<{
+      key: string
+      value: unknown
+      description: string
+      type: string
+      defaultValue: unknown
+      constraints: Record<string, unknown>
+    }>
+  >
+}
+```
+
+Display `config` grouped by section key. Each option row shows:
 
 - key
 - value editor
@@ -530,6 +638,68 @@ Display:
 - strategy and normalized query
 - trace details if returned
 
+The response shape is:
+
+```ts
+type RetrieveMemoryResponse = {
+  items: Array<{
+    id: string
+    text: string
+    vectorScore: number
+    finalScore: number
+    occurredAt: string | null
+  }>
+  insights: Array<{ id: string; text: string; tier: string }>
+  rawData: Array<{
+    rawDataId: string
+    caption: string
+    maxScore: number
+    itemIds: string[]
+  }>
+  evidences: string[]
+  strategy: string
+  query: string
+  trace: RetrievalTraceView | null
+}
+
+type RetrievalTraceView = {
+  traceId: string
+  startedAt: string
+  completedAt: string
+  truncated: boolean
+  stages: Array<{
+    stage: string
+    tier: string
+    method: string
+    status: string
+    inputCount: number | null
+    candidateCount: number | null
+    resultCount: number | null
+    degraded: boolean
+    skipped: boolean
+    startedAt: string
+    durationMillis: number | null
+    attributes: Record<string, unknown>
+    candidates: unknown[]
+  }>
+  merge: {
+    inputCount: number
+    outputCount: number
+    deduplicatedCount: number
+    sourceCount: number
+    status: string
+  } | null
+  finalResults: {
+    strategy: string
+    status: string
+    itemCount: number
+    insightCount: number
+    rawDataCount: number
+    evidenceCount: number
+  } | null
+}
+```
+
 If the server is not configured with retrieval trace enabled, the trace area should show an empty state rather than an error.
 
 ## Frontend Structure
@@ -543,35 +713,34 @@ memind-ui/src/
     format.ts
     memory-scope.ts
   features/
-    memind/
-      types.ts
-      api/
-        dashboard.ts
-        items.ts
-        raw-data.ts
-        insights.ts
-        buffers.ts
-        memory-threads.ts
-        item-graph.ts
-        config.ts
-        retrieve.ts
-      components/
-        memory-scope-picker.tsx
-        json-viewer.tsx
-        confirm-result-dialog.tsx
-        server-status.tsx
-      dashboard/
-      items/
-      raw-data/
-      insights/
-      buffers/
-      memory-threads/
-      item-graph/
-      config/
-      retrieve/
+    types.ts
+    api/
+      dashboard.ts
+      items.ts
+      raw-data.ts
+      insights.ts
+      buffers.ts
+      memory-threads.ts
+      item-graph.ts
+      config.ts
+      retrieve.ts
+    components/
+      memory-scope-picker.tsx
+      json-viewer.tsx
+      confirm-result-dialog.tsx
+      server-status.tsx
+    dashboard/
+    items/
+    raw-data/
+    insights/
+    buffers/
+    memory-threads/
+    item-graph/
+    config/
+    retrieve/
 ```
 
-Keep reusable table and UI primitives in existing template component folders when they are generic. Put Memind-specific code under `features/memind`.
+Keep reusable table and UI primitives in existing template component folders when they are generic. Because this module is itself `memind-ui`, avoid an extra `features/memind/` nesting layer; put Memind feature domains directly under `src/features/`.
 
 ## Data Fetching
 
@@ -583,6 +752,8 @@ Query keys should include:
 - pagination params
 - filters
 - active memory scope
+
+For list pages, React Query variables should use the same names as the server and URL state: `pageNo`, `pageSize`, and the documented filter keys.
 
 Mutation success should invalidate the narrow affected resource keys. For broad operations such as raw data deletion and memory thread rebuild, also invalidate dashboard queries because counts and health signals can change.
 
@@ -623,6 +794,7 @@ Verification for the first implementation:
 - `pnpm build` in `memind-ui`
 - API client unit tests for success, async ok-without-data, and server error responses
 - memory scope parsing unit tests
+- table URL state integration tests for `pageNo`/`pageSize` and filters
 - focused component tests for delete confirmation, config conflict handling, and server status display
 - manual integration with a running `memind-server` at `http://127.0.0.1:8366`
 
@@ -642,6 +814,6 @@ The first version does not need end-to-end browser automation unless the impleme
 ## Open Implementation Notes
 
 - The server currently exposes no dedicated "list memory scopes" API. The UI should rely on user-entered `memoryId` and observed IDs from dashboard/list responses.
-- Some APIs accept `memoryId`, while memory thread status/rebuild require `userId` and retrieve requires both `userId` and `agentId`. The UI must centralize parsing to avoid inconsistent behavior.
-- The shadcn-admin generated `routeTree.gen.ts` should be regenerated by the TanStack Router Vite plugin after routes are changed.
+- The memory scope parameter matrix above is the implementation source of truth for `memory-scope.ts`.
+- The shadcn-admin generated `routeTree.gen.ts` should be regenerated by the TanStack Router Vite plugin after routes are changed, especially after renaming `_authenticated` to `_app`.
 - Since graph entity deletion requires `memoryId`, the UI should disable entity deletion until a memory scope is selected.
