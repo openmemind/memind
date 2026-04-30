@@ -53,6 +53,20 @@ Clean template metadata and dependencies so the new module looks and behaves lik
 
 Rename the template's `_authenticated` route group to a neutral app-shell route group such as `_app` during migration. Do not keep route directory names, component names, or navigation labels that imply login or authorization in the first version. Regenerate TanStack Router's generated route tree after route files are moved.
 
+Declare frontend runtime requirements in `memind-ui/package.json` and README. Because the template currently uses Vite 8 and Tailwind CSS 4 dependencies that require modern Node versions, use an `engines` constraint aligned with Vite 8, for example:
+
+```json
+{
+  "engines": {
+    "node": "^20.19.0 || ^22.12.0 || >=24.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@10.15.0"
+}
+```
+
+The exact `packageManager` patch version can be updated to the pnpm version used when generating the initial `memind-ui/pnpm-lock.yaml`, but it should be pinned so contributors get predictable installs through Corepack.
+
 ## Backend Integration
 
 The UI talks to a separately running Memind server, normally:
@@ -167,6 +181,17 @@ Destructive operations in version one only delete or update explicitly selected 
 | Group/mark/delete insight buffers | `{ ids: number[], ... }` | selected insight buffer rows |
 | Delete graph entities | `{ memoryId: string, entityKeys: string[] }` | selected entity rows plus active `memoryId` |
 | Delete graph aliases, mentions, item links, cooccurrences | `{ ids: number[] }` | selected graph rows |
+
+Known server-backed filter options:
+
+| Field | Values | Source |
+| --- | --- | --- |
+| Conversation buffer `state` | `pending`, `extracted`, `all` | `AdminBufferQueryMapper` |
+| Insight buffer `state` | `unbuilt`, `ungrouped`, `grouped`, `built`, `all` | `AdminBufferQueryMapper` |
+| Memory thread `status` | `ACTIVE`, `DORMANT`, `CLOSED` | `MemoryThreadLifecycleStatus` |
+| Graph batch `state` | `PENDING`, `COMMITTED`, `REPAIR_REQUIRED` | `ExtractionBatchState` |
+
+Use these values for select controls where practical, while still allowing the API client to surface `bad_request` responses if the backend later tightens validation.
 
 ## Response Contract
 
@@ -467,6 +492,20 @@ Conversation columns:
 - created at
 - updated at
 
+Conversation detail drawer:
+
+- session id
+- memory id
+- role
+- full content
+- user name
+- source client
+- timestamp
+- extracted
+- created at and updated at
+
+Current `ConversationBufferView` does not expose a metadata field. Do not render or type a conversation metadata panel unless the server DTO later adds it.
+
 Conversation actions:
 
 - mark selected rows as extracted with `{ ids: number[] }`
@@ -583,6 +622,12 @@ Summary API:
 
 - `GET /admin/v1/item-graph/summary`
 
+Summary display:
+
+- metric cards for `entityCount`, `aliasCount`, `mentionCount`, `itemLinkCount`, and `cooccurrenceCount`
+- compact grouped tables or bar charts for `graphBatchCountByState`, `itemLinkCountByType`, and `entityCountByType`
+- visual style should match Dashboard breakdown sections rather than introducing a separate report layout
+
 Entities:
 
 - `GET /admin/v1/item-graph/entities`
@@ -594,6 +639,16 @@ Entity filters:
 - `memoryId`
 - `entityType`
 - `q`
+
+Entity columns:
+
+- id
+- memory id
+- entity key
+- display name
+- entity type
+- created at
+- updated at
 
 Entity detail drawer:
 
@@ -613,6 +668,16 @@ Aliases:
 
 Filters: `memoryId`, `entityKey`, `q`
 
+Alias columns:
+
+- id
+- memory id
+- entity key
+- normalized alias
+- entity type
+- evidence count
+- created at
+
 Delete aliases by selected alias row ids only with `{ ids: number[] }`.
 
 Mentions:
@@ -621,6 +686,15 @@ Mentions:
 - `DELETE /admin/v1/item-graph/mentions`
 
 Filters: `memoryId`, `itemId`, `entityKey`
+
+Mention columns:
+
+- id
+- memory id
+- item id
+- entity key
+- confidence
+- created at
 
 Delete mentions by selected mention row ids only with `{ ids: number[] }`.
 
@@ -631,6 +705,18 @@ Item links:
 
 Filters: `memoryId`, `itemId`, `linkType`, `evidenceSource`
 
+Item link columns:
+
+- id
+- memory id
+- source item id
+- target item id
+- link type
+- relation code
+- evidence source
+- strength
+- created at
+
 Delete item links by selected item-link row ids only with `{ ids: number[] }`.
 
 Cooccurrences:
@@ -640,6 +726,15 @@ Cooccurrences:
 
 Filters: `memoryId`, `entityKey`
 
+Cooccurrence columns:
+
+- id
+- memory id
+- left entity key
+- right entity key
+- cooccurrence count
+- created at
+
 Delete cooccurrences by selected cooccurrence row ids only with `{ ids: number[] }`.
 
 Batches:
@@ -647,6 +742,17 @@ Batches:
 - `GET /admin/v1/item-graph/batches`
 
 Filters: `memoryId`, `state`
+
+Batches columns:
+
+- id
+- memory id
+- extraction batch id
+- state
+- error message
+- retry promotion supported
+- created at
+- updated at
 
 Graph batch rows are read-only in version one.
 
@@ -707,6 +813,8 @@ Inputs:
 - query
 - strategy: `SIMPLE` or `DEEP`
 - trace toggle
+
+Pre-fill `userId` and `agentId` from the global memory scope when possible. The Retrieve page remains a debugging tool, so users can override both fields inside the form without changing the global scope.
 
 Display:
 
@@ -780,6 +888,15 @@ type RetrievalTraceView = {
 ```
 
 If the server is not configured with retrieval trace enabled, the trace area should show an empty state rather than an error.
+
+Trace rendering:
+
+- keep the whole trace section collapsed by default and let users expand it explicitly
+- render `stages` as a collapsible step list or timeline
+- each stage row shows stage name, method, status, duration, `inputCount -> resultCount`, and `candidateCount` when present
+- show `degraded` and `skipped` as badges
+- render `merge` and `finalResults` as compact summary cards
+- show `attributes` and `candidates` inside a collapsed JSON viewer so large traces do not dominate the page
 
 ## Frontend Structure
 
