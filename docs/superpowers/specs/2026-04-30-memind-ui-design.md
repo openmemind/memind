@@ -332,7 +332,7 @@ Backlog cards should be actionable where the current API surface supports a usef
 - `conversationPending` links to Buffers with `tab=conversations&state=pending`
 - `insightUnbuilt` links to Buffers with `tab=insights&state=unbuilt`
 - `insightUngrouped` links to Buffers with `tab=insights&state=ungrouped`
-- `threadOutboxPending` and `threadOutboxFailed` link to Memory Threads and focus the status panel for the active scope
+- `threadOutboxPending` and `threadOutboxFailed` link to Memory Threads with `focus=status` and focus the status panel for the active scope
 - `graphBatchRepairRequired` links to Item Graph with `tab=batches&state=REPAIR_REQUIRED`
 
 Dashboard links must preserve the active `memoryId` scope in the target URL when applicable.

@@ -24,6 +24,7 @@ Create a new top-level module:
 ```text
 memind-ui/
   README.md
+  THIRD_PARTY_NOTICES.md
   package.json
   pnpm-lock.yaml
   vite.config.ts
@@ -52,7 +53,6 @@ memind-ui/
       memory-scope.ts
       memory-scope.test.ts
       query-client.ts
-      route-search.ts
     hooks/
       use-table-url-state.ts
       use-table-url-state.test.ts
@@ -78,7 +78,6 @@ memind-ui/
         data-state.tsx
         json-viewer.tsx
         memory-scope-picker.tsx
-        page-toolbar.tsx
         server-status.tsx
       dashboard/
       items/
@@ -122,9 +121,11 @@ Use one memory scope input in the app shell, but pass parameters in the shape ea
 
 **Files:**
 - Create: `memind-ui/`
+- Create: `memind-ui/THIRD_PARTY_NOTICES.md`
 - Modify: `memind-ui/package.json`
 - Modify: `memind-ui/README.md`
 - Modify: `memind-ui/vite.config.ts`
+- Verify absent: `memind-ui/.github`, `memind-ui/.vscode`, `memind-ui/netlify.toml`, `memind-ui/CHANGELOG.md`, `memind-ui/cz.yaml`
 - Verify unchanged: `pom.xml`
 
 - [ ] **Step 1: Copy the template into the new module**
@@ -133,10 +134,21 @@ Run:
 
 ```bash
 mkdir -p memind-ui
-rsync -a --exclude .git /Users/zhengyate/dev/git-project/shadcn-admin/ memind-ui/
+rsync -a \
+  --exclude .git \
+  --exclude .github \
+  --exclude .vscode \
+  --exclude CHANGELOG.md \
+  --exclude LICENSE \
+  --exclude cz.yaml \
+  --exclude netlify.toml \
+  /Users/zhengyate/dev/git-project/shadcn-admin/ memind-ui/
 ```
 
-Expected: `memind-ui/package.json`, `memind-ui/src`, and `memind-ui/components.json` exist.
+Expected:
+
+- `memind-ui/package.json`, `memind-ui/src`, and `memind-ui/components.json` exist
+- template-only repository metadata such as `.github`, `.vscode`, `CHANGELOG.md`, `netlify.toml`, and `cz.yaml` do not exist under `memind-ui`
 
 - [ ] **Step 2: Update package metadata**
 
@@ -156,9 +168,49 @@ Set `memind-ui/package.json` top-level fields to:
 }
 ```
 
+- [ ] **Step 3: Add third-party attribution**
+
+Create `memind-ui/THIRD_PARTY_NOTICES.md`:
+
+```markdown
+# Third-Party Notices
+
+`memind-ui` is derived from selected source files and project structure from `shadcn-admin`.
+
+## shadcn-admin
+
+- Source project: https://github.com/satnaing/shadcn-admin
+- License: MIT
+
+MIT License
+
+Copyright (c) 2024 Sat Naing
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Memind project code remains under the repository's Apache-2.0 license unless
+otherwise stated in a specific file or notice.
+```
+
 Keep existing scripts initially. Remove dependencies only after their imports are deleted in Task 2.
 
-- [ ] **Step 3: Configure Vite proxy**
+- [ ] **Step 4: Configure Vite proxy**
 
 Modify `memind-ui/vite.config.ts` so `server.proxy` contains:
 
@@ -177,7 +229,7 @@ server: {
 },
 ```
 
-- [ ] **Step 4: Replace README content**
+- [ ] **Step 5: Replace README content**
 
 `memind-ui/README.md` must document:
 
@@ -186,8 +238,25 @@ server: {
 - `pnpm install`, `pnpm dev`, `pnpm lint`, `pnpm test`, `pnpm build`
 - local server assumption: `http://127.0.0.1:8366`
 - Vite proxy paths: `/admin`, `/open`
+- template attribution notice: `THIRD_PARTY_NOTICES.md`
 
-- [ ] **Step 5: Verify root Maven isolation**
+- [ ] **Step 6: Install dependencies and browser test runtime**
+
+Run:
+
+```bash
+cd memind-ui
+pnpm install
+pnpm test:browser:install
+```
+
+Expected:
+
+- `node_modules` is created
+- `pnpm-lock.yaml` remains consistent with `package.json`
+- Playwright Chromium required by `pnpm test` is installed for local browser tests
+
+- [ ] **Step 7: Verify root Maven isolation**
 
 Run:
 
@@ -197,7 +266,7 @@ git diff -- pom.xml
 
 Expected: no output.
 
-- [ ] **Step 6: Commit scaffold**
+- [ ] **Step 8: Commit scaffold**
 
 Run:
 
@@ -213,12 +282,21 @@ git commit -m "feat: scaffold memind ui module"
 **Files:**
 - Delete: `memind-ui/src/routes/(auth)/`
 - Delete: `memind-ui/src/routes/clerk/`
+- Delete after route move: `memind-ui/src/routes/_app/apps/`
+- Delete after route move: `memind-ui/src/routes/_app/chats/`
+- Delete after route move: `memind-ui/src/routes/_app/errors/`
+- Delete after route move: `memind-ui/src/routes/_app/help-center/`
+- Delete after route move: `memind-ui/src/routes/_app/settings/`
+- Delete after route move: `memind-ui/src/routes/_app/tasks/`
+- Delete after route move: `memind-ui/src/routes/_app/users/`
 - Delete: `memind-ui/src/features/auth/`
 - Delete: `memind-ui/src/features/apps/`
 - Delete: `memind-ui/src/features/chats/`
+- Delete: `memind-ui/src/features/dashboard/components/`
 - Delete: `memind-ui/src/features/tasks/`
 - Delete: `memind-ui/src/features/users/`
 - Delete: `memind-ui/src/features/settings/`
+- Modify: `memind-ui/src/features/dashboard/index.tsx`
 - Delete: `memind-ui/src/stores/auth-store.ts`
 - Delete: `memind-ui/src/stores/auth-store.test.ts`
 - Delete: `memind-ui/src/components/config-drawer.tsx`
@@ -244,19 +322,62 @@ mv memind-ui/src/routes/_authenticated memind-ui/src/routes/_app
 mv memind-ui/src/components/layout/authenticated-layout.tsx memind-ui/src/components/layout/app-layout.tsx
 ```
 
-Change all imports and identifiers from `AuthenticatedLayout` to `AppLayout`.
+Change all imports and identifiers from `AuthenticatedLayout` to `AppLayout`, and change TanStack route path strings from `/_authenticated` to `/_app`.
 
-- [ ] **Step 2: Remove auth and demo imports**
+- [ ] **Step 2: Remove moved demo routes and replace the template dashboard**
+
+After moving `_authenticated` to `_app`, delete demo route folders and old dashboard demo subcomponents that would otherwise import or leave behind removed template features:
+
+```bash
+rm -rf memind-ui/src/routes/_app/apps memind-ui/src/routes/_app/chats memind-ui/src/routes/_app/errors memind-ui/src/routes/_app/help-center memind-ui/src/routes/_app/settings memind-ui/src/routes/_app/tasks memind-ui/src/routes/_app/users
+rm -rf memind-ui/src/features/dashboard/components
+```
+
+Replace `memind-ui/src/features/dashboard/index.tsx` with a temporary Memind-specific page that has no template demo dependencies:
+
+```tsx
+import { Header } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
+import { ThemeSwitch } from '@/components/theme-switch'
+
+export function DashboardPage() {
+  return (
+    <>
+      <Header>
+        <div className='flex flex-1 items-center justify-between gap-3'>
+          <div className='min-w-0'>
+            <h1 className='truncate text-lg font-semibold'>Memind UI</h1>
+            <p className='truncate text-sm text-muted-foreground'>
+              Local Memory Admin
+            </p>
+          </div>
+          <ThemeSwitch />
+        </div>
+      </Header>
+      <Main>
+        <div className='flex flex-col gap-2'>
+          <h2 className='text-2xl font-semibold'>Dashboard</h2>
+          <p className='text-sm text-muted-foreground'>No dashboard data loaded yet.</p>
+        </div>
+      </Main>
+    </>
+  )
+}
+
+export const Dashboard = DashboardPage
+```
+
+- [ ] **Step 3: Remove auth and demo imports**
 
 Run:
 
 ```bash
-rg -n "Clerk|auth|sign-in|sign-out|Authenticated|users|tasks|apps|chats|settings|ConfigDrawer|SearchProvider|CommandMenu" memind-ui/src memind-ui/package.json
+rg -n "Clerk|auth|sign-in|sign-out|Authenticated|users|tasks|apps|chats|settings|ConfigDrawer|SearchProvider|CommandMenu|ProfileDropdown" memind-ui/src memind-ui/package.json
 ```
 
 Expected after edits: no auth, sign-in, sign-out, Clerk, or demo page imports remain. `settings` may only appear inside generic TypeScript or CSS terms unrelated to routes.
 
-- [ ] **Step 3: Remove unused dependencies**
+- [ ] **Step 4: Remove unused dependencies**
 
 Remove these dependencies from `memind-ui/package.json` when no imports remain:
 
@@ -267,7 +388,18 @@ Remove these dependencies from `memind-ui/package.json` when no imports remain:
 
 Keep `cmdk` only if `memind-ui/src/components/data-table/faceted-filter.tsx` still imports `memind-ui/src/components/ui/command.tsx`. Remove global search files either way.
 
-- [ ] **Step 4: Replace sidebar data**
+- [ ] **Step 5: Update lockfile after dependency removal**
+
+Run:
+
+```bash
+cd memind-ui
+pnpm install --lockfile-only
+```
+
+Expected: `pnpm-lock.yaml` matches the cleaned `package.json`.
+
+- [ ] **Step 6: Replace sidebar data**
 
 `memind-ui/src/components/layout/data/sidebar-data.ts` should define these nav entries only:
 
@@ -294,7 +426,7 @@ export const sidebarData = {
 
 Use `lucide-react` icons because the template uses `lucide-react`.
 
-- [ ] **Step 5: Verify route tree regenerates**
+- [ ] **Step 7: Verify route tree regenerates**
 
 Run:
 
@@ -305,7 +437,7 @@ pnpm build
 
 Expected: build either passes or fails only on missing Memind route components that are introduced in Task 6. If it fails for Clerk, auth store, demo routes, or `_authenticated`, finish cleanup before continuing.
 
-- [ ] **Step 6: Commit cleanup**
+- [ ] **Step 8: Commit cleanup**
 
 Run:
 
@@ -664,6 +796,15 @@ git commit -m "feat: add memind ui shared status and state components"
 - Create: `memind-ui/src/routes/_app/item-graph.tsx`
 - Create: `memind-ui/src/routes/_app/config.tsx`
 - Create: `memind-ui/src/routes/_app/retrieve.tsx`
+- Modify placeholder: `memind-ui/src/features/dashboard/index.tsx`
+- Create placeholder: `memind-ui/src/features/items/index.tsx`
+- Create placeholder: `memind-ui/src/features/raw-data/index.tsx`
+- Create placeholder: `memind-ui/src/features/insights/index.tsx`
+- Create placeholder: `memind-ui/src/features/buffers/index.tsx`
+- Create placeholder: `memind-ui/src/features/memory-threads/index.tsx`
+- Create placeholder: `memind-ui/src/features/item-graph/index.tsx`
+- Create placeholder: `memind-ui/src/features/config/index.tsx`
+- Create placeholder: `memind-ui/src/features/retrieve/index.tsx`
 - Modify: `memind-ui/src/hooks/use-table-url-state.ts`
 - Modify: `memind-ui/src/hooks/use-table-url-state.test.ts`
 
@@ -696,6 +837,34 @@ Each route file imports its feature page component and validates search params u
 - `pageSize`
 - page-specific filters
 - `tab` for Buffers and Item Graph
+- `focus=status` for Memory Threads links that should open or scroll to the status panel
+
+Create temporary page exports so the route tree can compile before the real feature pages are implemented. Each later page task replaces the matching placeholder while keeping the same export name:
+
+```tsx
+// memind-ui/src/features/items/index.tsx
+import { Header } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
+import { ThemeSwitch } from '@/components/theme-switch'
+
+export function ItemsPage() {
+  return (
+    <>
+      <Header>
+        <div className='flex flex-1 items-center justify-between gap-3'>
+          <h1 className='truncate text-lg font-semibold'>Memory Items</h1>
+          <ThemeSwitch />
+        </div>
+      </Header>
+      <Main>
+        <div className='text-sm text-muted-foreground'>No data loaded yet.</div>
+      </Main>
+    </>
+  )
+}
+```
+
+Use the same shape for these exports: `DashboardPage`, `RawDataPage`, `InsightsPage`, `BuffersPage`, `MemoryThreadsPage`, `ItemGraphPage`, `ConfigPage`, and `RetrievePage`.
 
 - [ ] **Step 3: Regenerate route tree**
 
@@ -722,7 +891,7 @@ git commit -m "feat: add memind ui routes and url state"
 ### Task 7: Dashboard Page
 
 **Files:**
-- Create: `memind-ui/src/features/dashboard/index.tsx`
+- Modify: `memind-ui/src/features/dashboard/index.tsx`
 - Create: `memind-ui/src/features/dashboard/dashboard-page.test.tsx`
 - Create: `memind-ui/src/features/dashboard/dashboard-cards.tsx`
 - Create: `memind-ui/src/features/dashboard/dashboard-activity-chart.tsx`
@@ -737,7 +906,10 @@ Test:
 renders total metric cards
 renders zero-state copy when all counts are zero
 links conversationPending to /buffers?tab=conversations&state=pending
+links insightUnbuilt to /buffers?tab=insights&state=unbuilt
 links insightUngrouped to /buffers?tab=insights&state=ungrouped
+links threadOutboxPending to /memory-threads?focus=status
+links threadOutboxFailed to /memory-threads?focus=status
 links graphBatchRepairRequired to /item-graph?tab=batches&state=REPAIR_REQUIRED
 preserves memoryId on backlog links
 ```
@@ -766,6 +938,8 @@ Render:
 - breakdown lists
 - health signals
 
+Use `focus=status` on Memory Threads backlog links so the target page can bring the status panel into view for the active scope.
+
 - [ ] **Step 3: Verify Dashboard**
 
 Run:
@@ -792,9 +966,12 @@ git commit -m "feat: add memind dashboard page"
 ### Task 8: Items, Raw Data, and Insights Pages
 
 **Files:**
-- Create: `memind-ui/src/features/items/`
-- Create: `memind-ui/src/features/raw-data/`
-- Create: `memind-ui/src/features/insights/`
+- Modify: `memind-ui/src/features/items/index.tsx`
+- Modify: `memind-ui/src/features/raw-data/index.tsx`
+- Modify: `memind-ui/src/features/insights/index.tsx`
+- Create: additional files under `memind-ui/src/features/items/`
+- Create: additional files under `memind-ui/src/features/raw-data/`
+- Create: additional files under `memind-ui/src/features/insights/`
 - Modify: `memind-ui/src/features/api/items.ts`
 - Modify: `memind-ui/src/features/api/raw-data.ts`
 - Modify: `memind-ui/src/features/api/insights.ts`
@@ -859,7 +1036,7 @@ git commit -m "feat: add memory item raw data and insight pages"
 ### Task 9: Buffers Page
 
 **Files:**
-- Create: `memind-ui/src/features/buffers/index.tsx`
+- Modify: `memind-ui/src/features/buffers/index.tsx`
 - Create: `memind-ui/src/features/buffers/buffers-page.test.tsx`
 - Create: `memind-ui/src/features/buffers/conversations-table.tsx`
 - Create: `memind-ui/src/features/buffers/insight-buffers-table.tsx`
@@ -937,7 +1114,7 @@ git commit -m "feat: add memory buffer management page"
 ### Task 10: Memory Threads Page
 
 **Files:**
-- Create: `memind-ui/src/features/memory-threads/index.tsx`
+- Modify: `memind-ui/src/features/memory-threads/index.tsx`
 - Create: `memind-ui/src/features/memory-threads/memory-threads-page.test.tsx`
 - Create: `memind-ui/src/features/memory-threads/thread-detail-drawer.tsx`
 - Create: `memind-ui/src/features/memory-threads/thread-status-panel.tsx`
@@ -953,6 +1130,7 @@ status options include ACTIVE DORMANT CLOSED
 detail drawer is blocked when userId is missing
 detail drawer loads thread and memberships when userId is present
 membership table shows role primary and relevanceWeight
+focus=status opens or scrolls to the status panel
 rebuild is blocked when userId is missing
 rebuild confirmation refreshes status and list
 ```
@@ -1008,7 +1186,7 @@ git commit -m "feat: add memory thread management page"
 ### Task 11: Item Graph Page
 
 **Files:**
-- Create: `memind-ui/src/features/item-graph/index.tsx`
+- Modify: `memind-ui/src/features/item-graph/index.tsx`
 - Create: `memind-ui/src/features/item-graph/item-graph-page.test.tsx`
 - Create: `memind-ui/src/features/item-graph/summary-tab.tsx`
 - Create: `memind-ui/src/features/item-graph/entities-tab.tsx`
@@ -1089,7 +1267,7 @@ git commit -m "feat: add item graph management page"
 ### Task 12: Config Page
 
 **Files:**
-- Create: `memind-ui/src/features/config/index.tsx`
+- Modify: `memind-ui/src/features/config/index.tsx`
 - Create: `memind-ui/src/features/config/config-page.test.tsx`
 - Create: `memind-ui/src/features/config/config-value-editor.tsx`
 - Modify: `memind-ui/src/features/api/config.ts`
@@ -1156,7 +1334,7 @@ git commit -m "feat: add memory options config page"
 ### Task 13: Retrieve Debug Page
 
 **Files:**
-- Create: `memind-ui/src/features/retrieve/index.tsx`
+- Modify: `memind-ui/src/features/retrieve/index.tsx`
 - Create: `memind-ui/src/features/retrieve/retrieve-page.test.tsx`
 - Create: `memind-ui/src/features/retrieve/retrieve-trace.tsx`
 - Modify: `memind-ui/src/features/api/retrieve.ts`
