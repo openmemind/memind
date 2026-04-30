@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -121,6 +122,13 @@ class MemindServerIntegrationTest {
     @BeforeEach
     void setUp() {
         this.mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
+        jdbcTemplate.update("DELETE FROM memory_graph_alias_batch_receipt");
+        jdbcTemplate.update("DELETE FROM memory_entity_cooccurrence");
+        jdbcTemplate.update("DELETE FROM memory_item_link");
+        jdbcTemplate.update("DELETE FROM memory_item_entity_mention");
+        jdbcTemplate.update("DELETE FROM memory_graph_entity_alias");
+        jdbcTemplate.update("DELETE FROM memory_graph_entity");
+        jdbcTemplate.update("DELETE FROM memory_item_graph_batch");
         jdbcTemplate.update("DELETE FROM memory_insight_buffer");
         jdbcTemplate.update("DELETE FROM memory_conversation_buffer");
         jdbcTemplate.update("DELETE FROM thread_intake_outbox");
@@ -377,6 +385,181 @@ class MemindServerIntegrationTest {
                 .andExpect(jsonPath("$.data").value(1));
     }
 
+    @Test
+    void adminBufferApisExposeAndCorrectRows() throws Exception {
+        insertConversationBuffer(1001L, "session-1", "u1", "a1", "u1:a1", false);
+        insertConversationBuffer(1002L, "session-1", "u1", "a1", "u1:a1", true);
+
+        mockMvc.perform(get("/admin/v1/buffers/conversations").queryParam("memoryId", "u1:a1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.list[0].id").value(1001))
+                .andExpect(jsonPath("$.data.list[0].extracted").value(false));
+
+        mockMvc.perform(
+                        patch("/admin/v1/buffers/conversations/extracted")
+                                .contentType(APPLICATION_JSON)
+                                .content("{\"ids\":[1001]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.updatedCount").value(1))
+                .andExpect(jsonPath("$.data.affectedMemoryIds[0]").value("u1:a1"));
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT extracted FROM memory_conversation_buffer WHERE id = 1001",
+                                Integer.class))
+                .isEqualTo(1);
+
+        mockMvc.perform(
+                        delete("/admin/v1/buffers/conversations")
+                                .contentType(APPLICATION_JSON)
+                                .content("{\"ids\":[1001]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deletedCount").value(1));
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT deleted FROM memory_conversation_buffer WHERE id = 1001",
+                                Integer.class))
+                .isEqualTo(1);
+
+        insertInsightBuffer(2001, "u1", "a1", "u1:a1", "preference", 501L, null, false);
+        mockMvc.perform(
+                        delete("/admin/v1/buffers/insights")
+                                .contentType(APPLICATION_JSON)
+                                .content("{\"ids\":[2001]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deletedCount").value(1))
+                .andExpect(jsonPath("$.data.affectedMemoryIds[0]").value("u1:a1"));
+        assertThat(
+                        jdbcTemplate.queryForObject(
+                                "SELECT COUNT(*) FROM memory_insight_buffer WHERE id = 2001",
+                                Integer.class))
+                .isZero();
+        insertInsightBuffer(2002, "u1", "a1", "u1:a1", "preference", 501L, null, false);
+    }
+
+    @Test
+    void adminDashboardAggregatesPersistedData() throws Exception {
+        insertRawData(
+                rawData(
+                        "rd-dashboard",
+                        "u1",
+                        "a1",
+                        "u1:a1",
+                        "cap-dashboard",
+                        Instant.parse("2026-04-30T09:00:00Z")));
+        insertItem(item(501L, "u1", "a1", "u1:a1", "rd-dashboard", "USER", "profile", "FACT"));
+        insertInsight(insight(601L, "u1", "a1", "u1:a1", "USER", "profile", "LEAF"));
+        insertConversationBuffer(2101L, "session-dashboard", "u1", "a1", "u1:a1", false);
+        insertInsightBuffer(2201, "u1", "a1", "u1:a1", "preference", 501L, null, false);
+        insertThread(
+                thread(
+                        "u1:a1",
+                        "topic:concept:dashboard",
+                        "TOPIC",
+                        "concept",
+                        "dashboard",
+                        "Dashboard"));
+        insertThreadRuntime(threadRuntime("u1:a1", "AVAILABLE", 501L, 1L, 0L));
+        insertThreadOutbox(2301L, "u1:a1", 501L, "PENDING");
+        insertGraphEntity(2401, "u1", "a1", "u1:a1", "person:alice", "Alice", "PERSON");
+        insertItemLink(2402, "u1", "a1", "u1:a1", 501L, 502L, "SEMANTIC", "related");
+        insertGraphBatch(2403, "u1", "a1", "u1:a1", "batch-dashboard", "REPAIR_REQUIRED");
+
+        mockMvc.perform(get("/admin/v1/dashboard").queryParam("memoryId", "u1:a1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.data.totals.rawData").value(1))
+                .andExpect(jsonPath("$.data.totals.items").value(1))
+                .andExpect(jsonPath("$.data.totals.memoryThreads").value(1))
+                .andExpect(jsonPath("$.data.backlog.conversationPending").value(1))
+                .andExpect(jsonPath("$.data.backlog.insightUnbuilt").value(1))
+                .andExpect(jsonPath("$.data.backlog.graphBatchRepairRequired").value(1))
+                .andExpect(jsonPath("$.data.breakdown.sourceClients[0].name").value("claude-code"))
+                .andExpect(
+                        jsonPath("$.data.healthSignals.threadProjectionStates[0].state")
+                                .value("AVAILABLE"));
+    }
+
+    @Test
+    void itemGraphCorrectionDeletesArePhysicalAndDoNotCascadeToItemLinks() throws Exception {
+        insertGraphEntity(3001, "u1", "a1", "u1:a1", "person:alice", "Alice", "PERSON");
+        insertGraphAlias(3002, "u1", "a1", "u1:a1", "person:alice", "PERSON", "alice");
+        insertGraphMention(3003, "u1", "a1", "u1:a1", 501L, "person:alice");
+        insertGraphCooccurrence(3004, "u1", "a1", "u1:a1", "person:alice", "concept:project");
+        insertItemLink(3005, "u1", "a1", "u1:a1", 501L, 502L, "SEMANTIC", "entity_overlap");
+        insertItemLink(3006, "u1", "a1", "u1:a1", 501L, 502L, "TEMPORAL", "entity_overlap");
+
+        mockMvc.perform(
+                        delete("/admin/v1/item-graph/entities")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        "{\"memoryId\":\" u1:a1 \","
+                                                + "\"entityKeys\":[\"person:alice\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deletedCount").value(1))
+                .andExpect(jsonPath("$.data.deletedAliases").value(1))
+                .andExpect(jsonPath("$.data.deletedMentions").value(1))
+                .andExpect(jsonPath("$.data.deletedCooccurrences").value(1))
+                .andExpect(jsonPath("$.data.possiblyStaleEntityOverlapLinks").value(1));
+
+        assertThat(countRows("memory_graph_entity", 3001)).isZero();
+        assertThat(countRows("memory_graph_entity_alias", 3002)).isZero();
+        assertThat(countRows("memory_item_entity_mention", 3003)).isZero();
+        assertThat(countRows("memory_entity_cooccurrence", 3004)).isZero();
+        assertThat(countRows("memory_item_link", 3005)).isEqualTo(1);
+        assertThat(countRows("memory_item_link", 3006)).isEqualTo(1);
+        insertGraphEntity(3011, "u1", "a1", "u1:a1", "person:alice", "Alice", "PERSON");
+
+        insertGraphAlias(3051, "u1", "a1", "u1:a1", "person:ghost", "PERSON", "ghost");
+        mockMvc.perform(
+                        delete("/admin/v1/item-graph/entities")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        "{\"memoryId\":\"u1:a1\","
+                                                + "\"entityKeys\":[\"person:ghost\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deletedCount").value(0))
+                .andExpect(jsonPath("$.data.deletedAliases").value(1))
+                .andExpect(jsonPath("$.data.affectedMemoryIds[0]").value("u1:a1"));
+
+        insertGraphAlias(3101, "u1", "a1", "u1:a1", "person:bob", "PERSON", "bob");
+        mockMvc.perform(
+                        delete("/admin/v1/item-graph/aliases")
+                                .contentType(APPLICATION_JSON)
+                                .content("{\"ids\":[3101]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deletedCount").value(1));
+        insertGraphAlias(3102, "u1", "a1", "u1:a1", "person:bob", "PERSON", "bob");
+
+        insertGraphMention(3201, "u1", "a1", "u1:a1", 601L, "person:bob");
+        mockMvc.perform(
+                        delete("/admin/v1/item-graph/mentions")
+                                .contentType(APPLICATION_JSON)
+                                .content("{\"ids\":[3201]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deletedCount").value(1));
+        insertGraphMention(3202, "u1", "a1", "u1:a1", 601L, "person:bob");
+
+        insertItemLink(3301, "u1", "a1", "u1:a1", 701L, 702L, "SEMANTIC", "manual");
+        mockMvc.perform(
+                        delete("/admin/v1/item-graph/item-links")
+                                .contentType(APPLICATION_JSON)
+                                .content("{\"ids\":[3301]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deletedCount").value(1));
+        insertItemLink(3302, "u1", "a1", "u1:a1", 701L, 702L, "SEMANTIC", "manual");
+
+        insertGraphCooccurrence(3401, "u1", "a1", "u1:a1", "person:bob", "concept:project");
+        mockMvc.perform(
+                        delete("/admin/v1/item-graph/cooccurrences")
+                                .contentType(APPLICATION_JSON)
+                                .content("{\"ids\":[3401]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deletedCount").value(1));
+        insertGraphCooccurrence(3402, "u1", "a1", "u1:a1", "person:bob", "concept:project");
+    }
+
     private void insertRawData(MemoryRawDataDO rawData) {
         rawDataMapper.insert(rawData);
     }
@@ -401,6 +584,239 @@ class MemindServerIntegrationTest {
         insightMapper.insert(insight);
     }
 
+    private void insertConversationBuffer(
+            Long id,
+            String sessionId,
+            String userId,
+            String agentId,
+            String memoryId,
+            boolean extracted) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO memory_conversation_buffer (
+                    id, session_id, user_id, agent_id, memory_id, role, content, user_name,
+                    source_client, timestamp, extracted, created_at, updated_at, deleted
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                """,
+                id,
+                sessionId,
+                userId,
+                agentId,
+                memoryId,
+                "USER",
+                "hello",
+                "Ada",
+                "claude-code",
+                "2026-04-30T09:00:00Z",
+                extracted ? 1 : 0,
+                "2026-04-30T09:00:01Z",
+                "2026-04-30T09:00:02Z");
+    }
+
+    private void insertInsightBuffer(
+            Integer id,
+            String userId,
+            String agentId,
+            String memoryId,
+            String insightTypeName,
+            Long itemId,
+            String groupName,
+            boolean built) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO memory_insight_buffer (
+                    id, user_id, agent_id, memory_id, insight_type_name, item_id,
+                    group_name, built, created_at, updated_at, deleted
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                """,
+                id,
+                userId,
+                agentId,
+                memoryId,
+                insightTypeName,
+                itemId,
+                groupName,
+                built ? 1 : 0,
+                "2026-04-30T09:01:00Z",
+                "2026-04-30T09:01:01Z");
+    }
+
+    private void insertThreadOutbox(Long id, String memoryId, Long triggerItemId, String status) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO thread_intake_outbox (
+                    id, memory_id, trigger_item_id, enqueue_generation, status, attempt_count,
+                    enqueued_at, created_at, updated_at
+                ) VALUES (?, ?, ?, 1, ?, 0, ?, ?, ?)
+                """,
+                id,
+                memoryId,
+                triggerItemId,
+                status,
+                "2026-04-30T09:02:00Z",
+                "2026-04-30T09:02:01Z",
+                "2026-04-30T09:02:02Z");
+    }
+
+    private void insertGraphEntity(
+            Integer id,
+            String userId,
+            String agentId,
+            String memoryId,
+            String entityKey,
+            String displayName,
+            String entityType) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO memory_graph_entity (
+                    id, user_id, agent_id, memory_id, entity_key, display_name, entity_type,
+                    metadata, created_at, updated_at, deleted
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, 0)
+                """,
+                id,
+                userId,
+                agentId,
+                memoryId,
+                entityKey,
+                displayName,
+                entityType,
+                "2026-04-30T09:03:00Z",
+                "2026-04-30T09:03:01Z");
+    }
+
+    private void insertGraphAlias(
+            Integer id,
+            String userId,
+            String agentId,
+            String memoryId,
+            String entityKey,
+            String entityType,
+            String normalizedAlias) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO memory_graph_entity_alias (
+                    id, user_id, agent_id, memory_id, entity_key, entity_type,
+                    normalized_alias, evidence_count, metadata, created_at, updated_at, deleted
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, '{}', ?, ?, 0)
+                """,
+                id,
+                userId,
+                agentId,
+                memoryId,
+                entityKey,
+                entityType,
+                normalizedAlias,
+                "2026-04-30T09:04:00Z",
+                "2026-04-30T09:04:01Z");
+    }
+
+    private void insertGraphMention(
+            Integer id,
+            String userId,
+            String agentId,
+            String memoryId,
+            Long itemId,
+            String entityKey) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO memory_item_entity_mention (
+                    id, user_id, agent_id, memory_id, item_id, entity_key, confidence,
+                    metadata, created_at, updated_at, deleted
+                ) VALUES (?, ?, ?, ?, ?, ?, 0.9, '{}', ?, ?, 0)
+                """,
+                id,
+                userId,
+                agentId,
+                memoryId,
+                itemId,
+                entityKey,
+                "2026-04-30T09:05:00Z",
+                "2026-04-30T09:05:01Z");
+    }
+
+    private void insertItemLink(
+            Integer id,
+            String userId,
+            String agentId,
+            String memoryId,
+            Long sourceItemId,
+            Long targetItemId,
+            String linkType,
+            String evidenceSource) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO memory_item_link (
+                    id, user_id, agent_id, memory_id, source_item_id, target_item_id,
+                    link_type, strength, metadata, created_at, updated_at, deleted,
+                    relation_code, evidence_source
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 0.8, '{}', ?, ?, 0, ?, ?)
+                """,
+                id,
+                userId,
+                agentId,
+                memoryId,
+                sourceItemId,
+                targetItemId,
+                linkType,
+                "2026-04-30T09:06:00Z",
+                "2026-04-30T09:06:01Z",
+                "related",
+                evidenceSource);
+    }
+
+    private void insertGraphCooccurrence(
+            Integer id,
+            String userId,
+            String agentId,
+            String memoryId,
+            String leftEntityKey,
+            String rightEntityKey) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO memory_entity_cooccurrence (
+                    id, user_id, agent_id, memory_id, left_entity_key, right_entity_key,
+                    cooccurrence_count, metadata, created_at, updated_at, deleted
+                ) VALUES (?, ?, ?, ?, ?, ?, 1, '{}', ?, ?, 0)
+                """,
+                id,
+                userId,
+                agentId,
+                memoryId,
+                leftEntityKey,
+                rightEntityKey,
+                "2026-04-30T09:07:00Z",
+                "2026-04-30T09:07:01Z");
+    }
+
+    private void insertGraphBatch(
+            Integer id,
+            String userId,
+            String agentId,
+            String memoryId,
+            String extractionBatchId,
+            String state) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO memory_item_graph_batch (
+                    id, user_id, agent_id, memory_id, extraction_batch_id, state,
+                    retry_promotion_supported, created_at, updated_at, deleted
+                ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 0)
+                """,
+                id,
+                userId,
+                agentId,
+                memoryId,
+                extractionBatchId,
+                state,
+                "2026-04-30T09:08:00Z",
+                "2026-04-30T09:08:01Z");
+    }
+
+    private int countRows(String tableName, Integer id) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM " + tableName + " WHERE id = ?", Integer.class, id);
+    }
+
     private static MemoryRawDataDO rawData(
             String bizId,
             String userId,
@@ -414,6 +830,7 @@ class MemindServerIntegrationTest {
         dataObject.setAgentId(agentId);
         dataObject.setMemoryId(memoryId);
         dataObject.setType("conversation");
+        dataObject.setSourceClient("claude-code");
         dataObject.setContentId("content-" + bizId);
         dataObject.setSegment(Map.of("type", "conversation"));
         dataObject.setCaption("caption-" + bizId);

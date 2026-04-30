@@ -61,7 +61,13 @@ public final class InsightTreeExample {
             ExamplePrinter.printExtractionResult(result);
         }
 
-        ExamplePrinter.printSection("Step 4: Retrieve Synthesized Insights");
+        ExamplePrinter.printSection("Step 4: Flush Synthesized Insights");
+        log.info("  flushing insight tree...");
+        long flushStartedAt = System.currentTimeMillis();
+        memory.flushInsights(memoryId, config.language());
+        log.info("  flush completed in {}ms", System.currentTimeMillis() - flushStartedAt);
+
+        ExamplePrinter.printSection("Step 5: Retrieve Synthesized Insights");
         var query = "这个用户在身份、关系、偏好和行为上有哪些稳定特征？";
         log.info("  query: {}", query);
         long startedAt = System.currentTimeMillis();
