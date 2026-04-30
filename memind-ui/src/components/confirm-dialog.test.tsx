@@ -36,14 +36,14 @@ describe('ConfirmDialog', () => {
       <ConfirmDialog
         open
         onOpenChange={vi.fn()}
-        title='Sign out'
+        title='Confirm action'
         desc='Are you sure?'
-        confirmText='Sign out'
+        confirmText='Confirm'
         handleConfirm={handleConfirm}
       />
     )
 
-    await userEvent.click(getByRole('button', { name: 'Sign out' }))
+    await userEvent.click(getByRole('button', { name: 'Confirm' }))
     expect(handleConfirm).toHaveBeenCalledOnce()
   })
 
@@ -110,10 +110,10 @@ describe('ConfirmDialog', () => {
       <ConfirmDialog
         open
         onOpenChange={vi.fn()}
-        title='Delete tasks'
-        form='tasks-multi-delete-form'
+        title='Delete selected rows'
+        form='bulk-delete-form'
         desc={
-          <form id='tasks-multi-delete-form' className='space-y-4'>
+          <form id='bulk-delete-form' className='flex flex-col gap-4'>
             <p>Type DELETE to confirm.</p>
           </form>
         }
@@ -126,7 +126,7 @@ describe('ConfirmDialog', () => {
     await expect.element(deleteBtn).toHaveAttribute('type', 'submit')
     await expect
       .element(deleteBtn)
-      .toHaveAttribute('form', 'tasks-multi-delete-form')
+      .toHaveAttribute('form', 'bulk-delete-form')
   })
 
   it('submits the desc form when confirm is clicked (form prop, no handleConfirm)', async () => {
@@ -139,12 +139,12 @@ describe('ConfirmDialog', () => {
         open
         onOpenChange={vi.fn()}
         title='Delete'
-        form='users-delete-form'
+        form='row-delete-form'
         desc={
           <form
-            id='users-delete-form'
+            id='row-delete-form'
             onSubmit={handleFormSubmit}
-            className='space-y-4'
+            className='flex flex-col gap-4'
           >
             <p>Confirm deletion.</p>
           </form>
@@ -169,14 +169,14 @@ describe('ConfirmDialog', () => {
         open
         onOpenChange={vi.fn()}
         title='Delete'
-        form='users-delete-form'
+        form='row-delete-form'
         desc={
           <form
-            id='users-delete-form'
+            id='row-delete-form'
             onSubmit={handleFormSubmit}
-            className='space-y-4'
+            className='flex flex-col gap-4'
           >
-            <input type='text' name='username' placeholder='username' />
+            <input type='text' name='confirmation' placeholder='confirmation' />
           </form>
         }
         confirmText='Delete'
@@ -184,7 +184,7 @@ describe('ConfirmDialog', () => {
       />
     )
 
-    await userEvent.fill(getByPlaceholder('username'), 'test')
+    await userEvent.fill(getByPlaceholder('confirmation'), 'test')
     await userEvent.keyboard('{Enter}')
     expect(handleFormSubmit).toHaveBeenCalledOnce()
   })
@@ -199,11 +199,11 @@ describe('ConfirmDialog', () => {
         open
         onOpenChange={vi.fn()}
         title='Delete'
-        form='users-delete-form'
+        form='row-delete-form'
         disabled
         desc={
-          <form id='users-delete-form' onSubmit={handleFormSubmit}>
-            <p>Enter username to enable Delete.</p>
+          <form id='row-delete-form' onSubmit={handleFormSubmit}>
+            <p>Enter confirmation text to enable Delete.</p>
           </form>
         }
         confirmText='Delete'
