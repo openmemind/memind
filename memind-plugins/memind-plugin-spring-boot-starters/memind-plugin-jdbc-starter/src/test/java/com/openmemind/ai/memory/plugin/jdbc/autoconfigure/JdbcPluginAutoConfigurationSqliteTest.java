@@ -39,11 +39,14 @@ import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentInputStore;
 import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.textsearch.TextSearchResult;
+import com.openmemind.ai.memory.plugin.jdbc.JdbcMemoryAccess;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JsonCodec;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteBubbleTrackerStore;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryStore;
 import com.openmemind.ai.memory.plugin.jdbc.sqlite.SqliteMemoryTextSearch;
+import com.zaxxer.hikari.HikariDataSource;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -55,31 +58,50 @@ import javax.sql.DataSource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.sqlite.SQLiteDataSource;
 import reactor.core.publisher.Mono;
 import tools.jackson.databind.ObjectMapper;
 
 @DisplayName("JDBC starter SQLite auto-configuration")
 class JdbcPluginAutoConfigurationSqliteTest {
 
-    private final ApplicationContextRunner contextRunner =
-            new ApplicationContextRunner()
-                    .withConfiguration(AutoConfigurations.of(JdbcPluginAutoConfiguration.class))
-                    .withPropertyValues("memind.store.init-schema=true");
+    private ApplicationContextRunner contextRunner() {
+        return contextRunner(true);
+    }
+
+    private ApplicationContextRunner contextRunner(boolean initSchema) {
+        try {
+            Path dbPath = Files.createTempFile("memind-jdbc-starter-", ".db");
+            return new ApplicationContextRunner()
+                    .withConfiguration(
+                            AutoConfigurations.of(
+                                    DataSourceAutoConfiguration.class,
+                                    JdbcPluginAutoConfiguration.class))
+                    .withPropertyValues(
+                            "spring.datasource.url=jdbc:sqlite:" + dbPath,
+                            "spring.datasource.driver-class-name=org.sqlite.JDBC",
+                            "spring.datasource.hikari.maximum-pool-size=1",
+                            "spring.datasource.hikari.minimum-idle=1",
+                            "memind.store.init-schema=" + initSchema);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
 
     @Test
     @DisplayName(
             "Create SQLite memory store and text search from datasource with buffers owned by"
                     + " store")
     void createsSqliteStoreAndTextSearchWithAggregateBuffers() {
-        contextRunner
-                .withUserConfiguration(SqliteDataSourceConfig.class)
+        contextRunner()
                 .run(
                         context -> {
                             assertThat(context).hasNotFailed();
+                            assertThat(context).hasSingleBean(JdbcMemoryAccess.class);
+                            assertThat(context).hasSingleBean(HikariDataSource.class);
                             assertThat(context).hasSingleBean(MemoryStore.class);
                             assertThat(context).hasSingleBean(MemoryBuffer.class);
                             assertThat(context).hasSingleBean(MemoryTextSearch.class);
@@ -210,8 +232,8 @@ class JdbcPluginAutoConfigurationSqliteTest {
     @Test
     @DisplayName("Wire optional ResourceStore into JDBC-backed MemoryStore")
     void wiresOptionalResourceStore() {
-        contextRunner
-                .withUserConfiguration(SqliteDataSourceConfig.class, ResourceStoreConfig.class)
+        contextRunner()
+                .withUserConfiguration(ResourceStoreConfig.class)
                 .run(
                         context -> {
                             assertThat(context).hasNotFailed();
@@ -223,8 +245,7 @@ class JdbcPluginAutoConfigurationSqliteTest {
     @Test
     @DisplayName("Expose BubbleTrackerStore bean for SQLite JDBC starter")
     void exposesBubbleTrackerStoreBean() {
-        contextRunner
-                .withUserConfiguration(SqliteDataSourceConfig.class)
+        contextRunner()
                 .run(
                         context -> {
                             assertThat(context).hasNotFailed();
@@ -237,9 +258,8 @@ class JdbcPluginAutoConfigurationSqliteTest {
     @Test
     @DisplayName("Use the application ObjectMapper for JDBC JSON codec")
     void usesApplicationObjectMapperForJdbcJsonCodec() {
-        contextRunner
-                .withUserConfiguration(
-                        SqliteDataSourceConfig.class, RawContentObjectMapperConfig.class)
+        contextRunner()
+                .withUserConfiguration(RawContentObjectMapperConfig.class)
                 .run(
                         context -> {
                             assertThat(context).hasNotFailed();
@@ -260,8 +280,7 @@ class JdbcPluginAutoConfigurationSqliteTest {
     @Test
     @DisplayName("Expose default taxonomy after first JDBC store bootstrap without runtime seeder")
     void exposesDefaultTaxonomyWithoutRuntimeSeeder() {
-        contextRunner
-                .withUserConfiguration(SqliteDataSourceConfig.class)
+        contextRunner()
                 .run(
                         context -> {
                             assertThat(context).hasNotFailed();
@@ -281,10 +300,7 @@ class JdbcPluginAutoConfigurationSqliteTest {
     @Test
     @DisplayName("Respect memind.store.init-schema=false")
     void respectsInitSchemaFlag() {
-        new ApplicationContextRunner()
-                .withConfiguration(AutoConfigurations.of(JdbcPluginAutoConfiguration.class))
-                .withPropertyValues("memind.store.init-schema=false")
-                .withUserConfiguration(SqliteDataSourceConfig.class)
+        contextRunner(false)
                 .run(
                         context -> {
                             assertThat(context).hasFailed();
@@ -296,7 +312,7 @@ class JdbcPluginAutoConfigurationSqliteTest {
     @Test
     @DisplayName("Back off fully when user provides store and text search beans")
     void backsOffFullyForUserProvidedStoreAndTextSearch() {
-        contextRunner
+        contextRunner()
                 .withUserConfiguration(CustomStoreAndTextSearchConfig.class)
                 .run(
                         context -> {
@@ -307,6 +323,7 @@ class JdbcPluginAutoConfigurationSqliteTest {
                             assertThat(context).hasSingleBean(MemoryTextSearch.class);
                             assertThat(context.getBean(MemoryTextSearch.class))
                                     .isSameAs(context.getBean("customMemoryTextSearch"));
+                            assertThat(context).doesNotHaveBean(JdbcMemoryAccess.class);
                             assertThat(context).doesNotHaveBean(InsightBuffer.class);
                             assertThat(context).doesNotHaveBean(PendingConversationBuffer.class);
                             assertThat(context).doesNotHaveBean(RecentConversationBuffer.class);
@@ -341,19 +358,7 @@ class JdbcPluginAutoConfigurationSqliteTest {
     }
 
     @Configuration(proxyBeanMethods = false)
-    static class SqliteDataSourceConfig {
-
-        @Bean
-        DataSource dataSource() throws IOException {
-            Path dbPath = Files.createTempFile("memind-jdbc-starter-", ".db");
-            SQLiteDataSource dataSource = new SQLiteDataSource();
-            dataSource.setUrl("jdbc:sqlite:" + dbPath);
-            return dataSource;
-        }
-    }
-
-    @Configuration(proxyBeanMethods = false)
-    static class CustomStoreAndTextSearchConfig extends SqliteDataSourceConfig {
+    static class CustomStoreAndTextSearchConfig {
 
         @Bean
         MemoryStore customMemoryStore() {

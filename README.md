@@ -143,8 +143,8 @@ see the [Examples](#examples) section.
 
 ### Embed Memind in your app
 
-Import the memind BOM first, then add the core runtime, the Spring AI plugin, the JDBC plugin,
-and a JDBC driver for your store. For the default SQLite setup:
+Import the memind BOM first, then add the core runtime, the Spring AI plugin, and one JDBC
+dialect plugin. For the default SQLite setup:
 
 ```xml
 <dependencyManagement>
@@ -170,17 +170,16 @@ and a JDBC driver for your store. For the default SQLite setup:
   </dependency>
   <dependency>
     <groupId>com.openmemind.ai</groupId>
-    <artifactId>memind-plugin-jdbc</artifactId>
-  </dependency>
-  <dependency>
-    <groupId>org.xerial</groupId>
-    <artifactId>sqlite-jdbc</artifactId>
+    <artifactId>memind-plugin-jdbc-sqlite</artifactId>
   </dependency>
 </dependencies>
 ```
 
-If you use MySQL or PostgreSQL instead, replace `sqlite-jdbc` with the corresponding driver and
-swap `JdbcStore.sqlite(...)` for `JdbcStore.mysql(...)` or `JdbcStore.postgresql(...)`.
+If you use MySQL or PostgreSQL instead, replace the SQLite module with
+`memind-plugin-jdbc-mysql` or `memind-plugin-jdbc-postgresql`, then use the matching factory.
+The factories create a `HikariDataSource` directly for plain Java usage. In Spring Boot, use
+`memind-plugin-jdbc-starter` and configure `spring.datasource.*` plus optional
+`spring.datasource.hikari.*`; Boot creates the `HikariDataSource` and the starter consumes it.
 
 Outside Spring Boot, assemble the runtime objects directly and pass them into
 `Memory.builder()`:
@@ -202,7 +201,7 @@ EmbeddingModel embeddingModel = new OpenAiEmbeddingModel(
         MetadataMode.NONE,
         OpenAiEmbeddingOptions.builder().model("text-embedding-3-small").build());
 
-JdbcMemoryAccess jdbc = JdbcStore.sqlite("./data/memind.db");
+JdbcMemoryAccess jdbc = SqliteJdbcPlugin.create("./data/memind.db");
 
 Memory memory = Memory.builder()
         .chatClient(new SpringAiStructuredChatClient(ChatClient.builder(chatModel).build()))
