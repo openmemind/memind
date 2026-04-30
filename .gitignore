@@ -60,3 +60,5 @@ example-data
 !memind-examples/data/
 !memind-examples/data/**
 eval-data
+
+memind-evaluation/data
