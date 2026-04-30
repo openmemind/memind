@@ -223,6 +223,18 @@ The sidebar should be renamed for Memind. Suggested branding:
 
 The sidebar footer should not show a user profile or sign-out. It can show server connection status instead.
 
+## Template Feature Decisions
+
+Keep template infrastructure that directly improves a local admin tool, and remove preference/demo surfaces that do not serve Memind workflows.
+
+| Template feature | Decision | Notes |
+| --- | --- | --- |
+| Dark/light/system theme switch | Keep | Keep the lightweight header theme switch and theme provider. |
+| Layout config drawer | Remove | Do not expose sidebar variant, layout width, or other template layout preferences in version one. |
+| Global search / command palette | Remove | There is no backend-backed global search in version one; sidebar navigation and page-level filters are enough. Keep `cmdk` only if still needed by reusable table filter components. |
+| RTL support | Keep | Keep existing RTL-safe component styling and direction support where it has low maintenance cost. |
+| Font selection | Remove | Use one project default font stack; do not keep font preference UI or font settings pages. |
+
 ## Global Memory Scope
 
 Add a global memory scope control in the header or sidebar. It stores a preferred scope in URL/localStorage and applies it as default filters where supported.
@@ -253,6 +265,8 @@ Use one centralized `memory-scope.ts` helper so parsing rules are identical acro
 | Memory Thread status/rebuild | `userId`, `agentId?` | Require parsed `userId`; confirmation happens after validation. |
 | Retrieve | `userId`, `agentId` | Require both parsed fields to be non-empty. |
 | Config and health | no memory scope | Do not apply memory scope. |
+
+Tables backed by DTOs that include `memoryId`, `userId`, and `agentId` should expose ownership clearly. The simplest version is to always show `memoryId` as a table column. If later screen density becomes a problem, the UI may hide `memoryId` only when a global memory scope is active and the page clearly displays that active scope elsewhere.
 
 ## Common UI States
 
@@ -288,6 +302,16 @@ Use cards for individual metric summaries and chart/table sections. Avoid market
 
 Activity charts should use `AdminDashboardView.Activity.days` and the three `DailyCount` series: `rawDataCreated`, `itemsCreated`, and `insightsCreated`. Use either a compact multi-series line chart or grouped bars; the X axis uses the server-provided `DailyCount.date` string in `YYYY-MM-DD` format.
 
+Backlog cards should be actionable where the current API surface supports a useful target:
+
+- `conversationPending` links to Buffers > Conversations with `state=pending`
+- `insightUnbuilt` links to Buffers > Insights with `state=unbuilt`
+- `insightUngrouped` links to Buffers > Insights with `state=unbuilt` and preserves scope; do not invent an unsupported `groupName` server filter in version one
+- `threadOutboxPending` and `threadOutboxFailed` link to Memory Threads and focus the status panel for the active scope
+- `graphBatchRepairRequired` links to Item Graph > Batches with `state=REPAIR_REQUIRED`
+
+Dashboard links must preserve the active `memoryId` scope in the target URL when applicable.
+
 ### Memory Items
 
 API:
@@ -309,6 +333,7 @@ Filters:
 List columns:
 
 - item id
+- memory id
 - content preview
 - type
 - category
@@ -350,6 +375,7 @@ Filters:
 List columns:
 
 - raw data id
+- memory id
 - type
 - caption preview
 - source client
@@ -387,6 +413,7 @@ Filters:
 List columns:
 
 - insight id
+- memory id
 - name/content preview
 - type
 - tier
@@ -426,6 +453,20 @@ Conversation filters:
 - `sessionId`
 - `state`, default `pending`
 
+Conversation columns:
+
+- id
+- session id
+- memory id
+- role
+- content preview
+- user name
+- source client
+- extracted
+- timestamp
+- created at
+- updated at
+
 Conversation actions:
 
 - mark selected rows as extracted with `{ ids: number[] }`
@@ -444,6 +485,17 @@ Insight buffer filters:
 - `insightTypeName`
 - `state`, default `unbuilt`
 
+Insight buffer columns:
+
+- id
+- memory id
+- insight type name
+- item id
+- group name
+- built
+- created at
+- updated at
+
 Insight buffer actions:
 
 - update group name for selected rows with `{ ids: number[], groupName }`
@@ -453,6 +505,15 @@ Insight buffer actions:
 Insight group API:
 
 - `GET /admin/v1/buffers/insights/groups`
+
+Insight group columns:
+
+- memory id
+- insight type name
+- group name
+- total
+- unbuilt
+- built
 
 Group view displays `memoryId`, `insightTypeName`, `groupName`, `total`, `unbuilt`, and `built`.
 
@@ -474,6 +535,7 @@ Filters:
 
 List columns:
 
+- memory id
 - thread key
 - display label/headline
 - thread type
@@ -488,7 +550,7 @@ Detail drawer:
 - snapshot JSON
 - anchor kind/key
 - opened/closed timestamps
-- thread item memberships
+- thread item memberships with `itemId`, `role`, `primary`, `relevanceWeight`, `createdAt`, and `updatedAt`; keep `memoryId` and `threadKey` visible when useful for debugging
 
 The detail drawer and thread item memberships call `GET /admin/v1/memory-threads/{threadKey}` and `GET /admin/v1/memory-threads/{threadKey}/items` with required `userId` and optional `agentId` query parameters from the global memory scope. If no `userId` is available, disable opening the drawer or show a scope-required prompt before issuing either request.
 
@@ -500,6 +562,7 @@ Status panel:
 - rebuild in progress
 - last processed item id
 - materialization policy version
+- updated at
 - invalidation reason
 
 Status and rebuild require explicit `userId` and optional `agentId`. Rebuild requires explicit confirmation after scope validation. After success, refresh status and list.
@@ -531,6 +594,15 @@ Entity filters:
 - `memoryId`
 - `entityType`
 - `q`
+
+Entity detail drawer:
+
+- entity basic fields: id, memory id, user id, agent id, entity key, display name, entity type, metadata, created at, updated at
+- aliases: id, memory id, entity key, normalized alias, evidence count, entity type, metadata, created at, updated at
+- mention count
+- top mentioned item ids
+- top cooccurrences: id, memory id, left entity key, right entity key, cooccurrence count, metadata, created at, updated at
+- entity overlap item link count
 
 Entity delete means deleting selected entity rows only. The request body requires active `memoryId` and selected row `entityKeys`. The confirmation must display that aliases, mentions, and cooccurrences can be removed. Success displays `deletedAliases`, `deletedMentions`, `deletedCooccurrences`, and `possiblyStaleEntityOverlapLinks`.
 
@@ -612,6 +684,13 @@ Display `config` grouped by section key. Each option row shows:
 - default value
 - description
 - constraints JSON
+
+Value editor behavior:
+
+- `boolean`: switch/toggle
+- `integer` and `double`: number input, using `constraints` such as min/max when present for client-side validation
+- `string`: text input by default; use select when `constraints` contains an enum/options list
+- unknown or complex types: read-only JSON preview plus an explicit text/JSON edit fallback so unsupported types do not silently corrupt values
 
 Updates must send the current `expectedVersion`. If the server returns `409 conflict`, show a conflict message and ask the user to refresh before saving again.
 
