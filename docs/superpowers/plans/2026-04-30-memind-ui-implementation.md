@@ -281,6 +281,8 @@ git commit -m "feat: scaffold memind ui module"
 
 **Files:**
 - Delete: `memind-ui/src/routes/(auth)/`
+- Delete: `memind-ui/src/routes/(errors)/401.tsx`
+- Delete: `memind-ui/src/routes/(errors)/403.tsx`
 - Delete: `memind-ui/src/routes/clerk/`
 - Delete after route move: `memind-ui/src/routes/_app/apps/`
 - Delete after route move: `memind-ui/src/routes/_app/chats/`
@@ -296,6 +298,8 @@ git commit -m "feat: scaffold memind ui module"
 - Delete: `memind-ui/src/features/tasks/`
 - Delete: `memind-ui/src/features/users/`
 - Delete: `memind-ui/src/features/settings/`
+- Delete: `memind-ui/src/features/errors/unauthorized-error.tsx`
+- Delete: `memind-ui/src/features/errors/forbidden.tsx`
 - Modify: `memind-ui/src/features/dashboard/index.tsx`
 - Delete: `memind-ui/src/stores/auth-store.ts`
 - Delete: `memind-ui/src/stores/auth-store.test.ts`
@@ -326,10 +330,13 @@ Change all imports and identifiers from `AuthenticatedLayout` to `AppLayout`, an
 
 - [ ] **Step 2: Remove moved demo routes and replace the template dashboard**
 
-After moving `_authenticated` to `_app`, delete demo route folders and old dashboard demo subcomponents that would otherwise import or leave behind removed template features:
+After moving `_authenticated` to `_app`, delete auth routes, auth-specific error routes, demo route folders, and old dashboard demo subcomponents that would otherwise import or leave behind removed template features:
 
 ```bash
+rm -rf memind-ui/src/routes/'(auth)' memind-ui/src/routes/clerk
+rm -f memind-ui/src/routes/'(errors)'/401.tsx memind-ui/src/routes/'(errors)'/403.tsx
 rm -rf memind-ui/src/routes/_app/apps memind-ui/src/routes/_app/chats memind-ui/src/routes/_app/errors memind-ui/src/routes/_app/help-center memind-ui/src/routes/_app/settings memind-ui/src/routes/_app/tasks memind-ui/src/routes/_app/users
+rm -f memind-ui/src/features/errors/unauthorized-error.tsx memind-ui/src/features/errors/forbidden.tsx
 rm -rf memind-ui/src/features/dashboard/components
 ```
 
@@ -372,10 +379,10 @@ export const Dashboard = DashboardPage
 Run:
 
 ```bash
-rg -n "Clerk|auth|sign-in|sign-out|Authenticated|users|tasks|apps|chats|settings|ConfigDrawer|SearchProvider|CommandMenu|ProfileDropdown" memind-ui/src memind-ui/package.json
+rg -n "Clerk|auth|sign-in|sign-out|Authenticated|Unauthorized|Unauthorised|Forbidden|Please log in|permission|credentials|users|tasks|apps|chats|settings|ConfigDrawer|SearchProvider|CommandMenu|ProfileDropdown" memind-ui/src memind-ui/package.json
 ```
 
-Expected after edits: no auth, sign-in, sign-out, Clerk, or demo page imports remain. `settings` may only appear inside generic TypeScript or CSS terms unrelated to routes.
+Expected after edits: no auth, sign-in, sign-out, Clerk, permission/login-oriented error page text, or demo page imports remain. `settings` may only appear inside generic TypeScript or CSS terms unrelated to routes.
 
 - [ ] **Step 4: Remove unused dependencies**
 
@@ -1424,7 +1431,7 @@ Run:
 
 ```bash
 cd memind-ui
-rg -n "Clerk|sign-in|sign-up|sign-out|Authenticated|shadcn-admin|Tasks|Users|Apps|Chats|ConfigDrawer|CommandMenu|SearchProvider|FontProvider" src package.json README.md
+rg -n "Clerk|sign-in|sign-up|sign-out|Authenticated|Unauthorized|Unauthorised|Forbidden|Please log in|permission|credentials|shadcn-admin|Tasks|Users|Apps|Chats|ConfigDrawer|CommandMenu|SearchProvider|FontProvider" src package.json README.md
 ```
 
 Expected: no output except references explaining removed template features in documentation.
@@ -1513,7 +1520,7 @@ Run:
 
 ```bash
 cd memind-ui
-rg -n "Clerk|sign-in|sign-up|sign-out|Authenticated|auth-store|shadcn-admin|Tasks|Users|Apps|Chats" src package.json README.md
+rg -n "Clerk|sign-in|sign-up|sign-out|Authenticated|Unauthorized|Unauthorised|Forbidden|Please log in|permission|credentials|auth-store|shadcn-admin|Tasks|Users|Apps|Chats" src package.json README.md
 ```
 
 Expected: no output.

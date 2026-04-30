@@ -39,6 +39,7 @@ Remove or replace template sample business surfaces:
 - login and sign-up pages
 - Clerk integration
 - mock auth store and sign-out behavior
+- auth-specific 401/403 error routes and pages that tell users to log in or mention permissions
 - users, tasks, apps, chats, and demo settings pages
 - sample dashboard metrics
 
