@@ -82,12 +82,23 @@ Add query and management services:
 
 Add admin query mappers that depend on the existing MyBatis Plus mappers and data objects from `memind-plugin-mybatis-plus-starter`.
 
+Add a small server-local scope helper for admin queries:
+
+- Accept `memoryId` in public APIs for a compact management-console contract.
+- Resolve `memoryId` into `userId` and `agentId` using the existing `DefaultMemoryId.toIdentifier()` convention: no colon means user-only memory, and the first colon separates user and agent.
+- Prefer `user_id` and `agent_id` predicates in MyBatis queries when the scope is available, because the existing tables and indexes are mostly keyed by `(user_id, agent_id)`.
+- Fall back to `memory_id` predicates only for graph tables or cases where that is already the strongest indexed lookup.
+
+This keeps the API simple without forcing full table scans for common dashboard and buffer queries.
+
 All list endpoints keep existing server paging behavior:
 
 - `pageNo`, default `1`, minimum `1`.
 - `pageSize`, default `20`, minimum `1`, maximum `100`.
 
-Delete and patch endpoints use request bodies. Patch endpoints return `AdminUpdateResult(updatedCount, affectedMemoryIds)`. Delete endpoints return the existing `BatchDeleteResult(deletedCount, affectedMemoryIds)`.
+Delete and patch endpoints use request bodies. Patch endpoints return `AdminUpdateResult(updatedCount, affectedMemoryIds)`. Delete endpoints return the existing `BatchDeleteResult(deletedCount, affectedMemoryIds)` unless the operation needs extra correction details. Entity deletion returns `AdminGraphEntityDeleteResult` because it reports the cascade counts and the number of surviving `entity_overlap` item links that may need explicit review.
+
+All write endpoints that update more than one table must execute inside one service-level transaction. This is required for item graph entity deletion, where entity, alias, mention, and cooccurrence rows must not be partially corrected.
 
 ## Buffer APIs
 
@@ -452,6 +463,7 @@ Response:
 - Mention count.
 - Top mentioned item IDs.
 - Top cooccurrences for the entity.
+- Entity-overlap semantic item link count. These links are item-to-item links whose `evidenceSource` is `entity_overlap` and may have been derived from the entity's mentions. Count links by looking at item links connected to items that mention this entity; this is intentionally a conservative "needs review" count, not proof that every link is invalid.
 
 `DELETE /admin/v1/item-graph/entities`
 
@@ -470,8 +482,23 @@ Behavior:
 - Also delete aliases for those entities.
 - Also delete item mentions for those entities.
 - Also delete cooccurrences where either side is one of those entities.
-- Do not delete item links, because item links are item-to-item relations and may have independent semantic, temporal, or causal evidence.
+- Execute the cascade inside one transaction.
+- Do not delete item links by default, because item links are item-to-item relations and may have independent semantic, temporal, or causal evidence.
+- Before deleting mentions, compute the count of surviving `entity_overlap` semantic item links connected to items that mention the target entities. Return that count so administrators can inspect those links through the item link list and delete them explicitly if they are incorrect.
 - Do not rebuild cooccurrences automatically.
+
+Response:
+
+```json
+{
+  "deletedCount": 1,
+  "affectedMemoryIds": ["user:agent"],
+  "deletedAliases": 2,
+  "deletedMentions": 8,
+  "deletedCooccurrences": 5,
+  "possiblyStaleEntityOverlapLinks": 3
+}
+```
 
 ### Aliases
 
@@ -484,6 +511,20 @@ Query parameters:
 - `q`, optional. Match against `normalizedAlias`.
 - `pageNo`, optional, default `1`.
 - `pageSize`, optional, default `20`, maximum `100`.
+
+Response item fields:
+
+- `id`
+- `memoryId`
+- `userId`
+- `agentId`
+- `entityKey`
+- `entityType`
+- `normalizedAlias`
+- `evidenceCount`
+- `metadata`
+- `createdAt`
+- `updatedAt`
 
 `DELETE /admin/v1/item-graph/aliases`
 
@@ -506,6 +547,19 @@ Query parameters:
 - `entityKey`, optional.
 - `pageNo`, optional, default `1`.
 - `pageSize`, optional, default `20`, maximum `100`.
+
+Response item fields:
+
+- `id`
+- `memoryId`
+- `userId`
+- `agentId`
+- `itemId`
+- `entityKey`
+- `confidence`
+- `metadata`
+- `createdAt`
+- `updatedAt`
 
 `DELETE /admin/v1/item-graph/mentions`
 
@@ -531,8 +585,25 @@ Query parameters:
 - `memoryId`, optional.
 - `itemId`, optional. Match source or target item ID.
 - `linkType`, optional.
+- `evidenceSource`, optional. Useful for finding links generated from `entity_overlap`.
 - `pageNo`, optional, default `1`.
 - `pageSize`, optional, default `20`, maximum `100`.
+
+Response item fields:
+
+- `id`
+- `memoryId`
+- `userId`
+- `agentId`
+- `sourceItemId`
+- `targetItemId`
+- `linkType`
+- `relationCode`
+- `evidenceSource`
+- `strength`
+- `metadata`
+- `createdAt`
+- `updatedAt`
 
 `DELETE /admin/v1/item-graph/item-links`
 
@@ -555,6 +626,19 @@ Query parameters:
 - `pageNo`, optional, default `1`.
 - `pageSize`, optional, default `20`, maximum `100`.
 
+Response item fields:
+
+- `id`
+- `memoryId`
+- `userId`
+- `agentId`
+- `leftEntityKey`
+- `rightEntityKey`
+- `cooccurrenceCount`
+- `metadata`
+- `createdAt`
+- `updatedAt`
+
 `DELETE /admin/v1/item-graph/cooccurrences`
 
 Request:
@@ -576,6 +660,19 @@ Query parameters:
 - `pageNo`, optional, default `1`.
 - `pageSize`, optional, default `20`, maximum `100`.
 
+Response item fields:
+
+- `id`
+- `memoryId`
+- `userId`
+- `agentId`
+- `extractionBatchId`
+- `state`
+- `errorMessage`
+- `retryPromotionSupported`
+- `createdAt`
+- `updatedAt`
+
 Behavior:
 
 - Read-only in the first version.
@@ -591,6 +688,7 @@ Validation rules:
 - Enum query parameters must match supported values.
 - `memoryId` is required for entity delete operations.
 - `days` for dashboard must be between `1` and `30`.
+- `memoryId` must follow the existing identifier convention used by `DefaultMemoryId.toIdentifier()`. The server resolves it to `userId` and `agentId` for index-friendly queries.
 
 Errors should flow through the existing `ApiExceptionHandler`:
 
@@ -616,8 +714,10 @@ Item graph:
 
 - Entity delete cascades only through entity-owned graph tables: aliases, mentions, cooccurrences.
 - Item links are not deleted by entity delete.
+- Entity detail and entity delete surface potentially stale `entity_overlap` semantic links so administrators can inspect and explicitly delete them through `/admin/v1/item-graph/item-links`.
 - Mention delete and cooccurrence delete do not trigger cooccurrence rebuild.
 - Graph batches are read-only.
+- Multi-table graph corrections run in one transaction.
 
 This keeps admin correction explicit and avoids surprising extraction or graph side effects.
 
@@ -636,8 +736,11 @@ Minimum coverage:
 - Insight buffer list state filters work for `unbuilt`, `ungrouped`, `grouped`, `built`, and `all`.
 - Insight buffer group and built updates return updated counts.
 - Dashboard returns totals, backlog counts, breakdowns, and respects `memoryId`.
+- Dashboard and buffer queries resolve `memoryId` to indexed `user_id` and `agent_id` predicates where applicable.
 - Item graph summary returns grouped counts.
 - Entity delete cascades to aliases, mentions, and cooccurrences but does not delete item links.
+- Entity delete returns the count of potentially stale `entity_overlap` item links.
+- Item link list can filter by `evidenceSource`.
 - Graph batch list is read-only and filters by state.
 
 ## Implementation Notes
