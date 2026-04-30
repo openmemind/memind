@@ -277,6 +277,14 @@ For APIs that require explicit `userId`, such as memory thread status and rebuil
 
 Use one centralized `memory-scope.ts` helper so parsing rules are identical across pages.
 
+Scope parsing edge cases must be explicit:
+
+| Input | Expected parsed result | Reason |
+| --- | --- | --- |
+| `:agent-a` | empty `userId`, `hasUserId: false`, `agentId: "agent-a"`, `hasAgentId: true` | Prevent detail/status/rebuild calls from treating a missing user id as valid. |
+| `alice:` | `userId: "alice"`, empty `agentId`, `hasAgentId: false` | Do not send an empty `agentId` value to APIs where it should be omitted. |
+| `alice:agent:extra` | split only on the first colon; `agentId: "agent:extra"` | The UI should not silently corrupt an agent id that contains a colon. |
+
 | API group | Accepted scope parameters | UI rule |
 | --- | --- | --- |
 | Dashboard | `memoryId?` | Pass the raw `memoryId` when present. |

@@ -250,6 +250,8 @@ pnpm install
 pnpm test:browser:install
 ```
 
+The copied template currently defines `test:browser:install` as `playwright install chromium --with-deps`. If the template script changes before implementation, replace this command with the equivalent explicit Playwright install command and keep the README in sync.
+
 Expected:
 
 - `node_modules` is created
@@ -303,6 +305,8 @@ git commit -m "feat: scaffold memind ui module"
 - Modify: `memind-ui/src/features/dashboard/index.tsx`
 - Delete: `memind-ui/src/stores/auth-store.ts`
 - Delete: `memind-ui/src/stores/auth-store.test.ts`
+- Delete: `memind-ui/src/context/font-provider.tsx`
+- Delete: `memind-ui/src/config/fonts.ts`
 - Delete: `memind-ui/src/components/config-drawer.tsx`
 - Delete: `memind-ui/src/components/config-drawer.test.tsx`
 - Delete: `memind-ui/src/components/search.tsx`
@@ -311,6 +315,8 @@ git commit -m "feat: scaffold memind ui module"
 - Delete: `memind-ui/src/components/sign-out-dialog.tsx`
 - Delete: `memind-ui/src/components/sign-out-dialog.test.tsx`
 - Modify: `memind-ui/package.json`
+- Modify: `memind-ui/src/main.tsx`
+- Modify: `memind-ui/src/components/layout/header.tsx`
 - Move: `memind-ui/src/routes/_authenticated` to `memind-ui/src/routes/_app`
 - Rename: `memind-ui/src/components/layout/authenticated-layout.tsx` to `memind-ui/src/components/layout/app-layout.tsx`
 - Modify: `memind-ui/src/components/layout/app-sidebar.tsx`
@@ -340,25 +346,34 @@ rm -f memind-ui/src/features/errors/unauthorized-error.tsx memind-ui/src/feature
 rm -rf memind-ui/src/features/dashboard/components
 ```
 
+Provider cleanup requirements:
+
+- Remove `FontProvider` from `memind-ui/src/main.tsx`, then delete `memind-ui/src/context/font-provider.tsx` and `memind-ui/src/config/fonts.ts` after no imports remain.
+- Remove `SearchProvider` from the renamed `AppLayout`; page-level filters replace the template global search provider.
+- Keep `ThemeProvider` and `DirectionProvider`.
+- Keep `LayoutProvider` only if the copied `AppSidebar` still uses it for sidebar collapse behavior. If kept, simplify it so it no longer exposes layout variant/font preference UI or depends on the removed config drawer. If the sidebar can use `SidebarProvider` directly without `LayoutProvider`, remove `LayoutProvider` and its imports.
+- Remove any cookie persistence that only exists for font selection, layout variant selection, or config drawer preferences. Sidebar open/collapse persistence may remain because it affects basic navigation ergonomics.
+
+Header and app title requirements:
+
+- `memind-ui/src/components/layout/header.tsx` keeps the sidebar trigger and layout container behavior, but must not import or render `ProfileDropdown`, `Search`, `CommandMenu`, or `ConfigDrawer`.
+- `memind-ui/src/components/layout/app-title.tsx` changes the application name to `Memind UI` and subtitle to `Local Memory Admin`.
+
 Replace `memind-ui/src/features/dashboard/index.tsx` with a temporary Memind-specific page that has no template demo dependencies:
 
 ```tsx
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { ThemeSwitch } from '@/components/theme-switch'
 
 export function DashboardPage() {
   return (
     <>
       <Header>
-        <div className='flex flex-1 items-center justify-between gap-3'>
-          <div className='min-w-0'>
-            <h1 className='truncate text-lg font-semibold'>Memind UI</h1>
-            <p className='truncate text-sm text-muted-foreground'>
-              Local Memory Admin
-            </p>
-          </div>
-          <ThemeSwitch />
+        <div className='min-w-0'>
+          <h1 className='truncate text-lg font-semibold'>Memind UI</h1>
+          <p className='truncate text-sm text-muted-foreground'>
+            Local Memory Admin
+          </p>
         </div>
       </Header>
       <Main>
@@ -383,6 +398,14 @@ rg -n "Clerk|auth|sign-in|sign-out|Authenticated|Unauthorized|Unauthorised|Forbi
 ```
 
 Expected after edits: no auth, sign-in, sign-out, Clerk, permission/login-oriented error page text, or demo page imports remain. `settings` may only appear inside generic TypeScript or CSS terms unrelated to routes.
+
+Run an additional provider cleanup scan:
+
+```bash
+rg -n "FontProvider|useFont|fonts|LayoutProvider|useLayout|layout_variant|layout_collapsible" memind-ui/src memind-ui/package.json
+```
+
+Expected: no font provider or font preference references remain. `LayoutProvider`, `useLayout`, and `layout_collapsible` may remain only if they are required for sidebar collapse behavior; `layout_variant` should not remain in version one.
 
 - [ ] **Step 4: Remove unused dependencies**
 
@@ -605,6 +628,8 @@ git commit -m "feat: add memind ui api client and contracts"
 - Create: `memind-ui/src/lib/query-client.ts`
 - Create: `memind-ui/src/features/components/memory-scope-picker.tsx`
 - Modify: `memind-ui/src/main.tsx`
+- Modify: `memind-ui/src/components/layout/header.tsx`
+- Modify as needed: `memind-ui/src/components/layout/app-layout.tsx`
 
 - [ ] **Step 1: Write memory scope tests**
 
@@ -614,9 +639,16 @@ Test cases:
 parseMemoryScope('alice:agent-a') -> { memoryId: 'alice:agent-a', userId: 'alice', agentId: 'agent-a', hasUserId: true, hasAgentId: true }
 parseMemoryScope('alice') -> { memoryId: 'alice', userId: 'alice', agentId: '', hasUserId: true, hasAgentId: false }
 parseMemoryScope('') -> { memoryId: '', userId: '', agentId: '', hasUserId: false, hasAgentId: false }
+parseMemoryScope(':agent-a') -> { memoryId: ':agent-a', userId: '', agentId: 'agent-a', hasUserId: false, hasAgentId: true }
+parseMemoryScope('alice:') -> { memoryId: 'alice:', userId: 'alice', agentId: '', hasUserId: true, hasAgentId: false }
+parseMemoryScope('alice:agent:extra') -> { memoryId: 'alice:agent:extra', userId: 'alice', agentId: 'agent:extra', hasUserId: true, hasAgentId: true }
 toUserAgentQuery('alice') -> { userId: 'alice' }
 toUserAgentQuery('alice:agent-a') -> { userId: 'alice', agentId: 'agent-a' }
+toUserAgentQuery(':agent-a') -> {}
+toUserAgentQuery('alice:') -> { userId: 'alice' }
+requireUserScope(':agent-a') -> validation error
 requireRetrieveScope('alice') -> validation error
+requireRetrieveScope('alice:') -> validation error
 requireRetrieveScope('alice:agent-a') -> userId and agentId
 ```
 
@@ -649,6 +681,15 @@ export function requireUserScope(value: string): ParsedMemoryScope
 export function requireRetrieveScope(value: string): ParsedMemoryScope
 ```
 
+Parsing rules:
+
+- trim surrounding whitespace before parsing
+- split only on the first colon
+- do not treat an empty `userId` as valid
+- do not include `agentId` in query objects when it is empty
+- `requireUserScope` fails when `hasUserId` is false
+- `requireRetrieveScope` fails unless both `hasUserId` and `hasAgentId` are true
+
 - [ ] **Step 3: Implement format helpers**
 
 Exports:
@@ -677,6 +718,8 @@ Tests cover null display as `-`, long text truncation, and JSON fallback for unk
 - show placeholder `userId:agentId`
 - keep empty value valid
 - update page filters through URL state where the current page supports scope
+- integrate the picker into `memind-ui/src/components/layout/header.tsx` in a shared right-side action area next to `ThemeSwitch`, so feature pages do not import or render `ThemeSwitch` or the scope picker repeatedly
+- on narrow screens, keep the input width constrained and allow it to wrap below the title actions rather than overlapping the sidebar trigger or page title
 
 - [ ] **Step 6: Run tests**
 
@@ -694,7 +737,7 @@ Expected: pass.
 Run:
 
 ```bash
-git add memind-ui/src/lib memind-ui/src/features/components/memory-scope-picker.tsx memind-ui/src/main.tsx
+git add memind-ui/src/lib memind-ui/src/features/components/memory-scope-picker.tsx memind-ui/src/main.tsx memind-ui/src/components/layout
 git commit -m "feat: add memory scope and query foundation"
 ```
 
@@ -846,22 +889,25 @@ Each route file imports its feature page component and validates search params u
 - `tab` for Buffers and Item Graph
 - `focus=status` for Memory Threads links that should open or scroll to the status panel
 
+Root and app-shell routing requirements:
+
+- `memind-ui/src/main.tsx` must use the `QueryClientProvider` backed by the Task 4 `queryClient`, remove imports for deleted auth/font providers, and keep `ThemeProvider` and `DirectionProvider`.
+- `memind-ui/src/routes/__root.tsx` must keep the TanStack Router context typed with `QueryClient`, keep React Query/TanStack Router devtools when the template already has them, and must not import deleted auth/font/search providers.
+- `memind-ui/src/routes/_app/route.tsx` must render the renamed `AppLayout` and must not perform login, auth, permission, or redirect checks.
+- The shared `Header` component should own the right-side action area where the memory scope picker and theme switch are rendered consistently.
+
 Create temporary page exports so the route tree can compile before the real feature pages are implemented. Each later page task replaces the matching placeholder while keeping the same export name:
 
 ```tsx
 // memind-ui/src/features/items/index.tsx
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { ThemeSwitch } from '@/components/theme-switch'
 
 export function ItemsPage() {
   return (
     <>
       <Header>
-        <div className='flex flex-1 items-center justify-between gap-3'>
-          <h1 className='truncate text-lg font-semibold'>Memory Items</h1>
-          <ThemeSwitch />
-        </div>
+        <h1 className='truncate text-lg font-semibold'>Memory Items</h1>
       </Header>
       <Main>
         <div className='text-sm text-muted-foreground'>No data loaded yet.</div>
@@ -889,7 +935,7 @@ Expected: `src/routeTree.gen.ts` regenerates and no route references `_authentic
 Run:
 
 ```bash
-git add memind-ui/src/routes memind-ui/src/routeTree.gen.ts memind-ui/src/hooks/use-table-url-state.ts memind-ui/src/hooks/use-table-url-state.test.ts
+git add memind-ui/src/routes memind-ui/src/routeTree.gen.ts memind-ui/src/hooks memind-ui/src/features
 git commit -m "feat: add memind ui routes and url state"
 ```
 
@@ -912,6 +958,8 @@ Test:
 ```ts
 renders total metric cards
 renders zero-state copy when all counts are zero
+days selector defaults to 7
+changing days to 30 refetches dashboard with days=30
 links conversationPending to /buffers?tab=conversations&state=pending
 links insightUnbuilt to /buffers?tab=insights&state=unbuilt
 links insightUngrouped to /buffers?tab=insights&state=ungrouped
@@ -996,6 +1044,29 @@ delete confirmation text does not claim filtered-result deletion
 successful delete invalidates the list query and dashboard query
 empty state is visible for an empty list
 ```
+
+Items-specific tests:
+
+```ts
+detail drawer shows full content, metadata, raw data type, vector id, content hash, and timestamps
+associated threads section shows a scope prompt when userId is missing
+associated threads load when userId is present
+```
+
+Raw Data-specific tests:
+
+```ts
+detail drawer shows caption, segment JSON, metadata JSON, content id, caption vector id, and timestamps
+raw data delete confirmation explains associated memory items are also deleted
+```
+
+Insights-specific tests:
+
+```ts
+detail drawer shows content, points, categories, parent and child insight ids, summary embedding, version, and timestamps
+```
+
+If this task becomes too large during implementation, split it into three task-local commits for Items, Raw Data, and Insights. Each split must still run its own page tests before commit and must preserve the same API contracts.
 
 - [ ] **Step 2: Implement list tables**
 
@@ -1422,8 +1493,10 @@ git commit -m "feat: add memory retrieve debug page"
 - Modify: `memind-ui/package.json`
 - Modify: `memind-ui/src/components/layout/app-sidebar.tsx`
 - Modify: `memind-ui/src/components/layout/header.tsx`
-- Modify: `memind-ui/src/styles/index.css`
-- Modify: `memind-ui/src/styles/theme.css`
+- Modify only if required by actual visual defects: `memind-ui/src/styles/index.css`
+- Modify only if required by actual visual defects: `memind-ui/src/styles/theme.css`
+
+Do not restyle the template globally during polish unless a verified visual issue requires it. If the default theme works, leave `index.css` and `theme.css` unchanged.
 
 - [ ] **Step 1: Remove remaining unused template code**
 
@@ -1465,7 +1538,22 @@ Check:
 - detail drawer loading state
 - mobile sidebar does not overlap content
 
-- [ ] **Step 4: Update README screenshots section**
+- [ ] **Step 4: Verify against a running Memind server**
+
+Start `memind-server` separately at `http://127.0.0.1:8366`, then keep the Vite dev server running and verify the real proxy path:
+
+- `GET /open/v1/health` shows `connected`
+- Dashboard loads real server data or real zero counts
+- list pages load with `pageNo` and `pageSize`, and filters change the request query
+- Items detail drawer loads full detail; associated memory threads load only when `userId` is available
+- Raw Data and Insights detail drawers load full detail
+- Buffers tab deep links open the expected tab and state filter
+- Item Graph tab deep links open the expected tab and batches can filter `REPAIR_REQUIRED`
+- delete confirmations open for selected disposable rows and show selected-id semantics; only execute destructive deletes on disposable test data
+- Config loads current options, Save sends a full config document with `expectedVersion`, and a stale `expectedVersion` response is shown as a conflict
+- Retrieve sends `userId`, `agentId`, `query`, `strategy`, and `trace`, then renders returned items/insights/raw data/evidences and trace when present
+
+- [ ] **Step 5: Update README screenshots section**
 
 Add a text section listing first-run expectations:
 
@@ -1474,7 +1562,7 @@ Add a text section listing first-run expectations:
 - set global memory scope when detail views require `userId`
 - do not expose the unauthenticated UI publicly
 
-- [ ] **Step 5: Commit polish**
+- [ ] **Step 6: Commit polish**
 
 Run:
 
@@ -1525,7 +1613,18 @@ rg -n "Clerk|sign-in|sign-up|sign-out|Authenticated|Unauthorized|Unauthorised|Fo
 
 Expected: no output.
 
-- [ ] **Step 4: Verify implementation matches design**
+- [ ] **Step 4: Verify no removed preference-provider residue**
+
+Run:
+
+```bash
+cd memind-ui
+rg -n "FontProvider|useFont|fonts|layout_variant|ConfigDrawer|CommandMenu|SearchProvider" src package.json README.md
+```
+
+Expected: no output. If `LayoutProvider` remains, confirm it only supports fixed sidebar behavior and no layout variant/font selection UI remains.
+
+- [ ] **Step 5: Verify implementation matches design**
 
 Run:
 
@@ -1535,7 +1634,7 @@ rg -n "GET /admin/v1|DELETE /admin/v1|POST /open/v1|PUT /admin/v1|PATCH /admin/v
 
 For each endpoint in the output, confirm there is a typed wrapper in `memind-ui/src/features/api/` or a documented non-goal for open ingestion endpoints.
 
-- [ ] **Step 5: Final commit**
+- [ ] **Step 6: Final commit**
 
 Run:
 
