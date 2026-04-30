@@ -181,6 +181,7 @@
                 <configuration>
                     <updatePomFile>true</updatePomFile>
                     <flattenMode>oss</flattenMode>
+                    <outputDirectory>${project.build.outputDirectory}</outputDirectory>
                 </configuration>
                 <executions>
                     <execution>
