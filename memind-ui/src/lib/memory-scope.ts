@@ -1,4 +1,4 @@
-export type ParsedMemoryScope = {
+type ParsedMemoryScope = {
   memoryId: string
   userId: string
   agentId: string
@@ -6,7 +6,7 @@ export type ParsedMemoryScope = {
   hasAgentId: boolean
 }
 
-export class MemoryScopeError extends Error {
+class MemoryScopeError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'MemoryScopeError'

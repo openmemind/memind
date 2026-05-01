@@ -2,7 +2,7 @@ import { apiGet } from '@/lib/api-client'
 import type { AdminDashboardView } from '@/features/types'
 import type { MemoryIdFilter } from './common'
 
-export type DashboardParams = MemoryIdFilter & {
+type DashboardParams = MemoryIdFilter & {
   days?: number
 }
 

@@ -1,4 +1,4 @@
-export type ApiResult<T> = {
+type ApiResult<T> = {
   code: string
   message?: string
   data?: T

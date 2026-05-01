@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Dashboard } from '@/features/dashboard'
+import { DashboardPage } from '@/features/dashboard'
 
 type DashboardSearch = {
   memoryId?: string
@@ -11,7 +11,7 @@ export const Route = createFileRoute('/_app/')({
     memoryId: readString(search.memoryId),
     days: readNumber(search.days),
   }),
-  component: Dashboard,
+  component: DashboardPage,
 })
 
 function readString(value: unknown) {

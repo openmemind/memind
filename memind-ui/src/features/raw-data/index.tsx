@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/table'
 import {
   deleteRawData,
+  getRawData,
   listRawData,
   type RawDataListParams,
 } from '@/features/api/raw-data'
@@ -29,6 +30,7 @@ import { ConfirmResultDialog } from '@/features/components/confirm-result-dialog
 import {
   EmptyState,
   PageError,
+  PageLoading,
   TableLoading,
 } from '@/features/components/data-state'
 import { JsonViewer } from '@/features/components/json-viewer'
@@ -44,7 +46,7 @@ export function RawDataPage() {
   const queryClient = useQueryClient()
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [detailRawData, setDetailRawData] = useState<AdminRawDataView | null>(
+  const [detailRawDataId, setDetailRawDataId] = useState<string | null>(
     null
   )
 
@@ -125,7 +127,7 @@ export function RawDataPage() {
                   return next
                 })
               }}
-              onView={setDetailRawData}
+              onView={setDetailRawDataId}
             />
           ) : null}
 
@@ -150,9 +152,9 @@ export function RawDataPage() {
       />
 
       <RawDataDetailDialog
-        rawData={detailRawData}
+        rawDataId={detailRawDataId}
         onOpenChange={(open) => {
-          if (!open) setDetailRawData(null)
+          if (!open) setDetailRawDataId(null)
         }}
       />
     </>
@@ -168,7 +170,7 @@ function RawDataTable({
   rows: AdminRawDataView[]
   selectedIds: Set<string>
   onToggleSelected: (rawDataId: string, checked: boolean) => void
-  onView: (rawData: AdminRawDataView) => void
+  onView: (rawDataId: string) => void
 }) {
   return (
     <Table>
@@ -217,7 +219,7 @@ function RawDataTable({
                 variant='outline'
                 size='sm'
                 aria-label={`View raw data ${rawData.rawDataId}`}
-                onClick={() => onView(rawData)}
+                onClick={() => onView(rawData.rawDataId)}
               >
                 View
               </Button>
@@ -230,20 +232,34 @@ function RawDataTable({
 }
 
 function RawDataDetailDialog({
-  rawData,
+  rawDataId,
   onOpenChange,
 }: {
-  rawData: AdminRawDataView | null
+  rawDataId: string | null
   onOpenChange: (open: boolean) => void
 }) {
+  const query = useQuery({
+    queryKey: ['raw-data', rawDataId, 'detail'],
+    enabled: rawDataId !== null,
+    queryFn: () => getRawData(rawDataId as string),
+  })
+  const rawData = query.data
+
   return (
-    <Dialog open={rawData !== null} onOpenChange={onOpenChange}>
+    <Dialog open={rawDataId !== null} onOpenChange={onOpenChange}>
       <DialogContent className='max-h-[85vh] overflow-auto sm:max-w-3xl'>
         <DialogHeader>
-          <DialogTitle>Raw data {rawData?.rawDataId}</DialogTitle>
+          <DialogTitle>Raw data {rawDataId}</DialogTitle>
           <DialogDescription>{rawData?.memoryId}</DialogDescription>
         </DialogHeader>
 
+        {query.isLoading ? <PageLoading /> : null}
+        {query.isError ? (
+          <PageError
+            message='Unable to load raw data detail.'
+            onRetry={query.refetch}
+          />
+        ) : null}
         {rawData ? (
           <div className='flex flex-col gap-5 text-sm'>
             <section className='flex flex-col gap-2'>

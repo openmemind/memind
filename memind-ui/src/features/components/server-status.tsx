@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { apiGet } from '@/lib/api-client'
 
-export const SERVER_STATUS_REFETCH_INTERVAL_MS = 30_000
+const SERVER_STATUS_REFETCH_INTERVAL_MS = 30_000
 
 type HealthResponse = {
   status: string

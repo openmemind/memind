@@ -78,8 +78,6 @@ export function DashboardPage() {
   )
 }
 
-export const Dashboard = DashboardPage
-
 function DashboardContent({
   data,
   memoryId,

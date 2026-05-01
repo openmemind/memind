@@ -31,7 +31,7 @@ export type InsightBufferListParams = PageParams &
     state?: InsightBufferState
   }
 
-export type InsightBufferGroupParams = MemoryIdFilter & {
+type InsightBufferGroupParams = MemoryIdFilter & {
   insightTypeName?: string
 }
 

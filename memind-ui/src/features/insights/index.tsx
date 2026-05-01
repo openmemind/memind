@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/table'
 import {
   deleteInsights,
+  getInsight,
   listInsights,
   type InsightListParams,
 } from '@/features/api/insights'
@@ -29,6 +30,7 @@ import { ConfirmResultDialog } from '@/features/components/confirm-result-dialog
 import {
   EmptyState,
   PageError,
+  PageLoading,
   TableLoading,
 } from '@/features/components/data-state'
 import { JsonViewer } from '@/features/components/json-viewer'
@@ -44,7 +46,7 @@ export function InsightsPage() {
   const queryClient = useQueryClient()
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set())
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [detailInsight, setDetailInsight] = useState<AdminInsightView | null>(
+  const [detailInsightId, setDetailInsightId] = useState<number | null>(
     null
   )
 
@@ -125,7 +127,7 @@ export function InsightsPage() {
                   return next
                 })
               }}
-              onView={setDetailInsight}
+              onView={setDetailInsightId}
             />
           ) : null}
 
@@ -149,9 +151,9 @@ export function InsightsPage() {
       />
 
       <InsightDetailDialog
-        insight={detailInsight}
+        insightId={detailInsightId}
         onOpenChange={(open) => {
-          if (!open) setDetailInsight(null)
+          if (!open) setDetailInsightId(null)
         }}
       />
     </>
@@ -167,7 +169,7 @@ function InsightsTable({
   rows: AdminInsightView[]
   selectedIds: Set<number>
   onToggleSelected: (insightId: number, checked: boolean) => void
-  onView: (insight: AdminInsightView) => void
+  onView: (insightId: number) => void
 }) {
   return (
     <Table>
@@ -215,7 +217,7 @@ function InsightsTable({
                 variant='outline'
                 size='sm'
                 aria-label={`View insight ${insight.insightId}`}
-                onClick={() => onView(insight)}
+                onClick={() => onView(insight.insightId)}
               >
                 View
               </Button>
@@ -228,20 +230,34 @@ function InsightsTable({
 }
 
 function InsightDetailDialog({
-  insight,
+  insightId,
   onOpenChange,
 }: {
-  insight: AdminInsightView | null
+  insightId: number | null
   onOpenChange: (open: boolean) => void
 }) {
+  const query = useQuery({
+    queryKey: ['insights', insightId, 'detail'],
+    enabled: insightId !== null,
+    queryFn: () => getInsight(insightId as number),
+  })
+  const insight = query.data
+
   return (
-    <Dialog open={insight !== null} onOpenChange={onOpenChange}>
+    <Dialog open={insightId !== null} onOpenChange={onOpenChange}>
       <DialogContent className='max-h-[85vh] overflow-auto sm:max-w-3xl'>
         <DialogHeader>
-          <DialogTitle>Insight {insight?.insightId}</DialogTitle>
+          <DialogTitle>Insight {insightId}</DialogTitle>
           <DialogDescription>{insight?.memoryId}</DialogDescription>
         </DialogHeader>
 
+        {query.isLoading ? <PageLoading /> : null}
+        {query.isError ? (
+          <PageError
+            message='Unable to load insight detail.'
+            onRetry={query.refetch}
+          />
+        ) : null}
         {insight ? (
           <div className='flex flex-col gap-5 text-sm'>
             <section className='flex flex-col gap-2'>

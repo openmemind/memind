@@ -91,13 +91,21 @@ describe('ItemsPage', () => {
   })
 
   it('detail drawer shows full content and scope prompt when userId is missing', async () => {
-    fetchMock.mockResolvedValueOnce(api({ total: 1, current: 1, list: [item] }))
+    fetchMock
+      .mockResolvedValueOnce(api({ total: 1, current: 1, list: [item] }))
+      .mockResolvedValueOnce(api(item))
 
     const { getByRole, getByText } = await renderPage()
     await userEvent.click(getByRole('button', { name: 'View item 101' }))
 
     await expect.element(getByText('Full item content')).toBeInTheDocument()
     await expect.element(getByText('vectorId: vec-1')).toBeInTheDocument()
+    await vi.waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/admin/v1/items/101',
+        expect.objectContaining({ method: 'GET' })
+      )
+    )
     await expect
       .element(getByText('Set memory scope with userId to load associated threads.'))
       .toBeInTheDocument()
@@ -107,6 +115,7 @@ describe('ItemsPage', () => {
     window.history.replaceState(null, '', '/items?memoryId=alice%3Aagent-a')
     fetchMock
       .mockResolvedValueOnce(api({ total: 1, current: 1, list: [item] }))
+      .mockResolvedValueOnce(api(item))
       .mockResolvedValueOnce(api([{ threadKey: 'thread-1', role: 'PRIMARY' }]))
 
     const { getByRole, getByText } = await renderPage()

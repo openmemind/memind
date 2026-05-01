@@ -84,7 +84,9 @@ describe('InsightsPage', () => {
   })
 
   it('detail drawer shows content, points, categories, relations, embedding, version, and timestamps', async () => {
-    fetchMock.mockResolvedValueOnce(api({ total: 1, current: 1, list: [insight] }))
+    fetchMock
+      .mockResolvedValueOnce(api({ total: 1, current: 1, list: [insight] }))
+      .mockResolvedValueOnce(api(insight))
 
     const { getByRole, getByText } = await renderPage()
     await userEvent.click(getByRole('button', { name: 'View insight 201' }))
@@ -95,6 +97,12 @@ describe('InsightsPage', () => {
     await expect.element(getByText('parentInsightId: 100')).toBeInTheDocument()
     await expect.element(getByText('childInsightIds: 202')).toBeInTheDocument()
     await expect.element(getByText('version: 3')).toBeInTheDocument()
+    await vi.waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/admin/v1/insights/201',
+        expect.objectContaining({ method: 'GET' })
+      )
+    )
     await expect.element(getByText('summaryEmbedding')).toBeInTheDocument()
   })
 })

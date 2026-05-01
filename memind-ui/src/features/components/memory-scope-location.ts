@@ -1,7 +1,7 @@
 import { parseMemoryScope } from '@/lib/memory-scope'
 
-export const MEMORY_SCOPE_SEARCH_PARAM = 'memoryId'
-export const MEMORY_SCOPE_STORAGE_KEY = 'memind-ui:memory-scope'
+const MEMORY_SCOPE_SEARCH_PARAM = 'memoryId'
+const MEMORY_SCOPE_STORAGE_KEY = 'memind-ui:memory-scope'
 
 export function readMemoryScopeFromLocation() {
   if (typeof window === 'undefined') return ''

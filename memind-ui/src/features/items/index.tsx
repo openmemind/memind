@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/table'
 import {
   deleteItems,
+  getItem,
   listItemMemoryThreads,
   listItems,
   type ItemListParams,
@@ -50,7 +51,7 @@ export function ItemsPage() {
   const queryClient = useQueryClient()
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set())
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [detailItem, setDetailItem] = useState<AdminItemView | null>(null)
+  const [detailItemId, setDetailItemId] = useState<number | null>(null)
 
   const search = readItemsSearch()
   const memoryScope = readMemoryScopeFromLocation()
@@ -129,7 +130,7 @@ export function ItemsPage() {
                   return next
                 })
               }}
-              onView={setDetailItem}
+              onView={setDetailItemId}
             />
           ) : null}
 
@@ -153,10 +154,10 @@ export function ItemsPage() {
       />
 
       <ItemDetailDialog
-        item={detailItem}
+        itemId={detailItemId}
         memoryScope={memoryScope}
         onOpenChange={(open) => {
-          if (!open) setDetailItem(null)
+          if (!open) setDetailItemId(null)
         }}
       />
     </>
@@ -172,7 +173,7 @@ function ItemsTable({
   rows: AdminItemView[]
   selectedIds: Set<number>
   onToggleSelected: (itemId: number, checked: boolean) => void
-  onView: (item: AdminItemView) => void
+  onView: (itemId: number) => void
 }) {
   return (
     <Table>
@@ -223,7 +224,7 @@ function ItemsTable({
                 variant='outline'
                 size='sm'
                 aria-label={`View item ${item.itemId}`}
-                onClick={() => onView(item)}
+                onClick={() => onView(item.itemId)}
               >
                 View
               </Button>
@@ -236,22 +237,36 @@ function ItemsTable({
 }
 
 function ItemDetailDialog({
-  item,
+  itemId,
   memoryScope,
   onOpenChange,
 }: {
-  item: AdminItemView | null
+  itemId: number | null
   memoryScope: string
   onOpenChange: (open: boolean) => void
 }) {
+  const query = useQuery({
+    queryKey: ['items', itemId, 'detail'],
+    enabled: itemId !== null,
+    queryFn: () => getItem(itemId as number),
+  })
+  const item = query.data
+
   return (
-    <Dialog open={item !== null} onOpenChange={onOpenChange}>
+    <Dialog open={itemId !== null} onOpenChange={onOpenChange}>
       <DialogContent className='max-h-[85vh] overflow-auto sm:max-w-3xl'>
         <DialogHeader>
-          <DialogTitle>Memory item {item?.itemId}</DialogTitle>
+          <DialogTitle>Memory item {itemId}</DialogTitle>
           <DialogDescription>{item?.memoryId}</DialogDescription>
         </DialogHeader>
 
+        {query.isLoading ? <PageLoading /> : null}
+        {query.isError ? (
+          <PageError
+            message='Unable to load memory item detail.'
+            onRetry={query.refetch}
+          />
+        ) : null}
         {item ? (
           <div className='flex flex-col gap-5 text-sm'>
             <section className='flex flex-col gap-2'>

@@ -17,37 +17,37 @@ import type { MemoryIdFilter, PageParams } from './common'
 
 export type GraphBatchState = 'PENDING' | 'COMMITTED' | 'REPAIR_REQUIRED'
 
-export type GraphEntityListParams = PageParams &
+type GraphEntityListParams = PageParams &
   MemoryIdFilter & {
     entityType?: string
     q?: string
   }
 
-export type GraphAliasListParams = PageParams &
+type GraphAliasListParams = PageParams &
   MemoryIdFilter & {
     entityKey?: string
     q?: string
   }
 
-export type GraphMentionListParams = PageParams &
+type GraphMentionListParams = PageParams &
   MemoryIdFilter & {
     itemId?: number
     entityKey?: string
   }
 
-export type GraphItemLinkListParams = PageParams &
+type GraphItemLinkListParams = PageParams &
   MemoryIdFilter & {
     itemId?: number
     linkType?: string
     evidenceSource?: string
   }
 
-export type GraphCooccurrenceListParams = PageParams &
+type GraphCooccurrenceListParams = PageParams &
   MemoryIdFilter & {
     entityKey?: string
   }
 
-export type GraphBatchListParams = PageParams &
+type GraphBatchListParams = PageParams &
   MemoryIdFilter & {
     state?: GraphBatchState
   }

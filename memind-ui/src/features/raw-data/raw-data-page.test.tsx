@@ -83,7 +83,9 @@ describe('RawDataPage', () => {
   })
 
   it('detail drawer shows caption, JSON fields, content id, vector id, and timestamps', async () => {
-    fetchMock.mockResolvedValueOnce(api({ total: 1, current: 1, list: [rawData] }))
+    fetchMock
+      .mockResolvedValueOnce(api({ total: 1, current: 1, list: [rawData] }))
+      .mockResolvedValueOnce(api(rawData))
 
     const { getByRole, getByText } = await renderPage()
     await userEvent.click(getByRole('button', { name: 'View raw data raw-1' }))
@@ -91,6 +93,12 @@ describe('RawDataPage', () => {
     await expect.element(getByText('Full raw caption')).toBeInTheDocument()
     await expect.element(getByText('contentId: content-1')).toBeInTheDocument()
     await expect.element(getByText('captionVectorId: caption-vec-1')).toBeInTheDocument()
+    await vi.waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/admin/v1/raw-data/raw-1',
+        expect.objectContaining({ method: 'GET' })
+      )
+    )
     await expect.element(getByText('segment')).toBeInTheDocument()
   })
 })
