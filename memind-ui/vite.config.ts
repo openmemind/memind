@@ -41,6 +41,7 @@ export default defineConfig({
       '@radix-ui/react-dropdown-menu',
       '@radix-ui/react-label',
       '@radix-ui/react-separator',
+      '@radix-ui/react-switch',
       '@radix-ui/react-tabs',
       '@radix-ui/react-tooltip',
       '@tanstack/react-query',
