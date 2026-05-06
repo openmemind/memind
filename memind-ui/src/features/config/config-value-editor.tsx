@@ -39,7 +39,11 @@ export function ConfigValueEditor({
     )
   }
 
-  if (option.type === 'integer' || option.type === 'double') {
+  if (
+    option.type === 'integer' ||
+    option.type === 'double' ||
+    option.type === 'number'
+  ) {
     const numericConstraints = readNumericConstraints(option.constraints)
     return (
       <EditorField label={option.key} id={id}>
@@ -58,7 +62,7 @@ export function ConfigValueEditor({
     )
   }
 
-  if (option.type === 'string') {
+  if (option.type === 'string' || option.type === 'enum') {
     if (enumOptions.length > 0) {
       return (
         <EditorField label={option.key} id={id}>
@@ -78,6 +82,19 @@ export function ConfigValueEditor({
       )
     }
 
+    return (
+      <EditorField label={option.key} id={id}>
+        <Input
+          id={id}
+          type='text'
+          value={toInputValue(option.value)}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </EditorField>
+    )
+  }
+
+  if (option.type === 'duration') {
     return (
       <EditorField label={option.key} id={id}>
         <Input

@@ -67,6 +67,27 @@ class MemoryOptionsProjectionMapperTest {
     }
 
     @Test
+    void projectsDirectlyEditableTypesForAdminEditors() {
+        var projection = mapper.toProjection(MemoryBuildOptions.defaults());
+
+        MemoryOptionItemView defaultScope = findItem(projection, "extraction.common.defaultScope");
+        assertThat(defaultScope.type()).isEqualTo("string");
+        assertThat(defaultScope.value()).isEqualTo("USER");
+        assertThat(defaultScope.defaultValue()).isEqualTo("USER");
+        assertThat(defaultScope.constraints())
+                .containsEntry("allowedValues", java.util.List.of("USER", "AGENT"));
+
+        MemoryOptionItemView timeout = findItem(projection, "extraction.common.timeout");
+        assertThat(timeout.type()).isEqualTo("string");
+        assertThat(timeout.value()).isInstanceOf(String.class);
+        assertThat(timeout.constraints()).containsEntry("format", "iso-8601-duration");
+
+        MemoryOptionItemView threshold =
+                findItem(projection, "retrieval.simple.graphAssist.graphChannelWeight");
+        assertThat(threshold.type()).isEqualTo("double");
+    }
+
+    @Test
     void groupsRuntimeOptionsByAdminEditingDomain() {
         var projection = mapper.toProjection(MemoryBuildOptions.defaults());
 

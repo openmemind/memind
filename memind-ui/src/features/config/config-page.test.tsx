@@ -12,7 +12,11 @@ const memoryOptions = {
     'extraction.common': [
       option('enabled', true, 'boolean'),
       option('maxItems', 10, 'integer', { min: 1, max: 100 }),
-      option('scoreThreshold', 0.5, 'double', { min: 0, max: 1 }),
+      option('scoreThreshold', 0.5, 'number', { min: 0, max: 1 }),
+      option('defaultScope', 'USER', 'enum', {
+        allowedValues: ['USER', 'SESSION', 'GLOBAL'],
+      }),
+      option('timeout', 'PT30S', 'duration', { format: 'iso-8601-duration' }),
       option('modelName', 'small', 'string'),
       option('strategy', 'simple', 'string', { enum: ['simple', 'deep'] }),
     ],
@@ -97,7 +101,7 @@ describe('ConfigPage', () => {
       .element(getByRole('combobox', { name: 'Section' }))
       .toBeInTheDocument()
     await expect
-      .element(getByRole('option', { name: 'Extraction Common (5)' }))
+      .element(getByRole('option', { name: 'Extraction Common (7)' }))
       .toBeInTheDocument()
     await expect
       .element(getByRole('option', { name: 'Extraction Raw Data (1)' }))
@@ -121,6 +125,16 @@ describe('ConfigPage', () => {
     await expect
       .element(getByLabelText('scoreThreshold'))
       .toHaveAttribute('type', 'number')
+    await expect
+      .element(getByRole('combobox', { name: 'defaultScope' }))
+      .toBeInTheDocument()
+    await expect
+      .element(getByRole('combobox', { name: 'defaultScope' }))
+      .toHaveValue('USER')
+    await expect.element(getByLabelText('timeout')).toHaveValue('PT30S')
+    await expect
+      .element(getByLabelText('timeout'))
+      .toHaveAttribute('type', 'text')
     await expect
       .element(getByLabelText('modelName'))
       .toHaveAttribute('type', 'text')

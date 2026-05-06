@@ -714,10 +714,10 @@ public class MemoryOptionsProjectionMapper {
             return "integer";
         }
         if (type == Double.class || type == Float.class) {
-            return "number";
+            return "double";
         }
         if (type == Duration.class) {
-            return "duration";
+            return "string";
         }
         if (Collection.class.isAssignableFrom(type)) {
             return "array";
@@ -726,7 +726,7 @@ public class MemoryOptionsProjectionMapper {
             return "object";
         }
         if (Enum.class.isAssignableFrom(type)) {
-            return "enum";
+            return "string";
         }
         return "string";
     }
