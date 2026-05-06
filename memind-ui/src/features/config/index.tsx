@@ -111,7 +111,7 @@ export function ConfigPage() {
   return (
     <>
       <Header>
-        <h1 className='truncate text-lg font-semibold'>Config</h1>
+        <h1 className='truncate text-lg font-semibold'>Settings</h1>
       </Header>
       <Main>
         <div className='flex min-w-0 flex-col gap-4'>

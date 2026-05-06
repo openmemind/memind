@@ -98,7 +98,7 @@ describe('BuffersPage', () => {
 
     const { getByLabelText, getByRole, getByText } = await renderPage()
 
-    await expect.element(getByRole('tab', { name: 'Insights' })).toHaveAttribute('aria-selected', 'true')
+    await expect.element(getByRole('tab', { name: 'Insight Buffers' })).toHaveAttribute('aria-selected', 'true')
     await expect.element(getByLabelText('Insight buffer state')).toHaveValue('unbuilt')
     await expect.element(getByText('preference')).toBeInTheDocument()
     await vi.waitFor(() =>
@@ -115,7 +115,7 @@ describe('BuffersPage', () => {
 
     const { getByRole, getByText } = await renderPage()
 
-    await expect.element(getByRole('tab', { name: 'Insight Groups' })).toHaveAttribute('aria-selected', 'true')
+    await expect.element(getByRole('tab', { name: 'Insight Buffer Groups' })).toHaveAttribute('aria-selected', 'true')
     await expect.element(getByText('group-a')).toBeInTheDocument()
   })
 

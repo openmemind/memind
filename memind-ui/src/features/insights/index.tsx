@@ -77,13 +77,13 @@ export function InsightsPage() {
   return (
     <>
       <Header>
-        <h1 className='truncate text-lg font-semibold'>Insights</h1>
+        <h1 className='truncate text-lg font-semibold'>Insight Tree</h1>
       </Header>
       <Main>
         <div className='flex flex-col gap-4'>
           <div className='flex flex-wrap items-center justify-between gap-3'>
             <div className='flex flex-col gap-1'>
-              <h2 className='text-2xl font-semibold'>Insights</h2>
+              <h2 className='text-2xl font-semibold'>Insight Tree</h2>
               <p className='text-sm text-muted-foreground'>
                 Inspect extracted long-lived insights, reasoning points, and
                 relationships.

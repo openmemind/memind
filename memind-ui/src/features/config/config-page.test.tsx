@@ -98,6 +98,9 @@ describe('ConfigPage', () => {
     const { getByLabelText, getByRole, getByText } = await renderPage()
 
     await expect
+      .element(getByRole('heading', { name: 'Settings' }))
+      .toBeInTheDocument()
+    await expect
       .element(getByRole('combobox', { name: 'Section' }))
       .toBeInTheDocument()
     await expect

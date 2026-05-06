@@ -60,6 +60,16 @@ describe('InsightsPage', () => {
     vi.clearAllMocks()
   })
 
+  it('uses the Insight Tree page title', async () => {
+    fetchMock.mockResolvedValueOnce(api({ total: 0, current: 1, list: [] }))
+
+    const { getByRole } = await renderPage()
+
+    await expect
+      .element(getByRole('heading', { level: 1, name: 'Insight Tree' }))
+      .toBeInTheDocument()
+  })
+
   it('selecting two rows sends only the selected insight ids', async () => {
     fetchMock
       .mockResolvedValueOnce(api({ total: 2, current: 1, list: [insight, { ...insight, insightId: 202 }] }))

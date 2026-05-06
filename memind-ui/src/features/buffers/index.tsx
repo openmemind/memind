@@ -94,8 +94,8 @@ export function BuffersPage() {
           >
             <TabsList>
               <TabsTrigger value='conversations'>Conversations</TabsTrigger>
-              <TabsTrigger value='insights'>Insights</TabsTrigger>
-              <TabsTrigger value='groups'>Insight Groups</TabsTrigger>
+              <TabsTrigger value='insights'>Insight Buffers</TabsTrigger>
+              <TabsTrigger value='groups'>Insight Buffer Groups</TabsTrigger>
             </TabsList>
 
             <TabsContent value='conversations'>
