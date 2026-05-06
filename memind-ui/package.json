@@ -10,6 +10,7 @@
   "packageManager": "pnpm@10.15.0",
   "scripts": {
     "dev": "vite",
+    "dev:mock": "vite --mode mock --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

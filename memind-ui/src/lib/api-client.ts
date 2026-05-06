@@ -101,6 +101,11 @@ async function apiRequest<T>(
   body?: unknown,
   query?: Record<string, unknown>
 ): Promise<T> {
+  if (import.meta.env.VITE_MEMIND_MOCK_API === 'true') {
+    const { mockApiRequest } = await import('./mock-api')
+    return mockApiRequest<T>(method, path, body, query)
+  }
+
   const init: RequestInit = {
     method,
     headers: {

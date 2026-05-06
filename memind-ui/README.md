@@ -47,6 +47,17 @@ Start the dev server:
 pnpm dev
 ```
 
+Start the UI with rich local mock data when a real `memind-server` has little
+or no data:
+
+```bash
+pnpm dev:mock
+```
+
+Mock mode is frontend-only. It keeps the Vite proxy and real server untouched,
+but `api-client` serves `/admin` and `/open` requests from deterministic local
+fixtures when `VITE_MEMIND_MOCK_API=true`.
+
 Run checks:
 
 ```bash

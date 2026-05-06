@@ -17,6 +17,7 @@ describe('api-client', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
     vi.clearAllMocks()
   })
 
@@ -29,11 +30,11 @@ describe('api-client', () => {
       })
     )
 
-    await expect(apiGet<{ status: string }>('/open/v1/health')).resolves.toEqual(
-      {
-        status: 'UP',
-      }
-    )
+    await expect(
+      apiGet<{ status: string }>('/open/v1/health')
+    ).resolves.toEqual({
+      status: 'UP',
+    })
   })
 
   it('allows async success code 200 without data', async () => {
@@ -44,7 +45,9 @@ describe('api-client', () => {
       })
     )
 
-    await expect(apiPost<void>('/open/v1/memory/extract')).resolves.toBeUndefined()
+    await expect(
+      apiPost<void>('/open/v1/memory/extract')
+    ).resolves.toBeUndefined()
   })
 
   it('throws ApiError with traceId for server errors', async () => {
@@ -101,5 +104,34 @@ describe('api-client', () => {
       '/admin/v1/items?pageNo=2&pageSize=20&userId=alice&include=item&include=raw',
       expect.objectContaining({ method: 'GET' })
     )
+  })
+
+  it('uses local mock data instead of fetch when mock api mode is enabled', async () => {
+    vi.stubEnv('VITE_MEMIND_MOCK_API', 'true')
+
+    await expect(apiGet('/admin/v1/dashboard')).resolves.toMatchObject({
+      totals: expect.objectContaining({
+        rawData: expect.any(Number),
+        items: expect.any(Number),
+        insights: expect.any(Number),
+      }),
+      backlog: expect.objectContaining({
+        conversationPending: expect.any(Number),
+      }),
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('preserves user scope requirements in mock api mode', async () => {
+    vi.stubEnv('VITE_MEMIND_MOCK_API', 'true')
+
+    await expect(
+      apiGet('/admin/v1/items/1001/memory-threads')
+    ).rejects.toMatchObject({
+      status: 400,
+      code: 'validation_failed',
+      message: 'userId is required',
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
