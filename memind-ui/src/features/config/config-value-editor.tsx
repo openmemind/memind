@@ -1,11 +1,11 @@
 import { useId, type ChangeEvent, type ReactNode } from 'react'
+import { compactJson } from '@/lib/format'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { JsonViewer } from '@/features/components/json-viewer'
 import type { JsonRecord, MemoryOptionItemView } from '@/features/types'
-import { compactJson } from '@/lib/format'
 
 type ConfigValueEditorProps = {
   option: MemoryOptionItemView
@@ -21,13 +21,20 @@ export function ConfigValueEditor({
 
   if (option.type === 'boolean') {
     return (
-      <div className='flex items-center gap-3'>
+      <div className='flex min-w-0 items-center gap-3'>
         <Switch
           id={id}
           checked={option.value === true}
           onCheckedChange={onChange}
         />
-        <Label htmlFor={id}>{option.key}</Label>
+        <Label
+          htmlFor={id}
+          className='min-w-0 leading-snug [overflow-wrap:anywhere] break-words'
+        >
+          <span className='min-w-0 [overflow-wrap:anywhere] break-words'>
+            {option.key}
+          </span>
+        </Label>
       </div>
     )
   }
@@ -58,7 +65,7 @@ export function ConfigValueEditor({
           <select
             id={id}
             value={toInputValue(option.value)}
-            className='h-9 rounded-md border bg-background px-3 text-sm'
+            className='h-9 w-full max-w-full min-w-0 rounded-md border bg-background px-3 text-sm'
             onChange={(event) => onChange(event.target.value)}
           >
             {enumOptions.map((value) => (
@@ -89,6 +96,7 @@ export function ConfigValueEditor({
         <JsonViewer label={`${option.key} value`} value={option.value} />
         <Textarea
           id={id}
+          className='min-w-0'
           value={compactJson(option.value)}
           onChange={(event) => onChange(parseJsonOrText(event.target.value))}
         />
@@ -107,8 +115,15 @@ function EditorField({
   children: ReactNode
 }) {
   return (
-    <div className='flex flex-col gap-2'>
-      <Label htmlFor={id}>{label}</Label>
+    <div className='flex min-w-0 flex-col gap-2'>
+      <Label
+        htmlFor={id}
+        className='min-w-0 leading-snug [overflow-wrap:anywhere] break-words'
+      >
+        <span className='min-w-0 [overflow-wrap:anywhere] break-words'>
+          {label}
+        </span>
+      </Label>
       {children}
     </div>
   )

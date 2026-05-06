@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import '@/styles/index.css'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { userEvent } from 'vitest/browser'
-import { SidebarProvider } from '@/components/ui/sidebar'
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { ConfigPage } from './index'
 
 const memoryOptions = {
@@ -18,6 +19,13 @@ const memoryOptions = {
     advanced: [option('rawJson', { mode: 'debug' }, 'object')],
   },
 }
+
+const longOptionKey =
+  'retrieval.pipeline.memory.thread.projection.materialization.policy.version.with.a.very.long.unbroken.identifier'
+const longOptionValue =
+  'value-with-a-very-long-unbroken-token-that-should-not-force-the-config-page-to-overflow-horizontally-'.repeat(
+    4
+  )
 
 function option(
   key: string,
@@ -58,7 +66,9 @@ function renderPage() {
   return render(
     <QueryClientProvider client={queryClient}>
       <SidebarProvider>
-        <ConfigPage />
+        <SidebarInset>
+          <ConfigPage />
+        </SidebarInset>
       </SidebarProvider>
     </QueryClientProvider>
   )
@@ -82,15 +92,64 @@ describe('ConfigPage', () => {
 
     const { getByLabelText, getByRole } = await renderPage()
 
-    await expect.element(getByRole('heading', { name: 'core' })).toBeInTheDocument()
-    await expect.element(getByRole('heading', { name: 'advanced' })).toBeInTheDocument()
-    await expect.element(getByRole('switch', { name: 'enabled' })).toBeInTheDocument()
-    await expect.element(getByLabelText('maxItems')).toHaveAttribute('type', 'number')
-    await expect.element(getByLabelText('scoreThreshold')).toHaveAttribute('type', 'number')
-    await expect.element(getByLabelText('modelName')).toHaveAttribute('type', 'text')
-    await expect.element(getByRole('combobox', { name: 'strategy' })).toBeInTheDocument()
-    await expect.element(getByRole('button', { name: 'rawJson value' })).toBeInTheDocument()
-    await expect.element(getByLabelText('rawJson JSON')).toHaveValue('{"mode":"debug"}')
+    await expect
+      .element(getByRole('heading', { name: 'core' }))
+      .toBeInTheDocument()
+    await expect
+      .element(getByRole('heading', { name: 'advanced' }))
+      .toBeInTheDocument()
+    await expect
+      .element(getByRole('switch', { name: 'enabled' }))
+      .toBeInTheDocument()
+    await expect
+      .element(getByLabelText('maxItems'))
+      .toHaveAttribute('type', 'number')
+    await expect
+      .element(getByLabelText('scoreThreshold'))
+      .toHaveAttribute('type', 'number')
+    await expect
+      .element(getByLabelText('modelName'))
+      .toHaveAttribute('type', 'text')
+    await expect
+      .element(getByRole('combobox', { name: 'strategy' }))
+      .toBeInTheDocument()
+    await expect
+      .element(getByRole('button', { name: 'rawJson value' }))
+      .toBeInTheDocument()
+    await expect
+      .element(getByLabelText('rawJson JSON'))
+      .toHaveValue('{"mode":"debug"}')
+  })
+
+  it('keeps long option names and values inside the viewport', async () => {
+    fetchMock.mockResolvedValueOnce(
+      api({
+        version: 7,
+        config: {
+          longSectionNameWithAnUnbrokenIdentifier: [
+            option(longOptionKey, longOptionValue, 'string'),
+            option('longEnum', longOptionValue, 'string', {
+              enum: [longOptionValue, 'short'],
+            }),
+          ],
+        },
+      })
+    )
+
+    const { getByLabelText, getByRole } = await renderPage()
+
+    await expect
+      .element(
+        getByRole('heading', {
+          name: 'longSectionNameWithAnUnbrokenIdentifier',
+        })
+      )
+      .toBeInTheDocument()
+    await expect.element(getByLabelText(longOptionKey)).toBeInTheDocument()
+
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
+      document.documentElement.clientWidth
+    )
   })
 
   it('save button is disabled before edits and dirty state appears after an edit', async () => {
@@ -98,17 +157,20 @@ describe('ConfigPage', () => {
 
     const { getByLabelText, getByRole, getByText } = await renderPage()
 
-    await expect.element(getByRole('button', { name: 'Save changes' })).toBeDisabled()
+    await expect
+      .element(getByRole('button', { name: 'Save changes' }))
+      .toBeDisabled()
     await userEvent.fill(getByLabelText('modelName'), 'large')
 
     await expect.element(getByText('1 unsaved change')).toBeInTheDocument()
-    await expect.element(getByRole('button', { name: 'Save changes' })).not.toBeDisabled()
+    await expect
+      .element(getByRole('button', { name: 'Save changes' }))
+      .not.toBeDisabled()
   })
 
   it('editing two fields sends one PUT with the complete config object', async () => {
-    fetchMock
-      .mockResolvedValueOnce(api(memoryOptions))
-      .mockResolvedValueOnce(api({
+    fetchMock.mockResolvedValueOnce(api(memoryOptions)).mockResolvedValueOnce(
+      api({
         version: 8,
         config: {
           ...memoryOptions.config,
@@ -118,7 +180,8 @@ describe('ConfigPage', () => {
             return item
           }),
         },
-      }))
+      })
+    )
 
     const { getByLabelText, getByRole } = await renderPage()
 
@@ -150,14 +213,20 @@ describe('ConfigPage', () => {
   it('conflict response shows refresh guidance', async () => {
     fetchMock
       .mockResolvedValueOnce(api(memoryOptions))
-      .mockResolvedValueOnce(api({ reason: 'stale' }, 409, 'conflict', 'Version mismatch'))
+      .mockResolvedValueOnce(
+        api({ reason: 'stale' }, 409, 'conflict', 'Version mismatch')
+      )
 
     const { getByLabelText, getByRole, getByText } = await renderPage()
 
     await userEvent.fill(getByLabelText('modelName'), 'large')
     await userEvent.click(getByRole('button', { name: 'Save changes' }))
 
-    await expect.element(getByText('The server config changed. Refresh before saving again.')).toBeInTheDocument()
+    await expect
+      .element(
+        getByText('The server config changed. Refresh before saving again.')
+      )
+      .toBeInTheDocument()
   })
 
   it('leaving with unsaved edits prompts for confirmation', async () => {

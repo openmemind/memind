@@ -1,21 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
+import type { ApiError } from '@/lib/api-client'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  getMemoryOptions,
-  updateMemoryOptions,
-} from '@/features/api/config'
+import { Header } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
+import { getMemoryOptions, updateMemoryOptions } from '@/features/api/config'
 import {
   EmptyState,
   PageError,
   PageLoading,
 } from '@/features/components/data-state'
 import type { MemoryOptionItemView } from '@/features/types'
-import type { ApiError } from '@/lib/api-client'
 import { ConfigValueEditor } from './config-value-editor'
 
 export function ConfigPage() {
@@ -103,9 +100,9 @@ export function ConfigPage() {
         <h1 className='truncate text-lg font-semibold'>Config</h1>
       </Header>
       <Main>
-        <div className='flex flex-col gap-4'>
+        <div className='flex min-w-0 flex-col gap-4'>
           <div className='flex flex-wrap items-start justify-between gap-3'>
-            <div className='flex flex-col gap-1'>
+            <div className='flex min-w-0 flex-col gap-1'>
               <h2 className='text-2xl font-semibold'>Memory Options</h2>
               <p className='text-sm text-muted-foreground'>
                 Edit local memory options and save them as one versioned config
@@ -115,7 +112,8 @@ export function ConfigPage() {
             <div className='flex items-center gap-2'>
               {isDirty ? (
                 <Badge variant='secondary'>
-                  {modifiedCount} unsaved {modifiedCount === 1 ? 'change' : 'changes'}
+                  {modifiedCount} unsaved{' '}
+                  {modifiedCount === 1 ? 'change' : 'changes'}
                 </Badge>
               ) : null}
               <Button
@@ -138,7 +136,10 @@ export function ConfigPage() {
           ) : null}
 
           {saveError && saveError.status !== 409 ? (
-            <PageError message={saveError.message} traceId={saveError.traceId} />
+            <PageError
+              message={saveError.message}
+              traceId={saveError.traceId}
+            />
           ) : null}
 
           {query.isLoading ? <PageLoading /> : null}
@@ -152,7 +153,7 @@ export function ConfigPage() {
             <EmptyState title='No memory options found.' />
           ) : null}
           {draft ? (
-            <div className='flex flex-col gap-4'>
+            <div className='flex min-w-0 flex-col gap-4'>
               {Object.entries(draft).map(([sectionKey, options]) => (
                 <ConfigSection
                   key={sectionKey}
@@ -179,22 +180,28 @@ function ConfigSection({
   onChange: (sectionKey: string, optionKey: string, value: unknown) => void
 }) {
   return (
-    <section className='rounded-md border'>
+    <section className='min-w-0 rounded-md border'>
       <div className='border-b px-4 py-3'>
-        <h3 className='text-base font-semibold'>{sectionKey}</h3>
+        <h3 className='text-base font-semibold [overflow-wrap:anywhere] break-words'>
+          {sectionKey}
+        </h3>
       </div>
-      <div className='divide-y'>
+      <div className='min-w-0 divide-y'>
         {options.map((option) => (
           <div
             key={option.key}
-            className='grid gap-3 p-4 lg:grid-cols-[minmax(14rem,20rem)_1fr]'
+            className='grid min-w-0 gap-3 p-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]'
           >
-            <div className='flex flex-col gap-1'>
-              <p className='font-medium'>{option.key}</p>
-              <p className='text-sm text-muted-foreground'>
+            <div className='flex min-w-0 flex-col gap-1'>
+              <p className='font-medium [overflow-wrap:anywhere] break-words'>
+                {option.key}
+              </p>
+              <p className='text-sm [overflow-wrap:anywhere] break-words text-muted-foreground'>
                 {option.description ?? 'No description.'}
               </p>
-              <p className='text-xs text-muted-foreground'>type: {option.type}</p>
+              <p className='text-xs [overflow-wrap:anywhere] break-words text-muted-foreground'>
+                type: {option.type}
+              </p>
             </div>
             <ConfigValueEditor
               option={option}
