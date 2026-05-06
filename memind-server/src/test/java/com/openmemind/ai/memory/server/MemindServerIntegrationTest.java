@@ -170,8 +170,14 @@ class MemindServerIntegrationTest {
                 .andExpect(jsonPath("$.code").value("success"))
                 .andExpect(jsonPath("$.timestamp").isNotEmpty())
                 .andExpect(jsonPath("$.data.version").value(1))
-                .andExpect(jsonPath("$.data.config.extraction").isArray())
-                .andExpect(jsonPath("$.data.config.retrieval").isArray());
+                .andExpect(jsonPath("$.data.config['extraction.common']").isArray())
+                .andExpect(jsonPath("$.data.config['extraction.itemGraph']").isArray())
+                .andExpect(jsonPath("$.data.config['retrieval.simple']").isArray())
+                .andExpect(jsonPath("$.data.config['retrieval.simpleGraphAssist']").isArray())
+                .andExpect(jsonPath("$.data.config['retrieval.rerank']").isArray())
+                .andExpect(jsonPath("$.data.config['memoryThread.lifecycle']").isArray())
+                .andExpect(jsonPath("$.data.config.extraction").doesNotExist())
+                .andExpect(jsonPath("$.data.config.retrieval").doesNotExist());
     }
 
     @Test

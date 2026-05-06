@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ApiError } from '@/lib/api-client'
+import { cn } from '@/lib/utils'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,19 @@ export function ConfigPage() {
     () => (query.data ? buildDraftConfig(query.data.config, edits) : null),
     [edits, query.data]
   )
+  const sections = useMemo(() => (draft ? Object.entries(draft) : []), [draft])
+  const [selectedSectionKey, setSelectedSectionKey] = useState<string | null>(
+    null
+  )
+
+  const activeSection = useMemo(() => {
+    if (!selectedSectionKey) return sections[0] ?? null
+    return (
+      sections.find(([sectionKey]) => sectionKey === selectedSectionKey) ??
+      sections[0] ??
+      null
+    )
+  }, [selectedSectionKey, sections])
 
   const modifiedCount = useMemo(
     () => (query.data ? countModifiedEdits(query.data.config, edits) : 0),
@@ -152,21 +166,100 @@ export function ConfigPage() {
           {draft && Object.keys(draft).length === 0 ? (
             <EmptyState title='No memory options found.' />
           ) : null}
-          {draft ? (
-            <div className='flex min-w-0 flex-col gap-4'>
-              {Object.entries(draft).map(([sectionKey, options]) => (
-                <ConfigSection
-                  key={sectionKey}
-                  sectionKey={sectionKey}
-                  options={options}
-                  onChange={updateOptionValue}
-                />
-              ))}
+          {sections.length > 0 && activeSection ? (
+            <div className='grid min-w-0 gap-4 lg:grid-cols-[minmax(15rem,18rem)_minmax(0,1fr)]'>
+              <ConfigSectionNav
+                sections={sections}
+                activeSectionKey={activeSection[0]}
+                onSelect={setSelectedSectionKey}
+              />
+              <ConfigSection
+                sectionKey={activeSection[0]}
+                options={activeSection[1]}
+                onChange={updateOptionValue}
+              />
             </div>
           ) : null}
         </div>
       </Main>
     </>
+  )
+}
+
+function ConfigSectionNav({
+  sections,
+  activeSectionKey,
+  onSelect,
+}: {
+  sections: [string, MemoryOptionItemView[]][]
+  activeSectionKey: string
+  onSelect: (sectionKey: string) => void
+}) {
+  return (
+    <div className='min-w-0 lg:sticky lg:top-20 lg:self-start'>
+      <div className='min-w-0 rounded-md border p-3 lg:hidden'>
+        <label
+          htmlFor='config-section-select'
+          className='mb-2 block text-xs font-medium text-muted-foreground'
+        >
+          Section
+        </label>
+        <select
+          id='config-section-select'
+          className='h-9 w-full min-w-0 rounded-md border bg-background px-3 text-sm'
+          value={activeSectionKey}
+          onChange={(event) => onSelect(event.target.value)}
+        >
+          {sections.map(([sectionKey, options]) => (
+            <option key={sectionKey} value={sectionKey}>
+              {formatSectionLabel(sectionKey)} ({options.length})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <nav
+        aria-label='Config sections'
+        className='hidden min-w-0 rounded-md border lg:block'
+      >
+        <div className='border-b px-3 py-2'>
+          <p className='text-xs font-medium text-muted-foreground'>
+            Sections ({sections.length})
+          </p>
+        </div>
+        <div className='flex min-w-0 flex-col gap-1 overflow-y-auto p-2 lg:max-h-[calc(100vh-12rem)]'>
+          {sections.map(([sectionKey, options]) => {
+            const isActive = sectionKey === activeSectionKey
+
+            return (
+              <button
+                key={sectionKey}
+                type='button'
+                aria-label={`${formatSectionLabel(sectionKey)} ${options.length}`}
+                aria-current={isActive ? 'page' : undefined}
+                className={cn(
+                  'flex min-w-0 items-start justify-between gap-3 rounded-md px-3 py-2 text-left transition-colors',
+                  isActive
+                    ? 'bg-accent text-accent-foreground'
+                    : 'hover:bg-accent/60'
+                )}
+                onClick={() => onSelect(sectionKey)}
+              >
+                <span className='flex min-w-0 flex-col gap-0.5'>
+                  <span className='font-medium [overflow-wrap:anywhere] break-words'>
+                    {formatSectionLabel(sectionKey)}
+                  </span>
+                  <span className='text-xs [overflow-wrap:anywhere] break-words text-muted-foreground'>
+                    {sectionKey}
+                  </span>
+                </span>
+                <Badge variant='secondary'>{options.length}</Badge>
+              </button>
+            )
+          })}
+        </div>
+      </nav>
+    </div>
   )
 }
 
@@ -181,10 +274,13 @@ function ConfigSection({
 }) {
   return (
     <section className='min-w-0 rounded-md border'>
-      <div className='border-b px-4 py-3'>
+      <div className='flex min-w-0 flex-col gap-1 border-b px-4 py-3'>
         <h3 className='text-base font-semibold [overflow-wrap:anywhere] break-words'>
-          {sectionKey}
+          {formatSectionLabel(sectionKey)}
         </h3>
+        <p className='text-xs [overflow-wrap:anywhere] break-words text-muted-foreground'>
+          {sectionKey}
+        </p>
       </div>
       <div className='min-w-0 divide-y'>
         {options.map((option) => (
@@ -263,4 +359,21 @@ function findOptionValue(
 
 function jsonEqual(left: unknown, right: unknown) {
   return JSON.stringify(left) === JSON.stringify(right)
+}
+
+function formatSectionLabel(sectionKey: string) {
+  return sectionKey
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[.\s_-]+/)
+    .filter(Boolean)
+    .map(formatSectionLabelSegment)
+    .join(' ')
+}
+
+function formatSectionLabelSegment(segment: string) {
+  if (segment.toLowerCase() === 'rawdata') {
+    return 'Raw Data'
+  }
+
+  return segment.charAt(0).toUpperCase() + segment.slice(1)
 }

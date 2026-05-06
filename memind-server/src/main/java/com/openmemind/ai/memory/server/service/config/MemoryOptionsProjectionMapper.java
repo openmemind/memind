@@ -393,7 +393,7 @@ public class MemoryOptionsProjectionMapper {
                 flattenValues(PersistedMemoryOptions.from(MemoryBuildOptions.defaults()));
         Map<String, List<MemoryOptionItemView>> grouped = new LinkedHashMap<>();
         for (OptionDefinition definition : DEFINITIONS) {
-            grouped.computeIfAbsent(definition.group(), ignored -> new ArrayList<>())
+            grouped.computeIfAbsent(groupForKey(definition.key()), ignored -> new ArrayList<>())
                     .add(
                             new MemoryOptionItemView(
                                     definition.key(),
@@ -432,7 +432,7 @@ public class MemoryOptionsProjectionMapper {
 
     private static List<OptionDefinition> discoverDefinitions(Object value) {
         List<OptionDefinition> definitions = new ArrayList<>();
-        collectDefinitions(value, value == null ? null : value.getClass(), "", "", definitions);
+        collectDefinitions(value, value == null ? null : value.getClass(), "", definitions);
         return List.copyOf(definitions);
     }
 
@@ -440,7 +440,6 @@ public class MemoryOptionsProjectionMapper {
             Object value,
             Class<?> declaredType,
             String currentPath,
-            String currentGroup,
             List<OptionDefinition> definitions) {
         if (value == null) {
             return;
@@ -448,8 +447,7 @@ public class MemoryOptionsProjectionMapper {
         Class<?> type = declaredType == null ? value.getClass() : declaredType;
         if (!type.isRecord()) {
             definitions.add(
-                    new OptionDefinition(
-                            currentPath, currentGroup, type, List.of(currentPath.split("\\."))));
+                    new OptionDefinition(currentPath, type, List.of(currentPath.split("\\."))));
             return;
         }
         for (RecordComponent component : type.getRecordComponents()) {
@@ -458,10 +456,60 @@ public class MemoryOptionsProjectionMapper {
                     currentPath.isBlank()
                             ? component.getName()
                             : currentPath + "." + component.getName();
-            String nextGroup = currentPath.isBlank() ? component.getName() : currentGroup;
-            collectDefinitions(
-                    componentValue, component.getType(), nextPath, nextGroup, definitions);
+            collectDefinitions(componentValue, component.getType(), nextPath, definitions);
         }
+    }
+
+    private static String groupForKey(String key) {
+        if (key.startsWith("extraction.common.")) {
+            return "extraction.common";
+        }
+        if (key.startsWith("extraction.rawdata.")) {
+            return "extraction.rawdata";
+        }
+        if (key.startsWith("extraction.item.graph.")) {
+            return "extraction.itemGraph";
+        }
+        if (key.startsWith("extraction.item.")) {
+            return "extraction.item";
+        }
+        if (key.startsWith("extraction.insight.")) {
+            return "extraction.insight";
+        }
+        if (key.startsWith("retrieval.common.")) {
+            return "retrieval.common";
+        }
+        if (key.startsWith("retrieval.simple.graphAssist.")) {
+            return "retrieval.simpleGraphAssist";
+        }
+        if (key.startsWith("retrieval.simple.memoryThreadAssist.")) {
+            return "retrieval.simpleThreadAssist";
+        }
+        if (key.startsWith("retrieval.simple.")) {
+            return "retrieval.simple";
+        }
+        if (key.startsWith("retrieval.deep.graphAssist.")) {
+            return "retrieval.deepGraphAssist";
+        }
+        if (key.startsWith("retrieval.deep.memoryThreadAssist.")) {
+            return "retrieval.deepThreadAssist";
+        }
+        if (key.startsWith("retrieval.deep.")) {
+            return "retrieval.deep";
+        }
+        if (key.startsWith("retrieval.advanced.rerank.")) {
+            return "retrieval.rerank";
+        }
+        if (key.startsWith("retrieval.advanced.scoring.")) {
+            return "retrieval.scoring";
+        }
+        if (key.startsWith("memoryThread.enrichment.")) {
+            return "memoryThread.enrichment";
+        }
+        if (key.startsWith("memoryThread.")) {
+            return "memoryThread.lifecycle";
+        }
+        throw new IllegalArgumentException("Unsupported memory option key group: " + key);
     }
 
     private static Map<String, Object> flattenValues(Object value) {
@@ -735,8 +783,7 @@ public class MemoryOptionsProjectionMapper {
         return type;
     }
 
-    private record OptionDefinition(
-            String key, String group, Class<?> type, List<String> pathSegments) {}
+    private record OptionDefinition(String key, Class<?> type, List<String> pathSegments) {}
 
     private record PersistedMemoryOptions(
             ExtractionOptions extraction,

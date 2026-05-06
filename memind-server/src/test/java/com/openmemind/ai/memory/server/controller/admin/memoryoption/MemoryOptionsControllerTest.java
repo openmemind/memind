@@ -36,6 +36,10 @@ import tools.jackson.databind.ObjectMapper;
 
 class MemoryOptionsControllerTest {
 
+    private static final String SEMANTIC_WINDOW_VALUE_JSON_PATH =
+            "$.data.config['extraction.itemGraph']"
+                    + "[?(@.key=='extraction.item.graph.semanticSourceWindowSize')].value";
+
     private final StubMemoryOptionService configService = new StubMemoryOptionService();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -60,7 +64,7 @@ class MemoryOptionsControllerTest {
                 .andExpect(jsonPath("$.timestamp").isNotEmpty())
                 .andExpect(jsonPath("$.data.version").value(3))
                 .andExpect(
-                        jsonPath("$.data.config.extraction[0].key")
+                        jsonPath("$.data.config['extraction.common'][0].key")
                                 .value("extraction.common.timeout"));
     }
 
@@ -74,14 +78,14 @@ class MemoryOptionsControllerTest {
                 .andExpect(jsonPath("$.code").value("success"))
                 .andExpect(jsonPath("$.timestamp").isNotEmpty())
                 .andExpect(jsonPath("$.data.version").value(4))
-                .andExpect(jsonPath("$.data.config.extraction[0].value").value("PT45S"));
+                .andExpect(jsonPath("$.data.config['extraction.common'][0].value").value("PT45S"));
 
         assertThat(configService.recordedExpectedVersion).isEqualTo(3L);
         assertThat(configService.recordedConfig)
-                .containsKey("extraction")
+                .containsKey("extraction.common")
                 .satisfies(
                         config ->
-                                assertThat(config.get("extraction"))
+                                assertThat(config.get("extraction.common"))
                                         .singleElement()
                                         .extracting(MemoryOptionItemView::value)
                                         .isEqualTo("PT45S"));
@@ -91,10 +95,7 @@ class MemoryOptionsControllerTest {
     void getAndPutExposeSemanticSourceWindowSize() throws Exception {
         mockMvc.perform(get("/admin/v1/config/memory-options"))
                 .andExpect(status().isOk())
-                .andExpect(
-                        jsonPath(
-                                        "$.data.config.extraction[?(@.key=='extraction.item.graph.semanticSourceWindowSize')].value")
-                                .value(128));
+                .andExpect(jsonPath(SEMANTIC_WINDOW_VALUE_JSON_PATH).value(128));
 
         mockMvc.perform(
                         put("/admin/v1/config/memory-options")
@@ -103,12 +104,9 @@ class MemoryOptionsControllerTest {
                                         objectMapper.writeValueAsBytes(
                                                 semanticWindowUpdateRequestBody())))
                 .andExpect(status().isOk())
-                .andExpect(
-                        jsonPath(
-                                        "$.data.config.extraction[?(@.key=='extraction.item.graph.semanticSourceWindowSize')].value")
-                                .value(64));
+                .andExpect(jsonPath(SEMANTIC_WINDOW_VALUE_JSON_PATH).value(64));
 
-        assertThat(configService.recordedConfig.get("extraction"))
+        assertThat(configService.recordedConfig.get("extraction.itemGraph"))
                 .singleElement()
                 .extracting(MemoryOptionItemView::value)
                 .isEqualTo(64);
@@ -135,7 +133,7 @@ class MemoryOptionsControllerTest {
                 3,
                 "config",
                 Map.of(
-                        "extraction",
+                        "extraction.common",
                         List.of(
                                 Map.of(
                                         "key",
@@ -152,7 +150,7 @@ class MemoryOptionsControllerTest {
                 3,
                 "config",
                 Map.of(
-                        "extraction",
+                        "extraction.itemGraph",
                         List.of(
                                 Map.of(
                                         "key",
@@ -170,7 +168,7 @@ class MemoryOptionsControllerTest {
                 new MemoryOptionsSnapshot(
                         3L,
                         Map.of(
-                                "extraction",
+                                "extraction.common",
                                 List.of(
                                         new MemoryOptionItemView(
                                                 "extraction.common.timeout",
@@ -178,7 +176,9 @@ class MemoryOptionsControllerTest {
                                                 "Maximum extraction timeout",
                                                 "duration",
                                                 "PT30S",
-                                                Map.of("format", "iso-8601-duration")),
+                                                Map.of("format", "iso-8601-duration"))),
+                                "extraction.itemGraph",
+                                List.of(
                                         new MemoryOptionItemView(
                                                 "extraction.item.graph.semanticSourceWindowSize",
                                                 128,

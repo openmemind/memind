@@ -9,14 +9,15 @@ import { ConfigPage } from './index'
 const memoryOptions = {
   version: 7,
   config: {
-    core: [
+    'extraction.common': [
       option('enabled', true, 'boolean'),
       option('maxItems', 10, 'integer', { min: 1, max: 100 }),
       option('scoreThreshold', 0.5, 'double', { min: 0, max: 1 }),
       option('modelName', 'small', 'string'),
       option('strategy', 'simple', 'string', { enum: ['simple', 'deep'] }),
     ],
-    advanced: [option('rawJson', { mode: 'debug' }, 'object')],
+    'extraction.rawdata': [option('rawBatchSize', 32, 'integer')],
+    'retrieval.rerank': [option('rawJson', { mode: 'debug' }, 'object')],
   },
 }
 
@@ -87,16 +88,29 @@ describe('ConfigPage', () => {
     vi.clearAllMocks()
   })
 
-  it('renders config grouped by section key with typed editors', async () => {
+  it('renders config groups with a compact selector and typed editors in the active group', async () => {
     fetchMock.mockResolvedValueOnce(api(memoryOptions))
 
-    const { getByLabelText, getByRole } = await renderPage()
+    const { getByLabelText, getByRole, getByText } = await renderPage()
 
     await expect
-      .element(getByRole('heading', { name: 'core' }))
+      .element(getByRole('combobox', { name: 'Section' }))
       .toBeInTheDocument()
     await expect
-      .element(getByRole('heading', { name: 'advanced' }))
+      .element(getByRole('option', { name: 'Extraction Common (5)' }))
+      .toBeInTheDocument()
+    await expect
+      .element(getByRole('option', { name: 'Extraction Raw Data (1)' }))
+      .toBeInTheDocument()
+    await expect
+      .element(getByRole('option', { name: 'Retrieval Rerank (1)' }))
+      .toBeInTheDocument()
+    await expect.element(getByRole('tablist')).not.toBeInTheDocument()
+    await expect
+      .element(getByRole('heading', { name: 'Extraction Common' }))
+      .toBeInTheDocument()
+    await expect
+      .element(getByText('extraction.common').last())
       .toBeInTheDocument()
     await expect
       .element(getByRole('switch', { name: 'enabled' }))
@@ -112,6 +126,17 @@ describe('ConfigPage', () => {
       .toHaveAttribute('type', 'text')
     await expect
       .element(getByRole('combobox', { name: 'strategy' }))
+      .toBeInTheDocument()
+    await userEvent.selectOptions(
+      getByRole('combobox', { name: 'Section' }),
+      'retrieval.rerank'
+    )
+
+    await expect
+      .element(getByRole('heading', { name: 'Retrieval Rerank' }))
+      .toBeInTheDocument()
+    await expect
+      .element(getByText('retrieval.rerank').last())
       .toBeInTheDocument()
     await expect
       .element(getByRole('button', { name: 'rawJson value' }))
@@ -140,8 +165,8 @@ describe('ConfigPage', () => {
 
     await expect
       .element(
-        getByRole('heading', {
-          name: 'longSectionNameWithAnUnbrokenIdentifier',
+        getByRole('option', {
+          name: 'Long Section Name With An Unbroken Identifier (2)',
         })
       )
       .toBeInTheDocument()
@@ -174,11 +199,13 @@ describe('ConfigPage', () => {
         version: 8,
         config: {
           ...memoryOptions.config,
-          core: memoryOptions.config.core.map((item) => {
-            if (item.key === 'maxItems') return { ...item, value: 25 }
-            if (item.key === 'modelName') return { ...item, value: 'large' }
-            return item
-          }),
+          'extraction.common': memoryOptions.config['extraction.common'].map(
+            (item) => {
+              if (item.key === 'maxItems') return { ...item, value: 25 }
+              if (item.key === 'modelName') return { ...item, value: 'large' }
+              return item
+            }
+          ),
         },
       })
     )
@@ -198,7 +225,9 @@ describe('ConfigPage', () => {
             expectedVersion: 7,
             config: {
               ...memoryOptions.config,
-              core: memoryOptions.config.core.map((item) => {
+              'extraction.common': memoryOptions.config[
+                'extraction.common'
+              ].map((item) => {
                 if (item.key === 'maxItems') return { ...item, value: 25 }
                 if (item.key === 'modelName') return { ...item, value: 'large' }
                 return item

@@ -58,7 +58,13 @@ class MemoryOptionServiceTest {
         MemoryOptionsSnapshot snapshot = service.getCurrent();
 
         assertThat(snapshot.version()).isEqualTo(1);
-        assertThat(snapshot.config()).containsKeys("extraction", "retrieval");
+        assertThat(snapshot.config())
+                .containsKeys(
+                        "extraction.common",
+                        "extraction.itemGraph",
+                        "retrieval.simple",
+                        "retrieval.simpleGraphAssist",
+                        "memoryThread.lifecycle");
         assertThat(repository.findActive(MemoryOptionService.CONFIG_KEY))
                 .hasValueSatisfying(config -> assertThat(config.getConfigVersion()).isEqualTo(1));
     }
