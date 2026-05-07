@@ -334,6 +334,7 @@
                         <exclude>data/**</exclude>
                         <exclude>etc/**</exclude>
                         <exclude>eval-data/**</exclude>
+                        <exclude>memind-integrations/claude-code/**</exclude>
                         <exclude>memind-integrations/codex/**</exclude>
                         <exclude>memind-ui/**</exclude>
                         <exclude>memind-evaluation/data/**</exclude>
