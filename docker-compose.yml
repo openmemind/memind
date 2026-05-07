@@ -1,0 +1,38 @@
+services:
+  memind-server:
+    build:
+      context: .
+      dockerfile: memind-server/Dockerfile
+    image: memind-server:local
+    container_name: memind-server
+    environment:
+      SERVER_PORT: 8366
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://openrouter.ai/api}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-123}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-openai/gpt-4o-mini}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-openai/text-embedding-3-small}
+      MEMIND_DATASOURCE_URL: jdbc:sqlite:/app/data/memind-server.db
+      MEMIND_VECTOR_STORE_PATH: /app/data/vector-store.json
+      MEMIND_RERANK_BASE_URL: ${MEMIND_RERANK_BASE_URL:-https://aihubmix.com}
+      MEMIND_RERANK_API_KEY: ${MEMIND_RERANK_API_KEY:-}
+      MEMIND_RERANK_MODEL: ${MEMIND_RERANK_MODEL:-jina-reranker-v3}
+    volumes:
+      - memind-data:/app/data
+    ports:
+      - "${MEMIND_SERVER_PORT:-8366}:8366"
+    restart: unless-stopped
+
+  memind-ui:
+    build:
+      context: memind-ui
+      dockerfile: Dockerfile
+    image: memind-ui:local
+    container_name: memind-ui
+    depends_on:
+      - memind-server
+    ports:
+      - "${MEMIND_UI_PORT:-8080}:80"
+    restart: unless-stopped
+
+volumes:
+  memind-data:

@@ -1,0 +1,11 @@
+.git
+.idea
+.vscode
+**/target
+**/node_modules
+**/dist
+memind-ui
+**/.DS_Store
+**/.env
+**/.env.*
+docs/superpowers
