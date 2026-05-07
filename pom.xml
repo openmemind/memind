@@ -24,8 +24,39 @@
     <packaging>pom</packaging>
     <version>${revision}</version>
     <name>Memind - Parent</name>
+    <description>Open-source memory infrastructure for AI applications.</description>
+    <url>https://github.com/openmemind/memind</url>
 
     <inceptionYear>2026</inceptionYear>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>openmemind</id>
+            <name>OpenMemind Contributors</name>
+            <organization>OpenMemind</organization>
+            <organizationUrl>https://github.com/openmemind</organizationUrl>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/openmemind/memind.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/openmemind/memind.git</developerConnection>
+        <url>https://github.com/openmemind/memind</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/openmemind/memind/issues</url>
+    </issueManagement>
 
     <modules>
         <module>memind-dependencies</module>
@@ -51,9 +82,13 @@
         <maven-deploy-plugin.version>3.1.4</maven-deploy-plugin.version>
         <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
         <flatten-maven-plugin.version>1.7.3</flatten-maven-plugin.version>
+        <central-publishing-maven-plugin.version>0.10.0</central-publishing-maven-plugin.version>
         <google-java-format.version>1.28.0</google-java-format.version>
         <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
         <maven.deploy.skip>false</maven.deploy.skip>
+        <central.autoPublish>false</central.autoPublish>
+        <central.skipPublishing>false</central.skipPublishing>
+        <central.waitUntil>validated</central.waitUntil>
 
         <license.plugin.version>4.1</license.plugin.version>
         <jacoco-maven-plugin.version>0.8.14</jacoco-maven-plugin.version>
@@ -344,4 +379,51 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>${maven-gpg-plugin.version}</version>
+                        <configuration>
+                            <bestPractices>true</bestPractices>
+                            <passphraseEnvName>MAVEN_GPG_PASSPHRASE</passphraseEnvName>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>${central-publishing-maven-plugin.version}</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <deploymentName>Memind ${revision}</deploymentName>
+                            <autoPublish>${central.autoPublish}</autoPublish>
+                            <skipPublishing>${central.skipPublishing}</skipPublishing>
+                            <waitUntil>${central.waitUntil}</waitUntil>
+                            <excludeArtifacts>
+                                <excludeArtifact>memind-server</excludeArtifact>
+                                <excludeArtifact>memind-evaluation</excludeArtifact>
+                                <excludeArtifact>memind-examples</excludeArtifact>
+                                <excludeArtifact>memind-example-java</excludeArtifact>
+                            </excludeArtifacts>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
