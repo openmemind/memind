@@ -16,7 +16,10 @@ package com.openmemind.ai.memory.core.store.item;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
+import java.util.OptionalLong;
 
 /**
  * Operations for memory item persistence.
@@ -32,6 +35,47 @@ public interface ItemOperations {
     List<MemoryItem> getItemsByContentHashes(MemoryId id, Collection<String> contentHashes);
 
     List<MemoryItem> listItems(MemoryId id);
+
+    /**
+     * Returns existing domain items with non-null ids less than or equal to {@code cutoffItemId},
+     * ordered by {@link MemoryItem#id()} ascending.
+     */
+    default List<MemoryItem> listItemsUpTo(MemoryId id, long cutoffItemId) {
+        if (cutoffItemId <= 0L) {
+            return List.of();
+        }
+        return listItems(id).stream()
+                .filter(item -> item.id() != null && item.id() <= cutoffItemId)
+                .sorted(Comparator.comparing(MemoryItem::id))
+                .toList();
+    }
+
+    /**
+     * Returns existing domain items with non-null ids greater than {@code afterItemId}, ordered by
+     * {@link MemoryItem#id()} ascending and capped to {@code limit}.
+     *
+     * <p>Phase 1 full replay does not call this method. It is added with the same range-read
+     * capability surface so persistent stores can expose a complete low-cost incremental read API
+     * for later intake and replay paths without another source-compatible interface expansion.
+     */
+    default List<MemoryItem> listItemsAfter(MemoryId id, long afterItemId, int limit) {
+        if (limit <= 0) {
+            return List.of();
+        }
+        return listItems(id).stream()
+                .filter(item -> item.id() != null && item.id() > afterItemId)
+                .sorted(Comparator.comparing(MemoryItem::id))
+                .limit(limit)
+                .toList();
+    }
+
+    default OptionalLong maxItemId(MemoryId id) {
+        return listItems(id).stream()
+                .map(MemoryItem::id)
+                .filter(Objects::nonNull)
+                .mapToLong(Long::longValue)
+                .max();
+    }
 
     default List<TemporalCandidateMatch> listTemporalCandidateMatches(
             MemoryId memoryId,

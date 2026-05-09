@@ -154,6 +154,7 @@ public class ThreadIntakeWorker {
                         .mapToLong(MemoryThreadIntakeClaim::triggerItemId)
                         .max()
                         .orElseThrow();
+        long replayStartedNanos = System.nanoTime();
         try {
             ThreadProjectionMaterializer.MaterializedProjection projection =
                     materializer.materializeUpTo(memoryId, replayCutoffItemId);
@@ -180,7 +181,15 @@ public class ThreadIntakeWorker {
                 store.releaseClaims(memoryId, claimed);
                 return false;
             }
-            notifyReplaySuccess(memoryId, claimed, projection, replayCutoffItemId, finalizedAt);
+            ThreadReplayStats stats =
+                    ThreadReplayStats.from(
+                            ThreadReplayOrigin.INTAKE_BATCH,
+                            replayStartedNanos,
+                            replayCutoffItemId,
+                            claimed.size(),
+                            projection);
+            notifyReplaySuccess(
+                    memoryId, claimed, projection, replayCutoffItemId, finalizedAt, stats);
             return true;
         } catch (RuntimeException e) {
             Instant failedAt = Instant.now();
@@ -230,9 +239,11 @@ public class ThreadIntakeWorker {
             List<MemoryThreadIntakeClaim> claimed,
             ThreadProjectionMaterializer.MaterializedProjection projection,
             long cutoffItemId,
-            Instant finalizedAt) {
+            Instant finalizedAt,
+            ThreadReplayStats stats) {
         metrics.onCoalescedReplayCutoffs(claimed.size());
         metrics.onReplayPublished(ThreadReplayOrigin.INTAKE_BATCH);
+        metrics.onReplayStats(stats);
         if (containsGroupRelationshipThread(projection.threads())) {
             metrics.onGroupRelationshipPublished();
         }

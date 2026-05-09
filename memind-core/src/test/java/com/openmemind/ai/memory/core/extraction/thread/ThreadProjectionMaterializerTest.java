@@ -27,12 +27,18 @@ import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.graph.EntityCooccurrence;
 import com.openmemind.ai.memory.core.store.graph.InMemoryGraphOperations;
 import com.openmemind.ai.memory.core.store.graph.ItemEntityMention;
+import com.openmemind.ai.memory.core.store.graph.ItemLink;
+import com.openmemind.ai.memory.core.store.graph.ItemLinkType;
 import com.openmemind.ai.memory.core.store.item.InMemoryItemOperations;
 import com.openmemind.ai.memory.core.support.TestMemoryIds;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class ThreadProjectionMaterializerTest {
@@ -476,6 +482,73 @@ class ThreadProjectionMaterializerTest {
     }
 
     @Test
+    void materializeUpToUsesBoundedItemMentionAndAdjacentLinkReads() {
+        MemoryId memoryId = TestMemoryIds.userAgent();
+        TrackingItemOperations itemOperations = new TrackingItemOperations();
+        TrackingGraphOperations graphOperations = new TrackingGraphOperations();
+        ThreadProjectionMaterializer materializer =
+                new ThreadProjectionMaterializer(
+                        itemOperations, graphOperations, ThreadMaterializationPolicy.v1());
+
+        itemOperations.insertItems(
+                memoryId,
+                List.of(
+                        item(301L, "The user planned a trip."),
+                        item(302L, "The user booked the trip."),
+                        item(999L, "This future item is outside the cutoff.")));
+        graphOperations.upsertItemEntityMentions(
+                memoryId,
+                List.of(
+                        mention(memoryId, 301L, "concept:travel"),
+                        mention(memoryId, 302L, "concept:travel"),
+                        mention(memoryId, 999L, "concept:future")));
+        graphOperations.upsertItemLinks(
+                memoryId,
+                List.of(
+                        new ItemLink(
+                                memoryId.toIdentifier(),
+                                301L,
+                                302L,
+                                ItemLinkType.SEMANTIC,
+                                null,
+                                "entity_overlap",
+                                0.8d,
+                                Map.of("source", "test"),
+                                Instant.parse("2026-04-20T09:00:00Z")),
+                        new ItemLink(
+                                memoryId.toIdentifier(),
+                                302L,
+                                999L,
+                                ItemLinkType.SEMANTIC,
+                                null,
+                                "entity_overlap",
+                                0.6d,
+                                Map.of("source", "cross-cutoff-test"),
+                                Instant.parse("2026-04-20T09:00:00Z")),
+                        new ItemLink(
+                                memoryId.toIdentifier(),
+                                1000L,
+                                301L,
+                                ItemLinkType.SEMANTIC,
+                                null,
+                                "entity_overlap",
+                                0.7d,
+                                Map.of("source", "target-side-test"),
+                                Instant.parse("2026-04-20T09:00:00Z"))));
+
+        ThreadProjectionMaterializer.MaterializedProjection projection =
+                materializer.materializeUpTo(memoryId, 302L);
+
+        assertThat(projection.lastProcessedItemId()).isEqualTo(302L);
+        assertThat(itemOperations.listItemsUpToCutoffs).containsExactly(302L);
+        assertThat(graphOperations.mentionItemIds).containsExactlyInAnyOrder(301L, 302L);
+        assertThat(graphOperations.adjacentSeedItemIds).containsExactlyInAnyOrder(301L, 302L);
+        assertThat(graphOperations.adjacentLinkPairs)
+                .containsExactlyInAnyOrder("301->302", "302->999", "1000->301");
+        assertThat(graphOperations.fullCooccurrenceReads).isEqualTo(1);
+    }
+
+    @Test
     void exactAnchorShortCircuitsBeforeMaxCandidateThreadsTruncation() {
         MemoryId memoryId = TestMemoryIds.userAgent();
         InMemoryMemoryStore store = new InMemoryMemoryStore();
@@ -661,6 +734,68 @@ class ThreadProjectionMaterializerTest {
                                     .containsEntry("lastEnrichedMeaningfulEventCount", 2L)
                                     .containsEntry("headlineSource", "THREAD_LLM");
                         });
+    }
+
+    private static final class TrackingItemOperations extends InMemoryItemOperations {
+        private final List<Long> listItemsUpToCutoffs = new ArrayList<>();
+
+        @Override
+        public List<MemoryItem> listItems(MemoryId id) {
+            throw new AssertionError("materializeUpTo must not read all memory items");
+        }
+
+        @Override
+        public List<MemoryItem> listItemsUpTo(MemoryId id, long cutoffItemId) {
+            listItemsUpToCutoffs.add(cutoffItemId);
+            return super.listItems(id).stream()
+                    .filter(item -> item.id() != null && item.id() <= cutoffItemId)
+                    .sorted(java.util.Comparator.comparing(MemoryItem::id))
+                    .toList();
+        }
+    }
+
+    private static final class TrackingGraphOperations extends InMemoryGraphOperations {
+        private final Set<Long> mentionItemIds = new LinkedHashSet<>();
+        private final Set<Long> adjacentSeedItemIds = new LinkedHashSet<>();
+        private final Set<String> adjacentLinkPairs = new LinkedHashSet<>();
+        private int fullCooccurrenceReads;
+
+        @Override
+        public List<ItemEntityMention> listItemEntityMentions(MemoryId memoryId) {
+            throw new AssertionError("materializeUpTo must not read all item entity mentions");
+        }
+
+        @Override
+        public List<ItemEntityMention> listItemEntityMentions(
+                MemoryId memoryId, Collection<Long> itemIds) {
+            mentionItemIds.addAll(itemIds);
+            return super.listItemEntityMentions(memoryId, itemIds);
+        }
+
+        @Override
+        public List<ItemLink> listItemLinks(MemoryId memoryId) {
+            throw new AssertionError("materializeUpTo must not read all item links");
+        }
+
+        @Override
+        public List<ItemLink> listAdjacentItemLinks(
+                MemoryId memoryId,
+                Collection<Long> seedItemIds,
+                Collection<ItemLinkType> linkTypes) {
+            adjacentSeedItemIds.addAll(seedItemIds);
+            List<ItemLink> links = super.listAdjacentItemLinks(memoryId, seedItemIds, linkTypes);
+            links.forEach(
+                    link ->
+                            adjacentLinkPairs.add(
+                                    link.sourceItemId() + "->" + link.targetItemId()));
+            return links;
+        }
+
+        @Override
+        public List<EntityCooccurrence> listEntityCooccurrences(MemoryId memoryId) {
+            fullCooccurrenceReads++;
+            return super.listEntityCooccurrences(memoryId);
+        }
     }
 
     private static ThreadProjectionMaterializer materializer(InMemoryMemoryStore store) {

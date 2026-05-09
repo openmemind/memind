@@ -21,6 +21,8 @@ final class RecordingThreadDerivationMetrics implements ThreadDerivationMetrics 
     private final List<Integer> claimedBatchSizes = new ArrayList<>();
     private final List<Integer> coalescedReplayCutoffCounts = new ArrayList<>();
     private final List<ThreadReplayOrigin> replayOrigins = new ArrayList<>();
+    private final List<ThreadReplayStats> replayStats = new ArrayList<>();
+    private final List<String> replayMetricEvents = new ArrayList<>();
     private final List<String> providerHits = new ArrayList<>();
     private final List<String> nonAdmissions = new ArrayList<>();
     private int wakeScheduledCount;
@@ -50,6 +52,13 @@ final class RecordingThreadDerivationMetrics implements ThreadDerivationMetrics 
     @Override
     public void onReplayPublished(ThreadReplayOrigin origin) {
         replayOrigins.add(origin);
+        replayMetricEvents.add("published:" + origin);
+    }
+
+    @Override
+    public void onReplayStats(ThreadReplayStats stats) {
+        replayStats.add(stats);
+        replayMetricEvents.add("stats:" + stats.origin());
     }
 
     @Override
@@ -77,6 +86,14 @@ final class RecordingThreadDerivationMetrics implements ThreadDerivationMetrics 
 
     List<ThreadReplayOrigin> replayOrigins() {
         return List.copyOf(replayOrigins);
+    }
+
+    List<ThreadReplayStats> replayStats() {
+        return List.copyOf(replayStats);
+    }
+
+    List<String> replayMetricEvents() {
+        return List.copyOf(replayMetricEvents);
     }
 
     List<String> providerHits() {

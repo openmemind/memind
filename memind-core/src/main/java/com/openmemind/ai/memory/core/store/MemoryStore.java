@@ -24,6 +24,7 @@ import com.openmemind.ai.memory.core.store.graph.NoOpGraphOperations;
 import com.openmemind.ai.memory.core.store.graph.NoOpItemGraphCommitOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
+import com.openmemind.ai.memory.core.store.item.ItemOperationsCapabilities;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.store.thread.NoOpThreadEnrichmentInputStore;
@@ -43,6 +44,10 @@ public interface MemoryStore extends AutoCloseable {
     RawDataOperations rawDataOperations();
 
     ItemOperations itemOperations();
+
+    default ItemOperationsCapabilities itemOperationsCapabilities() {
+        return ItemOperationsCapabilities.defaults();
+    }
 
     InsightOperations insightOperations();
 

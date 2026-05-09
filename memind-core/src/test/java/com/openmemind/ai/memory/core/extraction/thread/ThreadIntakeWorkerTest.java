@@ -129,7 +129,7 @@ class ThreadIntakeWorkerTest {
         when(materializer.materializeUpTo(memoryId, 402L))
                 .thenReturn(
                         new ThreadProjectionMaterializer.MaterializedProjection(
-                                List.of(), List.of(), List.of(), 402L));
+                                List.of(), List.of(), List.of(), 402L, 2, 3, 1, 0));
         RecordingThreadDerivationMetrics metrics = new RecordingThreadDerivationMetrics();
         ThreadIntakeWorker worker =
                 new ThreadIntakeWorker(
@@ -140,6 +140,26 @@ class ThreadIntakeWorkerTest {
         assertThat(metrics.claimedBatchSizes()).containsExactly(2);
         assertThat(metrics.coalescedReplayCutoffCounts()).containsExactly(2);
         assertThat(metrics.replayOrigins()).containsExactly(ThreadReplayOrigin.INTAKE_BATCH);
+        assertThat(metrics.replayMetricEvents())
+                .containsExactly(
+                        "published:" + ThreadReplayOrigin.INTAKE_BATCH,
+                        "stats:" + ThreadReplayOrigin.INTAKE_BATCH);
+        assertThat(metrics.replayStats())
+                .singleElement()
+                .satisfies(
+                        stats -> {
+                            assertThat(stats.origin()).isEqualTo(ThreadReplayOrigin.INTAKE_BATCH);
+                            assertThat(stats.triggerItemCount()).isEqualTo(2);
+                            assertThat(stats.cutoffItemId()).isEqualTo(402L);
+                            assertThat(stats.loadedItemCount()).isEqualTo(2);
+                            assertThat(stats.loadedMentionCount()).isEqualTo(3);
+                            assertThat(stats.loadedAdjacentLinkCount()).isEqualTo(1);
+                            assertThat(stats.loadedCooccurrenceCount()).isEqualTo(0);
+                            assertThat(stats.replacedThreadCount()).isEqualTo(0);
+                            assertThat(stats.replacedEventCount()).isEqualTo(0);
+                            assertThat(stats.replacedMembershipCount()).isEqualTo(0);
+                            assertThat(stats.durationMillis()).isGreaterThanOrEqualTo(0L);
+                        });
     }
 
     @Test

@@ -16,9 +16,12 @@ package com.openmemind.ai.memory.plugin.jdbc.mysql;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.store.item.ItemOperationsCapabilities;
 import com.openmemind.ai.memory.plugin.jdbc.internal.schema.JdbcDialectSchema;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import org.junit.jupiter.api.Test;
@@ -52,6 +55,24 @@ class MysqlJdbcPluginTest {
                         normalizedCreateTableStatement(
                                 JdbcDialectSchema.MYSQL.scriptPath(), "memory_insight"))
                 .doesNotContain(" confidence ");
+    }
+
+    @Test
+    void mysqlStoreDeclaresStoreSideItemRangeOverrides() throws Exception {
+        assertDeclaredRangeOverride("listItemsUpTo", MemoryId.class, long.class);
+        assertDeclaredRangeOverride("listItemsAfter", MemoryId.class, long.class, int.class);
+        assertDeclaredRangeOverride("maxItemId", MemoryId.class);
+
+        ItemOperationsCapabilities capabilities = MysqlMemoryStore.ITEM_OPERATIONS_CAPABILITIES;
+        assertThat(capabilities.boundedIdLookup()).isTrue();
+        assertThat(capabilities.boundedRangeReads()).isTrue();
+        assertThat(capabilities.maxItemIdLookup()).isTrue();
+    }
+
+    private static void assertDeclaredRangeOverride(String methodName, Class<?>... parameterTypes)
+            throws NoSuchMethodException {
+        Method method = MysqlMemoryStore.class.getMethod(methodName, parameterTypes);
+        assertThat(method.getDeclaringClass()).isEqualTo(MysqlMemoryStore.class);
     }
 
     private String normalizedCreateTableStatement(String classpathResource, String tableName) {

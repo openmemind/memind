@@ -38,6 +38,9 @@ public final class NoOpThreadDerivationMetrics implements ThreadDerivationMetric
     public void onReplayPublished(ThreadReplayOrigin origin) {}
 
     @Override
+    public void onReplayStats(ThreadReplayStats stats) {}
+
+    @Override
     public void onProviderHit(String providerName) {}
 
     @Override

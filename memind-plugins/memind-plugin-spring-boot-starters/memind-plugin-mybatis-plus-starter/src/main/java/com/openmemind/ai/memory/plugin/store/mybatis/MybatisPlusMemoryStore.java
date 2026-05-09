@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.plugin.store.mybatis;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
@@ -45,6 +46,7 @@ import com.openmemind.ai.memory.core.store.graph.NoOpGraphOperations;
 import com.openmemind.ai.memory.core.store.graph.NoOpItemGraphCommitOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
+import com.openmemind.ai.memory.core.store.item.ItemOperationsCapabilities;
 import com.openmemind.ai.memory.core.store.item.TemporalCandidateMatch;
 import com.openmemind.ai.memory.core.store.item.TemporalCandidateRequest;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
@@ -94,6 +96,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.transaction.annotation.Transactional;
@@ -256,6 +259,11 @@ public class MybatisPlusMemoryStore
     @Override
     public ItemOperations itemOperations() {
         return this;
+    }
+
+    @Override
+    public ItemOperationsCapabilities itemOperationsCapabilities() {
+        return new ItemOperationsCapabilities(true, true, true);
     }
 
     @Override
@@ -548,6 +556,53 @@ public class MybatisPlusMemoryStore
         return itemMapper.selectList(memoryQuery(id, MemoryItemDO.class)).stream()
                 .map(ItemConverter::toRecord)
                 .toList();
+    }
+
+    @Override
+    public List<MemoryItem> listItemsUpTo(MemoryId id, long cutoffItemId) {
+        if (cutoffItemId <= 0L) {
+            return List.of();
+        }
+        return itemMapper
+                .selectList(
+                        memoryQuery(id, MemoryItemDO.class)
+                                .le("biz_id", cutoffItemId)
+                                .orderByAsc("biz_id"))
+                .stream()
+                .map(ItemConverter::toRecord)
+                .toList();
+    }
+
+    @Override
+    public List<MemoryItem> listItemsAfter(MemoryId id, long afterItemId, int limit) {
+        if (limit <= 0) {
+            return List.of();
+        }
+        Page<MemoryItemDO> page = Page.of(1, limit, false);
+        return itemMapper
+                .selectPage(
+                        page,
+                        memoryQuery(id, MemoryItemDO.class)
+                                .gt("biz_id", afterItemId)
+                                .orderByAsc("biz_id"))
+                .getRecords()
+                .stream()
+                .map(ItemConverter::toRecord)
+                .toList();
+    }
+
+    @Override
+    public OptionalLong maxItemId(MemoryId id) {
+        List<Object> values =
+                itemMapper.selectObjs(memoryQuery(id, MemoryItemDO.class).select("MAX(biz_id)"));
+        if (values == null || values.isEmpty() || values.getFirst() == null) {
+            return OptionalLong.empty();
+        }
+        Object value = values.getFirst();
+        if (value instanceof Number number) {
+            return OptionalLong.of(number.longValue());
+        }
+        return OptionalLong.empty();
     }
 
     @Override

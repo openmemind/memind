@@ -99,13 +99,7 @@ public class ThreadProjectionRebuilder {
 
     public void rebuild(MemoryId memoryId) {
         Objects.requireNonNull(memoryId, "memoryId");
-        long cutoff =
-                itemOperations.listItems(memoryId).stream()
-                        .map(item -> item.id())
-                        .filter(Objects::nonNull)
-                        .mapToLong(Long::longValue)
-                        .max()
-                        .orElse(0L);
+        long cutoff = itemOperations.maxItemId(memoryId).orElse(0L);
         rebuild(memoryId, cutoff);
     }
 
@@ -122,6 +116,7 @@ public class ThreadProjectionRebuilder {
                         .sorted()
                         .toList();
 
+        long replayStartedNanos = System.nanoTime();
         try {
             ThreadProjectionMaterializer.MaterializedProjection projection =
                     materializer.materializeUpTo(memoryId, rebuildCutoffItemId);
@@ -140,6 +135,13 @@ public class ThreadProjectionRebuilder {
                     availableRuntime(memoryId, current, lastProcessedItemId, finalizedAt),
                     finalizedAt);
             metrics.onReplayPublished(ThreadReplayOrigin.REBUILD);
+            metrics.onReplayStats(
+                    ThreadReplayStats.from(
+                            ThreadReplayOrigin.REBUILD,
+                            replayStartedNanos,
+                            rebuildCutoffItemId,
+                            coveredTriggerItemIds.size(),
+                            projection));
             if (containsGroupRelationshipThread(projection.threads())) {
                 metrics.onGroupRelationshipPublished();
             }

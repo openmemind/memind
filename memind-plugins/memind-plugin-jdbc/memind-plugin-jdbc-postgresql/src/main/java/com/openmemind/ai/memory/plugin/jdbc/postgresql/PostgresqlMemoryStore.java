@@ -39,6 +39,7 @@ import com.openmemind.ai.memory.core.store.graph.GraphOperationsCapabilities;
 import com.openmemind.ai.memory.core.store.graph.ItemGraphCommitOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
+import com.openmemind.ai.memory.core.store.item.ItemOperationsCapabilities;
 import com.openmemind.ai.memory.core.store.item.TemporalCandidateMatch;
 import com.openmemind.ai.memory.core.store.item.TemporalCandidateRequest;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
@@ -66,6 +67,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import org.jdbi.v3.core.Jdbi;
@@ -87,6 +89,8 @@ public class PostgresqlMemoryStore
     private static final TypeReference<List<Float>> FLOAT_LIST_TYPE = new TypeReference<>() {};
     private static final TypeReference<List<InsightPoint>> INSIGHT_POINT_LIST_TYPE =
             new TypeReference<>() {};
+    static final ItemOperationsCapabilities ITEM_OPERATIONS_CAPABILITIES =
+            new ItemOperationsCapabilities(true, true, true);
 
     private final DataSource dataSource;
     private final Jdbi jdbi;
@@ -136,6 +140,11 @@ public class PostgresqlMemoryStore
     @Override
     public ItemOperations itemOperations() {
         return this;
+    }
+
+    @Override
+    public ItemOperationsCapabilities itemOperationsCapabilities() {
+        return ITEM_OPERATIONS_CAPABILITIES;
     }
 
     @Override
@@ -421,6 +430,62 @@ public class PostgresqlMemoryStore
                 this::mapItem,
                 scope.userId(),
                 scope.agentId());
+    }
+
+    @Override
+    public List<MemoryItem> listItemsUpTo(MemoryId memoryId, long cutoffItemId) {
+        if (cutoffItemId <= 0L) {
+            return List.of();
+        }
+        ScopeContext scope = scopeOf(memoryId);
+        return queryList(
+                """
+                SELECT * FROM memory_item
+                WHERE user_id = ? AND agent_id = ? AND deleted = FALSE AND biz_id <= ?
+                ORDER BY biz_id ASC
+                """,
+                this::mapItem,
+                scope.userId(),
+                scope.agentId(),
+                cutoffItemId);
+    }
+
+    @Override
+    public List<MemoryItem> listItemsAfter(MemoryId memoryId, long afterItemId, int limit) {
+        if (limit <= 0) {
+            return List.of();
+        }
+        ScopeContext scope = scopeOf(memoryId);
+        return queryList(
+                """
+                SELECT * FROM memory_item
+                WHERE user_id = ? AND agent_id = ? AND deleted = FALSE AND biz_id > ?
+                ORDER BY biz_id ASC
+                LIMIT ?
+                """,
+                this::mapItem,
+                scope.userId(),
+                scope.agentId(),
+                afterItemId,
+                limit);
+    }
+
+    @Override
+    public OptionalLong maxItemId(MemoryId memoryId) {
+        ScopeContext scope = scopeOf(memoryId);
+        Long value =
+                queryOne(
+                        """
+                        SELECT MAX(biz_id) FROM memory_item
+                        WHERE user_id = ? AND agent_id = ? AND deleted = FALSE
+                        """,
+                        resultSet -> {
+                            long max = resultSet.getLong(1);
+                            return resultSet.wasNull() ? null : max;
+                        },
+                        scope.userId(),
+                        scope.agentId());
+        return value == null ? OptionalLong.empty() : OptionalLong.of(value);
     }
 
     @Override

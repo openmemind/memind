@@ -18,7 +18,36 @@ package com.openmemind.ai.memory.core.extraction.thread;
  */
 public interface ThreadDerivationMetrics {
 
-    ThreadDerivationMetrics NOOP = NoOpThreadDerivationMetrics.INSTANCE;
+    ThreadDerivationMetrics NOOP =
+            new ThreadDerivationMetrics() {
+                @Override
+                public void onWakeScheduled() {}
+
+                @Override
+                public void onWakeSubmissionFailed() {}
+
+                @Override
+                public void onClaimedBatch(int batchSize) {}
+
+                @Override
+                public void onCoalescedReplayCutoffs(int coveredCutoffCount) {}
+
+                @Override
+                public void onReplayPublished(ThreadReplayOrigin origin) {}
+
+                @Override
+                public void onReplayStats(ThreadReplayStats stats) {}
+
+                @Override
+                public void onProviderHit(String providerName) {}
+
+                @Override
+                public void onGroupRelationshipPublished() {}
+
+                @Override
+                public void onNonAdmission(
+                        ThreadNonAdmissionDisposition disposition, String reason) {}
+            };
 
     void onWakeScheduled();
 
@@ -29,6 +58,8 @@ public interface ThreadDerivationMetrics {
     void onCoalescedReplayCutoffs(int coveredCutoffCount);
 
     void onReplayPublished(ThreadReplayOrigin origin);
+
+    default void onReplayStats(ThreadReplayStats stats) {}
 
     void onProviderHit(String providerName);
 

@@ -17,10 +17,13 @@ import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -98,6 +101,38 @@ public class InMemoryItemOperations implements ItemOperations {
     @Override
     public List<MemoryItem> listItems(MemoryId id) {
         return new ArrayList<>(itemStore.getOrDefault(key(id), Map.of()).values());
+    }
+
+    @Override
+    public List<MemoryItem> listItemsUpTo(MemoryId id, long cutoffItemId) {
+        if (cutoffItemId <= 0L) {
+            return List.of();
+        }
+        return itemStore.getOrDefault(key(id), Map.of()).values().stream()
+                .filter(item -> item.id() != null && item.id() <= cutoffItemId)
+                .sorted(Comparator.comparing(MemoryItem::id))
+                .toList();
+    }
+
+    @Override
+    public List<MemoryItem> listItemsAfter(MemoryId id, long afterItemId, int limit) {
+        if (limit <= 0) {
+            return List.of();
+        }
+        return itemStore.getOrDefault(key(id), Map.of()).values().stream()
+                .filter(item -> item.id() != null && item.id() > afterItemId)
+                .sorted(Comparator.comparing(MemoryItem::id))
+                .limit(limit)
+                .toList();
+    }
+
+    @Override
+    public OptionalLong maxItemId(MemoryId id) {
+        return itemStore.getOrDefault(key(id), Map.of()).values().stream()
+                .map(MemoryItem::id)
+                .filter(Objects::nonNull)
+                .mapToLong(Long::longValue)
+                .max();
     }
 
     @Override

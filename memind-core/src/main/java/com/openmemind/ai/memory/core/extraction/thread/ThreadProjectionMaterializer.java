@@ -113,18 +113,14 @@ class ThreadProjectionMaterializer {
         List<MemoryThreadEnrichmentInput> enrichmentInputs =
                 enrichmentInputStore.listReplayable(memoryId, cutoffItemId, policy.version());
 
-        List<MemoryItem> items =
-                itemOperations.listItems(memoryId).stream()
-                        .filter(item -> item.id() != null && item.id() <= cutoffItemId)
-                        .sorted(Comparator.comparing(MemoryItem::id))
-                        .toList();
+        List<MemoryItem> items = itemOperations.listItemsUpTo(memoryId, cutoffItemId);
         if (items.isEmpty()) {
             return MaterializedProjection.empty();
         }
 
         Set<Long> itemIds = items.stream().map(MemoryItem::id).collect(Collectors.toSet());
         Map<Long, List<ItemEntityMention>> mentionsByItemId =
-                graphOperations.listItemEntityMentions(memoryId).stream()
+                graphOperations.listItemEntityMentions(memoryId, itemIds).stream()
                         .filter(mention -> itemIds.contains(mention.itemId()))
                         .collect(
                                 Collectors.groupingBy(
@@ -272,7 +268,22 @@ class ThreadProjectionMaterializer {
                                         .thenComparing(MemoryThreadMembership::role))
                         .toList();
 
-        return new MaterializedProjection(threads, events, memberships, items.getLast().id());
+        int loadedMentionCount = mentionsByItemId.values().stream().mapToInt(List::size).sum();
+        int loadedAdjacentLinkCount =
+                adjacentLinksByItemId.values().stream()
+                        .flatMap(Collection::stream)
+                        .collect(Collectors.toSet())
+                        .size();
+
+        return new MaterializedProjection(
+                threads,
+                events,
+                memberships,
+                items.getLast().id(),
+                items.size(),
+                loadedMentionCount,
+                loadedAdjacentLinkCount,
+                cooccurrences.size());
     }
 
     private void applyEnrichmentInput(
@@ -445,7 +456,7 @@ class ThreadProjectionMaterializer {
 
     private Map<Long, List<ItemLink>> adjacentLinksByItemId(MemoryId memoryId, Set<Long> itemIds) {
         Map<Long, List<ItemLink>> linksByItemId = new LinkedHashMap<>();
-        for (ItemLink link : graphOperations.listItemLinks(memoryId)) {
+        for (ItemLink link : graphOperations.listAdjacentItemLinks(memoryId, itemIds, List.of())) {
             if (itemIds.contains(link.sourceItemId())) {
                 linksByItemId
                         .computeIfAbsent(link.sourceItemId(), ignored -> new ArrayList<>())
@@ -615,10 +626,22 @@ class ThreadProjectionMaterializer {
             List<MemoryThreadProjection> threads,
             List<MemoryThreadEvent> events,
             List<MemoryThreadMembership> memberships,
-            Long lastProcessedItemId) {
+            Long lastProcessedItemId,
+            int loadedItemCount,
+            int loadedMentionCount,
+            int loadedAdjacentLinkCount,
+            int loadedCooccurrenceCount) {
+
+        public MaterializedProjection(
+                List<MemoryThreadProjection> threads,
+                List<MemoryThreadEvent> events,
+                List<MemoryThreadMembership> memberships,
+                Long lastProcessedItemId) {
+            this(threads, events, memberships, lastProcessedItemId, 0, 0, 0, 0);
+        }
 
         static MaterializedProjection empty() {
-            return new MaterializedProjection(List.of(), List.of(), List.of(), null);
+            return new MaterializedProjection(List.of(), List.of(), List.of(), null, 0, 0, 0, 0);
         }
     }
 }

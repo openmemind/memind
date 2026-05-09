@@ -29,14 +29,17 @@ import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadIntakeStatus;
 import com.openmemind.ai.memory.core.data.enums.MemoryThreadProjectionState;
+import com.openmemind.ai.memory.core.data.thread.MemoryThreadRuntimeState;
 import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.graph.ItemEntityMention;
+import com.openmemind.ai.memory.core.store.item.InMemoryItemOperations;
 import com.openmemind.ai.memory.core.store.thread.InMemoryThreadProjectionStore;
 import com.openmemind.ai.memory.core.support.TestMemoryIds;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import org.junit.jupiter.api.Test;
 
 class ThreadProjectionRebuilderTest {
@@ -205,6 +208,78 @@ class ThreadProjectionRebuilderTest {
 
         assertThat(metrics.replayOrigins()).containsExactly(ThreadReplayOrigin.REBUILD);
         assertThat(metrics.groupRelationshipPublishedCount()).isEqualTo(1);
+        assertThat(metrics.replayMetricEvents())
+                .containsExactly(
+                        "published:" + ThreadReplayOrigin.REBUILD,
+                        "stats:" + ThreadReplayOrigin.REBUILD);
+        assertThat(metrics.replayStats())
+                .singleElement()
+                .satisfies(
+                        stats -> {
+                            assertThat(stats.origin()).isEqualTo(ThreadReplayOrigin.REBUILD);
+                            assertThat(stats.cutoffItemId()).isEqualTo(322L);
+                            assertThat(stats.loadedItemCount()).isEqualTo(2);
+                            assertThat(stats.replacedThreadCount()).isEqualTo(1);
+                            assertThat(stats.replacedMembershipCount()).isEqualTo(2);
+                            assertThat(stats.durationMillis()).isGreaterThanOrEqualTo(0L);
+                        });
+    }
+
+    @Test
+    void rebuildWithoutExplicitCutoffUsesMaxItemIdLookup() {
+        MemoryId memoryId = TestMemoryIds.userAgent();
+        MaxOnlyItemOperations itemOperations = new MaxOnlyItemOperations();
+        InMemoryMemoryStore graphBackingStore = new InMemoryMemoryStore();
+        itemOperations.insertItems(
+                memoryId,
+                List.of(
+                        item(301L, "The user planned a trip."),
+                        item(302L, "The user booked the trip.")));
+        graphBackingStore
+                .graphOperations()
+                .upsertItemEntityMentions(
+                        memoryId,
+                        List.of(
+                                mention(memoryId, 301L, "concept:travel"),
+                                mention(memoryId, 302L, "concept:travel")));
+
+        ThreadProjectionRebuilder rebuilder =
+                new ThreadProjectionRebuilder(
+                        graphBackingStore.threadOperations(),
+                        itemOperations,
+                        graphBackingStore.graphOperations(),
+                        ThreadMaterializationPolicy.v1());
+
+        rebuilder.rebuild(memoryId);
+
+        assertThat(itemOperations.maxItemIdCalls).isEqualTo(1);
+        assertThat(graphBackingStore.threadOperations().getRuntime(memoryId))
+                .get()
+                .extracting(MemoryThreadRuntimeState::lastProcessedItemId)
+                .isEqualTo(302L);
+    }
+
+    private static final class MaxOnlyItemOperations extends InMemoryItemOperations {
+        private int maxItemIdCalls;
+
+        @Override
+        public List<MemoryItem> listItems(MemoryId id) {
+            throw new AssertionError("rebuild(memoryId) must use maxItemId for cutoff discovery");
+        }
+
+        @Override
+        public List<MemoryItem> listItemsUpTo(MemoryId id, long cutoffItemId) {
+            return super.listItems(id).stream()
+                    .filter(item -> item.id() != null && item.id() <= cutoffItemId)
+                    .sorted(java.util.Comparator.comparing(MemoryItem::id))
+                    .toList();
+        }
+
+        @Override
+        public OptionalLong maxItemId(MemoryId id) {
+            maxItemIdCalls++;
+            return super.maxItemId(id);
+        }
     }
 
     private static MemoryItem item(long itemId, String content) {

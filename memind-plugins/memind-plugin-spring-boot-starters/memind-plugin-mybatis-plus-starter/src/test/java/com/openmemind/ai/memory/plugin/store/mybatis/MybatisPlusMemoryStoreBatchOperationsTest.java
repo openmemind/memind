@@ -40,13 +40,23 @@ import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryRawDataMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.schema.MemorySchemaAutoConfiguration;
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
+import java.sql.Connection;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
+import org.apache.ibatis.executor.statement.StatementHandler;
+import org.apache.ibatis.mapping.BoundSql;
+import org.apache.ibatis.plugin.Interceptor;
+import org.apache.ibatis.plugin.Intercepts;
+import org.apache.ibatis.plugin.Invocation;
+import org.apache.ibatis.plugin.Plugin;
+import org.apache.ibatis.plugin.Signature;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -140,6 +150,60 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
                             assertThat(itemOps.listItems(MEMORY_ID))
                                     .extracting(MemoryItem::id)
                                     .containsExactly(1L);
+                        });
+    }
+
+    @Test
+    @DisplayName("item range reads use domain biz id ordering")
+    void itemRangeReadsUseDomainBizIdOrdering() {
+        newContextRunner(tempDir.resolve("item-range-reads.db"))
+                .run(
+                        context -> {
+                            MemoryStore store = context.getBean(MemoryStore.class);
+                            ItemOperations itemOps = store.itemOperations();
+                            SqlStatementRecorder sqlRecorder =
+                                    context.getBean(SqlStatementRecorder.class);
+
+                            itemOps.insertItems(
+                                    MEMORY_ID,
+                                    List.of(
+                                            memoryItem(30L, "thirty"),
+                                            memoryItem(2L, "two"),
+                                            memoryItem(10L, "ten")));
+
+                            sqlRecorder.clear();
+                            assertThat(itemOps.listItemsUpTo(MEMORY_ID, 10L))
+                                    .extracting(MemoryItem::id)
+                                    .containsExactly(2L, 10L);
+                            assertThat(sqlRecorder.sql())
+                                    .anySatisfy(
+                                            sql ->
+                                                    assertThat(sql)
+                                                            .contains("biz_id <= ?")
+                                                            .contains("order by biz_id asc"));
+
+                            sqlRecorder.clear();
+                            assertThat(itemOps.listItemsAfter(MEMORY_ID, 2L, 2))
+                                    .extracting(MemoryItem::id)
+                                    .containsExactly(10L, 30L);
+                            assertThat(sqlRecorder.sql())
+                                    .anySatisfy(
+                                            sql ->
+                                                    assertThat(sql)
+                                                            .contains("biz_id > ?")
+                                                            .contains("order by biz_id asc")
+                                                            .contains("limit"));
+
+                            sqlRecorder.clear();
+                            assertThat(itemOps.maxItemId(MEMORY_ID)).hasValue(30L);
+                            assertThat(sqlRecorder.sql())
+                                    .anySatisfy(sql -> assertThat(sql).contains("max(biz_id)"));
+                            assertThat(store.itemOperationsCapabilities().boundedIdLookup())
+                                    .isTrue();
+                            assertThat(store.itemOperationsCapabilities().boundedRangeReads())
+                                    .isTrue();
+                            assertThat(store.itemOperationsCapabilities().maxItemIdLookup())
+                                    .isTrue();
                         });
     }
 
@@ -683,6 +747,17 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
         }
 
         @Bean
+        SqlStatementRecorder sqlStatementRecorder() {
+            return new SqlStatementRecorder();
+        }
+
+        @Bean
+        ConfigurationCustomizer sqlRecordingCustomizer(SqlStatementRecorder recorder) {
+            return configuration ->
+                    configuration.addInterceptor(new SqlRecordingInterceptor(recorder));
+        }
+
+        @Bean
         BeanPostProcessor countingMapperBeanPostProcessor(MapperMethodCounter counter) {
             return new CountingMapperBeanPostProcessor(counter);
         }
@@ -719,6 +794,52 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
         @Bean
         InitializingBean ddlRunnerInitializer(DdlApplicationRunner ddlApplicationRunner) {
             return () -> ddlApplicationRunner.run(new DefaultApplicationArguments(new String[0]));
+        }
+    }
+
+    private static final class SqlStatementRecorder {
+
+        private final List<String> sql = new CopyOnWriteArrayList<>();
+
+        void record(String statement) {
+            sql.add(statement.replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT));
+        }
+
+        void clear() {
+            sql.clear();
+        }
+
+        List<String> sql() {
+            return List.copyOf(sql);
+        }
+    }
+
+    @Intercepts(
+            @Signature(
+                    type = StatementHandler.class,
+                    method = "prepare",
+                    args = {Connection.class, Integer.class}))
+    private static final class SqlRecordingInterceptor implements Interceptor {
+
+        private final SqlStatementRecorder recorder;
+
+        private SqlRecordingInterceptor(SqlStatementRecorder recorder) {
+            this.recorder = recorder;
+        }
+
+        @Override
+        public Object intercept(Invocation invocation) throws Throwable {
+            StatementHandler statementHandler = (StatementHandler) invocation.getTarget();
+            BoundSql boundSql = statementHandler.getBoundSql();
+            if (boundSql != null && boundSql.getSql() != null) {
+                recorder.record(boundSql.getSql());
+            }
+            return invocation.proceed();
+        }
+
+        @Override
+        public Object plugin(Object target) {
+            return Plugin.wrap(target, this);
         }
     }
 

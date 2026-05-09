@@ -23,6 +23,7 @@ import com.openmemind.ai.memory.core.store.insight.InMemoryInsightOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.InMemoryItemOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
+import com.openmemind.ai.memory.core.store.item.ItemOperationsCapabilities;
 import com.openmemind.ai.memory.core.store.rawdata.InMemoryRawDataOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.InMemoryResourceOperations;
@@ -38,6 +39,9 @@ import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 public class InMemoryMemoryStore implements MemoryStore {
 
     private final RawDataOperations rawDataOperations = new InMemoryRawDataOperations();
+    static final ItemOperationsCapabilities ITEM_OPERATIONS_CAPABILITIES =
+            new ItemOperationsCapabilities(true, true, true);
+
     private final InMemoryItemOperations itemOperations = new InMemoryItemOperations();
     private final InsightOperations insightOperations = new InMemoryInsightOperations();
     private final InMemoryGraphOperations graphOperations = new InMemoryGraphOperations();
@@ -63,6 +67,11 @@ public class InMemoryMemoryStore implements MemoryStore {
     @Override
     public ItemOperations itemOperations() {
         return itemOperations;
+    }
+
+    @Override
+    public ItemOperationsCapabilities itemOperationsCapabilities() {
+        return ITEM_OPERATIONS_CAPABILITIES;
     }
 
     @Override

@@ -35,17 +35,25 @@ import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
+import com.openmemind.ai.memory.core.store.item.ItemOperationsCapabilities;
 import com.openmemind.ai.memory.core.store.item.TemporalCandidateMatch;
 import com.openmemind.ai.memory.core.store.item.TemporalCandidateRequest;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.content.ToolCallContent;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -377,6 +385,109 @@ class SqliteMemoryStoreTest {
     }
 
     @Test
+    void itemRangeReadsUseDomainBizIdOrderingInsteadOfStorageRowId() throws Exception {
+        store.insertItems(
+                memoryId,
+                List.of(
+                        item(30L, "thirty", "vec-30", "hash-30", "raw-30"),
+                        item(2L, "two", "vec-2", "hash-2", "raw-2"),
+                        item(10L, "ten", "vec-10", "hash-10", "raw-10")));
+
+        assertThat(store.listItemsUpTo(memoryId, 10L))
+                .extracting(MemoryItem::id)
+                .containsExactly(2L, 10L);
+        assertThat(store.listItemsAfter(memoryId, 2L, 2))
+                .extracting(MemoryItem::id)
+                .containsExactly(10L, 30L);
+        assertThat(store.listItemsAfter(memoryId, 2L, 0)).isEmpty();
+        assertThat(store.maxItemId(memoryId)).hasValue(30L);
+
+        ItemOperationsCapabilities capabilities = store.itemOperationsCapabilities();
+        assertThat(capabilities.boundedIdLookup()).isTrue();
+        assertThat(capabilities.boundedRangeReads()).isTrue();
+        assertThat(capabilities.maxItemIdLookup()).isTrue();
+
+        assertDeclaredRangeOverride("listItemsUpTo", MemoryId.class, long.class);
+        assertDeclaredRangeOverride("listItemsAfter", MemoryId.class, long.class, int.class);
+        assertDeclaredRangeOverride("maxItemId", MemoryId.class);
+    }
+
+    @Test
+    void itemRangeReadsExecuteIndexedBizIdSql() throws Exception {
+        List<String> recordedSql = new CopyOnWriteArrayList<>();
+        SqliteMemoryStore recordingStore =
+                new SqliteMemoryStore(recordingDataSource("range-sql.db", recordedSql));
+        recordingStore.insertItems(
+                memoryId,
+                List.of(
+                        item(30L, "thirty", "vec-30", "hash-30", "raw-30"),
+                        item(2L, "two", "vec-2", "hash-2", "raw-2"),
+                        item(10L, "ten", "vec-10", "hash-10", "raw-10")));
+
+        recordedSql.clear();
+        assertThat(recordingStore.listItemsUpTo(memoryId, 10L))
+                .extracting(MemoryItem::id)
+                .containsExactly(2L, 10L);
+        assertThat(recordedSql)
+                .anySatisfy(
+                        sql ->
+                                assertThat(sql)
+                                        .contains("biz_id <= ?")
+                                        .contains("order by biz_id asc"));
+
+        String listItemsUpToSql = singleRecordedSqlContaining(recordedSql, "biz_id <= ?");
+
+        recordedSql.clear();
+        assertThat(recordingStore.listItemsAfter(memoryId, 2L, 2))
+                .extracting(MemoryItem::id)
+                .containsExactly(10L, 30L);
+        assertThat(recordedSql)
+                .anySatisfy(
+                        sql ->
+                                assertThat(sql)
+                                        .contains("biz_id > ?")
+                                        .contains("order by biz_id asc")
+                                        .contains("limit ?"));
+
+        String listItemsAfterSql = singleRecordedSqlContaining(recordedSql, "biz_id > ?");
+
+        recordedSql.clear();
+        assertThat(recordingStore.maxItemId(memoryId)).hasValue(30L);
+        assertThat(recordedSql).anySatisfy(sql -> assertThat(sql).contains("max(biz_id)"));
+
+        String maxItemIdSql = singleRecordedSqlContaining(recordedSql, "max(biz_id)");
+
+        try (Connection connection = dataSource.getConnection()) {
+            assertThat(
+                            explainQueryPlan(
+                                    connection,
+                                    listItemsUpToSql,
+                                    memoryId.userId(),
+                                    memoryId.agentId(),
+                                    10L))
+                    .anySatisfy(plan -> assertThat(plan).contains("uk_item_biz_id"));
+
+            assertThat(
+                            explainQueryPlan(
+                                    connection,
+                                    listItemsAfterSql,
+                                    memoryId.userId(),
+                                    memoryId.agentId(),
+                                    2L,
+                                    2))
+                    .anySatisfy(plan -> assertThat(plan).contains("uk_item_biz_id"));
+
+            assertThat(
+                            explainQueryPlan(
+                                    connection,
+                                    maxItemIdSql,
+                                    memoryId.userId(),
+                                    memoryId.agentId()))
+                    .anySatisfy(plan -> assertThat(plan).contains("uk_item_biz_id"));
+        }
+    }
+
+    @Test
     void itemsCanPersistWithNullOccurredAt() {
         Instant observedAt = BASE_TIME.plusSeconds(30);
         MemoryItem itemWithoutOccurredAt =
@@ -613,6 +724,96 @@ class SqliteMemoryStoreTest {
         assertThat(store.listInsights(memoryId))
                 .extracting(MemoryInsight::id)
                 .containsExactly(302L);
+    }
+
+    private static void assertDeclaredRangeOverride(String methodName, Class<?>... parameterTypes)
+            throws NoSuchMethodException {
+        Method method = SqliteMemoryStore.class.getMethod(methodName, parameterTypes);
+        assertThat(method.getDeclaringClass()).isEqualTo(SqliteMemoryStore.class);
+    }
+
+    private DataSource recordingDataSource(String fileName, List<String> recordedSql) {
+        DataSource delegate = dataSource(fileName);
+        return (DataSource)
+                Proxy.newProxyInstance(
+                        DataSource.class.getClassLoader(),
+                        new Class<?>[] {DataSource.class},
+                        (proxy, method, args) -> {
+                            Object result = invoke(delegate, method, args);
+                            if ("getConnection".equals(method.getName())
+                                    && result instanceof Connection connection) {
+                                return recordingConnection(connection, recordedSql);
+                            }
+                            return result;
+                        });
+    }
+
+    private static Connection recordingConnection(Connection delegate, List<String> recordedSql) {
+        return (Connection)
+                Proxy.newProxyInstance(
+                        Connection.class.getClassLoader(),
+                        new Class<?>[] {Connection.class},
+                        (proxy, method, args) -> {
+                            if ("prepareStatement".equals(method.getName())
+                                    && args != null
+                                    && args.length > 0
+                                    && args[0] instanceof String sql) {
+                                recordedSql.add(normalizeSql(sql));
+                            }
+                            return invoke(delegate, method, args);
+                        });
+    }
+
+    private static String normalizeSql(String sql) {
+        return sql.replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static String singleRecordedSqlContaining(List<String> recordedSql, String needle) {
+        return recordedSql.stream()
+                .filter(sql -> sql.contains(needle))
+                .reduce(
+                        (left, right) -> {
+                            throw new AssertionError("Expected one SQL containing " + needle);
+                        })
+                .orElseThrow(() -> new AssertionError("Missing SQL containing " + needle));
+    }
+
+    private static Object invoke(Object target, Method method, Object[] args) throws Throwable {
+        if (method.getDeclaringClass() == Object.class) {
+            return switch (method.getName()) {
+                case "toString" -> target.toString();
+                case "hashCode" -> System.identityHashCode(target);
+                case "equals" -> args != null && args.length == 1 && target == args[0];
+                default -> method.invoke(target, args);
+            };
+        }
+        try {
+            return method.invoke(target, args);
+        } catch (InvocationTargetException exception) {
+            throw exception.getCause();
+        }
+    }
+
+    private static List<String> explainQueryPlan(
+            Connection connection, String sql, Object... parameters) throws SQLException {
+        List<String> plan = new ArrayList<>();
+        try (PreparedStatement statement =
+                connection.prepareStatement("EXPLAIN QUERY PLAN " + sql)) {
+            for (int i = 0; i < parameters.length; i++) {
+                statement.setObject(i + 1, parameters[i]);
+            }
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    plan.add(
+                            resultSet
+                                    .getString("detail")
+                                    .replaceAll("\\s+", " ")
+                                    .trim()
+                                    .toLowerCase(Locale.ROOT));
+                }
+            }
+        }
+        return plan;
     }
 
     private DataSource dataSource(String fileName) {
