@@ -191,6 +191,54 @@ class OpenMemoryApplicationServiceTest {
     }
 
     @Test
+    void retrieveResponseIncludesStatusFromResult() {
+        RecordingMemory memory = new RecordingMemory();
+        memory.retrieveResult =
+                RetrievalResult.of(
+                        List.of(
+                                new ScoredResult(
+                                        ScoredResult.SourceType.ITEM,
+                                        "item-1",
+                                        "loves coffee",
+                                        0.82F,
+                                        0.91,
+                                        Instant.parse("2026-03-30T10:00:00Z"))),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        "SIMPLE",
+                        "coffee");
+        MemoryRuntimeManager runtimeManager =
+                new MemoryRuntimeManager(
+                        new RuntimeHandle(memory, MemoryBuildOptions.defaults(), 1));
+        OpenMemoryApplicationService service = new OpenMemoryApplicationService(runtimeManager);
+
+        var response =
+                service.retrieve(
+                        new RetrieveMemoryRequest(
+                                "u1", "a1", "coffee", RetrievalConfig.Strategy.SIMPLE));
+
+        assertThat(response.status()).isEqualTo("success");
+    }
+
+    @Test
+    void retrieveResponseStatusIsDegradedOnError() {
+        RecordingMemory memory = new RecordingMemory();
+        memory.retrieveResult = RetrievalResult.degraded("SIMPLE", "coffee");
+        MemoryRuntimeManager runtimeManager =
+                new MemoryRuntimeManager(
+                        new RuntimeHandle(memory, MemoryBuildOptions.defaults(), 1));
+        OpenMemoryApplicationService service = new OpenMemoryApplicationService(runtimeManager);
+
+        var response =
+                service.retrieve(
+                        new RetrieveMemoryRequest(
+                                "u1", "a1", "coffee", RetrievalConfig.Strategy.SIMPLE));
+
+        assertThat(response.status()).isEqualTo("degraded");
+    }
+
+    @Test
     void retrieveIncludesDebugTraceWhenEnabledAndRequested() {
         RecordingMemory memory = new RecordingMemory();
         memory.retrieveResult = RetrievalResult.empty("SIMPLE", "coffee");

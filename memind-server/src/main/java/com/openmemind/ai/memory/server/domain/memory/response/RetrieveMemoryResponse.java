@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.List;
 
 public record RetrieveMemoryResponse(
+        String status,
         List<RetrievedItemView> items,
         List<RetrievedInsightView> insights,
         List<RetrievedRawDataView> rawData,
@@ -26,13 +27,14 @@ public record RetrieveMemoryResponse(
         RetrievalTraceView trace) {
 
     public RetrieveMemoryResponse(
+            String status,
             List<RetrievedItemView> items,
             List<RetrievedInsightView> insights,
             List<RetrievedRawDataView> rawData,
             List<String> evidences,
             String strategy,
             String query) {
-        this(items, insights, rawData, evidences, strategy, query, null);
+        this(status, items, insights, rawData, evidences, strategy, query, null);
     }
 
     public record RetrievedItemView(

@@ -262,6 +262,7 @@ public class OpenMemoryApplicationService {
     private static RetrieveMemoryResponse toRetrieveResponse(
             RetrievalResult result, BoundedRetrievalTraceCollector traceCollector) {
         return new RetrieveMemoryResponse(
+                result.status().name().toLowerCase(),
                 result.items() == null
                         ? List.of()
                         : result.items().stream()
