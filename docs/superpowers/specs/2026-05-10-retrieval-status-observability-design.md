@@ -10,7 +10,7 @@
 
 ## Design Principle
 
-Minimal invasion: one enum + one field. No new abstraction layers, no interface signature changes, no behavioral changes to existing callers.
+Minimal invasion: one enum + one field. No new abstraction layers, no interface signature changes, no pipeline restructuring, no behavioral changes to existing callers.
 
 ## Solution
 
@@ -40,15 +40,17 @@ public record RetrievalResult(
 
     /**
      * Standard factory for strategy implementations.
-     * Status defaults to SUCCESS; DefaultMemoryRetriever will reclassify to EMPTY
-     * if the result contains no data.
+     * Determines status from content: EMPTY if no data, SUCCESS otherwise.
      */
     public static RetrievalResult of(
             List<ScoredResult> items, List<InsightResult> insights,
             List<RawDataResult> rawData, List<String> evidences,
             String strategy, String query) {
+        boolean empty = (items == null || items.isEmpty())
+                && (insights == null || insights.isEmpty())
+                && (rawData == null || rawData.isEmpty());
         return new RetrievalResult(items, insights, rawData, evidences,
-                strategy, query, RetrievalStatus.SUCCESS);
+                strategy, query, empty ? RetrievalStatus.EMPTY : RetrievalStatus.SUCCESS);
     }
 
     /** Empty result (normal — no matching memories) */
@@ -62,16 +64,14 @@ public record RetrievalResult(
         return new RetrievalResult(List.of(), List.of(), List.of(), List.of(),
                 strategy, query, RetrievalStatus.DEGRADED);
     }
-
-    public RetrievalResult withStatus(RetrievalStatus newStatus) {
-        return new RetrievalResult(items, insights, rawData, evidences, strategy, query, newStatus);
-    }
 }
 ```
 
+Status is determined at construction time. No post-hoc reclassification needed.
+
 ### 2. Strategy Implementations
 
-`SimpleRetrievalStrategy` and `DeepRetrievalStrategy` currently call `new RetrievalResult(...)` directly. They must migrate to the `RetrievalResult.of(...)` factory method:
+`SimpleRetrievalStrategy` and `DeepRetrievalStrategy` currently call `new RetrievalResult(...)` directly. They migrate to `RetrievalResult.of(...)`:
 
 ```java
 // Before (both strategies):
@@ -81,46 +81,27 @@ return new RetrievalResult(sortedItems, insights, rawDataResults, evidences, nam
 return RetrievalResult.of(sortedItems, insights, rawDataResults, evidences, name(), context.searchQuery());
 ```
 
-This is a mechanical 1-line change per strategy. The `of()` factory defaults status to `SUCCESS`.
+Mechanical 1-line change per strategy. The `of()` factory determines status automatically from content.
 
-### 3. Status Assignment in DefaultMemoryRetriever
+### 3. DefaultMemoryRetriever
 
-The reactive pipeline order is critical. The `withStatus()` reclassification MUST occur **before** the cache write, so that cached results carry the correct status.
-
-**Pipeline order:**
-
-```
-strategy.retrieve(context, config)
-    → .map(withStatus)        // 4a. Reclassify SUCCESS→EMPTY if result has no data
-    → .doOnSuccess(cache)     // 5. Cache write (only caches non-empty SUCCESS results)
-    → .timeout(config)        // 6. Timeout protection
-    → .onErrorResume(degraded) // 7. Error fallback → DEGRADED
-```
-
-**Normal path** — reclassify after strategy returns, before cache:
+The only change: `onErrorResume` uses `degraded()` instead of `empty()`.
 
 ```java
-return strategy.retrieve(context, config)
-        // 4a. Status reclassification
-        .map(result -> result.isEmpty()
-                ? result.withStatus(RetrievalStatus.EMPTY)
-                : result)
-        // 5. Cache writing (unchanged logic — only caches non-empty results)
-        .doOnSuccess(result -> {
-            if (config.enableCache() && result != null && !result.isEmpty()) {
-                cache.put(request.memoryId(), queryHash, configHash, result);
-            }
-        })
-        // 6. Timeout protection
-        .timeout(config.timeout())
-        // 7. Error fallback
-        .onErrorResume(e -> {
-            log.warn("Retrieval failed, returning degraded result: query={}", request.query(), e);
-            return Mono.just(RetrievalResult.degraded(config.strategyName(), effectiveQuery));
-        });
+// Before:
+.onErrorResume(e -> {
+    log.warn("Retrieval failed, returning empty result: query={}", request.query(), e);
+    return Mono.just(RetrievalResult.empty(config.strategyName(), effectiveQuery));
+});
+
+// After:
+.onErrorResume(e -> {
+    log.warn("Retrieval failed, returning degraded result: query={}", request.query(), e);
+    return Mono.just(RetrievalResult.degraded(config.strategyName(), effectiveQuery));
+});
 ```
 
-Note: strategies return results with `SUCCESS` status via `of()`. If the result is empty (strategy found no matches), `DefaultMemoryRetriever` reclassifies it to `EMPTY`. If the result has data, it stays `SUCCESS`. This keeps status logic centralized in one place.
+The reactive pipeline structure is unchanged. No new operators, no reordering.
 
 ### 4. Metrics Simplification
 
@@ -174,7 +155,7 @@ Both `claude-code/scripts/retrieve.py` and `codex/scripts/retrieve.py`:
 - When degraded with no data at all, still output the notice
 
 ```python
-# In _format_context:
+# In _format_context, append notice when degraded:
 degraded_notice = ""
 if data.get("status") == "degraded":
     degraded_notice = "\n[Note: Memory retrieval encountered an error. Results may be incomplete.]\n"
@@ -188,7 +169,7 @@ The `except Exception` block in `main()` remains unchanged — it handles client
 
 ## Status Field Semantics
 
-The API response now has two `status` fields at different levels:
+The API response has two `status` fields at different levels:
 
 - **Top-level `status`** (`"success"` / `"empty"` / `"degraded"`): Business-level signal for callers. Answers "can I trust this result?" Callers that want best-effort behavior can ignore it; callers that need observability (circuit-breaking, alerting) check this field.
 - **`trace.finalResults.status`** (`"success"` / `"empty"` / `"error"`): Diagnostic-level detail for operators. Answers "what happened internally?" Only present when trace is enabled.
@@ -201,6 +182,7 @@ The distinction: `degraded` means "the system handled the failure gracefully"; `
 - `RetrievalResult.empty()` behavior unchanged (returns EMPTY status)
 - Python scripts gracefully handle missing `status` field (`data.get("status")` returns None, no notice triggered)
 - `MemoryRetriever` interface signature unchanged
+- Reactive pipeline structure unchanged (no new operators)
 - Trace system unchanged (provides complementary fine-grained diagnostics)
 
 ## Files Changed
@@ -208,10 +190,10 @@ The distinction: `degraded` means "the system handled the failure gracefully"; `
 | File | Change |
 |------|--------|
 | `RetrievalStatus.java` (new) | Three-state enum |
-| `RetrievalResult.java` | Add `status` field + `of()` / `degraded()` factories + `withStatus()` |
+| `RetrievalResult.java` | Add `status` field + `of()` / `degraded()` factories |
 | `SimpleRetrievalStrategy.java` | `new RetrievalResult(...)` → `RetrievalResult.of(...)` (1 line) |
 | `DeepRetrievalStrategy.java` | `new RetrievalResult(...)` → `RetrievalResult.of(...)` (1 line) |
-| `DefaultMemoryRetriever.java` | Add `.map(withStatus)` before cache; `onErrorResume` uses `degraded()` |
+| `DefaultMemoryRetriever.java` | `onErrorResume`: `empty()` → `degraded()` (1 line) |
 | `RetrievalMetricsSupport.java` | Read from `result.status()` directly |
 | `RetrieveMemoryResponse.java` | Add top-level `status` field |
 | `OpenMemoryApplicationService.java` | Map status to response |
