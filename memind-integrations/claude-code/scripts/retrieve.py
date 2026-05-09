@@ -56,7 +56,7 @@ def _format_context(data, config):
     if not sections:
         return ""
     body = "\n".join(sections)[:max_chars]
-    return f"<memind_memories>\n{config.get('retrievePromptPreamble')}\n{body}\n</memind_memories>"
+    return f"<memind_memories>\n{config.get('retrievePromptPreamble') or ""}\n{body}\n</memind_memories>"
 
 
 def main():
