@@ -15,12 +15,12 @@ package com.openmemind.ai.memory.plugin.jdbc.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
 
 import com.openmemind.ai.memory.core.buffer.MemoryBuffer;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
 import javax.sql.DataSource;
@@ -36,11 +36,11 @@ class DefaultJdbcMemoryAccessTest {
 
         DefaultJdbcMemoryAccess access =
                 new DefaultJdbcMemoryAccess(
-                        mock(MemoryStore.class),
-                        mock(MemoryBuffer.class),
-                        mock(MemoryTextSearch.class),
-                        mock(BubbleTrackerStore.class),
-                        mock(DataSource.class),
+                        stub(MemoryStore.class),
+                        stub(MemoryBuffer.class),
+                        stub(MemoryTextSearch.class),
+                        stub(BubbleTrackerStore.class),
+                        stub(DataSource.class),
                         List.of(first, second));
 
         access.close();
@@ -62,11 +62,11 @@ class DefaultJdbcMemoryAccessTest {
                 };
         DefaultJdbcMemoryAccess access =
                 new DefaultJdbcMemoryAccess(
-                        mock(MemoryStore.class),
-                        mock(MemoryBuffer.class),
-                        mock(MemoryTextSearch.class),
-                        mock(BubbleTrackerStore.class),
-                        mock(DataSource.class),
+                        stub(MemoryStore.class),
+                        stub(MemoryBuffer.class),
+                        stub(MemoryTextSearch.class),
+                        stub(BubbleTrackerStore.class),
+                        stub(DataSource.class),
                         List.of(first, second));
 
         assertThatThrownBy(access::close)
@@ -77,5 +77,22 @@ class DefaultJdbcMemoryAccessTest {
                         throwable ->
                                 assertThat(throwable.getSuppressed())
                                         .containsExactly(secondFailure));
+    }
+
+    private static <T> T stub(Class<T> type) {
+        return type.cast(
+                Proxy.newProxyInstance(
+                        type.getClassLoader(),
+                        new Class<?>[] {type},
+                        (proxy, method, args) -> {
+                            Class<?> returnType = method.getReturnType();
+                            if (returnType == boolean.class) {
+                                return false;
+                            }
+                            if (returnType.isPrimitive()) {
+                                return 0;
+                            }
+                            return null;
+                        }));
     }
 }
