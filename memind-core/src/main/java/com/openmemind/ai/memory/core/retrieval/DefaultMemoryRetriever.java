@@ -322,12 +322,12 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
                             .onErrorResume(
                                     e -> {
                                         log.warn(
-                                                "Retrieval failed, returning empty result:"
+                                                "Retrieval failed, returning degraded result:"
                                                         + " query={}",
                                                 request.query(),
                                                 e);
                                         return Mono.just(
-                                                RetrievalResult.empty(
+                                                RetrievalResult.degraded(
                                                         config.strategyName(), effectiveQuery));
                                     });
                 });
