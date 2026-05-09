@@ -10,11 +10,17 @@
 
 ---
 
-### Task 1: Add `RetrievalStatus` enum and update `RetrievalResult`
+### Task 1: Add `RetrievalStatus` enum, update `RetrievalResult`, and migrate all construction sites
 
 **Files:**
 - Create: `memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/RetrievalStatus.java`
 - Modify: `memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/RetrievalResult.java`
+- Modify: `memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/strategy/SimpleRetrievalStrategy.java:577`
+- Modify: `memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/strategy/DeepRetrievalStrategy.java:801`
+- Modify: `memind-server/src/test/java/com/openmemind/ai/memory/server/service/memory/OpenMemoryApplicationServiceTest.java:159`
+- Modify: `memind-core/src/test/java/com/openmemind/ai/memory/core/DefaultMemoryContextTest.java:170`
+- Modify: `memind-core/src/test/java/com/openmemind/ai/memory/core/retrieval/cache/CaffeineRetrievalCacheTest.java:48`
+- Modify: `memind-core/src/test/java/com/openmemind/ai/memory/core/extraction/context/ContextWindowTest.java:118`
 
 - [ ] **Step 1: Create `RetrievalStatus` enum**
 
@@ -46,7 +52,7 @@ public enum RetrievalStatus {
 
 - [ ] **Step 2: Modify `RetrievalResult` record — add `status` field and factories**
 
-Replace the full record definition in `memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/RetrievalResult.java`:
+Replace the record definition in `memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/RetrievalResult.java`:
 
 ```java
 /**
@@ -105,9 +111,47 @@ Add factory methods (replace existing `empty` method and add `of` and `degraded`
     }
 ```
 
-- [ ] **Step 3: Fix all `new RetrievalResult(...)` call sites in tests**
+- [ ] **Step 3: Migrate `SimpleRetrievalStrategy`**
 
-These 4 files use the canonical constructor directly and need the `status` parameter appended:
+In `memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/strategy/SimpleRetrievalStrategy.java:577`, change:
+
+```java
+// Before:
+return new RetrievalResult(
+        sortedItems, insights, rawDataResults, List.of(), name(), context.searchQuery());
+
+// After:
+return RetrievalResult.of(
+        sortedItems, insights, rawDataResults, List.of(), name(), context.searchQuery());
+```
+
+- [ ] **Step 4: Migrate `DeepRetrievalStrategy`**
+
+In `memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/strategy/DeepRetrievalStrategy.java:801`, change:
+
+```java
+// Before:
+return new RetrievalResult(
+        sortedItems,
+        insights,
+        aggregation.rawDataResults(),
+        evidences,
+        name(),
+        context.searchQuery());
+
+// After:
+return RetrievalResult.of(
+        sortedItems,
+        insights,
+        aggregation.rawDataResults(),
+        evidences,
+        name(),
+        context.searchQuery());
+```
+
+- [ ] **Step 5: Migrate all `new RetrievalResult(...)` in tests**
+
+These 4 test files use the canonical constructor directly — change to `RetrievalResult.of(...)`:
 
 `memind-server/src/test/.../OpenMemoryApplicationServiceTest.java:159`:
 ```java
@@ -138,21 +182,23 @@ These 4 files use the canonical constructor directly and need the `status` param
 
 `memind-core/src/test/.../ContextWindowTest.java:118` — change `new RetrievalResult(...)` to `RetrievalResult.of(...)`.
 
-- [ ] **Step 4: Compile to verify**
+- [ ] **Step 6: Compile to verify**
 
 Run: `mvn compile -pl memind-core,memind-server -q`
-Expected: BUILD SUCCESS (no compilation errors)
+Expected: BUILD SUCCESS
 
-- [ ] **Step 5: Run existing tests to verify no regressions**
+- [ ] **Step 7: Run existing tests to verify no regressions**
 
 Run: `mvn test -pl memind-core -Dtest="DefaultMemoryRetrieverTest,CaffeineRetrievalCacheTest,DefaultMemoryContextTest" -q`
 Expected: All tests pass
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/RetrievalStatus.java \
         memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/RetrievalResult.java \
+        memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/strategy/SimpleRetrievalStrategy.java \
+        memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/strategy/DeepRetrievalStrategy.java \
         memind-core/src/test/ \
         memind-server/src/test/
 git commit -m "feat(retrieval): add RetrievalStatus enum and update RetrievalResult
@@ -166,14 +212,13 @@ Refs: #46"
 
 ---
 
-### Task 2: Update strategy implementations and DefaultMemoryRetriever
+### Task 2: Update `DefaultMemoryRetriever` to return DEGRADED on error
 
 **Files:**
-- Modify: `memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/strategy/SimpleRetrievalStrategy.java:577`
-- Modify: `memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/strategy/DeepRetrievalStrategy.java:801`
 - Modify: `memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/DefaultMemoryRetriever.java:322-331`
+- Modify: `memind-core/src/test/java/com/openmemind/ai/memory/core/retrieval/DefaultMemoryRetrieverTest.java`
 
-- [ ] **Step 1: Write test for DEGRADED status on retrieval error**
+- [ ] **Step 1: Write tests for status behavior**
 
 Add to `memind-core/src/test/java/com/openmemind/ai/memory/core/retrieval/DefaultMemoryRetrieverTest.java`:
 
@@ -288,50 +333,12 @@ Add import at top of test file:
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 ```
 
-- [ ] **Step 2: Run new tests to verify they fail**
+- [ ] **Step 2: Run new tests to verify DEGRADED test fails**
 
 Run: `mvn test -pl memind-core -Dtest="DefaultMemoryRetrieverTest#strategyErrorShouldReturnDegradedStatus+successfulRetrievalWithResultsShouldHaveSuccessStatus+successfulRetrievalWithNoResultsShouldHaveEmptyStatus" -q`
-Expected: `strategyErrorShouldReturnDegradedStatus` FAILS (returns EMPTY instead of DEGRADED). The other two should pass (since `of()` already sets correct status).
+Expected: `strategyErrorShouldReturnDegradedStatus` FAILS (returns EMPTY instead of DEGRADED). The other two pass (since `of()` already sets correct status).
 
-- [ ] **Step 3: Update `SimpleRetrievalStrategy`**
-
-In `memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/strategy/SimpleRetrievalStrategy.java:577`, change:
-
-```java
-// Before:
-return new RetrievalResult(
-        sortedItems, insights, rawDataResults, List.of(), name(), context.searchQuery());
-
-// After:
-return RetrievalResult.of(
-        sortedItems, insights, rawDataResults, List.of(), name(), context.searchQuery());
-```
-
-- [ ] **Step 4: Update `DeepRetrievalStrategy`**
-
-In `memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/strategy/DeepRetrievalStrategy.java:801`, change:
-
-```java
-// Before:
-return new RetrievalResult(
-        sortedItems,
-        insights,
-        aggregation.rawDataResults(),
-        evidences,
-        name(),
-        context.searchQuery());
-
-// After:
-return RetrievalResult.of(
-        sortedItems,
-        insights,
-        aggregation.rawDataResults(),
-        evidences,
-        name(),
-        context.searchQuery());
-```
-
-- [ ] **Step 5: Update `DefaultMemoryRetriever.onErrorResume`**
+- [ ] **Step 3: Update `DefaultMemoryRetriever.onErrorResume`**
 
 In `memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/DefaultMemoryRetriever.java:322-331`, change:
 
@@ -363,23 +370,21 @@ In `memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/DefaultMem
         });
 ```
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [ ] **Step 4: Run tests to verify all pass**
 
 Run: `mvn test -pl memind-core -Dtest="DefaultMemoryRetrieverTest" -q`
 Expected: All tests pass including the 3 new ones.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/strategy/SimpleRetrievalStrategy.java \
-        memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/strategy/DeepRetrievalStrategy.java \
-        memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/DefaultMemoryRetriever.java \
+git add memind-core/src/main/java/com/openmemind/ai/memory/core/retrieval/DefaultMemoryRetriever.java \
         memind-core/src/test/java/com/openmemind/ai/memory/core/retrieval/DefaultMemoryRetrieverTest.java
-git commit -m "feat(retrieval): use DEGRADED status on error, migrate strategies to of()
+git commit -m "feat(retrieval): return DEGRADED status on retrieval error
 
 DefaultMemoryRetriever.onErrorResume now returns RetrievalResult.degraded()
-instead of empty(). Strategies use RetrievalResult.of() which determines
-SUCCESS/EMPTY from content automatically.
+instead of empty(), allowing callers to distinguish infrastructure failures
+from genuine empty results.
 
 Refs: #46"
 ```
@@ -483,11 +488,6 @@ Add to `memind-server/src/test/java/com/openmemind/ai/memory/server/service/memo
     }
 ```
 
-Add import:
-```java
-import com.openmemind.ai.memory.core.retrieval.RetrievalStatus;
-```
-
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `mvn test -pl memind-server -Dtest="OpenMemoryApplicationServiceTest#retrieveResponseIncludesStatusFromResult+retrieveResponseStatusIsDegradedOnError" -q`
@@ -534,7 +534,39 @@ In `memind-server/src/main/java/com/openmemind/ai/memory/server/service/memory/O
                         : result.items().stream()
                                 .map(OpenMemoryApplicationService::toRetrievedItemView)
                                 .toList(),
-                // ... rest unchanged ...
+                result.insights() == null
+                        ? List.of()
+                        : result.insights().stream()
+                                .map(
+                                        insight ->
+                                                new RetrieveMemoryResponse.RetrievedInsightView(
+                                                        insight.id(),
+                                                        insight.text(),
+                                                        insight.tier() != null
+                                                                ? insight.tier().name()
+                                                                : null))
+                                .toList(),
+                result.rawData() == null
+                        ? List.of()
+                        : result.rawData().stream()
+                                .map(
+                                        rawData ->
+                                                new RetrieveMemoryResponse.RetrievedRawDataView(
+                                                        rawData.rawDataId(),
+                                                        rawData.caption(),
+                                                        rawData.maxScore(),
+                                                        rawData.itemIds()))
+                                .toList(),
+                result.evidences() == null ? List.of() : result.evidences(),
+                result.strategy(),
+                result.query(),
+                traceCollector == null
+                        ? null
+                        : traceCollector
+                                .snapshot()
+                                .map(OpenMemoryApplicationService::toTraceView)
+                                .orElse(null));
+    }
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
