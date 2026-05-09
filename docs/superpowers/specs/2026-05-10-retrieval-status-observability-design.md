@@ -38,11 +38,26 @@ public record RetrievalResult(
         String query,
         RetrievalStatus status) {
 
+    /**
+     * Standard factory for strategy implementations.
+     * Status defaults to SUCCESS; DefaultMemoryRetriever will reclassify to EMPTY
+     * if the result contains no data.
+     */
+    public static RetrievalResult of(
+            List<ScoredResult> items, List<InsightResult> insights,
+            List<RawDataResult> rawData, List<String> evidences,
+            String strategy, String query) {
+        return new RetrievalResult(items, insights, rawData, evidences,
+                strategy, query, RetrievalStatus.SUCCESS);
+    }
+
+    /** Empty result (normal — no matching memories) */
     public static RetrievalResult empty(String strategy, String query) {
         return new RetrievalResult(List.of(), List.of(), List.of(), List.of(),
                 strategy, query, RetrievalStatus.EMPTY);
     }
 
+    /** Degraded result (error occurred, fallback empty) */
     public static RetrievalResult degraded(String strategy, String query) {
         return new RetrievalResult(List.of(), List.of(), List.of(), List.of(),
                 strategy, query, RetrievalStatus.DEGRADED);
@@ -54,27 +69,60 @@ public record RetrievalResult(
 }
 ```
 
-### 2. Status Assignment in DefaultMemoryRetriever
+### 2. Strategy Implementations
 
-**Error path** — use `degraded()` factory:
-
-```java
-.onErrorResume(e -> {
-    log.warn("Retrieval failed, returning degraded result: query={}", request.query(), e);
-    return Mono.just(RetrievalResult.degraded(config.strategyName(), effectiveQuery));
-});
-```
-
-**Normal path** — infer status from result content after strategy execution:
+`SimpleRetrievalStrategy` and `DeepRetrievalStrategy` currently call `new RetrievalResult(...)` directly. They must migrate to the `RetrievalResult.of(...)` factory method:
 
 ```java
-.map(result -> result.withStatus(
-        result.isEmpty() ? RetrievalStatus.EMPTY : RetrievalStatus.SUCCESS))
+// Before (both strategies):
+return new RetrievalResult(sortedItems, insights, rawDataResults, evidences, name(), context.searchQuery());
+
+// After:
+return RetrievalResult.of(sortedItems, insights, rawDataResults, evidences, name(), context.searchQuery());
 ```
 
-This keeps status assignment centralized in `DefaultMemoryRetriever`. Individual strategy implementations do not need modification.
+This is a mechanical 1-line change per strategy. The `of()` factory defaults status to `SUCCESS`.
 
-### 3. Metrics Simplification
+### 3. Status Assignment in DefaultMemoryRetriever
+
+The reactive pipeline order is critical. The `withStatus()` reclassification MUST occur **before** the cache write, so that cached results carry the correct status.
+
+**Pipeline order:**
+
+```
+strategy.retrieve(context, config)
+    → .map(withStatus)        // 4a. Reclassify SUCCESS→EMPTY if result has no data
+    → .doOnSuccess(cache)     // 5. Cache write (only caches non-empty SUCCESS results)
+    → .timeout(config)        // 6. Timeout protection
+    → .onErrorResume(degraded) // 7. Error fallback → DEGRADED
+```
+
+**Normal path** — reclassify after strategy returns, before cache:
+
+```java
+return strategy.retrieve(context, config)
+        // 4a. Status reclassification
+        .map(result -> result.isEmpty()
+                ? result.withStatus(RetrievalStatus.EMPTY)
+                : result)
+        // 5. Cache writing (unchanged logic — only caches non-empty results)
+        .doOnSuccess(result -> {
+            if (config.enableCache() && result != null && !result.isEmpty()) {
+                cache.put(request.memoryId(), queryHash, configHash, result);
+            }
+        })
+        // 6. Timeout protection
+        .timeout(config.timeout())
+        // 7. Error fallback
+        .onErrorResume(e -> {
+            log.warn("Retrieval failed, returning degraded result: query={}", request.query(), e);
+            return Mono.just(RetrievalResult.degraded(config.strategyName(), effectiveQuery));
+        });
+```
+
+Note: strategies return results with `SUCCESS` status via `of()`. If the result is empty (strategy found no matches), `DefaultMemoryRetriever` reclassifies it to `EMPTY`. If the result has data, it stays `SUCCESS`. This keeps status logic centralized in one place.
+
+### 4. Metrics Simplification
 
 `RetrievalMetricsSupport.summary()` reads status directly from result instead of inferring:
 
@@ -82,7 +130,7 @@ This keeps status assignment centralized in `DefaultMemoryRetriever`. Individual
 String status = result == null ? "empty" : result.status().name().toLowerCase();
 ```
 
-### 4. API Response Layer
+### 5. API Response Layer
 
 **Modified `RetrieveMemoryResponse`** — add top-level `status` field:
 
@@ -117,7 +165,7 @@ result.status().name().toLowerCase()
 {"status": "degraded", "items": [], "insights": [], ...}
 ```
 
-### 5. Python Integration Layer
+### 6. Python Integration Layer
 
 Both `claude-code/scripts/retrieve.py` and `codex/scripts/retrieve.py`:
 
@@ -138,13 +186,21 @@ if not context and data.get("status") == "degraded":
 
 The `except Exception` block in `main()` remains unchanged — it handles client-side errors (network unreachable, etc.) which are a different concern from server-side degradation.
 
+## Status Field Semantics
+
+The API response now has two `status` fields at different levels:
+
+- **Top-level `status`** (`"success"` / `"empty"` / `"degraded"`): Business-level signal for callers. Answers "can I trust this result?" Callers that want best-effort behavior can ignore it; callers that need observability (circuit-breaking, alerting) check this field.
+- **`trace.finalResults.status`** (`"success"` / `"empty"` / `"error"`): Diagnostic-level detail for operators. Answers "what happened internally?" Only present when trace is enabled.
+
+The distinction: `degraded` means "the system handled the failure gracefully"; `error` in trace means "an error occurred at this specific stage." They describe the same event at different abstraction levels.
+
 ## Backward Compatibility
 
 - API response adds a new field; no existing fields removed or modified
 - `RetrievalResult.empty()` behavior unchanged (returns EMPTY status)
 - Python scripts gracefully handle missing `status` field (`data.get("status")` returns None, no notice triggered)
 - `MemoryRetriever` interface signature unchanged
-- Individual `RetrievalStrategy` implementations unchanged
 - Trace system unchanged (provides complementary fine-grained diagnostics)
 
 ## Files Changed
@@ -152,8 +208,10 @@ The `except Exception` block in `main()` remains unchanged — it handles client
 | File | Change |
 |------|--------|
 | `RetrievalStatus.java` (new) | Three-state enum |
-| `RetrievalResult.java` | Add `status` field + `degraded()` factory + `withStatus()` |
-| `DefaultMemoryRetriever.java` | `onErrorResume` uses `degraded()`, normal path uses `withStatus()` |
+| `RetrievalResult.java` | Add `status` field + `of()` / `degraded()` factories + `withStatus()` |
+| `SimpleRetrievalStrategy.java` | `new RetrievalResult(...)` → `RetrievalResult.of(...)` (1 line) |
+| `DeepRetrievalStrategy.java` | `new RetrievalResult(...)` → `RetrievalResult.of(...)` (1 line) |
+| `DefaultMemoryRetriever.java` | Add `.map(withStatus)` before cache; `onErrorResume` uses `degraded()` |
 | `RetrievalMetricsSupport.java` | Read from `result.status()` directly |
 | `RetrieveMemoryResponse.java` | Add top-level `status` field |
 | `OpenMemoryApplicationService.java` | Map status to response |
