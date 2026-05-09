@@ -156,7 +156,7 @@ class OpenMemoryApplicationServiceTest {
     void retrieveMapsRetrievalResult() {
         RecordingMemory memory = new RecordingMemory();
         memory.retrieveResult =
-                new RetrievalResult(
+                RetrievalResult.of(
                         List.of(
                                 new ScoredResult(
                                         ScoredResult.SourceType.ITEM,

@@ -30,6 +30,7 @@ import java.util.stream.Collectors;
  * @param evidences Tier1 key sentences extracted when sufficient; empty list when insufficient
  * @param strategy  Name of the strategy used
  * @param query     Actual query text used (may have been rewritten)
+ * @param status    Outcome of the retrieval operation
  */
 public record RetrievalResult(
         List<ScoredResult> items,
@@ -37,7 +38,8 @@ public record RetrievalResult(
         List<RawDataResult> rawData,
         List<String> evidences,
         String strategy,
-        String query) {
+        String query,
+        RetrievalStatus status) {
 
     /** RawData aggregation result */
     public record RawDataResult(
@@ -51,9 +53,48 @@ public record RetrievalResult(
         }
     }
 
-    /** Empty result */
+    /**
+     * Standard factory for strategy implementations.
+     *
+     * <p>Determines status from content: EMPTY if no data, SUCCESS otherwise.
+     */
+    public static RetrievalResult of(
+            List<ScoredResult> items,
+            List<InsightResult> insights,
+            List<RawDataResult> rawData,
+            List<String> evidences,
+            String strategy,
+            String query) {
+        boolean empty =
+                (items == null || items.isEmpty())
+                        && (insights == null || insights.isEmpty())
+                        && (rawData == null || rawData.isEmpty());
+        return new RetrievalResult(
+                items,
+                insights,
+                rawData,
+                evidences,
+                strategy,
+                query,
+                empty ? RetrievalStatus.EMPTY : RetrievalStatus.SUCCESS);
+    }
+
+    /** Empty result (normal - no matching memories) */
     public static RetrievalResult empty(String strategy, String query) {
-        return new RetrievalResult(List.of(), List.of(), List.of(), List.of(), strategy, query);
+        return new RetrievalResult(
+                List.of(), List.of(), List.of(), List.of(), strategy, query, RetrievalStatus.EMPTY);
+    }
+
+    /** Degraded result (error occurred, fallback empty) */
+    public static RetrievalResult degraded(String strategy, String query) {
+        return new RetrievalResult(
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                strategy,
+                query,
+                RetrievalStatus.DEGRADED);
     }
 
     /** Is the result empty */

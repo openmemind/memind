@@ -115,7 +115,7 @@ class ContextWindowTest {
         var scored =
                 new ScoredResult(
                         ScoredResult.SourceType.ITEM, "item-1", itemText, 0.9f, 0.9, Instant.now());
-        return new RetrievalResult(
+        return RetrievalResult.of(
                 List.of(scored), List.of(), List.of(), List.of(), "SIMPLE", "test");
     }
 }

@@ -45,7 +45,7 @@ class CaffeineRetrievalCacheTest {
         @DisplayName("put then get should return cached result")
         void shouldReturnCachedResult() {
             RetrievalResult result =
-                    new RetrievalResult(
+                    RetrievalResult.of(
                             List.of(
                                     new ScoredResult(
                                             ScoredResult.SourceType.ITEM, "1", "test", 0.9f, 0.9)),
