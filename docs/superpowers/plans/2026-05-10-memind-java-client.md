@@ -69,6 +69,23 @@
 
 - [ ] **Step 1: Create parent POM**
 
+Note: All Java source files in this project MUST include the Apache 2.0 license header at the top:
+```java
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+```
+
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
@@ -295,12 +312,22 @@
 </project>
 ```
 
-- [ ] **Step 4: Verify build compiles**
+- [ ] **Step 4: Create .gitignore**
+
+File: `memind-clients/java/.gitignore`
+```
+target/
+*.iml
+.idea/
+*.class
+```
+
+- [ ] **Step 5: Verify build compiles**
 
 Run: `cd memind-clients/java && mvn compile -q`
 Expected: BUILD SUCCESS (no source files yet, just validates POM structure)
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add memind-clients/
@@ -1203,7 +1230,25 @@ public class MemindHttpClient implements AutoCloseable {
 
     private <T> CompletableFuture<T> sendAsync(HttpRequest request, TypeReference<ApiResult<T>> responseType) {
         return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray())
-                .thenApply(response -> handleResponse(response, responseType));
+                .thenApply(response -> handleResponse(response, responseType))
+                .exceptionallyCompose(ex -> {
+                    Throwable cause = ex instanceof java.util.concurrent.CompletionException
+                            ? ex.getCause() : ex;
+                    if (cause instanceof java.net.http.HttpTimeoutException) {
+                        return CompletableFuture.failedFuture(
+                                new MemindTimeoutException("Request timed out: " + request.uri(), cause));
+                    }
+                    if (cause instanceof java.net.ConnectException
+                            || cause instanceof java.io.IOException) {
+                        return CompletableFuture.failedFuture(
+                                new MemindConnectionException("Connection failed: " + request.uri(), cause));
+                    }
+                    if (cause instanceof MemindApiException) {
+                        return CompletableFuture.failedFuture(cause);
+                    }
+                    return CompletableFuture.failedFuture(
+                            new MemindConnectionException("Unexpected error: " + cause.getMessage(), cause));
+                });
     }
 
     private <T> T handleResponse(HttpResponse<byte[]> response, TypeReference<ApiResult<T>> responseType) {
@@ -1240,31 +1285,6 @@ public class MemindHttpClient implements AutoCloseable {
         // JDK HttpClient doesn't require explicit close in Java 17
         // In Java 21+ we could call httpClient.close()
     }
-}
-```
-
-Note: The timeout exception mapping needs to be handled in the `sendAsync` chain. Update the `sendAsync` method:
-
-```java
-private <T> CompletableFuture<T> sendAsync(HttpRequest request, TypeReference<ApiResult<T>> responseType) {
-    return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray())
-            .thenApply(response -> handleResponse(response, responseType))
-            .exceptionallyCompose(ex -> {
-                Throwable cause = ex instanceof java.util.concurrent.CompletionException ? ex.getCause() : ex;
-                if (cause instanceof java.net.http.HttpTimeoutException) {
-                    return CompletableFuture.failedFuture(
-                            new MemindTimeoutException("Request timed out: " + request.uri(), cause));
-                }
-                if (cause instanceof java.net.ConnectException || cause instanceof java.io.IOException) {
-                    return CompletableFuture.failedFuture(
-                            new MemindConnectionException("Connection failed: " + request.uri(), cause));
-                }
-                if (cause instanceof MemindApiException) {
-                    return CompletableFuture.failedFuture(cause);
-                }
-                return CompletableFuture.failedFuture(
-                        new MemindConnectionException("Unexpected error: " + cause.getMessage(), cause));
-            });
 }
 ```
 
@@ -1397,6 +1417,29 @@ class MemindClientTest {
     }
 
     @Test
+    void syncMethod_apiError_throwsUnwrappedException(WireMockRuntimeInfo wmInfo) {
+        stubFor(post("/open/v1/memory/retrieve").willReturn(aResponse()
+                .withStatus(400)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                        {"code":"bad_request","message":"query is required","traceId":"t1"}
+                        """)));
+
+        try (MemindClient client = MemindClient.builder()
+                .baseUrl(wmInfo.getHttpBaseUrl())
+                .build()) {
+            assertThatThrownBy(() -> client.retrieve(RetrieveMemoryRequest.builder()
+                    .userId("u1").agentId("a1").query("q").strategy(Strategy.SIMPLE).build()))
+                    .isInstanceOf(com.openmemind.ai.client.exception.MemindApiException.class)
+                    .satisfies(ex -> {
+                        var apiEx = (com.openmemind.ai.client.exception.MemindApiException) ex;
+                        assertThat(apiEx.getHttpStatus()).isEqualTo(400);
+                        assertThat(apiEx.getErrorCode()).isEqualTo("bad_request");
+                    });
+        }
+    }
+
+    @Test
     void close_thenCall_throwsIllegalState(WireMockRuntimeInfo wmInfo) {
         MemindClient client = MemindClient.builder()
                 .baseUrl(wmInfo.getHttpBaseUrl())
@@ -1420,6 +1463,7 @@ Expected: COMPILATION ERROR (MemindClient doesn't exist yet)
 package com.openmemind.ai.client;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.openmemind.ai.client.exception.MemindClientException;
 import com.openmemind.ai.client.internal.ApiResult;
 import com.openmemind.ai.client.internal.MemindHttpClient;
 import com.openmemind.ai.client.model.request.*;
@@ -1428,6 +1472,7 @@ import com.openmemind.ai.client.model.response.RetrieveMemoryResponse;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MemindClient implements AutoCloseable {
@@ -1446,23 +1491,23 @@ public class MemindClient implements AutoCloseable {
     // === Sync API ===
 
     public void addMessage(AddMessageRequest request) {
-        addMessageAsync(request).join();
+        joinAndUnwrap(addMessageAsync(request));
     }
 
     public void extract(ExtractMemoryRequest request) {
-        extractAsync(request).join();
+        joinAndUnwrap(extractAsync(request));
     }
 
     public void commit(CommitMemoryRequest request) {
-        commitAsync(request).join();
+        joinAndUnwrap(commitAsync(request));
     }
 
     public RetrieveMemoryResponse retrieve(RetrieveMemoryRequest request) {
-        return retrieveAsync(request).join();
+        return joinAndUnwrap(retrieveAsync(request));
     }
 
     public HealthResponse health() {
-        return healthAsync().join();
+        return joinAndUnwrap(healthAsync());
     }
 
     // === Async API ===
@@ -1509,6 +1554,22 @@ public class MemindClient implements AutoCloseable {
     private void ensureOpen() {
         if (closed.get()) {
             throw new IllegalStateException("MemindClient is closed");
+        }
+    }
+
+    /**
+     * Joins the future and unwraps CompletionException so that sync callers
+     * receive the actual exception (e.g. MemindApiException) directly.
+     */
+    private <T> T joinAndUnwrap(CompletableFuture<T> future) {
+        try {
+            return future.join();
+        } catch (CompletionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException re) {
+                throw re;
+            }
+            throw new MemindClientException(cause.getMessage(), cause);
         }
     }
 
