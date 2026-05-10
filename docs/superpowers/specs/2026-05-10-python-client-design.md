@@ -62,6 +62,10 @@ from typing import Generic, TypeVar
 
 T = TypeVar("T")
 
+class Role(str, Enum):
+    USER = "user"
+    ASSISTANT = "assistant"
+
 class Strategy(str, Enum):
     SIMPLE = "SIMPLE"
     DEEP = "DEEP"
@@ -276,6 +280,7 @@ async with AsyncMemindClient(base_url="...") as client:
 
 ### 客户端生命周期
 
+- `MemindClient` 和 `AsyncMemindClient` 实例是线程安全/协程安全的，可在多线程或多协程中共享使用
 - 调用 `close()` 后再使用客户端的任何方法，抛出 `MemindError("Client has been closed")`
 - 内部通过 `_closed: bool` 标志位实现，每次请求前检查
 
@@ -313,7 +318,7 @@ MemindError (基类, extends Exception)
 ### BaseClient
 
 共享配置解析、URL 构建、请求头构造、响应处理逻辑：
-- `_build_headers()` → User-Agent + Authorization + Content-Type
+- `_build_headers()` → User-Agent (`memind-python/{version}`) + Authorization + Content-Type
 - `_build_url(path)` → `{base_url}/open/v1{path}`
 - `_process_response(response, response_type)` → 解析 ApiResult 包装，成功返回 data，失败抛异常
 - 成功判断：HTTP 2xx 且 `ApiResult.code` 为 `"200"` 或 `"success"`（与 Java `ApiResult.isSuccess()` 对齐）
