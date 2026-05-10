@@ -316,14 +316,17 @@ MemindError (基类, extends Exception)
 - `_build_headers()` → User-Agent + Authorization + Content-Type
 - `_build_url(path)` → `{base_url}/open/v1{path}`
 - `_process_response(response, response_type)` → 解析 ApiResult 包装，成功返回 data，失败抛异常
+- 成功判断：HTTP 2xx 且 `ApiResult.code` 为 `"200"` 或 `"success"`（与 Java `ApiResult.isSuccess()` 对齐）
+- 失败时从 ApiResult 中提取 `code`、`message`、`traceId` 构造 `MemindAPIError`
 
 ### JSON 序列化约定
 
+- 所有模型继承自统一基类 `MemindModel(BaseModel)`，配置 `model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)`
 - 请求：`model_dump(by_alias=True, exclude_none=True)` → camelCase JSON
-- 响应：camelCase JSON → `model_validate()` → snake_case 属性
-- 通过 Pydantic `ConfigDict(alias_generator=to_camel, populate_by_name=True)` 实现
-- 例外：`Base64Source.media_type` 在 JSON 中为 snake_case `"media_type"`（与 Java `@JsonProperty("media_type")` 对齐），需单独配置 alias
+- 响应：camelCase JSON → `model_validate()` → snake_case 属性（Pydantic 自动通过 alias 匹配）
+- 例外：`Base64Source.media_type` 在 JSON 中为 snake_case `"media_type"`（与 Java `@JsonProperty("media_type")` 对齐），需通过 `Field(alias="media_type")` 覆盖全局 alias_generator
 - `MapRawContent` 序列化时需自定义 `model_serializer`，将 properties 展开为顶层字段
+- 响应反序列化配置 `model_config = ConfigDict(extra="ignore")`，忽略未知字段（与 Java `@JsonIgnoreProperties(ignoreUnknown=true)` 对齐）
 
 ### 日志
 
