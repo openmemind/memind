@@ -24,7 +24,6 @@ memind-clients/                              # 非 Maven 模块，所有语言 S
     │   └── src/
     │       ├── main/java/com/openmemind/ai/client/
     │       │   ├── MemindClient.java
-    │       │   ├── MemindClientConfig.java
     │       │   ├── exception/
     │       │   │   ├── MemindClientException.java
     │       │   │   ├── MemindApiException.java
@@ -49,13 +48,18 @@ memind-clients/                              # 非 Maven 模块，所有语言 S
     │       │   │       ├── Role.java
     │       │   │       └── Strategy.java
     │       │   └── internal/
-    │       │       └── MemindHttpClient.java
+    │       │       ├── MemindHttpClient.java
+    │       │       └── RawContentSerializer.java
     │       └── test/java/com/openmemind/ai/client/
     └── memind-client-spring-boot-starter/
         ├── pom.xml
-        └── src/main/java/com/openmemind/ai/client/spring/
-            ├── MemindClientAutoConfiguration.java
-            └── MemindClientProperties.java
+        └── src/
+            ├── main/java/com/openmemind/ai/client/spring/
+            │   ├── MemindClientAutoConfiguration.java
+            │   └── MemindClientProperties.java
+            └── main/resources/
+                └── META-INF/spring/
+                    └── org.springframework.boot.autoconfigure.AutoConfiguration.imports
 ```
 
 ## 依赖策略
@@ -316,6 +320,8 @@ public record UrlSource(String url) implements Source {}
 public record Base64Source(String mediaType, String data) implements Source {}
 ```
 
+注意：`ContentBlock` 和 `Source` 使用 `@JsonSubTypes` 静态注册是合理的，因为它们的子类型是固定的、由协议定义的。而 `RawContent` 不同，它的子类型是通过插件动态扩展的，所以使用自定义 Serializer。
+
 ### RawContent 多态设计
 
 `RawContent` 是 memind 的核心抽象，server 端通过插件机制动态注册子类型。client 端的处理策略：
@@ -323,41 +329,76 @@ public record Base64Source(String mediaType, String data) implements Source {}
 1. **内置核心类型**：提供 `ConversationContent`（最常用的对话内容类型）
 2. **通用兜底类型**：提供 `MapRawContent`，允许用户以 Map 形式发送任意 RawContent
 
+**重要**：server 端的 type name 全部为小写（`"conversation"`, `"document"`, `"audio"`, `"image"`, `"tool_call"`），client 序列化时必须使用小写。
+
 ```java
-// RawContent 基类 - 通过 type 字段做 JSON 多态序列化
-@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
-@JsonSubTypes({
-    @JsonSubTypes.Type(value = ConversationContent.class, name = "CONVERSATION"),
-    @JsonSubTypes.Type(value = MapRawContent.class, name = "MAP_FALLBACK")
-})
-public abstract sealed class RawContent permits ConversationContent, MapRawContent {
-    public abstract String contentType();
+// RawContent 基类 - 非 sealed，允许未来扩展
+// 序列化通过自定义 RawContentSerializer 处理，不使用 @JsonSubTypes 静态注册
+@JsonSerialize(using = RawContentSerializer.class)
+public abstract class RawContent {
+    /** 返回 JSON type 字段的值（小写，如 "conversation"、"document"） */
+    public abstract String type();
 }
 
 // ConversationContent - 对话内容（最常用）
 public final class ConversationContent extends RawContent {
     private final List<Message> messages;
+
     public static ConversationContent of(List<Message> messages) { ... }
-    public String contentType() { return "CONVERSATION"; }
+
+    @Override
+    public String type() { return "conversation"; }
+
+    public List<Message> getMessages() { return messages; }
 }
 
 // MapRawContent - 通用兜底，用于发送 client 未内置的 RawContent 类型
-// 用户可以直接构造 JSON 结构发送给 server
+// 序列化时将 type 和 properties 平铺到 JSON 顶层
 public final class MapRawContent extends RawContent {
     private final String type;
     private final Map<String, Object> properties;
 
     public static MapRawContent of(String type, Map<String, Object> properties) { ... }
-    public String contentType() { return type; }
+
+    @Override
+    public String type() { return type; }
+
+    public Map<String, Object> getProperties() { return properties; }
+}
+```
+
+**RawContentSerializer 序列化逻辑**：
+```java
+// 内部类，处理 RawContent 的 JSON 序列化
+class RawContentSerializer extends JsonSerializer<RawContent> {
+    @Override
+    public void serialize(RawContent value, JsonGenerator gen, SerializerProvider provider) {
+        gen.writeStartObject();
+        gen.writeStringField("type", value.type());
+
+        if (value instanceof ConversationContent conv) {
+            gen.writeArrayFieldStart("messages");
+            // 序列化 messages 列表...
+            gen.writeEndArray();
+        } else if (value instanceof MapRawContent map) {
+            // 将 properties 中的每个 entry 平铺写入
+            for (var entry : map.getProperties().entrySet()) {
+                gen.writeObjectField(entry.getKey(), entry.getValue());
+            }
+        }
+
+        gen.writeEndObject();
+    }
 }
 ```
 
 **使用 MapRawContent 的场景**（如发送文档内容）：
 ```java
+// 发送文档 - type 必须与 server 端注册的 type name 一致（小写）
 client.extract(ExtractMemoryRequest.builder()
     .userId("user-1")
     .agentId("agent-1")
-    .rawContent(MapRawContent.of("DOCUMENT", Map.of(
+    .rawContent(MapRawContent.of("document", Map.of(
         "fileName", "report.pdf",
         "content", "文档内容...",
         "mimeType", "application/pdf"
@@ -421,8 +462,8 @@ class MemindHttpClient implements AutoCloseable {
   - `SerializationFeature.WRITE_DATES_AS_TIMESTAMPS = false`（ISO-8601 格式）
   - 注册 `JavaTimeModule` 处理 `Instant`
   - `JsonInclude.Include.NON_NULL`（不序列化 null 字段）
-- ContentBlock / Source / RawContent 的多态序列化通过 `@JsonTypeInfo` + `@JsonSubTypes` 处理
-- `MapRawContent` 使用自定义 Serializer，将 type 和 properties 平铺序列化
+- ContentBlock / Source 的多态序列化通过 `@JsonTypeInfo` + `@JsonSubTypes` 处理（子类型固定）
+- RawContent 的序列化通过自定义 `RawContentSerializer` 处理（子类型动态扩展）
 
 ### 线程安全
 
@@ -432,6 +473,12 @@ class MemindHttpClient implements AutoCloseable {
 - 所有字段均为 final，无可变状态
 
 用户可以创建一个 `MemindClient` 实例，在整个应用生命周期中共享使用。
+
+### 资源管理
+
+- `close()` 是幂等的：多次调用不会抛出异常
+- 关闭后调用任何 API 方法将抛出 `IllegalStateException`
+- 在 Spring Boot Starter 中，Bean 销毁时自动调用 `close()`（通过 `@Bean(destroyMethod = "close")`）
 
 ### 重试策略
 
@@ -490,6 +537,11 @@ memind:
 ```
 
 ### 自动配置
+
+需要在 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` 中注册：
+```
+com.openmemind.ai.client.spring.MemindClientAutoConfiguration
+```
 
 ```java
 @AutoConfiguration
