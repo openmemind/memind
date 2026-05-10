@@ -9,19 +9,20 @@
 - 提供类型安全、易用的 Java API 来调用 memind server
 - 支持同步和异步（CompletableFuture）两种调用模式
 - 提供 Spring Boot Starter 实现开箱即用的自动配置
-- 最低 Java 17，利用 record 等现代特性
+- 最低 Java 17，利用 record、sealed interface 等现代特性
 - 版本号与 memind server 保持同步（当前 0.2.0-SNAPSHOT）
+- 线程安全，可在多线程环境中共享单个 client 实例
 
 ## 项目结构
 
 ```
 memind-clients/                              # 非 Maven 模块，所有语言 SDK 的统一入口
 └── java/                                    # Java client 独立 Maven 项目
-    ├── pom.xml                              # 父 POM (groupId: org.openmemind)
+    ├── pom.xml                              # 父 POM (groupId: com.openmemind.ai)
     ├── memind-client/                       # 核心 client 模块
     │   ├── pom.xml
     │   └── src/
-    │       ├── main/java/org/openmemind/client/
+    │       ├── main/java/com/openmemind/ai/client/
     │       │   ├── MemindClient.java
     │       │   ├── MemindClientConfig.java
     │       │   ├── exception/
@@ -42,14 +43,17 @@ memind-clients/                              # 非 Maven 模块，所有语言 S
     │       │   │   └── common/
     │       │   │       ├── Message.java
     │       │   │       ├── ContentBlock.java
+    │       │   │       ├── RawContent.java
+    │       │   │       ├── ConversationContent.java
+    │       │   │       ├── MapRawContent.java
     │       │   │       ├── Role.java
     │       │   │       └── Strategy.java
     │       │   └── internal/
     │       │       └── MemindHttpClient.java
-    │       └── test/java/org/openmemind/client/
+    │       └── test/java/com/openmemind/ai/client/
     └── memind-client-spring-boot-starter/
         ├── pom.xml
-        └── src/main/java/org/openmemind/client/spring/
+        └── src/main/java/com/openmemind/ai/client/spring/
             ├── MemindClientAutoConfiguration.java
             └── MemindClientProperties.java
 ```
@@ -61,15 +65,37 @@ memind-clients/                              # 非 Maven 模块，所有语言 S
 | 依赖 | 版本 | 用途 |
 |------|------|------|
 | JDK 17+ HttpClient | 内置 | HTTP 通信 |
-| Jackson-databind | 2.18.x | JSON 序列化/反序列化 |
+| Jackson-databind | 2.18.x (`com.fasterxml.jackson`) | JSON 序列化/反序列化 |
+| Jackson-datatype-jsr310 | 2.18.x | Instant 等时间类型支持 |
+| SLF4J API | 2.0.x | 日志门面（不绑定具体实现） |
+
+**Jackson 版本说明**：memind server 使用 Jackson 3.x（`tools.jackson` 包名），但 client 选择 Jackson 2.x，原因：
+- 目标用户大多在 Spring Boot 3.x 生态，默认使用 Jackson 2.x
+- 避免与用户项目的 Jackson 版本冲突
+- client 作为独立项目，不需要与 server 使用相同的 Jackson 版本
+- JSON wire format 兼容，不影响通信
 
 ### memind-client-spring-boot-starter
 
 | 依赖 | 版本 | 用途 |
 |------|------|------|
 | memind-client | ${project.version} | 核心功能 |
-| spring-boot-autoconfigure | 3.x | 自动配置 |
-| spring-boot-configuration-processor | 3.x | 配置元数据生成 |
+| spring-boot-autoconfigure | 3.2+ | 自动配置 |
+| spring-boot-configuration-processor | 3.2+ | 配置元数据生成（optional） |
+
+**Spring Boot 版本说明**：Starter 支持 Spring Boot 3.2+（不要求 4.x），覆盖主流用户群体。
+
+## API 端点映射
+
+| Client 方法 | HTTP Method | Server 路径 |
+|-------------|-------------|-------------|
+| `addMessage()` | POST | `/open/v1/memory/add-message` |
+| `extract()` | POST | `/open/v1/memory/extract` |
+| `commit()` | POST | `/open/v1/memory/commit` |
+| `retrieve()` | POST | `/open/v1/memory/retrieve` |
+| `health()` | GET | `/open/v1/health` |
+
+注意：`health` 端点在 `/open/v1/health`，不在 `/open/v1/memory/` 路径下。
 
 ## API 设计
 
@@ -93,6 +119,10 @@ MemindClient client = MemindClient.builder()
 ### 核心方法
 
 ```java
+/**
+ * Memind Java Client - 线程安全，可在多线程环境中共享单个实例。
+ * 底层基于 JDK HttpClient 异步实现，同步方法内部调用异步后 join()。
+ */
 public class MemindClient implements AutoCloseable {
 
     // === 同步 API ===
@@ -100,7 +130,7 @@ public class MemindClient implements AutoCloseable {
     /** 添加消息到记忆缓冲区 */
     public void addMessage(AddMessageRequest request);
 
-    /** 提取记忆（从缓冲区中的消息提取结构化记忆） */
+    /** 提取记忆（从 rawContent 提取结构化记忆） */
     public void extract(ExtractMemoryRequest request);
 
     /** 提交记忆（触发 insight 生成等后处理） */
@@ -122,7 +152,12 @@ public class MemindClient implements AutoCloseable {
 
     // === 生命周期 ===
 
+    /** 关闭底层 HTTP 连接资源 */
     public void close();
+
+    // === Builder ===
+
+    public static Builder builder() { ... }
 }
 ```
 
@@ -156,6 +191,12 @@ try (MemindClient client = MemindClient.builder()
         )))
         .build());
 
+    // 提交记忆
+    client.commit(CommitMemoryRequest.builder()
+        .userId("user-1")
+        .agentId("agent-1")
+        .build());
+
     // 检索记忆
     RetrieveMemoryResponse response = client.retrieve(RetrieveMemoryRequest.builder()
         .userId("user-1")
@@ -180,7 +221,7 @@ public record AddMessageRequest(String userId, String agentId, Message message, 
     public static Builder builder() { ... }
 }
 
-// ExtractMemoryRequest - rawContent 为必填，支持多态（ConversationContent 等）
+// ExtractMemoryRequest - rawContent 为必填，支持多态
 public record ExtractMemoryRequest(String userId, String agentId, RawContent rawContent, String sourceClient) {
     public static Builder builder() { ... }
 }
@@ -222,7 +263,15 @@ public record HealthResponse(String status, String service) {}
 public record RetrievalTraceView(
     String traceId, Instant startedAt, Instant completedAt, boolean truncated,
     List<StageView> stages, MergeView merge, FinalView finalResults
-) { ... }
+) {
+    public record StageView(String stage, String tier, String method, String status,
+        Integer inputCount, Integer candidateCount, Integer resultCount,
+        boolean degraded, boolean skipped, Instant startedAt, Long durationMillis) {}
+    public record MergeView(int inputCount, int outputCount, int deduplicatedCount,
+        int sourceCount, String status) {}
+    public record FinalView(String strategy, String status, int itemCount,
+        int insightCount, int rawDataCount, int evidenceCount) {}
+}
 ```
 
 ### 通用模型
@@ -243,6 +292,13 @@ public enum Role { USER, ASSISTANT }
 public enum Strategy { SIMPLE, DEEP }
 
 // ContentBlock - 消息内容块（多模态支持）
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
+@JsonSubTypes({
+    @JsonSubTypes.Type(value = TextBlock.class, name = "text"),
+    @JsonSubTypes.Type(value = ImageBlock.class, name = "image"),
+    @JsonSubTypes.Type(value = AudioBlock.class, name = "audio"),
+    @JsonSubTypes.Type(value = VideoBlock.class, name = "video")
+})
 public sealed interface ContentBlock permits TextBlock, ImageBlock, AudioBlock, VideoBlock {}
 public record TextBlock(String text) implements ContentBlock {}
 public record ImageBlock(Source source) implements ContentBlock {}
@@ -250,22 +306,71 @@ public record AudioBlock(Source source) implements ContentBlock {}
 public record VideoBlock(Source source) implements ContentBlock {}
 
 // Source - 媒体来源
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
+@JsonSubTypes({
+    @JsonSubTypes.Type(value = UrlSource.class, name = "url"),
+    @JsonSubTypes.Type(value = Base64Source.class, name = "base64")
+})
 public sealed interface Source permits UrlSource, Base64Source {}
 public record UrlSource(String url) implements Source {}
 public record Base64Source(String mediaType, String data) implements Source {}
+```
 
-// RawContent - 原始内容（多态，通过 type 字段区分）
-public abstract class RawContent {
+### RawContent 多态设计
+
+`RawContent` 是 memind 的核心抽象，server 端通过插件机制动态注册子类型。client 端的处理策略：
+
+1. **内置核心类型**：提供 `ConversationContent`（最常用的对话内容类型）
+2. **通用兜底类型**：提供 `MapRawContent`，允许用户以 Map 形式发送任意 RawContent
+
+```java
+// RawContent 基类 - 通过 type 字段做 JSON 多态序列化
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "type")
+@JsonSubTypes({
+    @JsonSubTypes.Type(value = ConversationContent.class, name = "CONVERSATION"),
+    @JsonSubTypes.Type(value = MapRawContent.class, name = "MAP_FALLBACK")
+})
+public abstract sealed class RawContent permits ConversationContent, MapRawContent {
     public abstract String contentType();
 }
 
-// ConversationContent - 对话内容（最常用的 RawContent 子类型）
-public class ConversationContent extends RawContent {
+// ConversationContent - 对话内容（最常用）
+public final class ConversationContent extends RawContent {
     private final List<Message> messages;
     public static ConversationContent of(List<Message> messages) { ... }
     public String contentType() { return "CONVERSATION"; }
 }
+
+// MapRawContent - 通用兜底，用于发送 client 未内置的 RawContent 类型
+// 用户可以直接构造 JSON 结构发送给 server
+public final class MapRawContent extends RawContent {
+    private final String type;
+    private final Map<String, Object> properties;
+
+    public static MapRawContent of(String type, Map<String, Object> properties) { ... }
+    public String contentType() { return type; }
+}
 ```
+
+**使用 MapRawContent 的场景**（如发送文档内容）：
+```java
+client.extract(ExtractMemoryRequest.builder()
+    .userId("user-1")
+    .agentId("agent-1")
+    .rawContent(MapRawContent.of("DOCUMENT", Map.of(
+        "fileName", "report.pdf",
+        "content", "文档内容...",
+        "mimeType", "application/pdf"
+    )))
+    .build());
+```
+
+### 模型独立性说明
+
+client 的模型类独立定义，不依赖 memind-core。原因：
+- memind-core 带有大量传递依赖（Spring AI、Reactor 等），引入会污染用户项目
+- client 只需要 API 层面的 DTO 定义，不需要 core 的业务逻辑
+- 通过版本号同步（client 与 server 同版本）保证 API 兼容性
 
 ## 内部实现
 
@@ -278,7 +383,6 @@ class MemindHttpClient implements AutoCloseable {
     private final ObjectMapper objectMapper;
     private final URI baseUri;
     private final String apiToken;       // nullable
-    private final Duration connectTimeout;
     private final Duration readTimeout;
 
     /** 异步 POST 请求 */
@@ -288,6 +392,14 @@ class MemindHttpClient implements AutoCloseable {
     <T> CompletableFuture<T> get(String path, TypeReference<ApiResult<T>> responseType);
 }
 ```
+
+### 请求 Headers
+
+每个请求自动附加：
+- `Content-Type: application/json`
+- `Accept: application/json`
+- `User-Agent: memind-java-client/<version>`（标识 SDK 版本）
+- `Authorization: Bearer <token>`（仅当配置了 apiToken 时）
 
 ### 认证机制
 
@@ -304,11 +416,36 @@ class MemindHttpClient implements AutoCloseable {
 
 ### JSON 序列化
 
-- 使用 Jackson ObjectMapper，配置：
-  - `DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES = false`（前向兼容）
+- 使用 Jackson 2.x ObjectMapper（`com.fasterxml.jackson`），配置：
+  - `DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES = false`（前向兼容，server 新增字段不会导致 client 报错）
   - `SerializationFeature.WRITE_DATES_AS_TIMESTAMPS = false`（ISO-8601 格式）
   - 注册 `JavaTimeModule` 处理 `Instant`
-- ContentBlock 的多态反序列化通过 `@JsonTypeInfo` + `@JsonSubTypes` 处理
+  - `JsonInclude.Include.NON_NULL`（不序列化 null 字段）
+- ContentBlock / Source / RawContent 的多态序列化通过 `@JsonTypeInfo` + `@JsonSubTypes` 处理
+- `MapRawContent` 使用自定义 Serializer，将 type 和 properties 平铺序列化
+
+### 线程安全
+
+`MemindClient` 是线程安全的：
+- 底层 `HttpClient` 是线程安全的（JDK 文档保证）
+- `ObjectMapper` 在配置完成后是线程安全的
+- 所有字段均为 final，无可变状态
+
+用户可以创建一个 `MemindClient` 实例，在整个应用生命周期中共享使用。
+
+### 重试策略
+
+client 不内置重试逻辑。原因：
+- 重试策略因场景而异（幂等性、退避算法、最大次数等）
+- 用户可以通过 Resilience4j、Spring Retry 等成熟框架自行包装
+- 保持 SDK 简单，不引入额外复杂度
+
+### 日志
+
+- 使用 SLF4J 作为日志门面，不绑定具体实现
+- DEBUG 级别：记录请求 URL、响应状态码
+- TRACE 级别：记录请求/响应 body（注意不记录 apiToken）
+- 用户项目中引入 logback/log4j2 即可看到日志
 
 ## 异常体系
 
@@ -319,22 +456,27 @@ public class MemindClientException extends RuntimeException {
     public MemindClientException(String message, Throwable cause) { ... }
 }
 
-// 服务端返回错误
+// 服务端返回错误（HTTP 4xx/5xx 或 ApiResult.code 非成功）
 public class MemindApiException extends MemindClientException {
     private final int httpStatus;
-    private final String errorCode;    // "bad_request", "not_found", "conflict", etc.
+    private final String errorCode;    // "bad_request", "not_found", "conflict", "service_unavailable", "internal_error"
     private final String errorMessage;
-    private final String traceId;
+    private final String traceId;      // nullable, 来自 ApiResult.traceId
 }
 
-// 网络连接失败
+// 网络连接失败（DNS 解析失败、连接拒绝等）
 public class MemindConnectionException extends MemindClientException { ... }
 
-// 请求超时
+// 请求超时（连接超时或读取超时）
 public class MemindTimeoutException extends MemindClientException { ... }
 ```
 
 ## Spring Boot Starter
+
+### 兼容性
+
+- 支持 Spring Boot 3.2+（包括 3.2、3.3、3.4 等主流版本）
+- 不要求 Spring Boot 4.x（server 用 4.x 不影响 client starter）
 
 ### 配置属性
 
@@ -411,7 +553,8 @@ public class MyAgentService {
 
 - Mock `MemindHttpClient`，验证 `MemindClient` 的请求构建和响应解析逻辑
 - 验证 Builder 的参数校验（baseUrl 必填等）
-- 验证异常映射逻辑
+- 验证异常映射逻辑（各种 HTTP 状态码 → 对应异常类型）
+- 验证 JSON 序列化/反序列化（特别是多态类型）
 
 ### 集成测试
 
@@ -419,17 +562,20 @@ public class MyAgentService {
 - 验证完整的 HTTP 请求/响应链路
 - 验证认证 header 的正确传递
 - 验证超时和错误场景
+- 验证 User-Agent header
 
 ### Spring Boot Starter 测试
 
 - 使用 `@SpringBootTest` 验证自动配置
 - 验证 `@ConditionalOnMissingBean` 允许用户覆盖
-- 验证配置属性绑定
+- 验证 `@ConditionalOnProperty` 在缺少 base-url 时不创建 Bean
+- 验证配置属性绑定（Duration 解析等）
 
 ## 发布策略
 
-- groupId: `org.openmemind`
+- groupId: `com.openmemind.ai`
 - artifactId: `memind-client` / `memind-client-spring-boot-starter`
 - 版本: 与 memind server 同步（0.2.0-SNAPSHOT）
 - 发布到 Maven Central（复用现有的 release workflow）
+- Java client 有独立的 Maven 构建，不纳入 server 的父 POM modules
 
