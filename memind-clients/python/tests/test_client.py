@@ -1,0 +1,201 @@
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+from __future__ import annotations
+
+import pytest
+
+from memind._client import MemindClient
+from memind._exceptions import MemindAPIError, MemindError
+from memind.types import ConversationContent, Message, RetrieveMemoryRequest, Strategy
+
+
+def test_health_returns_response(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="GET",
+        url="https://api.example.test/open/v1/health",
+        json={"code": "success", "data": {"status": "UP", "service": "memind-server"}},
+    )
+
+    with MemindClient(base_url="https://api.example.test") as client:
+        health = client.health()
+
+    assert health.status == "UP"
+    request = httpx_mock.get_request()
+    assert request.headers["User-Agent"].startswith("memind-python/")
+
+
+def test_add_message_sends_payload_and_auth_header(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/open/v1/memory/add-message",
+        json={"code": "200"},
+    )
+
+    client = MemindClient(base_url="https://api.example.test", api_token="sk-test")
+    client.memory.add_message(user_id="u1", agent_id="a1", message=Message.user("hello"))
+
+    request = httpx_mock.get_request()
+    assert request.headers["Authorization"] == "Bearer sk-test"
+    assert b'"userId":"u1"' in request.content
+    assert b'"message":{"role":"USER"' in request.content
+    client.close()
+
+
+def test_extract_sends_raw_content(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/open/v1/memory/extract",
+        json={"code": "200"},
+    )
+
+    client = MemindClient(base_url="https://api.example.test")
+    client.memory.extract(
+        user_id="u1",
+        agent_id="a1",
+        raw_content=ConversationContent(messages=[Message.user("hello")]),
+    )
+
+    assert b'"rawContent":{"type":"conversation"' in httpx_mock.get_request().content
+    client.close()
+
+
+def test_commit_sends_payload(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/open/v1/memory/commit",
+        json={"code": "200"},
+    )
+
+    client = MemindClient(base_url="https://api.example.test")
+    client.memory.commit(user_id="u1", agent_id="a1")
+
+    assert b'"userId":"u1"' in httpx_mock.get_request().content
+    client.close()
+
+
+def test_retrieve_accepts_expanded_parameters(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/open/v1/memory/retrieve",
+        json={
+            "code": "success",
+            "data": {
+                "status": "success",
+                "items": [{"id": "1", "text": "likes coffee", "vectorScore": 0.9}],
+                "insights": [],
+                "rawData": [],
+                "evidences": [],
+                "strategy": "SIMPLE",
+                "query": "coffee",
+            },
+        },
+    )
+
+    client = MemindClient(base_url="https://api.example.test")
+    result = client.memory.retrieve(
+        user_id="u1", agent_id="a1", query="coffee", strategy=Strategy.SIMPLE, trace=True
+    )
+
+    assert result.items[0].text == "likes coffee"
+    assert b'"trace":true' in httpx_mock.get_request().content
+    client.close()
+
+
+def test_retrieve_accepts_request_object(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/open/v1/memory/retrieve",
+        json={
+            "code": "success",
+            "data": {"items": [], "insights": [], "rawData": [], "evidences": []},
+        },
+    )
+
+    client = MemindClient(base_url="https://api.example.test")
+    request = RetrieveMemoryRequest(
+        user_id="u1", agent_id="a1", query="coffee", strategy=Strategy.DEEP
+    )
+    result = client.memory.retrieve(request)
+
+    assert result.items == []
+    client.close()
+
+
+def test_api_error_is_raised_unwrapped(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/open/v1/memory/retrieve",
+        status_code=400,
+        json={"code": "bad_request", "message": "query is required", "traceId": "t1"},
+    )
+
+    client = MemindClient(base_url="https://api.example.test")
+    with pytest.raises(MemindAPIError) as exc_info:
+        client.memory.retrieve(user_id="u1", agent_id="a1", query="", strategy=Strategy.SIMPLE)
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.error_code == "bad_request"
+    client.close()
+
+
+def test_close_then_call_raises_memind_error() -> None:
+    client = MemindClient(base_url="https://api.example.test")
+    client.close()
+
+    with pytest.raises(MemindError, match="closed"):
+        client.health()
+
+
+def test_mutating_post_methods_do_not_retry_by_default(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/open/v1/memory/add-message",
+        status_code=503,
+        json={"code": "unavailable"},
+    )
+
+    client = MemindClient(base_url="https://api.example.test", max_retries=2)
+    with pytest.raises(MemindAPIError) as exc_info:
+        client.memory.add_message(user_id="u1", agent_id="a1", message=Message.user("hello"))
+
+    assert exc_info.value.status_code == 503
+    assert len(httpx_mock.get_requests()) == 1
+    client.close()
+
+
+def test_retrieve_retries_by_default(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/open/v1/memory/retrieve",
+        status_code=503,
+        json={"code": "unavailable"},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/open/v1/memory/retrieve",
+        json={
+            "code": "success",
+            "data": {"items": [], "insights": [], "rawData": [], "evidences": []},
+        },
+    )
+
+    client = MemindClient(base_url="https://api.example.test", max_retries=1)
+    result = client.memory.retrieve(
+        user_id="u1", agent_id="a1", query="coffee", strategy=Strategy.SIMPLE
+    )
+
+    assert result.items == []
+    assert len(httpx_mock.get_requests()) == 2
+    client.close()

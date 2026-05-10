@@ -1,0 +1,89 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Release Python Client to PyPI
+
+# Release prerequisites:
+# - The `memind` project must exist on PyPI and be owned by OpenMemind maintainers.
+# - PyPI Trusted Publishing must trust this workflow path and the `pypi` environment.
+# - The GitHub repository must define an environment named `pypi`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Python client release version, for example 0.2.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  release:
+    name: Build and publish Python client
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: pypi
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: memind-clients/python/pyproject.toml
+
+      - name: Install build tools
+        working-directory: memind-clients/python
+        run: pip install -e ".[dev]"
+
+      - name: Validate release version
+        working-directory: memind-clients/python
+        shell: bash
+        run: |
+          version="${{ inputs.version }}"
+          if [[ -z "${version}" || "${version}" == *"-SNAPSHOT" ]]; then
+            echo "Release version must be non-empty and must not end with -SNAPSHOT." >&2
+            exit 1
+          fi
+
+          package_version="$(python -c 'from memind import __version__; print(__version__)')"
+          if [[ "${package_version}" != "${version}" ]]; then
+            echo "Workflow version ${version} does not match package version ${package_version}." >&2
+            exit 1
+          fi
+
+      - name: Verify
+        working-directory: memind-clients/python
+        run: |
+          ruff format --check .
+          ruff check .
+          mypy src
+          pytest --cov=memind --cov-fail-under=90 -q
+
+      - name: Build
+        working-directory: memind-clients/python
+        run: python -m build
+
+      - name: Check package metadata
+        working-directory: memind-clients/python
+        run: twine check dist/*
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: memind-clients/python/dist

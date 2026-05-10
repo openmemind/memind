@@ -339,6 +339,18 @@
                         <exclude>memind-integrations/codex/**</exclude>
                         <exclude>memind-ui/**</exclude>
                         <exclude>memind-evaluation/data/**</exclude>
+                        <exclude>memind-clients/python/.coverage</exclude>
+                        <exclude>memind-clients/python/.mypy_cache/**</exclude>
+                        <exclude>memind-clients/python/.pytest_cache/**</exclude>
+                        <exclude>memind-clients/python/.ruff_cache/**</exclude>
+                        <exclude>memind-clients/python/.uv-cache/**</exclude>
+                        <exclude>memind-clients/python/.venv/**</exclude>
+                        <exclude>memind-clients/python/build/**</exclude>
+                        <exclude>memind-clients/python/dist/**</exclude>
+                        <exclude>memind-clients/python/src/*.egg-info/**</exclude>
+                        <exclude>memind-clients/python/uv.lock</exclude>
+                        <exclude>memind-clients/python/**/__pycache__/**</exclude>
+                        <exclude>memind-clients/python/**/*.pyc</exclude>
                     </excludes>
                 </configuration>
                 <dependencies>
