@@ -64,7 +64,7 @@ class ApiResult[T](BaseModel):
     code: str
     message: str | None = None
     data: T | None = None
-    timestamp: int | None = None
+    timestamp: str | None = None  # ISO-8601 (Instant in Java)
     trace_id: str | None = None
 ```
 
@@ -104,6 +104,9 @@ class ConversationContent(RawContent):
 class MapRawContent(RawContent):
     type: str
     properties: dict[str, str]
+    # 注意：序列化时 properties 中的键值对展开为顶层字段
+    # {"type": "xxx", "key1": "val1"} 而非 {"type": "xxx", "properties": {...}}
+    # 需要自定义 model_serializer 实现
 ```
 
 ### 请求模型
@@ -144,8 +147,8 @@ class HealthResponse(BaseModel):
 class RetrievedItem(BaseModel):
     id: str
     text: str
-    vector_score: float | None = None
-    final_score: float | None = None
+    vector_score: float
+    final_score: float
     occurred_at: str | None = None
 
 class RetrievedInsight(BaseModel):
@@ -156,8 +159,18 @@ class RetrievedInsight(BaseModel):
 class RetrievedRawData(BaseModel):
     raw_data_id: str
     caption: str | None = None
-    max_score: float | None = None
+    max_score: float
     item_ids: list[str] | None = None
+
+class RetrievalTraceView(BaseModel):
+    """可观测性追踪数据，当请求 trace=True 时返回"""
+    trace_id: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+    truncated: bool | None = None
+    stages: list[dict] = []  # 复杂嵌套结构，使用 dict 保持灵活性
+    merge: dict | None = None
+    final_results: dict | None = None
 
 class RetrieveMemoryResponse(BaseModel):
     status: str | None = None
@@ -167,9 +180,14 @@ class RetrieveMemoryResponse(BaseModel):
     evidences: list[str] = []
     strategy: str | None = None
     query: str | None = None
+    trace: RetrievalTraceView | None = None  # 当请求 trace=True 时返回
 ```
 
 ## 客户端 API
+
+### 设计说明
+
+Python client 的 resource 方法采用展开参数方式（更 Pythonic，IDE 补全更好），而非 Java 的 Request 对象方式。Request 模型类仍然保留并导出，供高级用户直接构造和传递使用。
 
 ### 同步客户端
 
@@ -216,7 +234,15 @@ async with AsyncMemindClient(base_url="...") as client:
 
 1. 构造函数参数（最高）
 2. 环境变量：`MEMIND_BASE_URL`, `MEMIND_API_TOKEN`
-3. 默认值：timeout=30s, max_retries=2
+3. 默认值：timeout=30s (connect=5s, read=30s), max_retries=2
+
+### timeout 配置
+
+支持两种方式：
+- 简单模式：`timeout=30.0`（统一超时）
+- 细粒度模式：`timeout=httpx.Timeout(connect=5.0, read=30.0, write=30.0, pool=5.0)`
+
+默认值与 Java client 对齐：connect=5s, read=30s。
 
 ## 异常层次
 
@@ -253,6 +279,8 @@ MemindError (基类, extends Exception)
 - 请求：`model_dump(by_alias=True, exclude_none=True)` → camelCase JSON
 - 响应：camelCase JSON → `model_validate()` → snake_case 属性
 - 通过 Pydantic `ConfigDict(alias_generator=to_camel, populate_by_name=True)` 实现
+- 例外：`Base64Source.media_type` 在 JSON 中为 snake_case `"media_type"`（与 Java `@JsonProperty("media_type")` 对齐），需单独配置 alias
+- `MapRawContent` 序列化时需自定义 `model_serializer`，将 properties 展开为顶层字段
 
 ### 日志
 
