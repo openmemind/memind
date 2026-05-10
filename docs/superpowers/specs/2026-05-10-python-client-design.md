@@ -13,7 +13,7 @@
 | 数据模型 | Pydantic v2 | 类型验证、序列化、IDE 补全 |
 | 构建工具 | Hatch/Hatchling | 现代标准，单一 pyproject.toml |
 | 代码位置 | memind-clients/python/ | 与 Java client 平级 |
-| PyPI 包名 | memind-client | 明确表明是 client SDK |
+| PyPI 包名 | memind | 与 import 名一致，符合 openai/anthropic 惯例 |
 | import 名 | memind | 简洁，与项目名一致 |
 | 客户端模式 | 双客户端 (sync + async) | 行业标准，类型安全 |
 
@@ -272,6 +272,13 @@ async with AsyncMemindClient(base_url="...") as client:
 2. 环境变量：`MEMIND_BASE_URL`, `MEMIND_API_TOKEN`
 3. 默认值：timeout=30s (connect=5s, read=30s), max_retries=2
 
+`base_url` 为必需配置：若构造函数未传且环境变量未设置，立即抛出 `MemindError`，提示用户提供。`api_token` 为可选：未提供时不发送 Authorization 头。
+
+### 客户端生命周期
+
+- 调用 `close()` 后再使用客户端的任何方法，抛出 `MemindError("Client has been closed")`
+- 内部通过 `_closed: bool` 标志位实现，每次请求前检查
+
 ### timeout 配置
 
 支持两种方式：
@@ -329,8 +336,8 @@ MemindError (基类, extends Exception)
 
 ### 运行时
 
-- `httpx >= 0.27.0` — HTTP 客户端
-- `pydantic >= 2.0.0` — 数据模型
+- `httpx >= 0.25.0, <1` — HTTP 客户端
+- `pydantic >= 2.1.0, <3` — 数据模型
 
 ### 开发
 
@@ -352,6 +359,7 @@ MemindError (基类, extends Exception)
 - 版本号与 memind 主项目对齐：0.2.0
 - 版本单一来源：`src/memind/_version.py` 中定义 `__version__ = "0.2.0"`
 - `pyproject.toml` 通过 `dynamic = ["version"]` + hatch-vcs 或直接引用 `_version.py`
-- User-Agent 通过 `importlib.metadata.version("memind-client")` 动态读取，避免硬编码
-- 发布到 PyPI，包名 `memind-client`
+- User-Agent 通过 `importlib.metadata.version("memind")` 动态读取，避免硬编码
+- 发布到 PyPI，包名 `memind`（`pip install memind`）
 - GitHub Actions CI/CD 发布流程（参考现有 Java client release workflow，使用 workflow_dispatch 触发）
+- 建议尽早注册 PyPI 包名，防止被抢注
