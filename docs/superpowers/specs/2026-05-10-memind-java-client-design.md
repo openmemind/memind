@@ -101,6 +101,18 @@ memind-clients/                              # 非 Maven 模块，所有语言 S
 
 注意：`health` 端点在 `/open/v1/health`，不在 `/open/v1/memory/` 路径下。
 
+### 调用语义
+
+| 方法 | 语义 | 说明 |
+|------|------|------|
+| `addMessage()` | Fire-and-forget | server 接受请求后立即返回，消息异步写入缓冲区 |
+| `extract()` | Fire-and-forget | server 接受请求后立即返回，记忆提取在后台异步执行 |
+| `commit()` | Fire-and-forget | server 接受请求后立即返回，insight 生成在后台异步执行 |
+| `retrieve()` | 同步等待 | server 完成检索后才返回结果 |
+| `health()` | 同步等待 | 立即返回健康状态 |
+
+**重要**：`addMessage()`、`extract()`、`commit()` 调用成功（无异常）只代表 server 接受了请求，不代表处理已完成。如果需要确认处理结果，应在调用后适当等待再调用 `retrieve()` 验证。
+
 ## API 设计
 
 ### 客户端构建
@@ -270,7 +282,8 @@ public record RetrievalTraceView(
 ) {
     public record StageView(String stage, String tier, String method, String status,
         Integer inputCount, Integer candidateCount, Integer resultCount,
-        boolean degraded, boolean skipped, Instant startedAt, Long durationMillis) {}
+        boolean degraded, boolean skipped, Instant startedAt, Long durationMillis,
+        Map<String, Object> attributes) {}
     public record MergeView(int inputCount, int outputCount, int deduplicatedCount,
         int sourceCount, String status) {}
     public record FinalView(String strategy, String status, int itemCount,
@@ -282,7 +295,7 @@ public record RetrievalTraceView(
 
 ```java
 // Message - 对话消息
-public record Message(Role role, List<ContentBlock> content, Instant timestamp, String userName) {
+public record Message(Role role, List<ContentBlock> content, Instant timestamp, String userName, String sourceClient) {
     public static Message user(String text) { ... }
     public static Message user(String text, Instant timestamp) { ... }
     public static Message assistant(String text) { ... }
