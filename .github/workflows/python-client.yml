@@ -1,0 +1,70 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Python Client
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'memind-clients/python/**'
+      - '.github/workflows/python-client.yml'
+      - '.github/workflows/release-python-client.yml'
+  pull_request:
+    paths:
+      - 'memind-clients/python/**'
+      - '.github/workflows/python-client.yml'
+      - '.github/workflows/release-python-client.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: memind-clients/python/pyproject.toml
+
+      - name: Install
+        working-directory: memind-clients/python
+        run: pip install -e ".[dev]"
+
+      - name: Ruff format
+        working-directory: memind-clients/python
+        run: ruff format --check .
+
+      - name: Ruff check
+        working-directory: memind-clients/python
+        run: ruff check .
+
+      - name: Mypy
+        working-directory: memind-clients/python
+        run: mypy src
+
+      - name: Pytest
+        working-directory: memind-clients/python
+        run: pytest --cov=memind --cov-fail-under=90 -q
