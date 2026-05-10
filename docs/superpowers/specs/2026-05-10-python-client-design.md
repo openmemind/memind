@@ -27,10 +27,12 @@ memind-clients/python/
 ├── src/
 │   └── memind/
 │       ├── __init__.py         # 公开 API 导出
+│       ├── py.typed            # PEP 561 类型标记
+│       ├── _version.py         # 版本号单一来源
 │       ├── _client.py          # MemindClient (同步)
 │       ├── _async_client.py    # AsyncMemindClient (异步)
 │       ├── _base_client.py     # 共享逻辑基类
-│       ├── _constants.py       # 默认值、版本号
+│       ├── _constants.py       # 默认值
 │       ├── _exceptions.py      # 异常层次
 │       ├── _http.py            # HTTP 传输层封装 (重试逻辑)
 │       ├── types/
@@ -56,11 +58,15 @@ memind-clients/python/
 ### 通用类型
 
 ```python
+from typing import Generic, TypeVar
+
+T = TypeVar("T")
+
 class Strategy(str, Enum):
     SIMPLE = "SIMPLE"
     DEEP = "DEEP"
 
-class ApiResult[T](BaseModel):
+class ApiResult(BaseModel, Generic[T]):
     code: str
     message: str | None = None
     data: T | None = None
@@ -103,7 +109,7 @@ class ConversationContent(RawContent):
 
 class MapRawContent(RawContent):
     type: str
-    properties: dict[str, str]
+    properties: dict[str, Any]
     # 注意：序列化时 properties 中的键值对展开为顶层字段
     # {"type": "xxx", "key1": "val1"} 而非 {"type": "xxx", "properties": {...}}
     # 需要自定义 model_serializer 实现
@@ -147,8 +153,8 @@ class HealthResponse(BaseModel):
 class RetrievedItem(BaseModel):
     id: str
     text: str
-    vector_score: float
-    final_score: float
+    vector_score: float = 0.0
+    final_score: float = 0.0
     occurred_at: str | None = None
 
 class RetrievedInsight(BaseModel):
@@ -159,7 +165,7 @@ class RetrievedInsight(BaseModel):
 class RetrievedRawData(BaseModel):
     raw_data_id: str
     caption: str | None = None
-    max_score: float
+    max_score: float = 0.0
     item_ids: list[str] | None = None
 
 class RetrievalTraceView(BaseModel):
@@ -168,9 +174,39 @@ class RetrievalTraceView(BaseModel):
     started_at: str | None = None
     completed_at: str | None = None
     truncated: bool | None = None
-    stages: list[dict] = []  # 复杂嵌套结构，使用 dict 保持灵活性
-    merge: dict | None = None
-    final_results: dict | None = None
+    stages: list["StageView"] = []
+    merge: "MergeView | None" = None
+    final_results: "FinalView | None" = None
+
+class StageView(BaseModel):
+    stage: str | None = None
+    tier: str | None = None
+    method: str | None = None
+    status: str | None = None
+    input_count: int | None = None
+    candidate_count: int | None = None
+    result_count: int | None = None
+    degraded: bool = False
+    skipped: bool = False
+    started_at: str | None = None
+    duration_millis: int | None = None
+    attributes: dict[str, Any] | None = None
+    candidates: list[dict[str, Any]] | None = None
+
+class MergeView(BaseModel):
+    input_count: int = 0
+    output_count: int = 0
+    deduplicated_count: int = 0
+    source_count: int = 0
+    status: str | None = None
+
+class FinalView(BaseModel):
+    strategy: str | None = None
+    status: str | None = None
+    item_count: int = 0
+    insight_count: int = 0
+    raw_data_count: int = 0
+    evidence_count: int = 0
 
 class RetrieveMemoryResponse(BaseModel):
     status: str | None = None
@@ -314,5 +350,8 @@ MemindError (基类, extends Exception)
 ## 版本与发布
 
 - 版本号与 memind 主项目对齐：0.2.0
+- 版本单一来源：`src/memind/_version.py` 中定义 `__version__ = "0.2.0"`
+- `pyproject.toml` 通过 `dynamic = ["version"]` + hatch-vcs 或直接引用 `_version.py`
+- User-Agent 通过 `importlib.metadata.version("memind-client")` 动态读取，避免硬编码
 - 发布到 PyPI，包名 `memind-client`
-- GitHub Actions CI/CD 发布流程（参考现有 Java client release workflow）
+- GitHub Actions CI/CD 发布流程（参考现有 Java client release workflow，使用 workflow_dispatch 触发）
