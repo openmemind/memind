@@ -65,6 +65,7 @@
         <module>memind-evaluation</module>
         <module>memind-examples</module>
         <module>memind-server</module>
+        <module>memind-clients/java</module>
     </modules>
 
     <properties>
@@ -420,6 +421,9 @@
                                 <excludeArtifact>memind-evaluation</excludeArtifact>
                                 <excludeArtifact>memind-examples</excludeArtifact>
                                 <excludeArtifact>memind-example-java</excludeArtifact>
+                                <excludeArtifact>memind-client-parent</excludeArtifact>
+                                <excludeArtifact>memind-client</excludeArtifact>
+                                <excludeArtifact>memind-client-spring-boot-starter</excludeArtifact>
                             </excludeArtifacts>
                         </configuration>
                     </plugin>
