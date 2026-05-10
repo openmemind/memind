@@ -40,10 +40,13 @@ def _format_context(data, config):
             sections.append("")
         sections.append("## Memory Items")
         sections.extend(f"- [item:{item.get('id')}] {item.get('text')}" for item in selected_items)
-    if not sections:
+    degraded_notice = ""
+    if data.get("status") == "degraded":
+        degraded_notice = "\n[Note: Memory retrieval encountered an error. Results may be incomplete.]\n"
+    if not sections and not degraded_notice:
         return ""
     body = "\n".join(sections)[:max_chars]
-    return f"<memind_memories>\n{config.get('retrievePromptPreamble') or ""}\n{body}\n</memind_memories>"
+    return f"<memind_memories>\n{config.get('retrievePromptPreamble') or ''}\n{body}{degraded_notice}\n</memind_memories>"
 
 
 def main():

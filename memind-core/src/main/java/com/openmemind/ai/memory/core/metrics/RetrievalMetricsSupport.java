@@ -21,7 +21,7 @@ public final class RetrievalMetricsSupport {
 
     public static RetrievalSummaryMetrics summary(
             String strategy, RetrievalResult result, String source) {
-        String status = result == null || result.isEmpty() ? "empty" : "success";
+        String status = result == null ? "empty" : result.status().name().toLowerCase();
         return new RetrievalSummaryMetrics(
                 strategyOrUnknown(strategy),
                 status,

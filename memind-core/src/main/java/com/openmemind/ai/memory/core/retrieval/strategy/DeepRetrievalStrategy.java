@@ -798,7 +798,7 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
                         .sorted((a, b) -> Double.compare(b.finalScore(), a.finalScore()))
                         .toList();
 
-        return new RetrievalResult(
+        return RetrievalResult.of(
                 sortedItems,
                 insights,
                 aggregation.rawDataResults(),

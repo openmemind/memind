@@ -209,6 +209,7 @@ class OpenMemoryControllerTest {
         @Override
         public RetrieveMemoryResponse retrieve(RetrieveMemoryRequest request) {
             return new RetrieveMemoryResponse(
+                    "success",
                     List.of(
                             new RetrieveMemoryResponse.RetrievedItemView(
                                     "item-1",

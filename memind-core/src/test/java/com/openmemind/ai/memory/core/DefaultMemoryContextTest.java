@@ -167,7 +167,7 @@ class DefaultMemoryContextTest {
                             0.9,
                             Instant.now());
             var retrievalResult =
-                    new RetrievalResult(
+                    RetrievalResult.of(
                             List.of(scored),
                             List.of(),
                             List.of(),

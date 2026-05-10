@@ -429,7 +429,7 @@ public class MemindAdapter {
                                     taggedItems.stream().map(TaggedItem::scored).toList();
 
                             RetrievalResult merged =
-                                    new RetrievalResult(
+                                    RetrievalResult.of(
                                             rerankedItems,
                                             mergedInsights,
                                             updatedRawData,

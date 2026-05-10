@@ -60,6 +60,14 @@ class HookTest(unittest.TestCase):
         self.assertNotIn("leaf", context)
         self.assertLess(context.index("[item:11] high"), context.index("[item:10] low"))
 
+    def test_format_context_includes_degraded_notice_without_results(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from retrieve import _format_context
+
+        context = _format_context({"status": "degraded"}, {"retrievePromptPreamble": ""})
+
+        self.assertIn("Memory retrieval encountered an error", context)
+
     def test_ingest_without_transcript_fails_open(self):
         with tempfile.TemporaryDirectory() as tmp:
             env = {"CLAUDE_PLUGIN_ROOT": tmp, "PYTHONPATH": str(ROOT)}
