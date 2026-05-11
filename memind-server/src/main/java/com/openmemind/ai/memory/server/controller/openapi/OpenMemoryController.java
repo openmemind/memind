@@ -18,9 +18,13 @@ import com.openmemind.ai.memory.server.domain.memory.request.AddMessageRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.CommitMemoryRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.ExtractMemoryRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.RetrieveMemoryRequest;
+import com.openmemind.ai.memory.server.domain.memory.response.AddMessageResponse;
+import com.openmemind.ai.memory.server.domain.memory.response.ExtractMemoryResponse;
 import com.openmemind.ai.memory.server.domain.memory.response.RetrieveMemoryResponse;
 import com.openmemind.ai.memory.server.service.memory.OpenMemoryApplicationService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -53,6 +57,53 @@ public class OpenMemoryController {
     public Mono<ApiResult<Void>> commit(@Valid @RequestBody CommitMemoryRequest request) {
         service.commitAsync(request);
         return Mono.just(ApiResult.ok());
+    }
+
+    @PostMapping("/extract/sync")
+    public ResponseEntity<ApiResult<ExtractMemoryResponse>> extractSync(
+            @Valid @RequestBody ExtractMemoryRequest request) {
+        return extractionResponse(service.extract(request));
+    }
+
+    @PostMapping("/add-message/sync")
+    public ResponseEntity<ApiResult<AddMessageResponse>> addMessageSync(
+            @Valid @RequestBody AddMessageRequest request) {
+        AddMessageResponse response = service.addMessage(request);
+        if (!response.triggered() || response.result() == null) {
+            return ResponseEntity.ok(ApiResult.success(response));
+        }
+        if (isFailed(response.result())) {
+            return failedExtraction(response.result());
+        }
+        return ResponseEntity.ok(ApiResult.success(response));
+    }
+
+    @PostMapping("/commit/sync")
+    public ResponseEntity<ApiResult<ExtractMemoryResponse>> commitSync(
+            @Valid @RequestBody CommitMemoryRequest request) {
+        return extractionResponse(service.commit(request));
+    }
+
+    private static ResponseEntity<ApiResult<ExtractMemoryResponse>> extractionResponse(
+            ExtractMemoryResponse response) {
+        if (isFailed(response)) {
+            return failedExtraction(response);
+        }
+        return ResponseEntity.ok(ApiResult.success(response));
+    }
+
+    private static <T> ResponseEntity<ApiResult<T>> failedExtraction(
+            ExtractMemoryResponse response) {
+        String message =
+                response.errorMessage() == null || response.errorMessage().isBlank()
+                        ? "Memory extraction failed"
+                        : response.errorMessage();
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResult.failure("extraction_failed", message, null, null));
+    }
+
+    private static boolean isFailed(ExtractMemoryResponse response) {
+        return response != null && "FAILED".equals(response.status());
     }
 
     @PostMapping("/retrieve")

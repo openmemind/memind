@@ -288,6 +288,21 @@ public class PostgresqlMemoryStore
     }
 
     @Override
+    public List<MemoryRawData> listRawDataByContentId(MemoryId memoryId, String contentId) {
+        ScopeContext scope = scopeOf(memoryId);
+        return queryList(
+                """
+                SELECT * FROM memory_raw_data
+                WHERE user_id = ? AND agent_id = ? AND content_id = ? AND deleted = FALSE
+                ORDER BY id ASC
+                """,
+                this::mapRawData,
+                scope.userId(),
+                scope.agentId(),
+                contentId);
+    }
+
+    @Override
     public List<MemoryRawData> listRawData(MemoryId memoryId) {
         ScopeContext scope = scopeOf(memoryId);
         return queryList(

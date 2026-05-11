@@ -18,6 +18,7 @@ import com.openmemind.ai.memory.core.data.MemoryRawData;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -30,6 +31,12 @@ public interface RawDataOperations {
     Optional<MemoryRawData> getRawData(MemoryId id, String rawDataId);
 
     Optional<MemoryRawData> getRawDataByContentId(MemoryId id, String contentId);
+
+    default List<MemoryRawData> listRawDataByContentId(MemoryId id, String contentId) {
+        return listRawData(id).stream()
+                .filter(rawData -> Objects.equals(rawData.contentId(), contentId))
+                .toList();
+    }
 
     List<MemoryRawData> listRawData(MemoryId id);
 

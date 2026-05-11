@@ -1,8 +1,8 @@
 # Memind Claude Code Integration
 
 Memind adds persistent project memory to Claude Code. The plugin retrieves relevant Memind context before each
-user prompt and appends Claude Code conversation messages to Memind's conversation buffer during session
-lifecycle hooks.
+user prompt and submits Claude Code conversation messages through Memind's reliable extraction endpoint during
+session lifecycle hooks.
 
 Use this plugin when you want Claude Code to remember project facts, preferences, implementation decisions, and
 previous discussions across sessions. The plugin connects Claude Code to an already-running Memind server; it
@@ -20,9 +20,8 @@ The integration is intentionally small:
 - **Retrieval**: `UserPromptSubmit` calls Memind `/open/v1/memory/retrieve` and injects relevant memories into
   Claude Code as `<memind_memories>...</memind_memories>` additional context.
 - **Ingestion**: `Stop`, `PreCompact`, and `SessionEnd` read the Claude Code transcript, filter
-  user/assistant messages, and send new messages to Memind `/open/v1/memory/add-message`.
-- **Commit on boundaries**: `PreCompact` and `SessionEnd` commit by default, so Memind can extract memories at
-  natural context/session boundaries.
+  user/assistant messages, and submit a caller-owned conversation payload to Memind
+  `/open/v1/memory/extract/sync`.
 - **Retry**: failed ingestion payloads are spooled under `~/.memind/claude-code/retry/` and replayed on later
   `SessionStart` hooks.
 - **Source tagging**: all requests use `sourceClient = "claude-code"` by default, so Memind can distinguish
@@ -93,9 +92,9 @@ The installed hooks are:
 | --- | --- | ---: | --- |
 | `SessionStart` | `scripts/session_start.py` | 5s | Health check, replay at most one failed retry payload, and clean old state. |
 | `UserPromptSubmit` | `scripts/retrieve.py` | 12s | Retrieve relevant Memind context for the current user prompt. |
-| `PreCompact` | `scripts/pre_compact.py` | 30s | Submit recent transcript messages and commit before context compaction. |
-| `Stop` | `scripts/ingest.py` | 15s | Append new transcript messages to Memind after a turn. |
-| `SessionEnd` | `scripts/session_end.py` | 10s | Submit remaining transcript messages and commit at session end. |
+| `PreCompact` | `scripts/pre_compact.py` | 30s | Submit recent transcript messages through reliable extraction before context compaction. |
+| `Stop` | `scripts/ingest.py` | 15s | Submit new transcript messages through reliable extraction after a turn. |
+| `SessionEnd` | `scripts/session_end.py` | 10s | Submit remaining transcript messages through reliable extraction at session end. |
 
 `Stop` is configured as async so regular turn completion stays fast. `PreToolUse` and `PostToolUse` are
 intentionally unused in v0.1 because tool-call memory needs an explicit privacy and data-model design.
@@ -114,6 +113,7 @@ User configuration is optional. Save overrides as `~/.memind/claude-code.json`:
   "agentId": "claude-code",
   "agentIdMode": "project",
   "sourceClient": "claude-code",
+  "ingestionMode": "extract-sync",
   "preCompactCommit": true,
   "commitOnSessionEnd": true,
   "retrieveContextTurns": 0
@@ -143,12 +143,13 @@ Settings are loaded in this order:
 | `retrieveMaxEntries` | `8` | Maximum formatted memory entries injected into Claude Code. |
 | `retrieveMaxChars` | `6000` | Maximum injected context characters. |
 | `retrieveContextTurns` | `0` | Number of recent transcript turns to include in the retrieval query. |
+| `ingestionMode` | `extract-sync` | Default reliable ingestion mode. |
 | `ingestionRoles` | `["user", "assistant"]` | Transcript roles eligible for ingestion. |
 | `ingestionMaxMessagesPerHook` | `20` | Maximum new messages sent during one regular ingestion hook. |
-| `preCompactCommit` | `true` | Commits after successful `PreCompact` ingestion. |
+| `preCompactCommit` | `true` | Compatibility flag for server-buffer ingestion mode; ignored by the default reliable mode. |
 | `preCompactMaxMessages` | `20` | Maximum messages submitted during one `PreCompact` hook. |
-| `commitOnSessionEnd` | `true` | Commits after successful `SessionEnd` ingestion. |
-| `ingestRetrySpool` | `true` | Enables file-backed retry for failed ingestion and commit payloads. |
+| `commitOnSessionEnd` | `true` | Compatibility flag for server-buffer ingestion mode; ignored by the default reliable mode. |
+| `ingestRetrySpool` | `true` | Enables file-backed retry for failed extraction payloads. |
 | `debug` | `false` | Writes debug logs to `~/.memind/claude-code.log`. |
 
 ### Environment Overrides
@@ -162,6 +163,7 @@ export MEMIND_USER_ID=local__alice
 export MEMIND_AGENT_ID=claude-code
 export MEMIND_AGENT_ID_MODE=project
 export MEMIND_SOURCE_CLIENT=claude-code
+export MEMIND_INGESTION_MODE=extract-sync
 export MEMIND_PRE_COMPACT_COMMIT=true
 export MEMIND_COMMIT_ON_SESSION_END=true
 export MEMIND_RETRIEVE_CONTEXT_TURNS=0
@@ -227,13 +229,14 @@ The ingestion flow:
 3. Strips previously injected `<memind_memories>` blocks to avoid feedback loops.
 4. Skips tool/event payloads, unsupported roles, and Claude Code interruption placeholders.
 5. Computes stable fingerprints and sends only messages that have not already been submitted.
-6. Retries each failed `add-message` once before writing a retry payload.
+6. Builds one caller-owned conversation raw-content payload and submits it to `/open/v1/memory/extract/sync`.
 
-Accepted fingerprints are persisted immediately, so partial progress is preserved even if later messages fail.
-Unsubmitted messages are retried by future hooks.
+The local retry spool stores the full extraction payload plus the covered message fingerprints. Fingerprints are
+marked submitted only after Memind returns `SUCCESS`; `PARTIAL_SUCCESS` and failures keep the payload available
+for later replay.
 
-`Stop` only appends messages by default. `PreCompact` and `SessionEnd` append messages and then commit by
-default, which gives Memind a natural boundary for extraction without forcing extraction after every turn.
+Commit flags apply only to explicit server-buffer mode. In the default reliable mode, hooks do not issue an
+additional `/commit` call after successful `/extract/sync`.
 
 ## Verify Installation
 
@@ -285,21 +288,8 @@ Then start a new Claude Code session and say something specific:
 Please remember: the Memind Claude Code smoke test topic is blue-lake-42.
 ```
 
-After Claude Code responds, the `Stop` hook should append the turn to Memind's conversation buffer. To make the
-message available for retrieval, either end the Claude Code session so `SessionEnd` commits, or manually commit:
-
-```bash
-curl -fsSL -X POST http://127.0.0.1:8366/open/v1/memory/commit \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "userId": "local__memind-smoke",
-    "agentId": "claude-code-smoke",
-    "sourceClient": "claude-code"
-  }'
-```
-
-Commit requests extraction. Depending on server configuration, extraction may finish asynchronously; wait until
-the Memind server logs show memory item or insight extraction completing.
+After Claude Code responds, the `Stop` hook should submit the turn to Memind via `/open/v1/memory/extract/sync`.
+No manual commit is needed for the default reliable path.
 
 Finally, verify retrieval:
 
@@ -411,11 +401,10 @@ curl -fsSL http://127.0.0.1:8366/open/v1/health
 
 ### New memories are not immediately retrieved
 
-Raw messages are appended first. They become retrievable after Memind commits and extracts memory items or
-insights. By default, Claude Code commits on `PreCompact` and `SessionEnd`, not after every `Stop` hook.
-
-If you need faster availability during testing, manually commit the same `userId` and `agentId` through Memind's
-API or end the Claude Code session to trigger `SessionEnd`.
+The default reliable mode submits transcript batches through `/open/v1/memory/extract/sync`, so a `SUCCESS`
+response means extraction finished for that batch. If retrieval still does not surface the expected memory,
+confirm the same `userId` and `agentId` are used for ingestion and retrieval, then inspect
+`~/.memind/claude-code.log` with `MEMIND_DEBUG=true`.
 
 ### Duplicate messages appear
 

@@ -25,6 +25,8 @@ import com.openmemind.ai.memory.server.domain.memory.request.AddMessageRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.CommitMemoryRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.ExtractMemoryRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.RetrieveMemoryRequest;
+import com.openmemind.ai.memory.server.domain.memory.response.AddMessageResponse;
+import com.openmemind.ai.memory.server.domain.memory.response.ExtractMemoryResponse;
 import com.openmemind.ai.memory.server.domain.memory.response.RetrieveMemoryResponse;
 import com.openmemind.ai.memory.server.handler.ApiExceptionHandler;
 import com.openmemind.ai.memory.server.service.memory.OpenMemoryApplicationService;
@@ -159,6 +161,226 @@ class OpenMemoryControllerTest {
     }
 
     @Test
+    void extractSyncReturnsResponseOnSuccess() throws Exception {
+        service.extractResponse =
+                new ExtractMemoryResponse(
+                        "SUCCESS",
+                        List.of("rd-1"),
+                        List.of(101L),
+                        List.of(201L),
+                        false,
+                        123L,
+                        null);
+
+        mockMvc.perform(
+                        post("/open/v1/memory/extract/sync")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1",
+                                          "rawContent": {
+                                            "type": "conversation",
+                                            "messages": [
+                                              {
+                                                "role": "USER",
+                                                "content": [{"type": "text", "text": "hello"}]
+                                              }
+                                            ]
+                                          }
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.rawDataIds[0]").value("rd-1"))
+                .andExpect(jsonPath("$.data.itemIds[0]").value(101))
+                .andExpect(jsonPath("$.data.insightIds[0]").value(201))
+                .andExpect(jsonPath("$.data.insightPending").value(false));
+
+        org.assertj.core.api.Assertions.assertThat(service.lastExtractRequest).isNotNull();
+    }
+
+    @Test
+    void extractSyncPreservesPartialSuccessAndInsightPending() throws Exception {
+        service.extractResponse =
+                new ExtractMemoryResponse(
+                        "PARTIAL_SUCCESS",
+                        List.of("rd-1"),
+                        List.of(101L),
+                        List.of(),
+                        true,
+                        234L,
+                        "insight scheduling deferred");
+
+        mockMvc.perform(
+                        post("/open/v1/memory/extract/sync")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1",
+                                          "rawContent": {
+                                            "type": "conversation",
+                                            "messages": [
+                                              {
+                                                "role": "USER",
+                                                "content": [{"type": "text", "text": "hello"}]
+                                              }
+                                            ]
+                                          }
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.data.status").value("PARTIAL_SUCCESS"))
+                .andExpect(jsonPath("$.data.insightPending").value(true))
+                .andExpect(jsonPath("$.data.errorMessage").value("insight scheduling deferred"));
+    }
+
+    @Test
+    void extractSyncReturnsFailureEnvelopeOnFailedStatus() throws Exception {
+        service.extractResponse =
+                new ExtractMemoryResponse(
+                        "FAILED", List.of(), List.of(), List.of(), false, 50L, "extraction failed");
+
+        mockMvc.perform(
+                        post("/open/v1/memory/extract/sync")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1",
+                                          "rawContent": {
+                                            "type": "conversation",
+                                            "messages": [
+                                              {
+                                                "role": "USER",
+                                                "content": [{"type": "text", "text": "hello"}]
+                                              }
+                                            ]
+                                          }
+                                        }
+                                        """))
+                .andExpect(status().is5xxServerError())
+                .andExpect(jsonPath("$.code").value("extraction_failed"))
+                .andExpect(jsonPath("$.message").value("extraction failed"));
+    }
+
+    @Test
+    void addMessageSyncReturnsSuccessWhenNoExtractionTriggered() throws Exception {
+        service.addMessageResponse = new AddMessageResponse(false, null);
+
+        mockMvc.perform(
+                        post("/open/v1/memory/add-message/sync")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1",
+                                          "message": {
+                                            "role": "USER",
+                                            "content": [{"type": "text", "text": "hello"}]
+                                          }
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.data.triggered").value(false))
+                .andExpect(jsonPath("$.data.result").doesNotExist());
+
+        org.assertj.core.api.Assertions.assertThat(service.lastAddMessageRequest).isNotNull();
+    }
+
+    @Test
+    void addMessageSyncReturnsFailureWhenTriggeredExtractionFailed() throws Exception {
+        service.addMessageResponse =
+                new AddMessageResponse(
+                        true,
+                        new ExtractMemoryResponse(
+                                "FAILED",
+                                List.of(),
+                                List.of(),
+                                List.of(),
+                                false,
+                                50L,
+                                "boundary extraction failed"));
+
+        mockMvc.perform(
+                        post("/open/v1/memory/add-message/sync")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1",
+                                          "message": {
+                                            "role": "USER",
+                                            "content": [{"type": "text", "text": "hello"}]
+                                          }
+                                        }
+                                        """))
+                .andExpect(status().is5xxServerError())
+                .andExpect(jsonPath("$.code").value("extraction_failed"))
+                .andExpect(jsonPath("$.message").value("boundary extraction failed"));
+    }
+
+    @Test
+    void commitSyncReturnsExtractionResponse() throws Exception {
+        service.commitResponse =
+                new ExtractMemoryResponse(
+                        "SUCCESS", List.of("rd-2"), List.of(102L), List.of(), false, 77L, null);
+
+        mockMvc.perform(
+                        post("/open/v1/memory/commit/sync")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1"
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.rawDataIds[0]").value("rd-2"));
+
+        org.assertj.core.api.Assertions.assertThat(service.lastCommitRequest).isNotNull();
+    }
+
+    @Test
+    void commitSyncReturnsFailureEnvelopeOnFailedStatus() throws Exception {
+        service.commitResponse =
+                new ExtractMemoryResponse(
+                        "FAILED",
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        false,
+                        50L,
+                        "commit extraction failed");
+
+        mockMvc.perform(
+                        post("/open/v1/memory/commit/sync")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1"
+                                        }
+                                        """))
+                .andExpect(status().is5xxServerError())
+                .andExpect(jsonPath("$.code").value("extraction_failed"))
+                .andExpect(jsonPath("$.message").value("commit extraction failed"));
+    }
+
+    @Test
     void retrieveReturnsRankedMemoryPayload() throws Exception {
         mockMvc.perform(
                         post("/open/v1/memory/retrieve")
@@ -186,6 +408,13 @@ class OpenMemoryControllerTest {
         private ExtractMemoryRequest lastExtractRequest;
         private AddMessageRequest lastAddMessageRequest;
         private CommitMemoryRequest lastCommitRequest;
+        private ExtractMemoryResponse extractResponse =
+                new ExtractMemoryResponse(
+                        "SUCCESS", List.of(), List.of(), List.of(), false, 1L, null);
+        private AddMessageResponse addMessageResponse = new AddMessageResponse(false, null);
+        private ExtractMemoryResponse commitResponse =
+                new ExtractMemoryResponse(
+                        "SUCCESS", List.of(), List.of(), List.of(), false, 1L, null);
 
         private StubOpenMemoryApplicationService() {
             super(null);
@@ -204,6 +433,24 @@ class OpenMemoryControllerTest {
         @Override
         public void commitAsync(CommitMemoryRequest request) {
             this.lastCommitRequest = request;
+        }
+
+        @Override
+        public ExtractMemoryResponse extract(ExtractMemoryRequest request) {
+            this.lastExtractRequest = request;
+            return extractResponse;
+        }
+
+        @Override
+        public AddMessageResponse addMessage(AddMessageRequest request) {
+            this.lastAddMessageRequest = request;
+            return addMessageResponse;
+        }
+
+        @Override
+        public ExtractMemoryResponse commit(CommitMemoryRequest request) {
+            this.lastCommitRequest = request;
+            return commitResponse;
         }
 
         @Override

@@ -43,6 +43,21 @@ class CommitMemoryRequest(MemindModel):
     source_client: str | None = None
 
 
+class ExtractMemoryResponse(MemindModel):
+    status: str
+    raw_data_ids: list[str] = Field(default_factory=list)
+    item_ids: list[int] = Field(default_factory=list)
+    insight_ids: list[int] = Field(default_factory=list)
+    insight_pending: bool = False
+    duration_millis: int | None = None
+    error_message: str | None = None
+
+
+class AddMessageResponse(MemindModel):
+    triggered: bool
+    result: ExtractMemoryResponse | None = None
+
+
 class RetrieveMemoryRequest(MemindModel):
     user_id: str
     agent_id: str

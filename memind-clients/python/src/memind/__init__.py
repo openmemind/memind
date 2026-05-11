@@ -25,6 +25,7 @@ from memind._exceptions import (
 from memind._version import __version__
 from memind.types import (
     AddMessageRequest,
+    AddMessageResponse,
     ApiResult,
     AudioBlock,
     Base64Source,
@@ -32,6 +33,7 @@ from memind.types import (
     ContentBlock,
     ConversationContent,
     ExtractMemoryRequest,
+    ExtractMemoryResponse,
     FinalView,
     HealthResponse,
     ImageBlock,
@@ -57,6 +59,7 @@ from memind.types import (
 
 __all__ = [
     "AddMessageRequest",
+    "AddMessageResponse",
     "ApiResult",
     "AsyncMemindClient",
     "AudioBlock",
@@ -65,6 +68,7 @@ __all__ = [
     "ContentBlock",
     "ConversationContent",
     "ExtractMemoryRequest",
+    "ExtractMemoryResponse",
     "FinalView",
     "HealthResponse",
     "ImageBlock",

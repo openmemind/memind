@@ -314,6 +314,16 @@ For a runnable version with centralized configuration defaults, start with
 `memind-examples/memind-example-java/README.md` and
 `memind-examples/memind-example-java/src/main/java/com/openmemind/ai/memory/example/java/support/ExampleSettings.java`.
 
+### Open API ingestion semantics
+
+The default ingestion endpoints (`/open/v1/memory/extract`, `/add-message`, and `/commit`) are
+fire-and-forget: a successful HTTP response means Memind accepted and dispatched the work, not that extraction
+completed. Retry-aware clients should use `/open/v1/memory/extract/sync` with a caller-owned raw-content payload
+and clear their local retry state only when the returned extraction status is `SUCCESS`.
+
+`/open/v1/memory/add-message/sync` and `/open/v1/memory/commit/sync` report immediate server-buffer success or
+failure, but they are not durable replay boundaries because the server owns the buffered conversation state.
+
 ---
 
 ## Examples

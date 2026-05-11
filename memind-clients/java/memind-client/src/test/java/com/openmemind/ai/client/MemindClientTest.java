@@ -33,8 +33,10 @@ import com.openmemind.ai.client.model.common.ConversationContent;
 import com.openmemind.ai.client.model.common.Message;
 import com.openmemind.ai.client.model.common.Strategy;
 import com.openmemind.ai.client.model.request.AddMessageRequest;
+import com.openmemind.ai.client.model.request.CommitMemoryRequest;
 import com.openmemind.ai.client.model.request.ExtractMemoryRequest;
 import com.openmemind.ai.client.model.request.RetrieveMemoryRequest;
+import com.openmemind.ai.client.model.response.ExtractMemoryResponse;
 import com.openmemind.ai.client.model.response.HealthResponse;
 import com.openmemind.ai.client.model.response.RetrieveMemoryResponse;
 import java.util.List;
@@ -62,11 +64,11 @@ class MemindClientTest {
     @Test
     void addMessage_sendsCorrectPayload(WireMockRuntimeInfo wmInfo) {
         stubFor(
-                post("/open/v1/memory/add-message")
+                post("/open/v1/memory/add-message/sync")
                         .willReturn(
                                 okJson(
                                         """
-                                        {"code":"200"}
+                                        {"code":"success","data":{"triggered":false}}
                                         """)));
 
         try (MemindClient client = MemindClient.builder().baseUrl(wmInfo.getHttpBaseUrl()).build()) {
@@ -79,7 +81,7 @@ class MemindClientTest {
         }
 
         verify(
-                postRequestedFor(urlEqualTo("/open/v1/memory/add-message"))
+                postRequestedFor(urlEqualTo("/open/v1/memory/add-message/sync"))
                         .withRequestBody(matchingJsonPath("$.userId", equalTo("user-1")))
                         .withRequestBody(matchingJsonPath("$.message.role", equalTo("USER"))));
     }
@@ -87,26 +89,158 @@ class MemindClientTest {
     @Test
     void extract_sendsRawContent(WireMockRuntimeInfo wmInfo) {
         stubFor(
-                post("/open/v1/memory/extract")
+                post("/open/v1/memory/extract/sync")
                         .willReturn(
                                 okJson(
                                         """
-                                        {"code":"200"}
+                                        {"code":"success","data":{
+                                            "status":"SUCCESS",
+                                            "rawDataIds":["rd-1"],
+                                            "itemIds":[101],
+                                            "insightIds":[],
+                                            "insightPending":false,
+                                            "durationMillis":12
+                                        }}
                                         """)));
 
         try (MemindClient client = MemindClient.builder().baseUrl(wmInfo.getHttpBaseUrl()).build()) {
-            client.extract(
-                    ExtractMemoryRequest.builder()
-                            .userId("user-1")
-                            .agentId("agent-1")
-                            .rawContent(ConversationContent.of(List.of(Message.user("test"))))
-                            .build());
+            ExtractMemoryResponse response =
+                    client.extract(
+                            ExtractMemoryRequest.builder()
+                                    .userId("user-1")
+                                    .agentId("agent-1")
+                                    .rawContent(ConversationContent.of(List.of(Message.user("test"))))
+                                    .build());
+
+            assertThat(response.status()).isEqualTo("SUCCESS");
+            assertThat(response.rawDataIds()).containsExactly("rd-1");
         }
 
         verify(
-                postRequestedFor(urlEqualTo("/open/v1/memory/extract"))
+                postRequestedFor(urlEqualTo("/open/v1/memory/extract/sync"))
                         .withRequestBody(
                                 matchingJsonPath("$.rawContent.type", equalTo("conversation"))));
+    }
+
+    @Test
+    void commit_usesSyncEndpoint(WireMockRuntimeInfo wmInfo) {
+        stubFor(
+                post("/open/v1/memory/commit/sync")
+                        .willReturn(
+                                okJson(
+                                        """
+                                        {"code":"success","data":{
+                                            "status":"SUCCESS",
+                                            "rawDataIds":[],
+                                            "itemIds":[],
+                                            "insightIds":[],
+                                            "insightPending":false
+                                        }}
+                                        """)));
+
+        try (MemindClient client = MemindClient.builder().baseUrl(wmInfo.getHttpBaseUrl()).build()) {
+            client.commit(
+                    CommitMemoryRequest.builder().userId("user-1").agentId("agent-1").build());
+        }
+
+        verify(postRequestedFor(urlEqualTo("/open/v1/memory/commit/sync")));
+    }
+
+    @Test
+    void extract_partialSuccessIsReturnedToCaller(WireMockRuntimeInfo wmInfo) {
+        stubFor(
+                post("/open/v1/memory/extract/sync")
+                        .willReturn(
+                                okJson(
+                                        """
+                                        {"code":"success","data":{
+                                            "status":"PARTIAL_SUCCESS",
+                                            "rawDataIds":["rd-1"],
+                                            "itemIds":[],
+                                            "insightIds":[],
+                                            "insightPending":false,
+                                            "errorMessage":"insight failed"
+                                        }}
+                                        """)));
+
+        try (MemindClient client = MemindClient.builder().baseUrl(wmInfo.getHttpBaseUrl()).build()) {
+            ExtractMemoryResponse response =
+                    client.extract(
+                            ExtractMemoryRequest.builder()
+                                    .userId("u")
+                                    .agentId("a")
+                                    .rawContent(ConversationContent.of(List.of(Message.user("test"))))
+                                    .build());
+
+            assertThat(response.status()).isEqualTo("PARTIAL_SUCCESS");
+            assertThat(response.errorMessage()).isEqualTo("insight failed");
+        }
+    }
+
+    @Test
+    void extract_failureEnvelopeThrowsApiException(WireMockRuntimeInfo wmInfo) {
+        stubFor(
+                post("/open/v1/memory/extract/sync")
+                        .willReturn(
+                                aResponse()
+                                        .withStatus(500)
+                                        .withHeader("Content-Type", "application/json")
+                                        .withBody(
+                                                """
+                                                {"code":"extraction_failed","message":"extract failed","traceId":"t1"}
+                                                """)));
+
+        try (MemindClient client = MemindClient.builder().baseUrl(wmInfo.getHttpBaseUrl()).build()) {
+            assertThatThrownBy(
+                            () ->
+                                    client.extract(
+                                            ExtractMemoryRequest.builder()
+                                                    .userId("u")
+                                                    .agentId("a")
+                                                    .rawContent(
+                                                            ConversationContent.of(
+                                                                    List.of(Message.user("test"))))
+                                                    .build()))
+                    .isInstanceOf(MemindApiException.class)
+                    .satisfies(
+                            ex -> {
+                                var apiEx = (MemindApiException) ex;
+                                assertThat(apiEx.getHttpStatus()).isEqualTo(500);
+                                assertThat(apiEx.getErrorCode()).isEqualTo("extraction_failed");
+                            });
+        }
+    }
+
+    @Test
+    void extractAsync_returnsExtractionResponse(WireMockRuntimeInfo wmInfo) {
+        stubFor(
+                post("/open/v1/memory/extract/sync")
+                        .willReturn(
+                                okJson(
+                                        """
+                                        {"code":"success","data":{
+                                            "status":"SUCCESS",
+                                            "rawDataIds":["rd-async"],
+                                            "itemIds":[],
+                                            "insightIds":[],
+                                            "insightPending":false
+                                        }}
+                                        """)));
+
+        try (MemindClient client = MemindClient.builder().baseUrl(wmInfo.getHttpBaseUrl()).build()) {
+            ExtractMemoryResponse response =
+                    client.extractAsync(
+                            ExtractMemoryRequest.builder()
+                                    .userId("user-1")
+                                    .agentId("agent-1")
+                                    .rawContent(ConversationContent.of(List.of(Message.user("test"))))
+                                    .build())
+                            .join();
+
+            assertThat(response.rawDataIds()).containsExactly("rd-async");
+        }
+
+        verify(postRequestedFor(urlEqualTo("/open/v1/memory/extract/sync")));
     }
 
     @Test

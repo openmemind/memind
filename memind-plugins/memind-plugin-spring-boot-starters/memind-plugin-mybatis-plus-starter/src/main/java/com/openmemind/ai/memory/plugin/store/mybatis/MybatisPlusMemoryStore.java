@@ -438,6 +438,18 @@ public class MybatisPlusMemoryStore
         return Optional.ofNullable(dataObject).map(RawDataConverter::toRecord);
     }
 
+    @Override
+    public List<MemoryRawData> listRawDataByContentId(MemoryId id, String contentId) {
+        return rawDataMapper
+                .selectList(
+                        memoryQuery(id, MemoryRawDataDO.class)
+                                .eq("content_id", contentId)
+                                .orderByAsc("id"))
+                .stream()
+                .map(RawDataConverter::toRecord)
+                .toList();
+    }
+
     public List<MemoryRawData> pollRawDataWithoutVector(MemoryId id, int limit, Duration minAge) {
         if (limit <= 0) {
             return List.of();

@@ -39,7 +39,7 @@ class ManifestTest(unittest.TestCase):
     def test_default_settings(self):
         settings = json.loads((ROOT / "settings.json").read_text())
         self.assertEqual(settings["retrieveContextTurns"], 0)
-        self.assertEqual(settings["ingestionMode"], "add-message")
+        self.assertEqual(settings["ingestionMode"], "extract-sync")
         self.assertEqual(settings["ingestionMaxMessagesPerHook"], 20)
         self.assertEqual(settings["stateMaxAgeDays"], 14)
 

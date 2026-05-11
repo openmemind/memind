@@ -21,6 +21,8 @@ import com.openmemind.ai.client.model.request.AddMessageRequest;
 import com.openmemind.ai.client.model.request.CommitMemoryRequest;
 import com.openmemind.ai.client.model.request.ExtractMemoryRequest;
 import com.openmemind.ai.client.model.request.RetrieveMemoryRequest;
+import com.openmemind.ai.client.model.response.AddMessageResponse;
+import com.openmemind.ai.client.model.response.ExtractMemoryResponse;
 import com.openmemind.ai.client.model.response.HealthResponse;
 import com.openmemind.ai.client.model.response.RetrieveMemoryResponse;
 import java.time.Duration;
@@ -50,8 +52,8 @@ public class MemindClient implements AutoCloseable {
         joinAndUnwrap(addMessageAsync(request));
     }
 
-    public void extract(ExtractMemoryRequest request) {
-        joinAndUnwrap(extractAsync(request));
+    public ExtractMemoryResponse extract(ExtractMemoryRequest request) {
+        return joinAndUnwrap(extractAsync(request));
     }
 
     public void commit(CommitMemoryRequest request) {
@@ -68,26 +70,30 @@ public class MemindClient implements AutoCloseable {
 
     public CompletableFuture<Void> addMessageAsync(AddMessageRequest request) {
         ensureOpen();
-        return httpClient.post(
-                "/open/v1/memory/add-message",
-                Objects.requireNonNull(request, "request"),
-                new TypeReference<ApiResult<Void>>() {});
+        return httpClient
+                .post(
+                        "/open/v1/memory/add-message/sync",
+                        Objects.requireNonNull(request, "request"),
+                        new TypeReference<ApiResult<AddMessageResponse>>() {})
+                .thenApply(ignored -> null);
     }
 
-    public CompletableFuture<Void> extractAsync(ExtractMemoryRequest request) {
+    public CompletableFuture<ExtractMemoryResponse> extractAsync(ExtractMemoryRequest request) {
         ensureOpen();
         return httpClient.post(
-                "/open/v1/memory/extract",
+                "/open/v1/memory/extract/sync",
                 Objects.requireNonNull(request, "request"),
-                new TypeReference<ApiResult<Void>>() {});
+                new TypeReference<ApiResult<ExtractMemoryResponse>>() {});
     }
 
     public CompletableFuture<Void> commitAsync(CommitMemoryRequest request) {
         ensureOpen();
-        return httpClient.post(
-                "/open/v1/memory/commit",
-                Objects.requireNonNull(request, "request"),
-                new TypeReference<ApiResult<Void>>() {});
+        return httpClient
+                .post(
+                        "/open/v1/memory/commit/sync",
+                        Objects.requireNonNull(request, "request"),
+                        new TypeReference<ApiResult<ExtractMemoryResponse>>() {})
+                .thenApply(ignored -> null);
     }
 
     public CompletableFuture<RetrieveMemoryResponse> retrieveAsync(RetrieveMemoryRequest request) {

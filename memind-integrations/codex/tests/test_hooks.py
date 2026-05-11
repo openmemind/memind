@@ -73,7 +73,7 @@ class HookTest(unittest.TestCase):
             output = self.run_hook("ingest.py", {"cwd": tmp, "session_id": "s1"}, env=env)
         self.assertEqual(output, {"continue": True})
 
-    def test_ingest_commits_only_when_enabled_and_all_selected_messages_succeed(self):
+    def test_ingest_uses_extract_sync_and_ignores_commit_flag_in_reliable_mode(self):
         sys.path.insert(0, str(ROOT / "scripts"))
         import ingest
 
@@ -99,15 +99,17 @@ class HookTest(unittest.TestCase):
                     with mock.patch.object(ingest, "retry_root", return_value=Path(tmp) / "retry"):
                         with mock.patch.object(ingest, "MemindClient") as client_cls:
                             client = client_cls.return_value
+                            client.extract.return_value = {"data": {"status": "SUCCESS"}}
                             result = ingest.ingest_messages(config, {"session_id": "s1", "transcript_path": str(transcript), "cwd": tmp})
             self.assertEqual(result["submitted"], 1)
-            self.assertTrue(result["committed"])
-            client.add_message.assert_called_once()
-            client.commit.assert_called_once()
+            self.assertFalse(result["committed"])
+            client.extract.assert_called_once()
+            client.add_message.assert_not_called()
+            client.commit.assert_not_called()
         finally:
             transcript.unlink()
 
-    def test_ingest_does_not_commit_after_partial_append_failure(self):
+    def test_ingest_does_not_mark_submitted_or_commit_when_extract_fails_without_spool(self):
         sys.path.insert(0, str(ROOT / "scripts"))
         import ingest
         from scripts.lib.content import extract_messages
@@ -136,19 +138,21 @@ class HookTest(unittest.TestCase):
                     with mock.patch.object(ingest, "retry_root", return_value=Path(tmp) / "retry"):
                         with mock.patch.object(ingest, "MemindClient") as client_cls:
                             client = client_cls.return_value
-                            client.add_message.side_effect = [None, RuntimeError("down"), RuntimeError("down")]
+                            client.extract.side_effect = RuntimeError("down")
                             result = ingest.ingest_messages(config, {"session_id": "s1", "transcript_path": str(transcript), "cwd": tmp})
                 messages = extract_messages(transcript, ["user", "assistant"])
                 with SessionStateStore(Path(tmp) / "state").locked("s1") as state:
-                    self.assertTrue(state.is_submitted(messages[0]["fingerprint"]))
+                    self.assertFalse(state.is_submitted(messages[0]["fingerprint"]))
                     self.assertFalse(state.is_submitted(messages[1]["fingerprint"]))
-            self.assertEqual(result["submitted"], 1)
+            self.assertEqual(result["submitted"], 0)
             self.assertFalse(result["committed"])
+            client.extract.assert_called_once()
+            client.add_message.assert_not_called()
             client.commit.assert_not_called()
         finally:
             transcript.unlink()
 
-    def test_ingest_spools_failed_and_unattempted_messages(self):
+    def test_ingest_spools_failed_extract_payload(self):
         sys.path.insert(0, str(ROOT / "scripts"))
         import ingest
 
@@ -176,18 +180,58 @@ class HookTest(unittest.TestCase):
                     with mock.patch.object(ingest, "retry_root", return_value=retry_dir):
                         with mock.patch.object(ingest, "MemindClient") as client_cls:
                             client = client_cls.return_value
-                            client.add_message.side_effect = [RuntimeError("down"), RuntimeError("down")]
+                            client.extract.side_effect = RuntimeError("down")
                             result = ingest.ingest_messages(config, {"session_id": "s1", "transcript_path": str(transcript), "cwd": tmp})
                 payload_files = list(retry_dir.glob("*.json"))
                 self.assertEqual(len(payload_files), 1)
                 payload = json.loads(payload_files[0].read_text())
             self.assertEqual(result["submitted"], 0)
             self.assertFalse(result["committed"])
-            self.assertEqual(payload["kind"], "ingestion-batch")
-            self.assertEqual(len(payload["operations"]), 2)
+            self.assertEqual(payload["kind"], "extract")
+            self.assertEqual(payload["rawContent"]["type"], "conversation")
+            self.assertEqual(len(payload["rawContent"]["messages"]), 2)
             self.assertEqual(len(payload["fingerprints"]), 2)
-            self.assertTrue(payload["commitOnSuccess"])
+            self.assertNotIn("commitOnSuccess", payload)
+            client.extract.assert_called_once()
+            client.add_message.assert_not_called()
             client.commit.assert_not_called()
+        finally:
+            transcript.unlink()
+
+    def test_ingest_spools_full_extract_payload_on_partial_success(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import ingest
+
+        with tempfile.NamedTemporaryFile("w", delete=False) as handle:
+            handle.write(json.dumps({"role": "user", "content": "first"}) + "\n")
+            transcript = Path(handle.name)
+        try:
+            config = {
+                "memindApiUrl": "http://127.0.0.1:8366",
+                "memindApiToken": None,
+                "autoIngest": True,
+                "ingestionRoles": ["user", "assistant"],
+                "ingestionMaxMessagesPerHook": 20,
+                "ingestRetrySpool": True,
+                "sourceClient": "codex",
+                "agentId": "codex",
+                "agentIdMode": "global",
+                "userId": "u",
+                "commitOnStop": False,
+            }
+            with tempfile.TemporaryDirectory() as tmp:
+                retry_dir = Path(tmp) / "retry"
+                with mock.patch.object(ingest, "state_root", return_value=Path(tmp) / "state"):
+                    with mock.patch.object(ingest, "retry_root", return_value=retry_dir):
+                        with mock.patch.object(ingest, "MemindClient") as client_cls:
+                            client = client_cls.return_value
+                            client.extract.return_value = {"data": {"status": "PARTIAL_SUCCESS"}}
+                            result = ingest.ingest_messages(config, {"session_id": "s1", "transcript_path": str(transcript), "cwd": tmp})
+                payload = json.loads(next(retry_dir.glob("*.json")).read_text())
+            self.assertEqual(result["submitted"], 0)
+            self.assertEqual(payload["kind"], "extract")
+            self.assertEqual(payload["rawContent"]["type"], "conversation")
+            self.assertEqual(len(payload["fingerprints"]), 1)
         finally:
             transcript.unlink()
 
@@ -244,6 +288,98 @@ class HookTest(unittest.TestCase):
                         session_start.run_session_start(config)
         method_names = [call[0] for call in client.method_calls]
         self.assertLess(method_names.index("add_message"), method_names.index("commit"))
+
+    def test_session_start_replays_extract_payload_and_marks_fingerprints(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import session_start
+        from scripts.lib.retry import RetrySpool
+        from scripts.lib.state import SessionStateStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            retry_root = Path(tmp) / "retry"
+            state_root = Path(tmp) / "state"
+            RetrySpool(retry_root).enqueue(
+                {
+                    "kind": "extract",
+                    "userId": "u",
+                    "agentId": "a",
+                    "sourceClient": "codex",
+                    "sessionKey": "s1",
+                    "fingerprints": ["fp1"],
+                    "rawContent": {
+                        "type": "conversation",
+                        "messages": [
+                            {"role": "USER", "content": [{"type": "text", "text": "hello"}]}
+                        ],
+                    },
+                }
+            )
+            config = {
+                "memindApiUrl": "http://127.0.0.1:8366",
+                "memindApiToken": None,
+                "ingestRetryMaxFiles": 20,
+                "ingestRetryMaxAgeDays": 7,
+                "stateMaxAgeDays": 14,
+                "debug": False,
+            }
+            with mock.patch.object(session_start, "retry_root", return_value=retry_root):
+                with mock.patch.object(session_start, "state_root", return_value=state_root):
+                    with mock.patch.object(session_start, "MemindClient") as client_cls:
+                        client = client_cls.return_value
+                        client.health.return_value = {"data": {"status": "UP"}}
+                        client.extract.return_value = {"data": {"status": "SUCCESS"}}
+                        session_start.run_session_start(config)
+            with SessionStateStore(state_root).locked("s1") as state:
+                self.assertTrue(state.is_submitted("fp1"))
+            self.assertEqual(list(retry_root.glob("*.json")), [])
+            client.extract.assert_called_once()
+            client.add_message.assert_not_called()
+            client.commit.assert_not_called()
+
+    def test_session_start_keeps_extract_payload_when_replay_is_not_success(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import session_start
+        from scripts.lib.retry import RetrySpool
+        from scripts.lib.state import SessionStateStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            retry_root = Path(tmp) / "retry"
+            state_root = Path(tmp) / "state"
+            RetrySpool(retry_root).enqueue(
+                {
+                    "kind": "extract",
+                    "userId": "u",
+                    "agentId": "a",
+                    "sourceClient": "codex",
+                    "sessionKey": "s1",
+                    "fingerprints": ["fp1"],
+                    "rawContent": {
+                        "type": "conversation",
+                        "messages": [
+                            {"role": "USER", "content": [{"type": "text", "text": "hello"}]}
+                        ],
+                    },
+                }
+            )
+            config = {
+                "memindApiUrl": "http://127.0.0.1:8366",
+                "memindApiToken": None,
+                "ingestRetryMaxFiles": 20,
+                "ingestRetryMaxAgeDays": 7,
+                "stateMaxAgeDays": 14,
+                "debug": False,
+            }
+            with mock.patch.object(session_start, "retry_root", return_value=retry_root):
+                with mock.patch.object(session_start, "state_root", return_value=state_root):
+                    with mock.patch.object(session_start, "MemindClient") as client_cls:
+                        client = client_cls.return_value
+                        client.health.return_value = {"data": {"status": "UP"}}
+                        client.extract.return_value = {"data": {"status": "PARTIAL_SUCCESS"}}
+                        session_start.run_session_start(config)
+            with SessionStateStore(state_root).locked("s1") as state:
+                self.assertFalse(state.is_submitted("fp1"))
+            self.assertEqual(len(list(retry_root.glob("*.json"))), 1)
+            client.extract.assert_called_once()
 
     def test_session_start_skips_replayed_message_already_submitted_by_later_stop(self):
         sys.path.insert(0, str(ROOT / "scripts"))
