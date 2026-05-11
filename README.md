@@ -118,15 +118,90 @@ Retrieval admission is always enabled: blank queries, pure punctuation/symbol in
 
 ## Quick Start
 
-This quick start covers the default **pure Java + OpenAI + SQLite** path.
+The fastest way to try Memind is Docker Compose. It starts the local
+`memind-server` API together with the React admin UI without requiring Java,
+Maven, Node.js, or pnpm on the host.
 
 ### Prerequisites
+
+- Docker with the Compose plugin
+- An OpenAI-compatible chat and embedding provider key
+
+### Configure credentials
+
+Create a local `.env` file in the repository root. `docker-compose.yml` reads these values
+automatically:
+
+```bash
+# Required.
+OPENAI_API_KEY=your-key
+
+# Optional provider and model overrides.
+OPENAI_BASE_URL=https://openrouter.ai/api
+OPENAI_CHAT_MODEL=openai/gpt-4o-mini
+OPENAI_EMBEDDING_MODEL=openai/text-embedding-3-small
+
+# Optional. Required only when you want an external rerank provider for deep retrieval.
+MEMIND_RERANK_BASE_URL=https://aihubmix.com
+MEMIND_RERANK_API_KEY=
+MEMIND_RERANK_MODEL=jina-reranker-v3
+
+# Optional host ports.
+MEMIND_SERVER_PORT=8366
+MEMIND_UI_PORT=8080
+```
+
+`OPENAI_BASE_URL`, `OPENAI_CHAT_MODEL`, and `OPENAI_EMBEDDING_MODEL` are optional.
+The chat and embedding model choices directly affect memory extraction, insight quality,
+and retrieval quality. If your embedding provider uses a different endpoint or key from chat,
+also set `EMBEDDING_BASE_URL` and `EMBEDDING_API_KEY`.
+
+### Start the stack
+
+```bash
+docker compose up -d --build
+```
+
+After the images are built and the containers start:
+
+- Admin UI: `http://localhost:8080`
+- Server health check: `http://localhost:8366/open/v1/health`
+- Open API base path: `http://localhost:8366/open/v1`
+- Admin API base path: `http://localhost:8366/admin/v1`
+
+The UI container proxies `/open/*` and `/admin/*` to `memind-server`, so the browser can use
+the UI as a same-origin local admin console.
+
+### Common commands
+
+```bash
+# View logs
+docker compose logs -f memind-server
+docker compose logs -f memind-ui
+
+# Stop containers but keep persisted memory data
+docker compose down
+
+# Stop containers and remove persisted memory data
+docker compose down -v
+```
+
+By default, `memind-server` stores SQLite data and the fallback file vector store in the
+named Docker volume `memind-data`, mounted at `/app/data` inside the container. The Compose
+setup is intended for local development and inspection; the admin UI has no authentication,
+so do not expose it directly to public networks.
+
+### Java quickstart example
+
+If you prefer to run from source, use the default **pure Java + OpenAI + SQLite** path.
+
+#### Java prerequisites
 
 - Java 21
 - Maven
 - `OPENAI_API_KEY`
 
-### Run the quickstart example
+#### Run the quickstart example
 
 Clone the repository, set your API key, and run the maintained Java quickstart example:
 
