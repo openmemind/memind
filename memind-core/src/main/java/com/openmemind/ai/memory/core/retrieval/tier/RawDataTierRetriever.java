@@ -27,6 +27,7 @@ import com.openmemind.ai.memory.core.textsearch.TextSearchResult;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import com.openmemind.ai.memory.core.vector.VectorSearchResult;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -123,27 +124,84 @@ public class RawDataTierRetriever implements TierSearchable {
             Set<String> rawDataIdScope,
             List<ExpandedQuery> expandedQueries) {
 
-        Map<String, MemoryRawData> vectorIdToRawData =
-                buildVectorIdToRawDataMap(context, rawDataIdScope);
-
-        // Channel 0: Original query vector search
-        Mono<List<ScoredResult>> originalVectorMono =
-                executeVectorChannel(context, config, topK, minScore, vectorIdToRawData);
-
-        // Channel 1: Original query BM25 search
+        Mono<List<VectorSearchResult>> originalVectorResultsMono =
+                searchOriginalVectorResults(context, config, topK, minScore);
         Mono<List<ScoredResult>> originalBm25Mono = executeBm25Channel(context, topK);
 
-        // Channels 2+: Expanded query channels
-        Mono<List<List<ScoredResult>>> expandedChannelsMono =
-                executeExpandedChannels(
-                        expandedQueries, context, config, topK, minScore, vectorIdToRawData);
+        List<ExpandedQuery> safeExpandedQueries =
+                expandedQueries == null ? List.of() : expandedQueries;
+        Mono<List<List<VectorSearchResult>>> expandedVectorHitsMono =
+                Flux.fromIterable(safeExpandedQueries)
+                        .filter(
+                                eq ->
+                                        eq.queryType() == ExpandedQuery.QueryType.VEC
+                                                || eq.queryType() == ExpandedQuery.QueryType.HYDE)
+                        .flatMap(
+                                eq ->
+                                        searchExpandedVectorResults(
+                                                        eq, context, config, topK, minScore)
+                                                .onErrorResume(
+                                                        e -> {
+                                                            log.warn(
+                                                                    "Tier3 expanded vector channel"
+                                                                            + " search failed:"
+                                                                            + " type={}, text={}",
+                                                                    eq.queryType(),
+                                                                    eq.text(),
+                                                                    e);
+                                                            return Mono.just(List.of());
+                                                        }))
+                        .collectList();
+        Mono<List<List<ScoredResult>>> expandedLexChannelsMono =
+                Flux.fromIterable(safeExpandedQueries)
+                        .filter(eq -> eq.queryType() == ExpandedQuery.QueryType.LEX)
+                        .flatMap(
+                                eq ->
+                                        executeExpandedLexChannel(eq, context, topK)
+                                                .onErrorResume(
+                                                        e -> {
+                                                            log.warn(
+                                                                    "Tier3 expanded lex channel"
+                                                                            + " search failed:"
+                                                                            + " type={}, text={}",
+                                                                    eq.queryType(),
+                                                                    eq.text(),
+                                                                    e);
+                                                            return Mono.just(List.of());
+                                                        }))
+                        .collectList();
 
-        return Mono.zip(originalVectorMono, originalBm25Mono, expandedChannelsMono)
+        return Mono.zip(
+                        originalVectorResultsMono,
+                        originalBm25Mono,
+                        expandedVectorHitsMono,
+                        expandedLexChannelsMono)
                 .map(
                         tuple -> {
-                            List<ScoredResult> vectorResults = tuple.getT1();
+                            List<VectorSearchResult> originalVectorHits = tuple.getT1();
                             List<ScoredResult> bm25Results = tuple.getT2();
-                            List<List<ScoredResult>> expandedResults = tuple.getT3();
+                            List<List<VectorSearchResult>> expandedVectorHits = tuple.getT3();
+                            List<List<ScoredResult>> expandedLexResults = tuple.getT4();
+
+                            List<String> vectorIds = new ArrayList<>();
+                            vectorIds.addAll(collectVectorIds(originalVectorHits));
+                            expandedVectorHits.forEach(
+                                    hits -> vectorIds.addAll(collectVectorIds(hits)));
+                            Map<String, MemoryRawData> vectorIdToRawData =
+                                    buildVectorIdToRawDataMap(context, vectorIds, rawDataIdScope);
+                            List<ScoredResult> vectorResults =
+                                    toScoredResults(
+                                            originalVectorHits, vectorIdToRawData, config, topK);
+                            List<List<ScoredResult>> expandedVectorResults =
+                                    expandedVectorHits.stream()
+                                            .map(
+                                                    hits ->
+                                                            toScoredResults(
+                                                                    hits,
+                                                                    vectorIdToRawData,
+                                                                    config,
+                                                                    topK))
+                                            .toList();
 
                             // Build ranking list and weights
                             List<List<ScoredResult>> rankedLists = new ArrayList<>();
@@ -157,7 +215,14 @@ public class RawDataTierRetriever implements TierSearchable {
                                 rankedLists.add(bm25Results);
                                 weightsList.add(config.scoring().queryWeight().originalWeight());
                             }
-                            for (List<ScoredResult> channelResults : expandedResults) {
+                            for (List<ScoredResult> channelResults : expandedVectorResults) {
+                                if (!channelResults.isEmpty()) {
+                                    rankedLists.add(channelResults);
+                                    weightsList.add(
+                                            config.scoring().queryWeight().expandedWeight());
+                                }
+                            }
+                            for (List<ScoredResult> channelResults : expandedLexResults) {
                                 if (!channelResults.isEmpty()) {
                                     rankedLists.add(channelResults);
                                     weightsList.add(
@@ -210,13 +275,8 @@ public class RawDataTierRetriever implements TierSearchable {
                         });
     }
 
-    /** Original query vector search channel */
-    private Mono<List<ScoredResult>> executeVectorChannel(
-            QueryContext context,
-            RetrievalConfig config,
-            int topK,
-            double minScore,
-            Map<String, MemoryRawData> vectorIdToRawData) {
+    private Mono<List<VectorSearchResult>> searchOriginalVectorResults(
+            QueryContext context, RetrievalConfig config, int topK, double minScore) {
         return memoryVector
                 .search(
                         context.memoryId(),
@@ -225,14 +285,36 @@ public class RawDataTierRetriever implements TierSearchable {
                         minScore,
                         null)
                 .collectList()
-                .map(
-                        vectorResults ->
-                                toScoredResults(vectorResults, vectorIdToRawData, config, topK))
                 .onErrorResume(
                         e -> {
                             log.warn("Tier3 vector channel search failed", e);
                             return Mono.just(List.of());
                         });
+    }
+
+    private Mono<List<VectorSearchResult>> searchExpandedVectorResults(
+            ExpandedQuery eq,
+            QueryContext baseContext,
+            RetrievalConfig config,
+            int topK,
+            double minScore) {
+        var ctx =
+                new QueryContext(
+                        baseContext.memoryId(),
+                        baseContext.originalQuery(),
+                        eq.text(),
+                        baseContext.conversationHistory(),
+                        baseContext.metadata(),
+                        null,
+                        null);
+        return memoryVector
+                .search(
+                        ctx.memoryId(),
+                        ctx.searchQuery(),
+                        topK * config.scoring().candidateMultiplier(),
+                        minScore,
+                        null)
+                .collectList();
     }
 
     /** BM25 keyword search channel */
@@ -254,85 +336,18 @@ public class RawDataTierRetriever implements TierSearchable {
                         });
     }
 
-    /** Execute expanded query channels in parallel */
-    private Mono<List<List<ScoredResult>>> executeExpandedChannels(
-            List<ExpandedQuery> expandedQueries,
-            QueryContext baseContext,
-            RetrievalConfig config,
-            int topK,
-            double minScore,
-            Map<String, MemoryRawData> vectorIdToRawData) {
-        if (expandedQueries == null || expandedQueries.isEmpty()) {
+    private Mono<List<ScoredResult>> executeExpandedLexChannel(
+            ExpandedQuery eq, QueryContext baseContext, int topK) {
+        if (textSearch == null) {
             return Mono.just(List.of());
         }
-        return Flux.fromIterable(expandedQueries)
-                .flatMap(
-                        eq ->
-                                executeExpandedChannel(
-                                                eq,
-                                                baseContext,
-                                                config,
-                                                topK,
-                                                minScore,
-                                                vectorIdToRawData)
-                                        .onErrorResume(
-                                                e -> {
-                                                    log.warn(
-                                                            "Tier3 expanded channel search failed:"
-                                                                    + " type={}, text={}",
-                                                            eq.queryType(),
-                                                            eq.text(),
-                                                            e);
-                                                    return Mono.just(List.of());
-                                                }))
-                .collectList();
-    }
-
-    /** Route to corresponding channel by query type */
-    private Mono<List<ScoredResult>> executeExpandedChannel(
-            ExpandedQuery eq,
-            QueryContext baseContext,
-            RetrievalConfig config,
-            int topK,
-            double minScore,
-            Map<String, MemoryRawData> vectorIdToRawData) {
-        return switch (eq.queryType()) {
-            case LEX -> {
-                if (textSearch == null) {
-                    yield Mono.just(List.<ScoredResult>of());
-                }
-                yield textSearch
-                        .search(
-                                baseContext.memoryId(),
-                                eq.text(),
-                                topK,
-                                MemoryTextSearch.SearchTarget.RAW_DATA)
-                        .map(this::toBm25ScoredResults);
-            }
-            case VEC, HYDE -> {
-                var ctx =
-                        new QueryContext(
-                                baseContext.memoryId(),
-                                baseContext.originalQuery(),
-                                eq.text(),
-                                baseContext.conversationHistory(),
-                                baseContext.metadata(),
-                                null,
-                                null);
-                yield memoryVector
-                        .search(
-                                ctx.memoryId(),
-                                ctx.searchQuery(),
-                                topK * config.scoring().candidateMultiplier(),
-                                minScore,
-                                null)
-                        .collectList()
-                        .map(
-                                vectorResults ->
-                                        toScoredResults(
-                                                vectorResults, vectorIdToRawData, config, topK));
-            }
-        };
+        return textSearch
+                .search(
+                        baseContext.memoryId(),
+                        eq.text(),
+                        topK,
+                        MemoryTextSearch.SearchTarget.RAW_DATA)
+                .map(this::toBm25ScoredResults);
     }
 
     /** Convert vector search results to ScoredResult */
@@ -389,27 +404,34 @@ public class RawDataTierRetriever implements TierSearchable {
     }
 
     private Map<String, MemoryRawData> buildVectorIdToRawDataMap(
-            QueryContext context, Set<String> rawDataIdScope) {
-        List<MemoryRawData> candidates;
-        if (!rawDataIdScope.isEmpty()) {
-            candidates =
-                    rawDataIdScope.stream()
-                            .map(
-                                    id ->
-                                            memoryStore
-                                                    .rawDataOperations()
-                                                    .getRawData(context.memoryId(), id))
-                            .filter(java.util.Optional::isPresent)
-                            .map(java.util.Optional::get)
-                            .toList();
-        } else {
-            candidates = memoryStore.rawDataOperations().listRawData(context.memoryId());
+            QueryContext context, Collection<String> vectorIds, Set<String> rawDataIdScope) {
+        List<String> effectiveVectorIds =
+                vectorIds == null
+                        ? List.of()
+                        : vectorIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (effectiveVectorIds.isEmpty()) {
+            return Map.of();
         }
-        return candidates.stream()
+        return memoryStore
+                .rawDataOperations()
+                .getRawDataByCaptionVectorIds(context.memoryId(), effectiveVectorIds)
+                .stream()
                 .filter(rd -> rd.captionVectorId() != null)
+                .filter(rd -> rawDataIdScope.isEmpty() || rawDataIdScope.contains(rd.id()))
                 .collect(
                         Collectors.toMap(
                                 MemoryRawData::captionVectorId, Function.identity(), (a, b) -> a));
+    }
+
+    private static List<String> collectVectorIds(List<VectorSearchResult> results) {
+        if (results == null || results.isEmpty()) {
+            return List.of();
+        }
+        return results.stream()
+                .map(VectorSearchResult::vectorId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
     }
 
     // ── TierSearchable Implementation ──
@@ -425,10 +447,16 @@ public class RawDataTierRetriever implements TierSearchable {
         if (!tier.enabled()) {
             return Mono.just(List.of());
         }
-        Map<String, MemoryRawData> vectorIdToRawData = buildVectorIdToRawDataMap(context, Set.of());
         RetrievalConfig tempConfig = buildTempConfig(tier, scoring);
-        return executeVectorChannel(
-                        context, tempConfig, tier.topK(), tier.minScore(), vectorIdToRawData)
+        return searchOriginalVectorResults(context, tempConfig, tier.topK(), tier.minScore())
+                .map(
+                        vectorResults -> {
+                            Map<String, MemoryRawData> vectorIdToRawData =
+                                    buildVectorIdToRawDataMap(
+                                            context, collectVectorIds(vectorResults), Set.of());
+                            return toScoredResults(
+                                    vectorResults, vectorIdToRawData, tempConfig, tier.topK());
+                        })
                 .onErrorResume(
                         e -> {
                             log.warn("RawData searchByVector failed, returning empty result", e);
@@ -466,16 +494,23 @@ public class RawDataTierRetriever implements TierSearchable {
         if (!tier.enabled()) {
             return Mono.just(List.of());
         }
-        Map<String, MemoryRawData> vectorIdToRawData = buildVectorIdToRawDataMap(context, Set.of());
         RetrievalConfig tempConfig = buildTempConfig(tier, scoring);
 
         Mono<List<ScoredResult>> vectorMono =
-                executeVectorChannel(
-                                context,
-                                tempConfig,
-                                tier.topK(),
-                                tier.minScore(),
-                                vectorIdToRawData)
+                searchOriginalVectorResults(context, tempConfig, tier.topK(), tier.minScore())
+                        .map(
+                                vectorResults -> {
+                                    Map<String, MemoryRawData> vectorIdToRawData =
+                                            buildVectorIdToRawDataMap(
+                                                    context,
+                                                    collectVectorIds(vectorResults),
+                                                    Set.of());
+                                    return toScoredResults(
+                                            vectorResults,
+                                            vectorIdToRawData,
+                                            tempConfig,
+                                            tier.topK());
+                                })
                         .onErrorResume(
                                 e -> {
                                     log.warn("RawData searchHybrid vector channel failed", e);

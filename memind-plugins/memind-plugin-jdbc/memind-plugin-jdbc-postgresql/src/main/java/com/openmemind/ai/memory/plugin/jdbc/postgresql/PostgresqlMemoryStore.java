@@ -42,6 +42,8 @@ import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperationsCapabilities;
 import com.openmemind.ai.memory.core.store.item.TemporalCandidateMatch;
 import com.openmemind.ai.memory.core.store.item.TemporalCandidateRequest;
+import com.openmemind.ai.memory.core.store.item.TemporalItemLookupMatch;
+import com.openmemind.ai.memory.core.store.item.TemporalItemLookupRequest;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentInputStore;
@@ -303,6 +305,33 @@ public class PostgresqlMemoryStore
     }
 
     @Override
+    public List<MemoryRawData> getRawDataByCaptionVectorIds(
+            MemoryId memoryId, Collection<String> captionVectorIds) {
+        List<String> vectorIds =
+                captionVectorIds == null
+                        ? List.of()
+                        : captionVectorIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (vectorIds.isEmpty()) {
+            return List.of();
+        }
+        ScopeContext scope = scopeOf(memoryId);
+        List<Object> params = new ArrayList<>();
+        params.add(scope.userId());
+        params.add(scope.agentId());
+        params.addAll(vectorIds);
+        return queryList(
+                """
+                SELECT * FROM memory_raw_data
+                WHERE user_id = ? AND agent_id = ? AND deleted = FALSE
+                  AND caption_vector_id IN (%s)
+                ORDER BY id ASC
+                """
+                        .formatted(placeholders(vectorIds.size())),
+                this::mapRawData,
+                params.toArray());
+    }
+
+    @Override
     public List<MemoryRawData> listRawData(MemoryId memoryId) {
         ScopeContext scope = scopeOf(memoryId);
         return queryList(
@@ -517,6 +546,51 @@ public class PostgresqlMemoryStore
     }
 
     @Override
+    public List<TemporalItemLookupMatch> listTemporalItemMatches(
+            MemoryId memoryId, TemporalItemLookupRequest request) {
+        Objects.requireNonNull(request, "request");
+        ScopeContext scope = scopeOf(memoryId);
+        List<Object> params = new ArrayList<>();
+        params.add(scope.userId());
+        params.add(scope.agentId());
+        String filters = temporalItemFilterSql(request, params);
+        params.add(setTimestampValue(request.endExclusive()));
+        params.add(setTimestampValue(request.startInclusive()));
+        params.add(setTimestampValue(midpoint(request)));
+        params.add(request.maxCandidates());
+        return queryList(
+                """
+                SELECT *
+                FROM (
+                    SELECT base_items.*,
+                           CASE
+                               WHEN occurred_end IS NOT NULL
+                                    AND semantic_start < occurred_end
+                               THEN occurred_end
+                               ELSE semantic_start + INTERVAL '1 millisecond'
+                           END AS semantic_end,
+                           COALESCE(occurred_at, semantic_start) AS semantic_anchor
+                    FROM (
+                        SELECT memory_item.*,
+                               COALESCE(occurred_start, occurred_at) AS semantic_start
+                        FROM memory_item
+                        WHERE user_id = ? AND agent_id = ? AND deleted = FALSE
+                        %s
+                    ) base_items
+                    WHERE semantic_start IS NOT NULL
+                ) semantic_items
+                WHERE semantic_start < ?
+                  AND ? < semantic_end
+                ORDER BY ABS(EXTRACT(EPOCH FROM (semantic_anchor - CAST(? AS TIMESTAMPTZ)))) ASC,
+                         biz_id ASC
+                LIMIT ?
+                """
+                        .formatted(filters),
+                this::mapTemporalItemLookupMatch,
+                params.toArray());
+    }
+
+    @Override
     public List<TemporalCandidateMatch> listTemporalCandidateMatches(
             MemoryId memoryId,
             List<TemporalCandidateRequest> requests,
@@ -573,6 +647,33 @@ public class PostgresqlMemoryStore
                             request.afterLimit()));
         }
         return List.copyOf(matches);
+    }
+
+    private String temporalItemFilterSql(TemporalItemLookupRequest request, List<Object> params) {
+        StringBuilder sql = new StringBuilder("\n  AND biz_id IS NOT NULL");
+        if (request.scope() != null) {
+            sql.append("\n  AND scope = ?");
+            params.add(request.scope().name());
+        }
+        if (!request.categories().isEmpty()) {
+            sql.append("\n  AND category IN (")
+                    .append(placeholders(request.categories().size()))
+                    .append(")");
+            request.categories().stream().map(Enum::name).forEach(params::add);
+        }
+        if (!request.itemTypes().isEmpty()) {
+            sql.append("\n  AND type IN (")
+                    .append(placeholders(request.itemTypes().size()))
+                    .append(")");
+            request.itemTypes().stream().map(Enum::name).forEach(params::add);
+        }
+        if (!request.excludeItemIds().isEmpty()) {
+            sql.append("\n  AND biz_id NOT IN (")
+                    .append(placeholders(request.excludeItemIds().size()))
+                    .append(")");
+            params.addAll(request.excludeItemIds());
+        }
+        return sql.toString();
     }
 
     private List<MemoryItem> selectTemporalCandidates(
@@ -1285,6 +1386,15 @@ public class PostgresqlMemoryStore
                 parseItemType(resultSet.getString("type")));
     }
 
+    private TemporalItemLookupMatch mapTemporalItemLookupMatch(ResultSet resultSet)
+            throws SQLException {
+        return new TemporalItemLookupMatch(
+                mapItem(resultSet),
+                parseInstant(resultSet.getTimestamp("semantic_start")),
+                parseInstant(resultSet.getTimestamp("semantic_end")),
+                parseInstant(resultSet.getTimestamp("semantic_anchor")));
+    }
+
     private MemoryInsightType mapInsightType(ResultSet resultSet) throws SQLException {
         return new MemoryInsightType(
                 nullableLong(resultSet, "biz_id"),
@@ -1400,6 +1510,15 @@ public class PostgresqlMemoryStore
 
     private Object setTimestampValue(Instant instant) {
         return instant == null ? null : Timestamp.from(instant);
+    }
+
+    private Instant midpoint(TemporalItemLookupRequest request) {
+        long midpoint =
+                request.startInclusive().toEpochMilli()
+                        + Duration.between(request.startInclusive(), request.endExclusive())
+                                        .toMillis()
+                                / 2L;
+        return Instant.ofEpochMilli(midpoint);
     }
 
     private MemoryScope parseScope(String value) {

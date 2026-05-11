@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS memory_raw_data (
     PRIMARY KEY (id),
     UNIQUE KEY uk_raw_data_biz_id (user_id, agent_id, biz_id),
     KEY idx_raw_data_content_id (user_id, agent_id, content_id),
-    KEY idx_raw_data_memory_id (user_id, agent_id)
+    KEY idx_raw_data_memory_id (user_id, agent_id),
+    KEY idx_raw_data_caption_vector_id (user_id, agent_id, caption_vector_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS memory_item (
@@ -656,5 +657,4 @@ CREATE TABLE IF NOT EXISTS memory_thread_enrichment_input (
         entry_seq
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 

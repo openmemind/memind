@@ -16,10 +16,12 @@ package com.openmemind.ai.memory.core.store.rawdata;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Operations for raw data persistence.
@@ -35,6 +37,23 @@ public interface RawDataOperations {
     default List<MemoryRawData> listRawDataByContentId(MemoryId id, String contentId) {
         return listRawData(id).stream()
                 .filter(rawData -> Objects.equals(rawData.contentId(), contentId))
+                .toList();
+    }
+
+    default List<MemoryRawData> getRawDataByCaptionVectorIds(
+            MemoryId id, Collection<String> captionVectorIds) {
+        if (captionVectorIds == null || captionVectorIds.isEmpty()) {
+            return List.of();
+        }
+        Set<String> requested =
+                captionVectorIds.stream()
+                        .filter(Objects::nonNull)
+                        .collect(java.util.stream.Collectors.toSet());
+        if (requested.isEmpty()) {
+            return List.of();
+        }
+        return listRawData(id).stream()
+                .filter(rawData -> requested.contains(rawData.captionVectorId()))
                 .toList();
     }
 

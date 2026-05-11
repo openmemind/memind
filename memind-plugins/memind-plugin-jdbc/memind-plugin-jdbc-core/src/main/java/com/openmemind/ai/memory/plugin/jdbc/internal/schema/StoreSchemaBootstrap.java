@@ -45,6 +45,7 @@ public final class StoreSchemaBootstrap {
         ensureSqliteBubbleStateSchema(dataSource, createIfNotExist);
         ensureSqliteItemTemporalSchema(dataSource, createIfNotExist);
         ensureSqliteItemTemporalLookupSchema(dataSource, createIfNotExist);
+        ensureSqliteRawDataCaptionVectorIndex(dataSource);
         ensureSqliteInsightConfidenceRemoved(dataSource, createIfNotExist);
         boolean hasInsightTypeTable =
                 SchemaVerifier.hasSqliteTable(dataSource, "memory_insight_type");
@@ -75,6 +76,7 @@ public final class StoreSchemaBootstrap {
         ensureMysqlBubbleStateSchema(dataSource, createIfNotExist);
         ensureMysqlItemTemporalSchema(dataSource, createIfNotExist);
         ensureMysqlItemTemporalLookupSchema(dataSource, createIfNotExist);
+        ensureMysqlRawDataCaptionVectorIndex(dataSource);
         ensureMysqlInsightConfidenceRemoved(dataSource, createIfNotExist);
         boolean hasInsightTypeTable =
                 SchemaVerifier.hasMysqlTable(dataSource, "memory_insight_type");
@@ -105,6 +107,7 @@ public final class StoreSchemaBootstrap {
         ensurePostgresqlBubbleStateSchema(dataSource, createIfNotExist);
         ensurePostgresqlItemTemporalSchema(dataSource, createIfNotExist);
         ensurePostgresqlItemTemporalLookupSchema(dataSource, createIfNotExist);
+        ensurePostgresqlRawDataCaptionVectorIndex(dataSource);
         ensurePostgresqlInsightConfidenceRemoved(dataSource, createIfNotExist);
         boolean hasInsightTypeTable =
                 SchemaVerifier.hasPostgresqlTable(dataSource, "memory_insight_type");
@@ -469,6 +472,22 @@ public final class StoreSchemaBootstrap {
                         + " biz_id)");
     }
 
+    private static void ensureSqliteRawDataCaptionVectorIndex(DataSource dataSource) {
+        if (!SchemaVerifier.hasSqliteTable(dataSource, "memory_raw_data")) {
+            return;
+        }
+        ensureSqliteTableColumn(
+                dataSource,
+                "memory_raw_data",
+                "caption_vector_id",
+                "ALTER TABLE memory_raw_data ADD COLUMN caption_vector_id TEXT");
+        ensureSqliteIndex(
+                dataSource,
+                "idx_raw_data_caption_vector_id",
+                "CREATE INDEX IF NOT EXISTS idx_raw_data_caption_vector_id ON"
+                        + " memory_raw_data(user_id, agent_id, caption_vector_id)");
+    }
+
     private static void ensureMysqlItemTemporalLookupSchema(
             DataSource dataSource, boolean createIfNotExist) {
         if (!hasRequiredMysqlItemTemporalLookupSchema(dataSource)) {
@@ -511,6 +530,23 @@ public final class StoreSchemaBootstrap {
                         + " biz_id)");
     }
 
+    private static void ensureMysqlRawDataCaptionVectorIndex(DataSource dataSource) {
+        if (!SchemaVerifier.hasMysqlTable(dataSource, "memory_raw_data")) {
+            return;
+        }
+        ensureMysqlTableColumn(
+                dataSource,
+                "memory_raw_data",
+                "caption_vector_id",
+                "ALTER TABLE memory_raw_data ADD COLUMN caption_vector_id VARCHAR(200)");
+        ensureMysqlIndex(
+                dataSource,
+                "memory_raw_data",
+                "idx_raw_data_caption_vector_id",
+                "CREATE INDEX idx_raw_data_caption_vector_id ON"
+                        + " memory_raw_data(user_id, agent_id, caption_vector_id)");
+    }
+
     private static void ensurePostgresqlItemTemporalLookupSchema(
             DataSource dataSource, boolean createIfNotExist) {
         if (!hasRequiredPostgresqlItemTemporalLookupSchema(dataSource)) {
@@ -551,6 +587,23 @@ public final class StoreSchemaBootstrap {
                 "CREATE INDEX idx_item_temporal_end_scope ON"
                         + " memory_item(memory_id, type, category, temporal_end_or_anchor,"
                         + " biz_id)");
+    }
+
+    private static void ensurePostgresqlRawDataCaptionVectorIndex(DataSource dataSource) {
+        if (!SchemaVerifier.hasPostgresqlTable(dataSource, "memory_raw_data")) {
+            return;
+        }
+        ensurePostgresqlTableColumn(
+                dataSource,
+                "memory_raw_data",
+                "caption_vector_id",
+                "ALTER TABLE memory_raw_data ADD COLUMN caption_vector_id VARCHAR(200)");
+        ensurePostgresqlIndex(
+                dataSource,
+                "memory_raw_data",
+                "idx_raw_data_caption_vector_id",
+                "CREATE INDEX IF NOT EXISTS idx_raw_data_caption_vector_id ON"
+                        + " memory_raw_data(user_id, agent_id, caption_vector_id)");
     }
 
     private static void ensureMysqlInsightConfidenceRemoved(
@@ -650,6 +703,14 @@ public final class StoreSchemaBootstrap {
         execute(dataSource, sql);
     }
 
+    private static void ensureMysqlTableColumn(
+            DataSource dataSource, String tableName, String columnName, String sql) {
+        if (SchemaVerifier.hasMysqlColumn(dataSource, tableName, columnName)) {
+            return;
+        }
+        execute(dataSource, sql);
+    }
+
     private static void ensureMysqlIndex(
             DataSource dataSource, String tableName, String indexName, String sql) {
         if (SchemaVerifier.hasMysqlIndex(dataSource, tableName, indexName)) {
@@ -683,6 +744,14 @@ public final class StoreSchemaBootstrap {
     private static void ensurePostgresqlItemTemporalLookupColumn(
             DataSource dataSource, String columnName, String sql) {
         if (SchemaVerifier.hasPostgresqlColumn(dataSource, "memory_item", columnName)) {
+            return;
+        }
+        execute(dataSource, sql);
+    }
+
+    private static void ensurePostgresqlTableColumn(
+            DataSource dataSource, String tableName, String columnName, String sql) {
+        if (SchemaVerifier.hasPostgresqlColumn(dataSource, tableName, columnName)) {
             return;
         }
         execute(dataSource, sql);

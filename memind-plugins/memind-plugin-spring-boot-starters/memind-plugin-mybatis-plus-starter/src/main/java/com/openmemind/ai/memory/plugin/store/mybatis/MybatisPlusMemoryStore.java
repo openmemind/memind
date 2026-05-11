@@ -49,6 +49,8 @@ import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperationsCapabilities;
 import com.openmemind.ai.memory.core.store.item.TemporalCandidateMatch;
 import com.openmemind.ai.memory.core.store.item.TemporalCandidateRequest;
+import com.openmemind.ai.memory.core.store.item.TemporalItemLookupMatch;
+import com.openmemind.ai.memory.core.store.item.TemporalItemLookupRequest;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.store.thread.NoOpThreadEnrichmentInputStore;
@@ -450,6 +452,26 @@ public class MybatisPlusMemoryStore
                 .toList();
     }
 
+    @Override
+    public List<MemoryRawData> getRawDataByCaptionVectorIds(
+            MemoryId id, Collection<String> captionVectorIds) {
+        List<String> vectorIds =
+                captionVectorIds == null
+                        ? List.of()
+                        : captionVectorIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (vectorIds.isEmpty()) {
+            return List.of();
+        }
+        return rawDataMapper
+                .selectList(
+                        memoryQuery(id, MemoryRawDataDO.class)
+                                .in("caption_vector_id", vectorIds)
+                                .orderByAsc("id"))
+                .stream()
+                .map(RawDataConverter::toRecord)
+                .toList();
+    }
+
     public List<MemoryRawData> pollRawDataWithoutVector(MemoryId id, int limit, Duration minAge) {
         if (limit <= 0) {
             return List.of();
@@ -631,6 +653,28 @@ public class MybatisPlusMemoryStore
     }
 
     @Override
+    public List<TemporalItemLookupMatch> listTemporalItemMatches(
+            MemoryId id, TemporalItemLookupRequest request) {
+        Objects.requireNonNull(request, "request");
+        if (dialect == null) {
+            return ItemOperations.super.listTemporalItemMatches(id, request);
+        }
+        List<MemoryItemDO> matches =
+                itemMapper.selectTemporalItemLookupMatches(
+                        dialect,
+                        id.toIdentifier(),
+                        request.scope() != null ? request.scope().name() : null,
+                        request.categories().stream().map(Enum::name).toList(),
+                        request.itemTypes().stream().map(Enum::name).toList(),
+                        request.excludeItemIds(),
+                        request.startInclusive(),
+                        request.endExclusive(),
+                        midpoint(request),
+                        request.maxCandidates());
+        return matches.stream().map(MybatisPlusMemoryStore::toTemporalItemLookupMatch).toList();
+    }
+
+    @Override
     public List<TemporalCandidateMatch> listTemporalCandidateMatches(
             MemoryId id, List<TemporalCandidateRequest> requests, Collection<Long> excludeItemIds) {
         if (dialect == null || requests == null || requests.isEmpty()) {
@@ -682,6 +726,23 @@ public class MybatisPlusMemoryStore
                             request.afterLimit()));
         }
         return List.copyOf(matches);
+    }
+
+    private static TemporalItemLookupMatch toTemporalItemLookupMatch(MemoryItemDO item) {
+        return new TemporalItemLookupMatch(
+                ItemConverter.toRecord(item),
+                item.getSemanticStart(),
+                item.getSemanticEnd(),
+                item.getSemanticAnchor());
+    }
+
+    private static Instant midpoint(TemporalItemLookupRequest request) {
+        long midpoint =
+                request.startInclusive().toEpochMilli()
+                        + Duration.between(request.startInclusive(), request.endExclusive())
+                                        .toMillis()
+                                / 2L;
+        return Instant.ofEpochMilli(midpoint);
     }
 
     private static void appendNativeMatches(

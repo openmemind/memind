@@ -30,9 +30,11 @@ import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.item.graph.commit.ExtractionBatchId;
 import com.openmemind.ai.memory.core.extraction.item.graph.plan.ItemGraphWritePlan;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
+import com.openmemind.ai.memory.core.retrieval.temporal.TemporalDirection;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.item.TemporalCandidateRequest;
+import com.openmemind.ai.memory.core.store.item.TemporalItemLookupRequest;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.plugin.store.mybatis.handler.InstantTypeHandler;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
@@ -246,6 +248,48 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
                                                         .containsEntry("existing", "value")
                                                         .containsEntry("patched", "yes");
                                             });
+                        });
+    }
+
+    @Test
+    @DisplayName("getRawDataByCaptionVectorIds returns scoped rows in storage order")
+    void getRawDataByCaptionVectorIdsReturnsScopedRowsInStorageOrder() {
+        newContextRunner(tempDir.resolve("raw-data-caption-vector-lookup.db"))
+                .run(
+                        context -> {
+                            RawDataOperations rawDataOps =
+                                    context.getBean(MemoryStore.class).rawDataOperations();
+                            SqlStatementRecorder sqlRecorder =
+                                    context.getBean(SqlStatementRecorder.class);
+                            MapperMethodCounter counter =
+                                    context.getBean(MapperMethodCounter.class);
+                            rawDataOps.upsertRawData(
+                                    MEMORY_ID,
+                                    List.of(
+                                            rawDataWithVector("rd-1", "content-1", "vec-shared"),
+                                            rawDataWithVector("rd-2", "content-2", "vec-other"),
+                                            rawDataWithVector("rd-3", "content-3", "vec-shared"),
+                                            rawDataWithVector("rd-4", "content-4", null)));
+                            sqlRecorder.clear();
+                            counter.reset();
+
+                            List<MemoryRawData> rows =
+                                    rawDataOps.getRawDataByCaptionVectorIds(
+                                            MEMORY_ID,
+                                            java.util.Arrays.asList(
+                                                    "vec-shared", null, "vec-missing"));
+
+                            assertThat(rows)
+                                    .extracting(MemoryRawData::id)
+                                    .containsExactly("rd-1", "rd-3");
+                            assertThat(counter.count(MemoryRawDataMapper.class, "selectList"))
+                                    .isEqualTo(1);
+                            assertThat(sqlRecorder.sql())
+                                    .anySatisfy(
+                                            sql ->
+                                                    assertThat(sql)
+                                                            .contains("caption_vector_id in")
+                                                            .contains("order by id asc"));
                         });
     }
 
@@ -657,6 +701,97 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
                         });
     }
 
+    @Test
+    @DisplayName("native temporal item lookup matches fallback semantics without broad item scan")
+    void nativeTemporalItemLookupMatchesFallbackSemantics() {
+        newContextRunner(tempDir.resolve("temporal-item-native-lookup.db"))
+                .run(
+                        context -> {
+                            ItemOperations itemOps =
+                                    context.getBean(MemoryStore.class).itemOperations();
+                            MapperMethodCounter counter =
+                                    context.getBean(MapperMethodCounter.class);
+                            SqlStatementRecorder sqlRecorder =
+                                    context.getBean(SqlStatementRecorder.class);
+
+                            itemOps.insertItems(
+                                    MEMORY_ID,
+                                    List.of(
+                                            memoryItem(
+                                                    1L,
+                                                    "source",
+                                                    BASE_TIME,
+                                                    BASE_TIME,
+                                                    BASE_TIME.plusSeconds(60),
+                                                    "minute"),
+                                            memoryItem(
+                                                    2L,
+                                                    "closest",
+                                                    BASE_TIME.plusSeconds(30),
+                                                    BASE_TIME.plusSeconds(30),
+                                                    BASE_TIME.plusSeconds(90),
+                                                    "minute"),
+                                            temporalPointItem(
+                                                    3L,
+                                                    "point",
+                                                    BASE_TIME.plusSeconds(45),
+                                                    MemoryCategory.EVENT,
+                                                    MemoryItemType.FACT),
+                                            temporalObservationOnlyItem(
+                                                    4L,
+                                                    "observation-only",
+                                                    BASE_TIME.plusSeconds(45)),
+                                            temporalPointItem(
+                                                    5L,
+                                                    "wrong-category",
+                                                    BASE_TIME.plusSeconds(45),
+                                                    MemoryCategory.PROFILE,
+                                                    MemoryItemType.FACT),
+                                            temporalPointItem(
+                                                    6L,
+                                                    "wrong-type",
+                                                    BASE_TIME.plusSeconds(45),
+                                                    MemoryCategory.EVENT,
+                                                    MemoryItemType.FORESIGHT)));
+
+                            var request =
+                                    new TemporalItemLookupRequest(
+                                            BASE_TIME,
+                                            BASE_TIME.plusSeconds(120),
+                                            TemporalDirection.FUTURE,
+                                            MemoryScope.USER,
+                                            Set.of(MemoryCategory.EVENT),
+                                            Set.of(MemoryItemType.FACT),
+                                            10,
+                                            Set.of(1L));
+
+                            sqlRecorder.clear();
+                            counter.reset();
+
+                            var matches = itemOps.listTemporalItemMatches(MEMORY_ID, request);
+
+                            assertThat(matches)
+                                    .extracting(match -> match.item().id())
+                                    .containsExactly(3L, 2L);
+                            assertThat(
+                                            counter.count(
+                                                    MemoryItemMapper.class,
+                                                    "selectTemporalItemLookupMatches"))
+                                    .isEqualTo(1);
+                            assertThat(counter.count(MemoryItemMapper.class, "selectList"))
+                                    .isZero();
+                            assertThat(sqlRecorder.sql())
+                                    .anySatisfy(
+                                            sql ->
+                                                    assertThat(sql)
+                                                            .contains(
+                                                                    "coalesce(occurred_start,"
+                                                                            + " occurred_at)")
+                                                            .doesNotContain("temporal_start")
+                                                            .doesNotContain("observed_at"));
+                        });
+    }
+
     private ApplicationContextRunner newContextRunner(Path dbPath) {
         return new ApplicationContextRunner()
                 .withConfiguration(
@@ -681,6 +816,24 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
                 caption,
                 null,
                 metadata,
+                null,
+                null,
+                BASE_TIME,
+                BASE_TIME,
+                BASE_TIME.plusSeconds(60));
+    }
+
+    private static MemoryRawData rawDataWithVector(
+            String id, String contentId, String captionVectorId) {
+        return new MemoryRawData(
+                id,
+                MEMORY_ID.toIdentifier(),
+                "conversation",
+                contentId,
+                Segment.single("segment-" + id),
+                "caption-" + id,
+                captionVectorId,
+                Map.of("source", "test"),
                 null,
                 null,
                 BASE_TIME,
@@ -732,6 +885,54 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
                 occurredEnd,
                 timeGranularity,
                 BASE_TIME.plusSeconds(30),
+                Map.of("content", content),
+                BASE_TIME,
+                MemoryItemType.FACT);
+    }
+
+    private static MemoryItem temporalPointItem(
+            Long id,
+            String content,
+            Instant occurredAt,
+            MemoryCategory category,
+            MemoryItemType type) {
+        return new MemoryItem(
+                id,
+                MEMORY_ID.toIdentifier(),
+                content,
+                MemoryScope.USER,
+                category,
+                "conversation",
+                "vector-" + id,
+                "raw-" + id,
+                "hash-" + id,
+                occurredAt,
+                null,
+                null,
+                "point",
+                null,
+                Map.of("content", content),
+                BASE_TIME,
+                type);
+    }
+
+    private static MemoryItem temporalObservationOnlyItem(
+            Long id, String content, Instant observedAt) {
+        return new MemoryItem(
+                id,
+                MEMORY_ID.toIdentifier(),
+                content,
+                MemoryScope.USER,
+                MemoryCategory.EVENT,
+                "conversation",
+                "vector-" + id,
+                "raw-" + id,
+                "hash-" + id,
+                null,
+                null,
+                null,
+                "point",
+                observedAt,
                 Map.of("content", content),
                 BASE_TIME,
                 MemoryItemType.FACT);

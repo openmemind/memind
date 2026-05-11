@@ -35,9 +35,12 @@ import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.SegmentRuntimeContext;
+import com.openmemind.ai.memory.core.retrieval.temporal.TemporalDirection;
+import com.openmemind.ai.memory.core.store.item.InMemoryItemOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperationsCapabilities;
 import com.openmemind.ai.memory.core.store.item.TemporalCandidateMatch;
 import com.openmemind.ai.memory.core.store.item.TemporalCandidateRequest;
+import com.openmemind.ai.memory.core.store.item.TemporalItemLookupRequest;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.content.ToolCallContent;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -173,6 +176,38 @@ class SqliteMemoryStoreTest {
     }
 
     @Test
+    void getRawDataByCaptionVectorIdsUsesScopedVectorIdLookup() {
+        var recordedSql = new CopyOnWriteArrayList<String>();
+        store =
+                new SqliteMemoryStore(
+                        recordingDataSource("raw-data-vector-lookup.db", recordedSql));
+        store.upsertRawData(
+                memoryId,
+                List.of(
+                        rawData("rd-1", "content-1", "vec-shared", BASE_TIME),
+                        rawData("rd-2", "content-2", "vec-other", BASE_TIME),
+                        rawData("rd-3", "content-3", "vec-shared", BASE_TIME),
+                        rawData("rd-4", "content-4", null, BASE_TIME)));
+        var otherMemoryId = new TestMemoryId("u2", "a1");
+        store.upsertRawData(
+                otherMemoryId,
+                List.of(rawData("rd-other", "content-other", "vec-shared", BASE_TIME)));
+
+        List<MemoryRawData> rows =
+                store.getRawDataByCaptionVectorIds(
+                        memoryId, java.util.Arrays.asList("vec-shared", null, "vec-missing"));
+
+        assertThat(rows).extracting(MemoryRawData::id).containsExactly("rd-1", "rd-3");
+        String lookupSql = singleRecordedSqlContaining(recordedSql, "caption_vector_id in");
+        assertThat(lookupSql).contains("from memory_raw_data");
+        assertThat(lookupSql).contains("user_id = ? and agent_id = ?");
+        assertThat(lookupSql)
+                .doesNotContain(
+                        "select * from memory_raw_data where user_id = ? and agent_id = ? and"
+                                + " deleted = 0 order by id asc");
+    }
+
+    @Test
     void rawDataSegmentRuntimeContextIsNotPersisted() {
         MemoryRawData rawData =
                 new MemoryRawData(
@@ -234,6 +269,79 @@ class SqliteMemoryStoreTest {
         assertThat(matches)
                 .extracting(match -> match.candidateItem().id())
                 .containsExactly(2L, 3L, 4L);
+    }
+
+    @Test
+    void listTemporalItemMatchesMatchesFallbackSemantics() {
+        MemoryItem source = temporalItem(1L, "source", BASE_TIME, BASE_TIME.plusSeconds(60));
+        MemoryItem closest =
+                temporalItem(2L, "closest", BASE_TIME.plusSeconds(30), BASE_TIME.plusSeconds(90));
+        MemoryItem point =
+                temporalPointItem(
+                        3L,
+                        "point",
+                        BASE_TIME.plusSeconds(45),
+                        MemoryCategory.EVENT,
+                        MemoryItemType.FACT);
+        MemoryItem observationOnly =
+                temporalObservationOnlyItem(4L, "observation-only", BASE_TIME.plusSeconds(45));
+        MemoryItem wrongCategory =
+                temporalPointItem(
+                        5L,
+                        "wrong-category",
+                        BASE_TIME.plusSeconds(45),
+                        MemoryCategory.PROFILE,
+                        MemoryItemType.FACT);
+        MemoryItem wrongType =
+                temporalPointItem(
+                        6L,
+                        "wrong-type",
+                        BASE_TIME.plusSeconds(45),
+                        MemoryCategory.EVENT,
+                        MemoryItemType.FORESIGHT);
+        List<String> recordedSql = new CopyOnWriteArrayList<>();
+        SqliteMemoryStore recordingStore =
+                new SqliteMemoryStore(recordingDataSource("temporal-item-lookup.db", recordedSql));
+        recordingStore.insertItems(
+                memoryId,
+                List.of(source, closest, point, observationOnly, wrongCategory, wrongType));
+
+        var request =
+                new TemporalItemLookupRequest(
+                        BASE_TIME,
+                        BASE_TIME.plusSeconds(120),
+                        TemporalDirection.FUTURE,
+                        MemoryScope.USER,
+                        java.util.Set.of(MemoryCategory.EVENT),
+                        java.util.Set.of(MemoryItemType.FACT),
+                        10,
+                        java.util.Set.of(1L));
+
+        recordedSql.clear();
+        List<Long> nativeIds =
+                recordingStore.listTemporalItemMatches(memoryId, request).stream()
+                        .map(match -> match.item().id())
+                        .toList();
+
+        var fallback = new InMemoryItemOperations();
+        fallback.insertItems(
+                memoryId,
+                List.of(source, closest, point, observationOnly, wrongCategory, wrongType));
+        List<Long> fallbackIds =
+                fallback.listTemporalItemMatches(memoryId, request).stream()
+                        .map(match -> match.item().id())
+                        .toList();
+
+        assertThat(nativeIds).containsExactlyElementsOf(fallbackIds);
+        assertThat(nativeIds).containsExactly(3L, 2L);
+        String lookupSql =
+                singleRecordedSqlContaining(recordedSql, "coalesce(occurred_start, occurred_at)");
+        assertThat(lookupSql)
+                .contains("from memory_item")
+                .contains("julianday(semantic_start)")
+                .contains("order by abs(julianday(semantic_anchor)");
+        assertThat(lookupSql).doesNotContain("temporal_start");
+        assertThat(lookupSql).doesNotContain("observed_at");
     }
 
     @Test
@@ -944,6 +1052,53 @@ class SqliteMemoryStoreTest {
                 start,
                 Map.of("origin", content),
                 start,
+                MemoryItemType.FACT);
+    }
+
+    private MemoryItem temporalPointItem(
+            Long id,
+            String content,
+            Instant occurredAt,
+            MemoryCategory category,
+            MemoryItemType type) {
+        return new MemoryItem(
+                id,
+                memoryId.toIdentifier(),
+                content,
+                MemoryScope.USER,
+                category,
+                ConversationContent.TYPE,
+                null,
+                null,
+                "hash-" + id,
+                occurredAt,
+                null,
+                null,
+                "point",
+                null,
+                Map.of("origin", content),
+                occurredAt,
+                type);
+    }
+
+    private MemoryItem temporalObservationOnlyItem(Long id, String content, Instant observedAt) {
+        return new MemoryItem(
+                id,
+                memoryId.toIdentifier(),
+                content,
+                MemoryScope.USER,
+                MemoryCategory.EVENT,
+                ConversationContent.TYPE,
+                null,
+                null,
+                "hash-" + id,
+                null,
+                null,
+                null,
+                "point",
+                observedAt,
+                Map.of("origin", content),
+                observedAt,
                 MemoryItemType.FACT);
     }
 

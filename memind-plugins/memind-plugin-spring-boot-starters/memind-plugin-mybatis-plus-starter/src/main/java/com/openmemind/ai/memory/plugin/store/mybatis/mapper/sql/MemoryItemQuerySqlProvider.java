@@ -18,6 +18,64 @@ import java.util.Map;
 
 public final class MemoryItemQuerySqlProvider {
 
+    public String selectTemporalItemLookupMatches(Map<String, Object> params) {
+        DatabaseDialect dialect = (DatabaseDialect) params.get("dialect");
+        return """
+        <script>
+        SELECT *
+        FROM (
+            SELECT base_items.*,
+                   CASE
+                       WHEN occurred_end IS NOT NULL
+                            AND %s
+                       THEN occurred_end
+                       ELSE %s
+                   END AS semantic_end,
+                   COALESCE(occurred_at, semantic_start) AS semantic_anchor
+            FROM (
+                SELECT memory_item.*,
+                       COALESCE(occurred_start, occurred_at) AS semantic_start
+                FROM memory_item
+                WHERE %s
+                  AND memory_id = #{memoryId}
+                  AND biz_id IS NOT NULL
+                  <if test="scope != null">
+                    AND scope = #{scope}
+                  </if>
+                  <if test="categories != null and !categories.isEmpty()">
+                    AND category IN
+                    <foreach collection="categories" item="category" open="(" separator="," close=")">
+                      #{category}
+                    </foreach>
+                  </if>
+                  <if test="itemTypes != null and !itemTypes.isEmpty()">
+                    AND type IN
+                    <foreach collection="itemTypes" item="itemTypeName" open="(" separator="," close=")">
+                      #{itemTypeName}
+                    </foreach>
+                  </if>
+                  <if test="excludeItemIds != null and !excludeItemIds.isEmpty()">
+                    AND biz_id NOT IN
+                    <foreach collection="excludeItemIds" item="itemId" open="(" separator="," close=")">
+                      #{itemId}
+                    </foreach>
+                  </if>
+            ) base_items
+            WHERE semantic_start IS NOT NULL
+        ) semantic_items
+        WHERE %s
+        ORDER BY %s ASC, biz_id ASC
+        LIMIT #{limit}
+        </script>
+        """
+                .formatted(
+                        semanticEndValidityExpression(dialect),
+                        semanticPointEndExpression(dialect),
+                        deletedPredicate(dialect),
+                        temporalItemOverlapPredicate(dialect),
+                        semanticAnchorDistanceExpression(dialect));
+    }
+
     public String selectTemporalOverlapCandidates(Map<String, Object> params) {
         DatabaseDialect dialect = (DatabaseDialect) params.get("dialect");
         return """
@@ -114,5 +172,55 @@ public final class MemoryItemQuerySqlProvider {
                     "ABS(EXTRACT(EPOCH FROM (temporal_anchor - CAST(#{sourceAnchor} AS"
                             + " TIMESTAMPTZ))))";
         };
+    }
+
+    private static String deletedPredicate(DatabaseDialect dialect) {
+        return effectiveDialect(dialect) == DatabaseDialect.POSTGRESQL
+                ? "deleted = FALSE"
+                : "deleted = 0";
+    }
+
+    private static String semanticEndValidityExpression(DatabaseDialect dialect) {
+        return switch (effectiveDialect(dialect)) {
+            case SQLITE -> "julianday(semantic_start) <![CDATA[<]]> julianday(occurred_end)";
+            case MYSQL, POSTGRESQL -> "semantic_start <![CDATA[<]]> occurred_end";
+        };
+    }
+
+    private static String semanticPointEndExpression(DatabaseDialect dialect) {
+        return switch (effectiveDialect(dialect)) {
+            case SQLITE -> "strftime('%Y-%m-%dT%H:%M:%fZ', semantic_start, '+0.001 seconds')";
+            case MYSQL -> "DATE_ADD(semantic_start, INTERVAL 1000 MICROSECOND)";
+            case POSTGRESQL -> "semantic_start + INTERVAL '1 millisecond'";
+        };
+    }
+
+    private static String temporalItemOverlapPredicate(DatabaseDialect dialect) {
+        return switch (effectiveDialect(dialect)) {
+            case SQLITE ->
+                    """
+                    julianday(semantic_start) <![CDATA[<]]> julianday(#{endExclusive})
+                      AND julianday(#{startInclusive}) <![CDATA[<]]> julianday(semantic_end)
+                    """;
+            case MYSQL, POSTGRESQL ->
+                    """
+                    semantic_start <![CDATA[<]]> #{endExclusive}
+                      AND #{startInclusive} <![CDATA[<]]> semantic_end
+                    """;
+        };
+    }
+
+    private static String semanticAnchorDistanceExpression(DatabaseDialect dialect) {
+        return switch (effectiveDialect(dialect)) {
+            case SQLITE -> "ABS(julianday(semantic_anchor) - julianday(#{midpoint}))";
+            case MYSQL -> "ABS(TIMESTAMPDIFF(MICROSECOND, semantic_anchor, #{midpoint}))";
+            case POSTGRESQL ->
+                    "ABS(EXTRACT(EPOCH FROM (semantic_anchor - CAST(#{midpoint} AS"
+                            + " TIMESTAMPTZ))))";
+        };
+    }
+
+    private static DatabaseDialect effectiveDialect(DatabaseDialect dialect) {
+        return dialect != null ? dialect : DatabaseDialect.SQLITE;
     }
 }

@@ -202,6 +202,7 @@ class MemoryStoreDdlTest {
         assertThat(columnExists(dataSource, "memory_item", "source_client")).isTrue();
         assertThat(columnExists(dataSource, "memory_conversation_buffer", "source_client"))
                 .isTrue();
+        assertThat(indexExists(dataSource, "idx_raw_data_caption_vector_id")).isTrue();
     }
 
     @Test

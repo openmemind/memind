@@ -43,7 +43,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.PriorityQueue;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -195,12 +197,13 @@ public final class DefaultInsightGraphAssistant implements InsightGraphAssistant
                         .map(ItemEntityMention::entityKey)
                         .filter(Objects::nonNull)
                         .collect(LinkedHashSet::new, Set::add, Set::addAll);
-        return store.graphOperations().listEntities(memoryId).stream()
-                .filter(entity -> mentionedEntityKeys.contains(entity.entityKey()))
+        return store
+                .graphOperations()
+                .listEntitiesByEntityKeys(memoryId, mentionedEntityKeys)
+                .stream()
+                .filter(entity -> entity.entityKey() != null)
                 .collect(
-                        HashMap::new,
-                        (map, entity) -> map.put(entity.entityKey(), entity),
-                        Map::putAll);
+                        Collectors.toMap(GraphEntity::entityKey, Function.identity(), (a, b) -> a));
     }
 
     private EntityDescriptor resolveEntityDescriptor(

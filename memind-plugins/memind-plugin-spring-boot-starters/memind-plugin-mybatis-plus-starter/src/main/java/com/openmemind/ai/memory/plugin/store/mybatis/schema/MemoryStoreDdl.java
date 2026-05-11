@@ -51,6 +51,7 @@ public class MemoryStoreDdl implements IDdl, Ordered {
         ensureSourceClientColumnsPresent();
         ensureItemTemporalColumnsPresent();
         ensureItemTemporalLookupSchemaPresent();
+        ensureRawDataCaptionVectorIndexPresent();
         if (!hadInsightTypeTable && tableExists("memory_insight_type")) {
             seedDefaultInsightTypes();
         }
@@ -293,6 +294,36 @@ public class MemoryStoreDdl implements IDdl, Ordered {
                 "CREATE INDEX idx_item_temporal_end_scope ON"
                         + " memory_item(memory_id, type, category, temporal_end_or_anchor,"
                         + " biz_id)");
+    }
+
+    private void ensureRawDataCaptionVectorIndexPresent() {
+        if (!tableExists("memory_raw_data")) {
+            return;
+        }
+        switch (databaseDialectDetector.detect(dataSource)) {
+            case SQLITE ->
+                    ensureColumn(
+                            "memory_raw_data",
+                            "caption_vector_id",
+                            "ALTER TABLE memory_raw_data ADD COLUMN caption_vector_id TEXT");
+            case MYSQL ->
+                    ensureColumn(
+                            "memory_raw_data",
+                            "caption_vector_id",
+                            "ALTER TABLE memory_raw_data ADD COLUMN caption_vector_id"
+                                    + " VARCHAR(200)");
+            case POSTGRESQL ->
+                    ensureColumn(
+                            "memory_raw_data",
+                            "caption_vector_id",
+                            "ALTER TABLE memory_raw_data ADD COLUMN caption_vector_id"
+                                    + " VARCHAR(200)");
+        }
+        ensureIndex(
+                "memory_raw_data",
+                "idx_raw_data_caption_vector_id",
+                "CREATE INDEX idx_raw_data_caption_vector_id ON"
+                        + " memory_raw_data(user_id, agent_id, caption_vector_id)");
     }
 
     private void ensureColumn(String tableName, String columnName, String sql) {

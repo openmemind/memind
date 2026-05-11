@@ -69,4 +69,19 @@ public interface MemoryItemMapper extends BaseMapper<MemoryItemDO> {
             @Param("excludeItemIds") Collection<Long> excludeItemIds,
             @Param("sourceAnchor") Instant sourceAnchor,
             @Param("limit") int limit);
+
+    @SelectProvider(
+            type = MemoryItemQuerySqlProvider.class,
+            method = "selectTemporalItemLookupMatches")
+    List<MemoryItemDO> selectTemporalItemLookupMatches(
+            @Param("dialect") DatabaseDialect dialect,
+            @Param("memoryId") String memoryId,
+            @Param("scope") String scope,
+            @Param("categories") Collection<String> categories,
+            @Param("itemTypes") Collection<String> itemTypes,
+            @Param("excludeItemIds") Collection<Long> excludeItemIds,
+            @Param("startInclusive") Instant startInclusive,
+            @Param("endExclusive") Instant endExclusive,
+            @Param("midpoint") Instant midpoint,
+            @Param("limit") int limit);
 }

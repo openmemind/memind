@@ -15,7 +15,11 @@ package com.openmemind.ai.memory.core.extraction.insight.graph;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.builder.InsightGraphAssistOptions;
@@ -132,6 +136,39 @@ class DefaultInsightGraphAssistantTest {
 
         assertThat(assist.additionalContext()).isBlank();
         assertThat(assist.orderedItems()).containsExactlyElementsOf(input);
+    }
+
+    @Test
+    void groupingAssistShouldUseBoundedEntityLookupForMentionedKeys() {
+        when(store.graphOperations()).thenReturn(graphOperations);
+        when(graphOperations.listItemEntityMentions(any(), anyList()))
+                .thenReturn(
+                        List.of(mention(1L, "organization:openai"), mention(2L, "concept:atlas")));
+        when(graphOperations.listEntitiesByEntityKeys(any(), anyCollection()))
+                .thenReturn(
+                        List.of(
+                                entity(
+                                        "organization:openai",
+                                        "OpenAI",
+                                        GraphEntityType.ORGANIZATION),
+                                entity("concept:atlas", "Atlas", GraphEntityType.CONCEPT)));
+        when(graphOperations.listItemLinks(any(), anyCollection(), anyCollection()))
+                .thenReturn(List.of());
+        lenient()
+                .when(graphOperations.listEntities(any()))
+                .thenThrow(new AssertionError("broad entity scan must not be used"));
+        var assistant =
+                new DefaultInsightGraphAssistant(
+                        store,
+                        InsightGraphAssistOptions.defaults().withEnabled(true),
+                        new GraphPromptContextFormatter(InsightGraphAssistOptions.defaults()));
+
+        var assist = assistant.groupingAssist(MEMORY_ID, insightType, List.of(item(1L), item(2L)));
+
+        assertThat(assist.additionalContext()).contains("OpenAI").contains("Atlas");
+        verify(graphOperations).listEntitiesByEntityKeys(any(), anyCollection());
+        verify(graphOperations).listItemLinks(any(), anyCollection(), anyCollection());
+        verify(graphOperations, never()).listEntities(any());
     }
 
     private static void seedGraph(InMemoryGraphOperations graph) {
