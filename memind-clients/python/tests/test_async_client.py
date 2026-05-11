@@ -39,22 +39,40 @@ async def test_async_health_returns_response(httpx_mock) -> None:
 async def test_async_memory_methods_send_payloads(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/extract",
-        json={"code": "200"},
+        url="https://api.example.test/open/v1/memory/extract/sync",
+        json={
+            "code": "success",
+            "data": {
+                "status": "SUCCESS",
+                "rawDataIds": ["rd-1"],
+                "itemIds": [],
+                "insightIds": [],
+                "insightPending": False,
+            },
+        },
     )
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/add-message",
-        json={"code": "200"},
+        url="https://api.example.test/open/v1/memory/add-message/sync",
+        json={"code": "success", "data": {"triggered": False}},
     )
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/commit",
-        json={"code": "200"},
+        url="https://api.example.test/open/v1/memory/commit/sync",
+        json={
+            "code": "success",
+            "data": {
+                "status": "SUCCESS",
+                "rawDataIds": [],
+                "itemIds": [],
+                "insightIds": [],
+                "insightPending": False,
+            },
+        },
     )
 
     client = AsyncMemindClient(base_url="https://api.example.test")
-    await client.memory.extract(
+    extract_response = await client.memory.extract(
         user_id="u1",
         agent_id="a1",
         raw_content=ConversationContent(messages=[Message.user("hello")]),
@@ -65,6 +83,7 @@ async def test_async_memory_methods_send_payloads(httpx_mock) -> None:
 
     requests = httpx_mock.get_requests()
     assert len(requests) == 3
+    assert extract_response.status == "SUCCESS"
     assert b'"rawContent":{"type":"conversation"' in requests[0].content
     assert b'"message":{"role":"USER"' in requests[1].content
     assert b'"userId":"u1"' in requests[2].content
@@ -128,7 +147,7 @@ async def test_async_close_then_call_raises_memind_error() -> None:
 async def test_async_mutating_post_methods_do_not_retry_by_default(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/add-message",
+        url="https://api.example.test/open/v1/memory/add-message/sync",
         status_code=503,
         json={"code": "unavailable"},
     )

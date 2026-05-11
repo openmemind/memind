@@ -1,7 +1,8 @@
 # Memind Codex Integration
 
 Memind adds persistent project memory to Codex CLI. The integration retrieves relevant Memind context before
-each user prompt and appends Codex conversation messages to Memind's conversation buffer after each turn.
+each user prompt and submits Codex conversation messages through Memind's reliable extraction endpoint after
+each turn.
 
 Use this integration when you want Codex to remember project facts, preferences, and previous decisions across
 sessions. The plugin connects Codex to an already-running Memind server; it does not start the server itself.
@@ -17,8 +18,8 @@ The integration is intentionally small:
 
 - **Retrieval**: `UserPromptSubmit` calls Memind `/open/v1/memory/retrieve` and injects relevant memories into
   the Codex prompt as `<memind_memories>...</memind_memories>`.
-- **Ingestion**: `Stop` reads the Codex transcript, filters user/assistant messages, and sends new messages to
-  Memind `/open/v1/memory/add-message`.
+- **Ingestion**: `Stop` reads the Codex transcript, filters user/assistant messages, and submits a caller-owned
+  conversation payload to Memind `/open/v1/memory/extract/sync`.
 - **Retry**: failed ingestion batches are spooled under `~/.memind/codex/retry/` and replayed on the next
   `SessionStart`.
 - **Source tagging**: all requests use `sourceClient = "codex"` by default, so Memind can distinguish Codex
@@ -107,7 +108,7 @@ The installed hooks are:
 | --- | --- | ---: | --- |
 | `SessionStart` | `scripts/session_start.py` | 5s | Replay at most one failed ingestion batch and clean old state. |
 | `UserPromptSubmit` | `scripts/retrieve.py` | 12s | Retrieve relevant Memind context for the current user prompt. |
-| `Stop` | `scripts/ingest.py` | 15s | Append new Codex transcript messages to Memind. |
+| `Stop` | `scripts/ingest.py` | 15s | Submit new Codex transcript messages through reliable extraction. |
 
 `PreToolUse`, `PostToolUse`, and `PermissionRequest` are intentionally unused in v0.1. Tool-call memory can be
 added later after the data model and privacy behavior are explicitly designed.
@@ -126,6 +127,7 @@ User configuration is optional. Save overrides as `~/.memind/codex.json`:
   "agentId": "codex",
   "agentIdMode": "project",
   "sourceClient": "codex",
+  "ingestionMode": "extract-sync",
   "commitOnStop": false,
   "retrieveContextTurns": 0
 }
@@ -149,11 +151,12 @@ Settings are loaded in this order:
 | `sourceClient` | `codex` | Source marker stored with Memind data. |
 | `autoRetrieve` | `true` | Enables prompt-time memory retrieval. |
 | `autoIngest` | `true` | Enables transcript ingestion after Codex turns. |
-| `commitOnStop` | `false` | When true, commits after each successful Stop ingestion. |
+| `commitOnStop` | `false` | Compatibility flag for server-buffer ingestion mode; ignored by the default reliable mode. |
 | `retrieveStrategy` | `SIMPLE` | Memind retrieval strategy. |
 | `retrieveMaxEntries` | `8` | Maximum formatted memory entries injected into Codex. |
 | `retrieveMaxChars` | `6000` | Maximum injected context characters. |
 | `retrieveContextTurns` | `0` | Number of recent transcript turns to include in the retrieval query. |
+| `ingestionMode` | `extract-sync` | Default reliable ingestion mode. |
 | `ingestionRoles` | `["user", "assistant"]` | Transcript roles eligible for ingestion. |
 | `ingestionMaxMessagesPerHook` | `20` | Maximum new messages sent during one Stop hook. |
 | `ingestRetrySpool` | `true` | Enables file-backed retry for failed ingestion. |
@@ -233,13 +236,14 @@ The Stop hook:
 3. Strips previously injected `<memind_memories>` blocks to avoid feedback loops.
 4. Skips tool/event payloads and Codex control context blocks.
 5. Computes stable fingerprints and sends only messages that have not already been submitted.
-6. Retries each failed `add-message` once before writing a retry payload.
+6. Builds one caller-owned conversation raw-content payload and submits it to `/open/v1/memory/extract/sync`.
 
-Accepted fingerprints are persisted immediately, so partial progress is preserved even if later messages fail.
-Unsubmitted messages are retried by future hooks.
+The local retry spool stores the full extraction payload plus the covered message fingerprints. Fingerprints are
+marked submitted only after Memind returns `SUCCESS`; `PARTIAL_SUCCESS` and failures keep the payload available
+for later replay.
 
-`commitOnStop` defaults to `false`. This lets Memind's own boundary detector decide when to extract memory.
-Set it to `true` only when you want faster cross-session availability and accept more frequent extraction work.
+Commit flags apply only to explicit server-buffer mode. In the default reliable mode, hooks do not issue an
+additional `/commit` call after successful `/extract/sync`.
 
 ## Verify Installation
 
@@ -357,7 +361,7 @@ curl -fsSL http://127.0.0.1:8366/open/v1/health
 
 - Confirm Memind server responds quickly.
 - Reduce `ingestionMaxMessagesPerHook`.
-- Keep `commitOnStop = false` unless immediate extraction is required.
+- Keep the default `extract-sync` mode and reduce batch size before increasing hook timeout.
 
 ### Duplicate messages appear
 
@@ -371,5 +375,5 @@ The integration uses per-session fingerprints stored under `~/.memind/codex/stat
 
 - v0.1 supports conversation memory only; tool calls are not ingested.
 - Retrieval quality depends on existing extracted Memind items and insights.
-- `commitOnStop = false` means newly appended messages may not become retrievable until Memind naturally commits
-  and extracts them.
+- `commitOnStop` applies only to compatibility server-buffer ingestion mode and is ignored by the default
+  reliable extraction mode.

@@ -16,8 +16,10 @@ from memind.types.common import ApiResult, Role, Strategy
 from memind.types.health import HealthResponse
 from memind.types.memory import (
     AddMessageRequest,
+    AddMessageResponse,
     CommitMemoryRequest,
     ExtractMemoryRequest,
+    ExtractMemoryResponse,
     FinalView,
     MergeView,
     RetrievalTraceView,
@@ -46,6 +48,7 @@ from memind.types.message import (
 
 __all__ = [
     "AddMessageRequest",
+    "AddMessageResponse",
     "ApiResult",
     "AudioBlock",
     "Base64Source",
@@ -53,6 +56,7 @@ __all__ = [
     "ContentBlock",
     "ConversationContent",
     "ExtractMemoryRequest",
+    "ExtractMemoryResponse",
     "FinalView",
     "HealthResponse",
     "ImageBlock",

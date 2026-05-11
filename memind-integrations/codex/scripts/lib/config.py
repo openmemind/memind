@@ -17,7 +17,7 @@ DEFAULT_SETTINGS = {
     "retrieveMaxChars": 6000,
     "retrievePromptPreamble": "Relevant memories from Memind. Use only when directly helpful:",
     "retrieveContextTurns": 0,
-    "ingestionMode": "add-message",
+    "ingestionMode": "extract-sync",
     "ingestionRoles": ["user", "assistant"],
     "ingestionMaxMessagesPerHook": 20,
     "stateMaxAgeDays": 14,

@@ -19,8 +19,10 @@ from typing import TYPE_CHECKING, TypeVar
 from memind.types.common import Strategy
 from memind.types.memory import (
     AddMessageRequest,
+    AddMessageResponse,
     CommitMemoryRequest,
     ExtractMemoryRequest,
+    ExtractMemoryResponse,
     RetrieveMemoryRequest,
     RetrieveMemoryResponse,
 )
@@ -42,14 +44,16 @@ class AsyncMemoryResource:
         agent_id: str | None = None,
         raw_content: RawContentValue | None = None,
         source_client: str | None = None,
-    ) -> None:
+    ) -> ExtractMemoryResponse:
         payload = request or _build_extract_request(
             user_id=user_id,
             agent_id=agent_id,
             raw_content=raw_content,
             source_client=source_client,
         )
-        await self._client._post("/memory/extract", payload, None)
+        result = await self._client._post("/memory/extract/sync", payload, ExtractMemoryResponse)
+        assert result is not None
+        return result
 
     async def add_message(
         self,
@@ -66,7 +70,7 @@ class AsyncMemoryResource:
             message=_required(message, "message"),
             source_client=source_client,
         )
-        await self._client._post("/memory/add-message", payload, None)
+        await self._client._post("/memory/add-message/sync", payload, AddMessageResponse)
 
     async def commit(
         self,
@@ -81,7 +85,7 @@ class AsyncMemoryResource:
             agent_id=_required(agent_id, "agent_id"),
             source_client=source_client,
         )
-        await self._client._post("/memory/commit", payload, None)
+        await self._client._post("/memory/commit/sync", payload, ExtractMemoryResponse)
 
     async def retrieve(
         self,

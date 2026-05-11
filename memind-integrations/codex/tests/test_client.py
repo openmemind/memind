@@ -43,6 +43,36 @@ class ClientTest(unittest.TestCase):
         self.assertEqual(payload, {"userId": "u", "agentId": "a", "sourceClient": "codex"})
 
     @mock.patch("urllib.request.urlopen")
+    def test_extract_sync_sends_source_client_and_raw_content(self, urlopen):
+        urlopen.return_value = _FakeResponse(
+            json.dumps(
+                {
+                    "code": "success",
+                    "data": {
+                        "status": "SUCCESS",
+                        "rawDataIds": ["rd-1"],
+                        "itemIds": [],
+                        "insightIds": [],
+                        "insightPending": False,
+                    },
+                }
+            )
+        )
+        client = MemindClient("http://127.0.0.1:8366")
+        response = client.extract(
+            "u",
+            "a",
+            {"type": "conversation", "messages": [{"role": "USER", "content": []}]},
+            "codex",
+        )
+        request = urlopen.call_args.args[0]
+        payload = json.loads(request.data.decode("utf-8"))
+        self.assertTrue(request.full_url.endswith("/open/v1/memory/extract/sync"))
+        self.assertEqual(response["data"]["status"], "SUCCESS")
+        self.assertEqual(payload["sourceClient"], "codex")
+        self.assertEqual(payload["rawContent"]["type"], "conversation")
+
+    @mock.patch("urllib.request.urlopen")
     def test_retrieve_requires_data(self, urlopen):
         urlopen.return_value = _FakeResponse(json.dumps({"code": "success"}))
         client = MemindClient("http://127.0.0.1:8366")

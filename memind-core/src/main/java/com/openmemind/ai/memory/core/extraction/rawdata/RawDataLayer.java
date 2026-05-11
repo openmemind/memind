@@ -149,8 +149,7 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
         // Idempotency check
         Optional<MemoryRawData> existing =
                 memoryStore.rawDataOperations().getRawDataByContentId(memoryId, contentId);
-        return existing.map(
-                        memoryRawData -> Mono.just(RawDataProcessResult.existing(memoryRawData)))
+        return existing.map(memoryRawData -> Mono.just(existingRawDataResult(memoryId, contentId)))
                 .orElseGet(() -> doProcess(input, memoryId, contentId, language));
     }
 
@@ -177,7 +176,7 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
         Optional<MemoryRawData> existing =
                 memoryStore.rawDataOperations().getRawDataByContentId(memoryId, contentId);
         if (existing.isPresent()) {
-            return Mono.just(RawDataResult.existing(existing.get()));
+            return Mono.just(toRawDataResult(memoryId, contentId));
         }
 
         String contentType = (type != null && !type.isBlank()) ? type : ConversationContent.TYPE;
@@ -444,6 +443,47 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
                 memoryId, resolvedResource.map(List::of).orElseGet(List::of), rawDataList);
 
         return new RawDataProcessResult(rawDataList, parsedSegments, false);
+    }
+
+    private RawDataProcessResult existingRawDataResult(MemoryId memoryId, String contentId) {
+        RawDataResult result = toRawDataResult(memoryId, contentId);
+        return new RawDataProcessResult(result.rawDataList(), result.segments(), true);
+    }
+
+    private RawDataResult toRawDataResult(MemoryId memoryId, String contentId) {
+        List<MemoryRawData> rawDataList =
+                memoryStore.rawDataOperations().listRawDataByContentId(memoryId, contentId);
+        List<ParsedSegment> segments = rawDataList.stream().map(this::toParsedSegment).toList();
+        return new RawDataResult(rawDataList, segments, true);
+    }
+
+    private ParsedSegment toParsedSegment(MemoryRawData rawData) {
+        Segment segment = rawData.segment();
+        boolean hasBoundary = segment != null && segment.boundary() != null;
+        return new ParsedSegment(
+                segment == null ? null : segment.content(),
+                rawData.caption(),
+                hasBoundary ? getBoundaryStart(segment) : 0,
+                hasBoundary ? getBoundaryEnd(segment) : 0,
+                rawData.id(),
+                rawData.metadata(),
+                replayRuntimeContext(rawData, segment));
+    }
+
+    private SegmentRuntimeContext replayRuntimeContext(MemoryRawData rawData, Segment segment) {
+        if (segment != null && segment.runtimeContext() != null) {
+            return segment.runtimeContext();
+        }
+        String sourceClient = rawData.sourceClient();
+        if (sourceClient == null && rawData.metadata() != null) {
+            Object metadataSource = rawData.metadata().get("sourceClient");
+            sourceClient = metadataSource == null ? null : metadataSource.toString();
+        }
+        if (rawData.startTime() == null && rawData.endTime() == null && sourceClient == null) {
+            return null;
+        }
+        return new SegmentRuntimeContext(
+                rawData.startTime(), rawData.endTime(), null, sourceClient);
     }
 
     private String resolveRawDataContentId(RawDataInput input) {

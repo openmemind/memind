@@ -16,7 +16,6 @@
 import json
 import os
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -38,6 +37,33 @@ def retry_root():
     return Path.home() / ".memind" / "claude-code" / "retry"
 
 
+def _message_payload(raw_message):
+    return {key: value for key, value in raw_message.items() if key != "fingerprint"}
+
+
+def _extract_payload(messages):
+    return {
+        "type": "conversation",
+        "messages": [_message_payload(message) for message in messages],
+    }
+
+
+def _spool_extract(retry_spool, identity, source_client, session_id, messages):
+    if retry_spool is None or not messages:
+        return
+    retry_spool.enqueue(
+        {
+            "kind": "extract",
+            "userId": identity["userId"],
+            "agentId": identity["agentId"],
+            "sourceClient": source_client,
+            "sessionId": session_id,
+            "fingerprints": [message["fingerprint"] for message in messages],
+            "rawContent": _extract_payload(messages),
+        }
+    )
+
+
 def ingest_messages(config, hook_input, commit=False, max_messages=None):
     identity = resolve_identity(config, hook_input)
     client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=10)
@@ -53,46 +79,26 @@ def ingest_messages(config, hook_input, commit=False, max_messages=None):
     source_client = config.get("sourceClient")
     with store.locked(session_id) as state:
         new_messages = [message for message in messages if not state.is_submitted(message["fingerprint"])]
-        for raw_message in new_messages[:limit]:
-            fingerprint = raw_message["fingerprint"]
-            message = {key: value for key, value in raw_message.items() if key != "fingerprint"}
+        selected = new_messages[:limit]
+        if selected:
+            response = None
             try:
-                client.add_message(identity["userId"], identity["agentId"], message, source_client)
-                submitted.append(fingerprint)
+                response = client.extract(
+                    identity["userId"],
+                    identity["agentId"],
+                    _extract_payload(selected),
+                    source_client,
+                )
             except Exception:
-                try:
-                    time.sleep(0.5)
-                    client.add_message(identity["userId"], identity["agentId"], message, source_client)
-                    submitted.append(fingerprint)
-                except Exception:
-                    if retry_spool is not None:
-                        retry_spool.enqueue(
-                            {
-                                "kind": "add-message",
-                                "userId": identity["userId"],
-                                "agentId": identity["agentId"],
-                                "message": message,
-                                "sourceClient": source_client,
-                                "sessionId": session_id,
-                                "fingerprint": fingerprint,
-                            }
-                        )
+                _spool_extract(retry_spool, identity, source_client, session_id, selected)
+            else:
+                status = ((response or {}).get("data") or {}).get("status")
+                if status == "SUCCESS":
+                    submitted = [message["fingerprint"] for message in selected]
+                else:
+                    _spool_extract(retry_spool, identity, source_client, session_id, selected)
         state.mark_submitted(submitted)
     committed = False
-    if commit:
-        try:
-            client.commit(identity["userId"], identity["agentId"], source_client)
-            committed = True
-        except Exception:
-            if retry_spool is not None:
-                retry_spool.enqueue(
-                    {
-                        "kind": "commit",
-                        "userId": identity["userId"],
-                        "agentId": identity["agentId"],
-                        "sourceClient": source_client,
-                    }
-                )
     return {"submitted": len(submitted), "committed": committed}
 
 

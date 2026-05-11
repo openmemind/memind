@@ -52,7 +52,21 @@ def main():
             if claimed:
                 payload = spool.load_claimed(claimed)
                 replay_client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=10)
-                if payload.get("kind") == "add-message":
+                if payload.get("kind") == "extract":
+                    response = replay_client.extract(
+                        payload["userId"],
+                        payload["agentId"],
+                        payload["rawContent"],
+                        payload.get("sourceClient"),
+                    )
+                    status = ((response or {}).get("data") or {}).get("status")
+                    if status != "SUCCESS":
+                        raise RuntimeError(f"extract replay did not fully succeed: {status}")
+                    if payload.get("sessionId") and payload.get("fingerprints"):
+                        with SessionStateStore(state_root()).locked(payload["sessionId"]) as state:
+                            state.mark_submitted(payload["fingerprints"])
+                    spool.complete(claimed)
+                elif payload.get("kind") == "add-message":
                     replay_client.add_message(
                         payload["userId"],
                         payload["agentId"],

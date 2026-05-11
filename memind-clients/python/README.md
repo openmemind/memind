@@ -17,13 +17,12 @@ from memind.types import ConversationContent
 with MemindClient(base_url="http://localhost:8080") as client:
     health = client.health()
 
-    client.memory.extract(
+    response = client.memory.extract(
         user_id="user-1",
         agent_id="agent-1",
-        raw_content=ConversationContent(messages=[Message.user("I like coffee")]),
+        raw_content=ConversationContent(messages=[Message.user("Remember that I prefer concise answers.")]),
     )
-
-    client.memory.commit(user_id="user-1", agent_id="agent-1")
+    print(response.status)
 
     result = client.memory.retrieve(
         user_id="user-1",
@@ -33,6 +32,10 @@ with MemindClient(base_url="http://localhost:8080") as client:
         trace=True,
     )
 ```
+
+`memory.extract()` uses Memind's synchronous extraction endpoint and returns `ExtractMemoryResponse`. Treat only
+`status == "SUCCESS"` as safe to clear caller-owned retry payloads; `PARTIAL_SUCCESS` is surfaced so applications
+can keep or re-enqueue the original payload.
 
 ## Asynchronous Usage
 

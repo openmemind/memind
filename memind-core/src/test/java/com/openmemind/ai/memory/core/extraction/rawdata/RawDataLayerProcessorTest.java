@@ -31,6 +31,7 @@ import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.extraction.rawdata.processor.ConversationContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
@@ -361,6 +362,8 @@ class RawDataLayerProcessorTest {
                         Instant.parse("2026-03-27T02:18:00Z"));
         when(rawDataOps.getRawDataByContentId(memoryId, "content-1"))
                 .thenReturn(java.util.Optional.of(existing));
+        when(rawDataOps.listRawDataByContentId(memoryId, "content-1"))
+                .thenReturn(List.of(existing));
 
         var result =
                 layer.processSegment(
@@ -370,7 +373,182 @@ class RawDataLayerProcessorTest {
         assertThat(result).isNotNull();
         assertThat(result.existed()).isTrue();
         assertThat(result.rawDataList()).containsExactly(existing);
+        assertThat(result.segments()).hasSize(1);
+        assertThat(result.segments().get(0).rawDataId()).isEqualTo("raw-1");
+        assertThat(result.segments().get(0).text()).isEqualTo("persisted");
+        assertThat(result.segments().get(0).caption()).isEqualTo("caption");
         verifyNoInteractions(defaultCaption, vector);
+    }
+
+    @Test
+    @DisplayName("idempotency hit should restore parsed segment for item extraction replay")
+    void idempotencyHitRestoresParsedSegmentForItemExtractionReplay() {
+        var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
+        var convProcessor = mock(ConversationContentProcessor.class);
+        when(convProcessor.contentClass()).thenReturn(ConversationContent.class);
+        var layer = new RawDataLayer(List.of(convProcessor), defaultCaption, store, vector, 64);
+        var content =
+                new ConversationContent(List.of(Message.user("remember that I like espresso"))) {
+                    @Override
+                    public String getContentId() {
+                        return "content-1";
+                    }
+                };
+        MemoryRawData existing =
+                rawData(
+                        memoryId,
+                        "rd-existing",
+                        "content-1",
+                        Segment.single("remember that I like espresso"),
+                        "espresso preference");
+        when(rawDataOps.getRawDataByContentId(memoryId, "content-1"))
+                .thenReturn(Optional.of(existing));
+        when(rawDataOps.listRawDataByContentId(memoryId, "content-1"))
+                .thenReturn(List.of(existing));
+
+        var result =
+                layer.extract(memoryId, content, ConversationContent.TYPE, Map.of(), null).block();
+
+        assertThat(result.existed()).isTrue();
+        assertThat(result.rawDataList())
+                .extracting(MemoryRawData::id)
+                .containsExactly("rd-existing");
+        assertThat(result.segments()).hasSize(1);
+        assertThat(result.segments().get(0).rawDataId()).isEqualTo("rd-existing");
+        assertThat(result.segments().get(0).text()).isEqualTo("remember that I like espresso");
+        assertThat(result.segments().get(0).caption()).isEqualTo("espresso preference");
+    }
+
+    @Test
+    @DisplayName("idempotency hit should restore all segments in stable order")
+    void idempotencyHitRestoresAllSegmentsInStableOrder() {
+        var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
+        var convProcessor = mock(ConversationContentProcessor.class);
+        when(convProcessor.contentClass()).thenReturn(ConversationContent.class);
+        var layer = new RawDataLayer(List.of(convProcessor), defaultCaption, store, vector, 64);
+        var content =
+                new ConversationContent(
+                        List.of(Message.user("first"), Message.assistant("second"))) {
+                    @Override
+                    public String getContentId() {
+                        return "content-1";
+                    }
+                };
+        MemoryRawData second =
+                rawData(
+                        memoryId,
+                        "rd-2",
+                        "content-1",
+                        new Segment("second", "second caption", new CharBoundary(10, 20), Map.of()),
+                        "second caption");
+        MemoryRawData first =
+                rawData(
+                        memoryId,
+                        "rd-1",
+                        "content-1",
+                        new Segment("first", "first caption", new CharBoundary(0, 9), Map.of()),
+                        "first caption");
+        when(rawDataOps.getRawDataByContentId(memoryId, "content-1"))
+                .thenReturn(Optional.of(second));
+        when(rawDataOps.listRawDataByContentId(memoryId, "content-1"))
+                .thenReturn(List.of(first, second));
+
+        var result =
+                layer.extract(memoryId, content, ConversationContent.TYPE, Map.of(), null).block();
+
+        assertThat(result.existed()).isTrue();
+        assertThat(result.rawDataList())
+                .extracting(MemoryRawData::id)
+                .containsExactly("rd-1", "rd-2");
+        assertThat(result.segments())
+                .extracting(ParsedSegment::rawDataId)
+                .containsExactly("rd-1", "rd-2");
+        assertThat(result.segments())
+                .extracting(ParsedSegment::text)
+                .containsExactly("first", "second");
+    }
+
+    @Test
+    @DisplayName("idempotency hit should restore boundaryless segment without throwing")
+    void idempotencyHitRestoresBoundarylessSegmentWithoutThrowing() {
+        var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
+        var convProcessor = mock(ConversationContentProcessor.class);
+        when(convProcessor.contentClass()).thenReturn(ConversationContent.class);
+        var layer = new RawDataLayer(List.of(convProcessor), defaultCaption, store, vector, 64);
+        var content =
+                new ConversationContent(List.of(Message.user("legacy segment"))) {
+                    @Override
+                    public String getContentId() {
+                        return "content-legacy";
+                    }
+                };
+        MemoryRawData existing =
+                rawData(
+                        memoryId,
+                        "rd-legacy",
+                        "content-legacy",
+                        new Segment("legacy segment", "legacy caption", null, Map.of()),
+                        "legacy caption");
+        when(rawDataOps.getRawDataByContentId(memoryId, "content-legacy"))
+                .thenReturn(Optional.of(existing));
+        when(rawDataOps.listRawDataByContentId(memoryId, "content-legacy"))
+                .thenReturn(List.of(existing));
+
+        var result =
+                layer.extract(memoryId, content, ConversationContent.TYPE, Map.of(), null).block();
+
+        assertThat(result.existed()).isTrue();
+        assertThat(result.segments()).hasSize(1);
+        assertThat(result.segments().get(0).rawDataId()).isEqualTo("rd-legacy");
+        assertThat(result.segments().get(0).startIndex()).isZero();
+        assertThat(result.segments().get(0).endIndex()).isZero();
+    }
+
+    @Test
+    @DisplayName("idempotency hit should restore persisted timing and source client context")
+    void idempotencyHitRestoresPersistedTimingAndSourceClientContext() {
+        var memoryId = new com.openmemind.ai.memory.core.data.DefaultMemoryId("test", "agent");
+        var convProcessor = mock(ConversationContentProcessor.class);
+        when(convProcessor.contentClass()).thenReturn(ConversationContent.class);
+        var layer = new RawDataLayer(List.of(convProcessor), defaultCaption, store, vector, 64);
+        var content =
+                new ConversationContent(List.of(Message.user("remember espresso"))) {
+                    @Override
+                    public String getContentId() {
+                        return "content-timed";
+                    }
+                };
+        MemoryRawData existing =
+                new MemoryRawData(
+                        "rd-timed",
+                        memoryId.toIdentifier(),
+                        ConversationContent.TYPE,
+                        "claude-code",
+                        "content-timed",
+                        Segment.single("remember espresso"),
+                        "espresso caption",
+                        "vec-1",
+                        Map.of("sourceClient", "claude-code"),
+                        null,
+                        null,
+                        Instant.parse("2026-05-11T00:00:00Z"),
+                        Instant.parse("2026-05-10T09:30:00Z"),
+                        Instant.parse("2026-05-10T09:31:00Z"));
+        when(rawDataOps.getRawDataByContentId(memoryId, "content-timed"))
+                .thenReturn(Optional.of(existing));
+        when(rawDataOps.listRawDataByContentId(memoryId, "content-timed"))
+                .thenReturn(List.of(existing));
+
+        var result =
+                layer.extract(memoryId, content, ConversationContent.TYPE, Map.of(), null).block();
+
+        assertThat(result.existed()).isTrue();
+        assertThat(result.segments()).hasSize(1);
+        var context = result.segments().get(0).runtimeContext();
+        assertThat(context).isNotNull();
+        assertThat(context.startTime()).isEqualTo(Instant.parse("2026-05-10T09:30:00Z"));
+        assertThat(context.observedAt()).isEqualTo(Instant.parse("2026-05-10T09:31:00Z"));
+        assertThat(context.sourceClient()).isEqualTo("claude-code");
     }
 
     @Test
@@ -902,6 +1080,28 @@ class RawDataLayerProcessorTest {
     @SuppressWarnings("unchecked")
     private static RawContentProcessor<TestDocumentContent> mockTestDocumentProcessor() {
         return (RawContentProcessor<TestDocumentContent>) mock(RawContentProcessor.class);
+    }
+
+    private static MemoryRawData rawData(
+            com.openmemind.ai.memory.core.data.MemoryId memoryId,
+            String id,
+            String contentId,
+            Segment segment,
+            String caption) {
+        return new MemoryRawData(
+                id,
+                memoryId.toIdentifier(),
+                ConversationContent.TYPE,
+                contentId,
+                segment,
+                caption,
+                null,
+                Map.of(),
+                null,
+                null,
+                Instant.parse("2026-05-11T00:00:00Z"),
+                null,
+                null);
     }
 
     private static final class TestPluginRawContent extends RawContent {

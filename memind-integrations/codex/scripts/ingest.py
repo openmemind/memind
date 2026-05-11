@@ -3,7 +3,6 @@
 import json
 import os
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -29,44 +28,27 @@ def _message_payload(raw_message):
     return {key: value for key, value in raw_message.items() if key != "fingerprint"}
 
 
-def _operation(user_id, agent_id, message, source_client):
+def _extract_payload(messages):
     return {
-        "kind": "add-message",
-        "userId": user_id,
-        "agentId": agent_id,
-        "sourceClient": source_client,
-        "message": message,
+        "type": "conversation",
+        "messages": [_message_payload(message) for message in messages],
     }
 
 
-def _spool_batch(retry_spool, identity, source_client, session_key, messages, commit_on_success):
+def _spool_extract(retry_spool, identity, source_client, session_key, messages):
     if retry_spool is None or not messages:
         return
     retry_spool.enqueue(
         {
-            "kind": "ingestion-batch",
+            "kind": "extract",
             "userId": identity["userId"],
             "agentId": identity["agentId"],
             "sourceClient": source_client,
-            "operations": [
-                _operation(identity["userId"], identity["agentId"], _message_payload(message), source_client)
-                for message in messages
-            ],
             "sessionKey": session_key,
             "fingerprints": [message["fingerprint"] for message in messages],
-            "commitOnSuccess": bool(commit_on_success),
+            "rawContent": _extract_payload(messages),
         }
     )
-
-
-def _add_message_with_retry(client, user_id, agent_id, message, source_client):
-    try:
-        client.add_message(user_id, agent_id, message, source_client)
-        return True
-    except Exception:
-        time.sleep(0.5)
-        client.add_message(user_id, agent_id, message, source_client)
-        return True
 
 
 def ingest_messages(config, hook_input):
@@ -82,51 +64,30 @@ def ingest_messages(config, hook_input):
     store = SessionStateStore(state_root())
     session_key = state_key(hook_input)
     source_client = config.get("sourceClient")
-    commit_on_stop = bool(config.get("commitOnStop", False))
 
     with store.locked(session_key) as state:
         selected = [message for message in messages if not state.is_submitted(message["fingerprint"])][:limit]
 
     submitted = []
-    failed = False
-    for index, raw_message in enumerate(selected):
-        fingerprint = raw_message["fingerprint"]
-        with store.locked(session_key) as state:
-            if state.is_submitted(fingerprint):
-                continue
-        message = _message_payload(raw_message)
+    if selected:
         try:
-            _add_message_with_retry(client, identity["userId"], identity["agentId"], message, source_client)
-            store.mark_submitted(session_key, [fingerprint])
-            submitted.append(fingerprint)
-        except Exception:
-            failed = True
-            _spool_batch(
-                retry_spool,
-                identity,
+            response = client.extract(
+                identity["userId"],
+                identity["agentId"],
+                _extract_payload(selected),
                 source_client,
-                session_key,
-                selected[index:],
-                commit_on_success=commit_on_stop,
             )
-            break
-
-    committed = False
-    if commit_on_stop and submitted and not failed:
-        try:
-            client.commit(identity["userId"], identity["agentId"], source_client)
-            committed = True
         except Exception:
-            if retry_spool is not None:
-                retry_spool.enqueue(
-                    {
-                        "kind": "commit",
-                        "userId": identity["userId"],
-                        "agentId": identity["agentId"],
-                        "sourceClient": source_client,
-                    }
-                )
-    return {"submitted": len(submitted), "committed": committed}
+            _spool_extract(retry_spool, identity, source_client, session_key, selected)
+        else:
+            status = ((response or {}).get("data") or {}).get("status")
+            if status == "SUCCESS":
+                submitted = [message["fingerprint"] for message in selected]
+                store.mark_submitted(session_key, submitted)
+            else:
+                _spool_extract(retry_spool, identity, source_client, session_key, selected)
+
+    return {"submitted": len(submitted), "committed": False}
 
 
 def main():

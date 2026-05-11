@@ -60,6 +60,12 @@ class MemindClient:
             payload["sourceClient"] = source_client
         return self._request("POST", "/open/v1/memory/add-message", payload)
 
+    def extract(self, user_id, agent_id, raw_content, source_client=None):
+        payload = {"userId": user_id, "agentId": agent_id, "rawContent": raw_content}
+        if source_client:
+            payload["sourceClient"] = source_client
+        return self._request("POST", "/open/v1/memory/extract/sync", payload, require_data=True)
+
     def commit(self, user_id, agent_id, source_client=None):
         payload = {"userId": user_id, "agentId": agent_id}
         if source_client:

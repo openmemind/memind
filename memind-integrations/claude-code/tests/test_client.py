@@ -83,6 +83,38 @@ class ClientTest(unittest.TestCase):
         self.assertEqual(Handler.requests[1][1], "/open/v1/memory/commit")
         self.assertEqual(Handler.requests[1][2]["sourceClient"], "claude-code")
 
+    def test_extract_sync_sends_raw_content_and_returns_data(self):
+        Handler.responses.append(
+            (
+                200,
+                {
+                    "code": "success",
+                    "data": {
+                        "status": "SUCCESS",
+                        "rawDataIds": ["rd-1"],
+                        "itemIds": [],
+                        "insightIds": [],
+                        "insightPending": False,
+                    },
+                },
+            )
+        )
+        client = MemindClient(self.base_url, timeout=2)
+        response = client.extract(
+            "u",
+            "a",
+            {
+                "type": "conversation",
+                "messages": [
+                    {"role": "USER", "content": [{"type": "text", "text": "hello"}]}
+                ],
+            },
+            "claude-code",
+        )
+        self.assertEqual(response["data"]["status"], "SUCCESS")
+        self.assertEqual(Handler.requests[0][1], "/open/v1/memory/extract/sync")
+        self.assertEqual(Handler.requests[0][2]["sourceClient"], "claude-code")
+
     def test_retrieve_requires_data(self):
         Handler.responses.append((200, {"code": "success", "data": {"items": [], "insights": []}}))
         client = MemindClient(self.base_url, timeout=2)

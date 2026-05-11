@@ -22,8 +22,10 @@ from memind.types.common import ApiResult, Role, Strategy
 from memind.types.health import HealthResponse
 from memind.types.memory import (
     AddMessageRequest,
+    AddMessageResponse,
     CommitMemoryRequest,
     ExtractMemoryRequest,
+    ExtractMemoryResponse,
     RetrieveMemoryRequest,
     RetrieveMemoryResponse,
 )
@@ -210,6 +212,23 @@ class TestHealthAndMemoryModels:
         assert dumped["rawContent"]["messages"][0]["content"][0]["text"] == "hi"
         assert "sourceClient" not in dumped
 
+    def test_extract_memory_response_aliases(self) -> None:
+        response = ExtractMemoryResponse.model_validate(
+            {
+                "status": "SUCCESS",
+                "rawDataIds": ["rd-1"],
+                "itemIds": [101],
+                "insightIds": [201],
+                "insightPending": True,
+                "durationMillis": 12,
+                "errorMessage": None,
+            }
+        )
+
+        assert response.raw_data_ids == ["rd-1"]
+        assert response.item_ids == [101]
+        assert response.insight_pending is True
+
     def test_add_message_request(self) -> None:
         req = AddMessageRequest(
             user_id="u1",
@@ -221,6 +240,25 @@ class TestHealthAndMemoryModels:
         assert dumped["userId"] == "u1"
         assert dumped["message"]["role"] == "USER"
         assert dumped["sourceClient"] == "python-sdk"
+
+    def test_add_message_response_aliases(self) -> None:
+        response = AddMessageResponse.model_validate(
+            {
+                "triggered": True,
+                "result": {
+                    "status": "SUCCESS",
+                    "rawDataIds": ["rd-1"],
+                    "itemIds": [],
+                    "insightIds": [],
+                    "insightPending": False,
+                },
+            }
+        )
+
+        assert response.triggered is True
+        assert response.result is not None
+        assert response.result.status == "SUCCESS"
+        assert response.result.raw_data_ids == ["rd-1"]
 
     def test_commit_memory_request(self) -> None:
         req = CommitMemoryRequest(user_id="u1", agent_id="a1")

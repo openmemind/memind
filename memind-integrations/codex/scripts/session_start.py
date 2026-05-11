@@ -54,6 +54,21 @@ def _replay_ingestion_batch(client, payload):
 
 def _replay_payload(client, payload):
     kind = payload.get("kind")
+    if kind == "extract":
+        response = client.extract(
+            payload["userId"],
+            payload["agentId"],
+            payload["rawContent"],
+            payload.get("sourceClient"),
+        )
+        status = ((response or {}).get("data") or {}).get("status")
+        if status != "SUCCESS":
+            raise RuntimeError(f"extract replay did not fully succeed: {status}")
+        session_key = payload.get("sessionKey")
+        fingerprints = payload.get("fingerprints") or []
+        if session_key and fingerprints:
+            SessionStateStore(state_root()).mark_submitted(session_key, fingerprints)
+        return len(fingerprints)
     if kind == "ingestion-batch":
         return _replay_ingestion_batch(client, payload)
     if kind == "commit":

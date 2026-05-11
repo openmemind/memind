@@ -17,6 +17,7 @@ import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -57,6 +58,17 @@ public class InMemoryRawDataOperations implements RawDataOperations {
     }
 
     @Override
+    public List<MemoryRawData> listRawDataByContentId(MemoryId id, String contentId) {
+        return rawDataStore.getOrDefault(key(id), Map.of()).values().stream()
+                .filter(r -> Objects.equals(r.contentId(), contentId))
+                .sorted(
+                        Comparator.comparing(InMemoryRawDataOperations::boundaryStart)
+                                .thenComparing(InMemoryRawDataOperations::boundaryEnd)
+                                .thenComparing(MemoryRawData::id))
+                .toList();
+    }
+
+    @Override
     public List<MemoryRawData> listRawData(MemoryId id) {
         return List.copyOf(rawDataStore.getOrDefault(key(id), Map.of()).values());
     }
@@ -92,5 +104,29 @@ public class InMemoryRawDataOperations implements RawDataOperations {
                         map.put(rawDataId, existing.withVectorId(vectorId, metadataPatch));
                     }
                 });
+    }
+
+    private static int boundaryStart(MemoryRawData rawData) {
+        if (rawData.segment() == null || rawData.segment().boundary() == null) {
+            return Integer.MAX_VALUE;
+        }
+        return switch (rawData.segment().boundary()) {
+            case com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary mb ->
+                    mb.startMessage();
+            case com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary cb ->
+                    cb.startChar();
+        };
+    }
+
+    private static int boundaryEnd(MemoryRawData rawData) {
+        if (rawData.segment() == null || rawData.segment().boundary() == null) {
+            return Integer.MAX_VALUE;
+        }
+        return switch (rawData.segment().boundary()) {
+            case com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary mb ->
+                    mb.endMessage();
+            case com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary cb ->
+                    cb.endChar();
+        };
     }
 }

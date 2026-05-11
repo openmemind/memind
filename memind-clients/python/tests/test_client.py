@@ -18,7 +18,13 @@ import pytest
 
 from memind._client import MemindClient
 from memind._exceptions import MemindAPIError, MemindError
-from memind.types import ConversationContent, Message, RetrieveMemoryRequest, Strategy
+from memind.types import (
+    ConversationContent,
+    ExtractMemoryResponse,
+    Message,
+    RetrieveMemoryRequest,
+    Strategy,
+)
 
 
 def test_health_returns_response(httpx_mock) -> None:
@@ -39,8 +45,8 @@ def test_health_returns_response(httpx_mock) -> None:
 def test_add_message_sends_payload_and_auth_header(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/add-message",
-        json={"code": "200"},
+        url="https://api.example.test/open/v1/memory/add-message/sync",
+        json={"code": "success", "data": {"triggered": False}},
     )
 
     client = MemindClient(base_url="https://api.example.test", api_token="sk-test")
@@ -56,17 +62,30 @@ def test_add_message_sends_payload_and_auth_header(httpx_mock) -> None:
 def test_extract_sends_raw_content(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/extract",
-        json={"code": "200"},
+        url="https://api.example.test/open/v1/memory/extract/sync",
+        json={
+            "code": "success",
+            "data": {
+                "status": "SUCCESS",
+                "rawDataIds": ["rd-1"],
+                "itemIds": [101],
+                "insightIds": [],
+                "insightPending": False,
+                "durationMillis": 12,
+            },
+        },
     )
 
     client = MemindClient(base_url="https://api.example.test")
-    client.memory.extract(
+    response = client.memory.extract(
         user_id="u1",
         agent_id="a1",
         raw_content=ConversationContent(messages=[Message.user("hello")]),
     )
 
+    assert isinstance(response, ExtractMemoryResponse)
+    assert response.status == "SUCCESS"
+    assert response.raw_data_ids == ["rd-1"]
     assert b'"rawContent":{"type":"conversation"' in httpx_mock.get_request().content
     client.close()
 
@@ -74,14 +93,77 @@ def test_extract_sends_raw_content(httpx_mock) -> None:
 def test_commit_sends_payload(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/commit",
-        json={"code": "200"},
+        url="https://api.example.test/open/v1/memory/commit/sync",
+        json={
+            "code": "success",
+            "data": {
+                "status": "SUCCESS",
+                "rawDataIds": [],
+                "itemIds": [],
+                "insightIds": [],
+                "insightPending": False,
+            },
+        },
     )
 
     client = MemindClient(base_url="https://api.example.test")
     client.memory.commit(user_id="u1", agent_id="a1")
 
     assert b'"userId":"u1"' in httpx_mock.get_request().content
+    client.close()
+
+
+def test_extract_partial_success_is_returned(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/open/v1/memory/extract/sync",
+        json={
+            "code": "success",
+            "data": {
+                "status": "PARTIAL_SUCCESS",
+                "rawDataIds": ["rd-1"],
+                "itemIds": [],
+                "insightIds": [],
+                "insightPending": False,
+                "errorMessage": "insight failed",
+            },
+        },
+    )
+
+    client = MemindClient(base_url="https://api.example.test")
+    response = client.memory.extract(
+        user_id="u1",
+        agent_id="a1",
+        raw_content=ConversationContent(messages=[Message.user("hello")]),
+    )
+
+    assert response.status == "PARTIAL_SUCCESS"
+    assert response.error_message == "insight failed"
+    client.close()
+
+
+def test_extract_failure_envelope_raises_api_error(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/open/v1/memory/extract/sync",
+        status_code=500,
+        json={
+            "code": "extraction_failed",
+            "message": "extract failed",
+            "traceId": "t1",
+        },
+    )
+
+    client = MemindClient(base_url="https://api.example.test")
+    with pytest.raises(MemindAPIError) as exc_info:
+        client.memory.extract(
+            user_id="u1",
+            agent_id="a1",
+            raw_content=ConversationContent(messages=[Message.user("hello")]),
+        )
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.error_code == "extraction_failed"
     client.close()
 
 
@@ -161,7 +243,7 @@ def test_close_then_call_raises_memind_error() -> None:
 def test_mutating_post_methods_do_not_retry_by_default(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/add-message",
+        url="https://api.example.test/open/v1/memory/add-message/sync",
         status_code=503,
         json={"code": "unavailable"},
     )

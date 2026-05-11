@@ -33,7 +33,7 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(settings["sourceClient"], "codex")
         self.assertFalse(settings["commitOnStop"])
         self.assertEqual(settings["retrieveContextTurns"], 0)
-        self.assertEqual(settings["ingestionMode"], "add-message")
+        self.assertEqual(settings["ingestionMode"], "extract-sync")
         self.assertEqual(settings["ingestionMaxMessagesPerHook"], 20)
         self.assertEqual(settings["stateMaxAgeDays"], 14)
 

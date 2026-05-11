@@ -18,6 +18,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -105,6 +106,214 @@ class HookTest(unittest.TestCase):
             }
             output = self.run_hook("session_start.py", {"cwd": tmp, "session_id": "s1"}, env=env)
         self.assertEqual(output, {"continue": True, "suppressOutput": True})
+
+    def test_ingest_uses_extract_sync_payload_and_marks_submitted_only_on_success(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import ingest
+
+        with tempfile.NamedTemporaryFile("w", delete=False) as handle:
+            handle.write(
+                json.dumps(
+                    {
+                        "type": "user",
+                        "uuid": "msg-1",
+                        "timestamp": "2026-05-11T00:00:00Z",
+                        "message": {"content": "remember espresso"},
+                    }
+                )
+                + "\n"
+            )
+            transcript = Path(handle.name)
+        try:
+            config = {
+                "memindApiUrl": "http://127.0.0.1:8366",
+                "memindApiToken": None,
+                "autoIngest": True,
+                "ingestionRoles": ["user", "assistant"],
+                "ingestionMaxMessagesPerHook": 20,
+                "ingestRetrySpool": True,
+                "sourceClient": "claude-code",
+                "agentId": "claude-code",
+                "agentIdMode": "global",
+                "userId": "u",
+            }
+            with tempfile.TemporaryDirectory() as tmp:
+                with mock.patch.object(ingest, "state_root", return_value=Path(tmp) / "state"):
+                    with mock.patch.object(ingest, "retry_root", return_value=Path(tmp) / "retry"):
+                        with mock.patch.object(ingest, "MemindClient") as client_cls:
+                            client = client_cls.return_value
+                            client.extract.return_value = {"data": {"status": "SUCCESS"}}
+                            result = ingest.ingest_messages(
+                                config,
+                                {
+                                    "session_id": "s1",
+                                    "transcript_path": str(transcript),
+                                    "cwd": tmp,
+                                },
+                                commit=True,
+                            )
+            self.assertEqual(result["submitted"], 1)
+            self.assertFalse(result["committed"])
+            client.extract.assert_called_once()
+            client.commit.assert_not_called()
+            raw_content = client.extract.call_args.args[2]
+            self.assertEqual(raw_content["type"], "conversation")
+            self.assertEqual(raw_content["messages"][0]["role"], "USER")
+        finally:
+            transcript.unlink()
+
+    def test_ingest_spools_full_extract_payload_on_partial_success(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import ingest
+
+        with tempfile.NamedTemporaryFile("w", delete=False) as handle:
+            handle.write(
+                json.dumps(
+                    {
+                        "type": "user",
+                        "uuid": "msg-1",
+                        "timestamp": "2026-05-11T00:00:00Z",
+                        "message": {"content": "remember espresso"},
+                    }
+                )
+                + "\n"
+            )
+            transcript = Path(handle.name)
+        try:
+            config = {
+                "memindApiUrl": "http://127.0.0.1:8366",
+                "memindApiToken": None,
+                "autoIngest": True,
+                "ingestionRoles": ["user", "assistant"],
+                "ingestionMaxMessagesPerHook": 20,
+                "ingestRetrySpool": True,
+                "sourceClient": "claude-code",
+                "agentId": "claude-code",
+                "agentIdMode": "global",
+                "userId": "u",
+            }
+            with tempfile.TemporaryDirectory() as tmp:
+                retry_dir = Path(tmp) / "retry"
+                with mock.patch.object(ingest, "state_root", return_value=Path(tmp) / "state"):
+                    with mock.patch.object(ingest, "retry_root", return_value=retry_dir):
+                        with mock.patch.object(ingest, "MemindClient") as client_cls:
+                            client = client_cls.return_value
+                            client.extract.return_value = {
+                                "data": {
+                                    "status": "PARTIAL_SUCCESS",
+                                    "errorMessage": "partial",
+                                }
+                            }
+                            result = ingest.ingest_messages(
+                                config,
+                                {
+                                    "session_id": "s1",
+                                    "transcript_path": str(transcript),
+                                    "cwd": tmp,
+                                },
+                                commit=False,
+                            )
+                payload = json.loads(next(retry_dir.glob("*.json")).read_text())
+            self.assertEqual(result["submitted"], 0)
+            self.assertEqual(payload["kind"], "extract")
+            self.assertEqual(payload["rawContent"]["type"], "conversation")
+            self.assertEqual(len(payload["fingerprints"]), 1)
+        finally:
+            transcript.unlink()
+
+    def test_session_start_replays_extract_payload_and_marks_fingerprints(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import session_start
+        from scripts.lib.retry import RetrySpool
+        from scripts.lib.state import SessionStateStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            retry_dir = Path(tmp) / "retry"
+            state_dir = Path(tmp) / "state"
+            RetrySpool(retry_dir).enqueue(
+                {
+                    "kind": "extract",
+                    "userId": "u",
+                    "agentId": "a",
+                    "sourceClient": "claude-code",
+                    "sessionId": "s1",
+                    "fingerprints": ["fp1"],
+                    "rawContent": {
+                        "type": "conversation",
+                        "messages": [
+                            {"role": "USER", "content": [{"type": "text", "text": "hello"}]}
+                        ],
+                    },
+                }
+            )
+            config = {
+                "memindApiUrl": "http://127.0.0.1:8366",
+                "memindApiToken": None,
+                "ingestRetryMaxFiles": 20,
+                "ingestRetryMaxAgeDays": 7,
+                "stateMaxAgeDays": 14,
+                "debug": False,
+            }
+            with mock.patch.object(session_start, "load_config", return_value=config):
+                with mock.patch.object(session_start, "retry_root", return_value=retry_dir):
+                    with mock.patch.object(session_start, "state_root", return_value=state_dir):
+                        with mock.patch.object(session_start, "MemindClient") as client_cls:
+                            client = client_cls.return_value
+                            client.health.return_value = {"data": {"status": "UP"}}
+                            client.extract.return_value = {"data": {"status": "SUCCESS"}}
+                            session_start.main()
+            with SessionStateStore(state_dir).locked("s1") as state:
+                self.assertTrue(state.is_submitted("fp1"))
+            self.assertEqual(list(retry_dir.glob("*.json")), [])
+            client.extract.assert_called_once()
+            client.add_message.assert_not_called()
+            client.commit.assert_not_called()
+
+    def test_session_start_keeps_extract_payload_when_replay_is_not_success(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import session_start
+        from scripts.lib.retry import RetrySpool
+        from scripts.lib.state import SessionStateStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            retry_dir = Path(tmp) / "retry"
+            state_dir = Path(tmp) / "state"
+            RetrySpool(retry_dir).enqueue(
+                {
+                    "kind": "extract",
+                    "userId": "u",
+                    "agentId": "a",
+                    "sourceClient": "claude-code",
+                    "sessionId": "s1",
+                    "fingerprints": ["fp1"],
+                    "rawContent": {
+                        "type": "conversation",
+                        "messages": [
+                            {"role": "USER", "content": [{"type": "text", "text": "hello"}]}
+                        ],
+                    },
+                }
+            )
+            config = {
+                "memindApiUrl": "http://127.0.0.1:8366",
+                "memindApiToken": None,
+                "ingestRetryMaxFiles": 20,
+                "ingestRetryMaxAgeDays": 7,
+                "stateMaxAgeDays": 14,
+                "debug": False,
+            }
+            with mock.patch.object(session_start, "load_config", return_value=config):
+                with mock.patch.object(session_start, "retry_root", return_value=retry_dir):
+                    with mock.patch.object(session_start, "state_root", return_value=state_dir):
+                        with mock.patch.object(session_start, "MemindClient") as client_cls:
+                            client = client_cls.return_value
+                            client.health.return_value = {"data": {"status": "UP"}}
+                            client.extract.return_value = {"data": {"status": "PARTIAL_SUCCESS"}}
+                            session_start.main()
+            with SessionStateStore(state_dir).locked("s1") as state:
+                self.assertFalse(state.is_submitted("fp1"))
+            self.assertEqual(len(list(retry_dir.glob("*.json"))), 1)
+            client.extract.assert_called_once()
 
 
 if __name__ == "__main__":
