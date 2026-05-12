@@ -68,8 +68,8 @@ public final class TemporalCandidateLookupSupport {
                     continue;
                 }
                 var ranked = new RankedTemporalCandidate(candidate, window);
-                if (window.start().isBefore(request.sourceEndOrAnchor())
-                        && request.sourceStart().isBefore(window.endOrAnchor())) {
+                if (window.start().isBefore(request.effectiveSourceEndExclusive())
+                        && request.sourceStart().isBefore(window.effectiveEndExclusive())) {
                     overlap.add(ranked);
                 } else if (window.anchor().isBefore(request.sourceAnchor())) {
                     before.add(ranked);

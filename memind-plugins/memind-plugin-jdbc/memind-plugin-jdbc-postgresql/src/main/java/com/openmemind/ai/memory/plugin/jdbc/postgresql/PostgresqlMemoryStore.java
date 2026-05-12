@@ -610,10 +610,17 @@ public class PostgresqlMemoryStore
                             memoryId,
                             request,
                             effectiveExcludeIds,
-                            "AND temporal_start < ? AND ? < temporal_end_or_anchor",
+                            """
+                            AND temporal_start < ?
+                            AND ? < CASE
+                                WHEN temporal_start < temporal_end_or_anchor
+                                THEN temporal_end_or_anchor
+                                ELSE temporal_start + INTERVAL '1 millisecond'
+                            END
+                            """,
                             "ABS(EXTRACT(EPOCH FROM (temporal_anchor - CAST(? AS TIMESTAMPTZ))))"
                                     + " ASC, biz_id ASC",
-                            request.sourceEndOrAnchor(),
+                            request.effectiveSourceEndExclusive(),
                             request.sourceStart(),
                             request.sourceAnchor(),
                             request.overlapLimit()));

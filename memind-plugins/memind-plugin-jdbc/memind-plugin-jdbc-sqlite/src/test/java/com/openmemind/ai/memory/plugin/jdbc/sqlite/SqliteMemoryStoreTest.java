@@ -272,6 +272,42 @@ class SqliteMemoryStoreTest {
     }
 
     @Test
+    void listTemporalCandidateMatchesReturnsSameInstantPointEvents() {
+        MemoryItem source =
+                temporalPointItem(
+                        1L, "source", BASE_TIME, MemoryCategory.EVENT, MemoryItemType.FACT);
+        MemoryItem candidate =
+                temporalPointItem(
+                        2L, "candidate", BASE_TIME, MemoryCategory.EVENT, MemoryItemType.FACT);
+        MemoryItem later =
+                temporalPointItem(
+                        3L,
+                        "later",
+                        BASE_TIME.plusSeconds(60),
+                        MemoryCategory.EVENT,
+                        MemoryItemType.FACT);
+        store.insertItems(memoryId, List.of(source, candidate, later));
+
+        List<TemporalCandidateMatch> matches =
+                store.listTemporalCandidateMatches(
+                        memoryId,
+                        List.of(
+                                new TemporalCandidateRequest(
+                                        1L,
+                                        BASE_TIME,
+                                        BASE_TIME,
+                                        BASE_TIME,
+                                        MemoryItemType.FACT,
+                                        MemoryCategory.EVENT,
+                                        4,
+                                        0,
+                                        0)),
+                        List.of(1L));
+
+        assertThat(matches).extracting(match -> match.candidateItem().id()).containsExactly(2L);
+    }
+
+    @Test
     void listTemporalItemMatchesMatchesFallbackSemantics() {
         MemoryItem source = temporalItem(1L, "source", BASE_TIME, BASE_TIME.plusSeconds(60));
         MemoryItem closest =

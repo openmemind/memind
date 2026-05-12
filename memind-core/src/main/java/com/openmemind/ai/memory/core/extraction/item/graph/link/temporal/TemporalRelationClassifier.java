@@ -67,8 +67,8 @@ public final class TemporalRelationClassifier {
     }
 
     private static boolean windowsOverlap(TemporalWindow left, TemporalWindow right) {
-        return left.start().isBefore(right.endOrAnchor())
-                && right.start().isBefore(left.endOrAnchor());
+        return left.start().isBefore(right.effectiveEndExclusive())
+                && right.start().isBefore(left.effectiveEndExclusive());
     }
 
     @SafeVarargs

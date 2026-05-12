@@ -697,7 +697,7 @@ public class MybatisPlusMemoryStore
                             categoryName,
                             effectiveExcludeIds,
                             request.sourceStart(),
-                            request.sourceEndOrAnchor(),
+                            request.effectiveSourceEndExclusive(),
                             request.sourceAnchor(),
                             request.overlapLimit()));
             appendNativeMatches(

@@ -29,4 +29,9 @@ public record TemporalWindow(Instant start, Instant end, Instant anchor) {
     public Instant endOrAnchor() {
         return end != null ? end : anchor;
     }
+
+    public Instant effectiveEndExclusive() {
+        Instant resolvedEnd = endOrAnchor();
+        return resolvedEnd.isAfter(start) ? resolvedEnd : start.plusMillis(1);
+    }
 }

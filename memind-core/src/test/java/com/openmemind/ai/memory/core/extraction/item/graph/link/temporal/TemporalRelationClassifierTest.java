@@ -58,6 +58,16 @@ class TemporalRelationClassifierTest {
         assertThat(classifier.classify(nearby, far)).isEqualTo("before");
     }
 
+    @Test
+    void classifierShouldTreatSameInstantPointWindowsAsOverlap() {
+        var classifier = new TemporalRelationClassifier();
+
+        var left = classifier.resolveWindow(item(201L, "left", "2026-04-10T09:00:00Z"));
+        var right = classifier.resolveWindow(item(202L, "right", "2026-04-10T09:00:00Z"));
+
+        assertThat(classifier.classify(left, right)).isEqualTo("overlap");
+    }
+
     private static MemoryItem item(Long id, String content, String occurredAt) {
         return new MemoryItem(
                 id,

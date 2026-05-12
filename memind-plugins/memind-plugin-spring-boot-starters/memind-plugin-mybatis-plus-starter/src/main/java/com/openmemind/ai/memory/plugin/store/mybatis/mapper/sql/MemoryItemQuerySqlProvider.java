@@ -82,7 +82,7 @@ public final class MemoryItemQuerySqlProvider {
         <script>
         SELECT *
         FROM memory_item
-        WHERE deleted = 0
+        WHERE %s
           AND memory_id = #{memoryId}
           AND type = #{itemType}
           %s
@@ -95,13 +95,16 @@ public final class MemoryItemQuerySqlProvider {
           AND temporal_start IS NOT NULL
           AND temporal_end_or_anchor IS NOT NULL
           AND temporal_anchor IS NOT NULL
-          AND temporal_start <![CDATA[<]]> #{sourceEndOrAnchor}
-          AND #{sourceStart} <![CDATA[<]]> temporal_end_or_anchor
+          AND %s
         ORDER BY %s ASC, biz_id ASC
         LIMIT #{limit}
         </script>
         """
-                .formatted(categoryPredicate(), anchorDistanceExpression(dialect));
+                .formatted(
+                        deletedPredicate(dialect),
+                        categoryPredicate(),
+                        temporalCandidateOverlapPredicate(dialect),
+                        anchorDistanceExpression(dialect));
     }
 
     public String selectTemporalBeforeCandidates(Map<String, Object> params) {
@@ -110,7 +113,7 @@ public final class MemoryItemQuerySqlProvider {
         <script>
         SELECT *
         FROM memory_item
-        WHERE deleted = 0
+        WHERE %s
           AND memory_id = #{memoryId}
           AND type = #{itemType}
           %s
@@ -126,7 +129,10 @@ public final class MemoryItemQuerySqlProvider {
         LIMIT #{limit}
         </script>
         """
-                .formatted(categoryPredicate(), anchorDistanceExpression(dialect));
+                .formatted(
+                        deletedPredicate(dialect),
+                        categoryPredicate(),
+                        anchorDistanceExpression(dialect));
     }
 
     public String selectTemporalAfterCandidates(Map<String, Object> params) {
@@ -135,7 +141,7 @@ public final class MemoryItemQuerySqlProvider {
         <script>
         SELECT *
         FROM memory_item
-        WHERE deleted = 0
+        WHERE %s
           AND memory_id = #{memoryId}
           AND type = #{itemType}
           %s
@@ -151,7 +157,10 @@ public final class MemoryItemQuerySqlProvider {
         LIMIT #{limit}
         </script>
         """
-                .formatted(categoryPredicate(), anchorDistanceExpression(dialect));
+                .formatted(
+                        deletedPredicate(dialect),
+                        categoryPredicate(),
+                        anchorDistanceExpression(dialect));
     }
 
     private static String categoryPredicate() {
@@ -207,6 +216,52 @@ public final class MemoryItemQuerySqlProvider {
                     semantic_start <![CDATA[<]]> #{endExclusive}
                       AND #{startInclusive} <![CDATA[<]]> semantic_end
                     """;
+        };
+    }
+
+    private static String temporalCandidateEffectiveEndExpression(DatabaseDialect dialect) {
+        return switch (effectiveDialect(dialect)) {
+            case SQLITE ->
+                    """
+                    CASE
+                        WHEN julianday(temporal_start) <![CDATA[<]]> julianday(temporal_end_or_anchor)
+                        THEN temporal_end_or_anchor
+                        ELSE strftime('%Y-%m-%dT%H:%M:%fZ', temporal_start, '+0.001 seconds')
+                    END
+                    """;
+            case MYSQL ->
+                    """
+                    CASE
+                        WHEN temporal_start <![CDATA[<]]> temporal_end_or_anchor
+                        THEN temporal_end_or_anchor
+                        ELSE DATE_ADD(temporal_start, INTERVAL 1000 MICROSECOND)
+                    END
+                    """;
+            case POSTGRESQL ->
+                    """
+                    CASE
+                        WHEN temporal_start <![CDATA[<]]> temporal_end_or_anchor
+                        THEN temporal_end_or_anchor
+                        ELSE temporal_start + INTERVAL '1 millisecond'
+                    END
+                    """;
+        };
+    }
+
+    private static String temporalCandidateOverlapPredicate(DatabaseDialect dialect) {
+        return switch (effectiveDialect(dialect)) {
+            case SQLITE ->
+                    """
+                    julianday(temporal_start) <![CDATA[<]]> julianday(#{sourceEndOrAnchor})
+                      AND julianday(#{sourceStart}) <![CDATA[<]]> julianday(%s)
+                    """
+                            .formatted(temporalCandidateEffectiveEndExpression(dialect));
+            case MYSQL, POSTGRESQL ->
+                    """
+                    temporal_start <![CDATA[<]]> #{sourceEndOrAnchor}
+                      AND #{sourceStart} <![CDATA[<]]> %s
+                    """
+                            .formatted(temporalCandidateEffectiveEndExpression(dialect));
         };
     }
 

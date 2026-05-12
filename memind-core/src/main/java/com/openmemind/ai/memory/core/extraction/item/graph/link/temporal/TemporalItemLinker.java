@@ -256,6 +256,9 @@ public class TemporalItemLinker {
         MemoryItem leftItem = source.item();
         MemoryItem rightItem = candidate.item();
         int compare = classifier.compare(left, right);
+        if (compare == 0) {
+            compare = Long.compare(leftItem.id(), rightItem.id());
+        }
         TemporalWindow earlierWindow = compare <= 0 ? left : right;
         TemporalWindow laterWindow = earlierWindow == left ? right : left;
         MemoryItem earlier = compare <= 0 ? leftItem : rightItem;

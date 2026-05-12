@@ -39,4 +39,10 @@ public record TemporalCandidateRequest(
         Objects.requireNonNull(sourceAnchor, "sourceAnchor");
         Objects.requireNonNull(itemType, "itemType");
     }
+
+    public Instant effectiveSourceEndExclusive() {
+        return sourceEndOrAnchor.isAfter(sourceStart)
+                ? sourceEndOrAnchor
+                : sourceStart.plusMillis(1);
+    }
 }

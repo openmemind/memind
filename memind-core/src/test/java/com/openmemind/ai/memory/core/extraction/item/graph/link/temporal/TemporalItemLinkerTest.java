@@ -91,6 +91,81 @@ class TemporalItemLinkerTest {
     }
 
     @Test
+    void linkerShouldPersistSameBatchSameInstantPointEventsAsOverlap() {
+        var itemOps = new InMemoryItemOperations();
+        var graphOps = new InMemoryGraphOperations();
+        var linker =
+                new TemporalItemLinker(
+                        itemOps,
+                        graphOps,
+                        new TemporalRelationClassifier(),
+                        new ItemGraphOptions(true, 8, 4, 1, 5, 0.82d, 4, 1, 128));
+
+        var incoming =
+                List.of(
+                        temporalItem(
+                                101L,
+                                MemoryItemType.FACT,
+                                MemoryCategory.EVENT,
+                                "2026-04-10T10:00:00Z"),
+                        temporalItem(
+                                102L,
+                                MemoryItemType.FACT,
+                                MemoryCategory.EVENT,
+                                "2026-04-10T10:00:00Z"));
+
+        var stats = linker.link(MEMORY_ID, incoming).block();
+
+        assertThat(stats.createdLinkCount()).isEqualTo(1);
+        assertThat(graphOps.listItemLinks(MEMORY_ID))
+                .extracting(
+                        ItemLink::sourceItemId,
+                        ItemLink::targetItemId,
+                        link -> link.metadata().get("relationType"),
+                        ItemLink::strength)
+                .containsExactly(tuple(101L, 102L, "overlap", 1.0d));
+    }
+
+    @Test
+    void linkerShouldPersistHistoricalSameInstantPointCandidateAsOverlap() {
+        var itemOps = new InMemoryItemOperations();
+        var graphOps = new InMemoryGraphOperations();
+        itemOps.insertItems(
+                MEMORY_ID,
+                List.of(
+                        temporalItem(
+                                1L,
+                                MemoryItemType.FACT,
+                                MemoryCategory.EVENT,
+                                "2026-04-10T10:00:00Z")));
+        var linker =
+                new TemporalItemLinker(
+                        itemOps,
+                        graphOps,
+                        new TemporalRelationClassifier(),
+                        new ItemGraphOptions(true, 8, 4, 1, 5, 0.82d, 4, 1, 128));
+
+        var incoming =
+                List.of(
+                        temporalItem(
+                                101L,
+                                MemoryItemType.FACT,
+                                MemoryCategory.EVENT,
+                                "2026-04-10T10:00:00Z"));
+
+        var stats = linker.link(MEMORY_ID, incoming).block();
+
+        assertThat(stats.createdLinkCount()).isEqualTo(1);
+        assertThat(graphOps.listItemLinks(MEMORY_ID))
+                .extracting(
+                        ItemLink::sourceItemId,
+                        ItemLink::targetItemId,
+                        link -> link.metadata().get("relationType"),
+                        ItemLink::strength)
+                .containsExactly(tuple(1L, 101L, "overlap", 1.0d));
+    }
+
+    @Test
     void linkerShouldDegradeOnlyTheFailedHistoricalLookupSubBatch() {
         var itemOps =
                 new InMemoryItemOperations() {

@@ -35,6 +35,45 @@ class TemporalCandidateLookupSupportTest {
     private static final Instant CREATED_AT = Instant.parse("2026-04-16T00:00:00Z");
 
     @Test
+    void defaultLookupShouldReturnSameInstantPointEventsAsOverlapCandidates() {
+        ItemOperations ops = new InMemoryItemOperations();
+        ops.insertItems(
+                MEMORY_ID,
+                List.of(
+                        temporalItem(
+                                1L,
+                                MemoryItemType.FACT,
+                                MemoryCategory.EVENT,
+                                "2026-04-10T10:00:00Z"),
+                        temporalItem(
+                                2L,
+                                MemoryItemType.FACT,
+                                MemoryCategory.EVENT,
+                                "2026-04-10T10:00:00Z"),
+                        temporalItem(
+                                3L,
+                                MemoryItemType.FACT,
+                                MemoryCategory.EVENT,
+                                "2026-04-10T10:01:00Z")));
+
+        var request =
+                new TemporalCandidateRequest(
+                        1L,
+                        Instant.parse("2026-04-10T10:00:00Z"),
+                        Instant.parse("2026-04-10T10:00:00Z"),
+                        Instant.parse("2026-04-10T10:00:00Z"),
+                        MemoryItemType.FACT,
+                        MemoryCategory.EVENT,
+                        4,
+                        0,
+                        0);
+
+        assertThat(ops.listTemporalCandidateMatches(MEMORY_ID, List.of(request), Set.of(1L)))
+                .extracting(match -> match.candidateItem().id())
+                .containsExactly(2L);
+    }
+
+    @Test
     void defaultLookupShouldReturnOverlapBeforeAndAfterMatchesWithScopeFilters() {
         ItemOperations ops = new InMemoryItemOperations();
         ops.insertItems(

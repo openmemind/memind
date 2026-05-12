@@ -609,9 +609,20 @@ public class SqliteMemoryStore
                             memoryId,
                             request,
                             effectiveExcludeIds,
-                            "AND temporal_start < ? AND ? < temporal_end_or_anchor",
+                            """
+                            AND julianday(temporal_start) < julianday(?)
+                            AND julianday(?) < julianday(
+                                CASE
+                                    WHEN julianday(temporal_start) < julianday(temporal_end_or_anchor)
+                                    THEN temporal_end_or_anchor
+                                    ELSE strftime('%Y-%m-%dT%H:%M:%fZ',
+                                                  temporal_start,
+                                                  '+0.001 seconds')
+                                END
+                            )
+                            """,
                             "ABS(unixepoch(temporal_anchor) - unixepoch(?)) ASC, biz_id ASC",
-                            request.sourceEndOrAnchor(),
+                            request.effectiveSourceEndExclusive(),
                             request.sourceStart(),
                             request.sourceAnchor(),
                             request.overlapLimit()));

@@ -702,6 +702,68 @@ class MybatisPlusMemoryStoreBatchOperationsTest {
     }
 
     @Test
+    @DisplayName("native temporal lookup returns same-instant point overlap candidates")
+    void nativeTemporalLookupReturnsSameInstantPointOverlapCandidates() {
+        newContextRunner(tempDir.resolve("temporal-native-point-overlap.db"))
+                .run(
+                        context -> {
+                            ItemOperations itemOps =
+                                    context.getBean(MemoryStore.class).itemOperations();
+                            MapperMethodCounter counter =
+                                    context.getBean(MapperMethodCounter.class);
+
+                            itemOps.insertItems(
+                                    MEMORY_ID,
+                                    List.of(
+                                            memoryItem(
+                                                    1L, "source", BASE_TIME, BASE_TIME, null,
+                                                    "instant"),
+                                            memoryItem(
+                                                    2L,
+                                                    "candidate",
+                                                    BASE_TIME,
+                                                    BASE_TIME,
+                                                    null,
+                                                    "instant"),
+                                            memoryItem(
+                                                    3L,
+                                                    "later",
+                                                    BASE_TIME.plusSeconds(60),
+                                                    BASE_TIME.plusSeconds(60),
+                                                    null,
+                                                    "instant")));
+                            counter.reset();
+
+                            var request =
+                                    new TemporalCandidateRequest(
+                                            1L,
+                                            BASE_TIME,
+                                            BASE_TIME,
+                                            BASE_TIME,
+                                            MemoryItemType.FACT,
+                                            MemoryCategory.EVENT,
+                                            4,
+                                            0,
+                                            0);
+
+                            var matches =
+                                    itemOps.listTemporalCandidateMatches(
+                                            MEMORY_ID, List.of(request), Set.of(1L));
+
+                            assertThat(matches)
+                                    .extracting(match -> match.candidateItem().id())
+                                    .containsExactly(2L);
+                            assertThat(
+                                            counter.count(
+                                                    MemoryItemMapper.class,
+                                                    "selectTemporalOverlapCandidates"))
+                                    .isEqualTo(1);
+                            assertThat(counter.count(MemoryItemMapper.class, "selectList"))
+                                    .isZero();
+                        });
+    }
+
+    @Test
     @DisplayName("native temporal item lookup matches fallback semantics without broad item scan")
     void nativeTemporalItemLookupMatchesFallbackSemantics() {
         newContextRunner(tempDir.resolve("temporal-item-native-lookup.db"))

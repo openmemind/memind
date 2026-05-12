@@ -608,9 +608,16 @@ public class MysqlMemoryStore
                             memoryId,
                             request,
                             effectiveExcludeIds,
-                            "AND temporal_start < ? AND ? < temporal_end_or_anchor",
+                            """
+                            AND temporal_start < ?
+                            AND ? < CASE
+                                WHEN temporal_start < temporal_end_or_anchor
+                                THEN temporal_end_or_anchor
+                                ELSE DATE_ADD(temporal_start, INTERVAL 1000 MICROSECOND)
+                            END
+                            """,
                             "ABS(TIMESTAMPDIFF(MICROSECOND, temporal_anchor, ?)) ASC, biz_id ASC",
-                            request.sourceEndOrAnchor(),
+                            request.effectiveSourceEndExclusive(),
                             request.sourceStart(),
                             request.sourceAnchor(),
                             request.overlapLimit()));

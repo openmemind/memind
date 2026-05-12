@@ -55,4 +55,44 @@ class MemoryItemQuerySqlProviderTest {
         assertThat(mysqlSql).doesNotContain("observed_at");
         assertThat(postgresqlSql).doesNotContain("observed_at");
     }
+
+    @Test
+    @DisplayName("temporal overlap candidate lookup expands point windows by dialect")
+    void temporalOverlapCandidateLookupExpandsPointWindowsByDialect() {
+        var provider = new MemoryItemQuerySqlProvider();
+
+        String sqliteSql =
+                provider.selectTemporalOverlapCandidates(Map.of("dialect", DatabaseDialect.SQLITE));
+        String mysqlSql =
+                provider.selectTemporalOverlapCandidates(Map.of("dialect", DatabaseDialect.MYSQL));
+        String postgresqlSql =
+                provider.selectTemporalOverlapCandidates(
+                        Map.of("dialect", DatabaseDialect.POSTGRESQL));
+
+        assertThat(sqliteSql)
+                .contains("julianday(temporal_start)")
+                .contains("julianday(#{sourceEndOrAnchor})")
+                .contains("strftime('%Y-%m-%dT%H:%M:%fZ', temporal_start, '+0.001 seconds')");
+        assertThat(mysqlSql)
+                .contains("temporal_start <![CDATA[<]]> #{sourceEndOrAnchor}")
+                .contains("DATE_ADD(temporal_start, INTERVAL 1000 MICROSECOND)");
+        assertThat(postgresqlSql)
+                .contains("temporal_start <![CDATA[<]]> #{sourceEndOrAnchor}")
+                .contains("temporal_start + INTERVAL '1 millisecond'");
+        assertThat(sqliteSql).contains("WHERE deleted = 0");
+        assertThat(mysqlSql).contains("WHERE deleted = 0");
+        assertThat(postgresqlSql).contains("WHERE deleted = FALSE");
+        assertThat(
+                        provider.selectTemporalBeforeCandidates(
+                                Map.of("dialect", DatabaseDialect.POSTGRESQL)))
+                .contains("WHERE deleted = FALSE");
+        assertThat(
+                        provider.selectTemporalAfterCandidates(
+                                Map.of("dialect", DatabaseDialect.POSTGRESQL)))
+                .contains("WHERE deleted = FALSE");
+        assertThat(sqliteSql).doesNotContain("#{sourceStart} <![CDATA[<]]> temporal_end_or_anchor");
+        assertThat(mysqlSql).doesNotContain("#{sourceStart} <![CDATA[<]]> temporal_end_or_anchor");
+        assertThat(postgresqlSql)
+                .doesNotContain("#{sourceStart} <![CDATA[<]]> temporal_end_or_anchor");
+    }
 }
