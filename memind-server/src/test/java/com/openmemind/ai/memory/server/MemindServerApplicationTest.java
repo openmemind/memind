@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.server;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
@@ -107,7 +108,7 @@ class MemindServerApplicationTest {
     @Test
     void commitApiAcceptsRequestWhenRuntimeIsAvailable() throws Exception {
         mockMvc.perform(
-                        post("/open/v1/memory/commit")
+                        post("/open/v1/memory/sync/commit")
                                 .contentType(APPLICATION_JSON)
                                 .content(
                                         """
@@ -116,7 +117,9 @@ class MemindServerApplicationTest {
                                           "agentId": "a1"
                                         }
                                         """))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"));
     }
 
     @Test
@@ -124,7 +127,7 @@ class MemindServerApplicationTest {
             extractApiAcceptsPluginOwnedImageAudioDocumentAndToolCallRawContentViaApplicationObjectMapper()
                     throws Exception {
         mockMvc.perform(
-                        post("/open/v1/memory/extract")
+                        post("/open/v1/memory/async/extract")
                                 .contentType(APPLICATION_JSON)
                                 .content(
                                         """
@@ -148,10 +151,12 @@ class MemindServerApplicationTest {
                                           }
                                         }
                                         """))
-                .andExpect(status().isOk());
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data.status").value("accepted"));
 
         mockMvc.perform(
-                        post("/open/v1/memory/extract")
+                        post("/open/v1/memory/async/extract")
                                 .contentType(APPLICATION_JSON)
                                 .content(
                                         """
@@ -167,10 +172,11 @@ class MemindServerApplicationTest {
                                           }
                                         }
                                         """))
-                .andExpect(status().isOk());
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.status").value("accepted"));
 
         mockMvc.perform(
-                        post("/open/v1/memory/extract")
+                        post("/open/v1/memory/async/extract")
                                 .contentType(APPLICATION_JSON)
                                 .content(
                                         """
@@ -186,10 +192,11 @@ class MemindServerApplicationTest {
                                           }
                                         }
                                         """))
-                .andExpect(status().isOk());
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.status").value("accepted"));
 
         mockMvc.perform(
-                        post("/open/v1/memory/extract")
+                        post("/open/v1/memory/async/extract")
                                 .contentType(APPLICATION_JSON)
                                 .content(
                                         """
@@ -206,10 +213,11 @@ class MemindServerApplicationTest {
                                           }
                                         }
                                         """))
-                .andExpect(status().isOk());
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.status").value("accepted"));
 
         mockMvc.perform(
-                        post("/open/v1/memory/extract")
+                        post("/open/v1/memory/async/extract")
                                 .contentType(APPLICATION_JSON)
                                 .content(
                                         """
@@ -234,6 +242,7 @@ class MemindServerApplicationTest {
                                           }
                                         }
                                         """))
-                .andExpect(status().isOk());
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.status").value("accepted"));
     }
 }
