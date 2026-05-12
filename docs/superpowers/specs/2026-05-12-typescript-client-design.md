@@ -72,7 +72,7 @@ The published `package.json` must include this shape. The snippet is a template,
 ```jsonc
 {
   "name": "@openmemind/memind",
-  // Set to the release version before publishing.
+  // Example only. Set to the concrete release version before publishing.
   "version": "0.2.0",
   "description": "Official TypeScript client for the Memind memory engine API",
   "license": "Apache-2.0",
@@ -111,6 +111,8 @@ The published `package.json` must include this shape. The snippet is a template,
 The package version should match the client release version used by Java and Python clients unless a
 future release policy explicitly decouples client versions. The release workflow must verify that
 the workflow input version matches the concrete `package.json` version.
+Implementation must not mechanically copy the example `0.2.0`; it must use the release version
+selected for the TypeScript client release.
 
 ## Public API
 
@@ -431,7 +433,7 @@ Headers:
 - `Accept: application/json`
 - `Content-Type: application/json` when a body is present
 - `Authorization: Bearer <token>` when `apiToken` is present
-- `User-Agent: memind-typescript/<version>` only when the runtime allows setting it
+- `User-Agent: memind-typescript/<version>` in Node.js only
 - Additional caller headers from `options.extraHeaders`
 
 `extraHeaders` may add application-specific headers, but it must not override SDK-owned headers. The
@@ -445,6 +447,9 @@ client must reject case-insensitive attempts to set these names through `extraHe
 This keeps authentication, content negotiation, and browser-forbidden headers deterministic. If
 callers need a different token, they must use `apiToken`. If they need a different runtime fetch,
 they must use the `fetch` option.
+
+The client must not attempt to set `User-Agent` in browser or edge runtimes. It should set
+`User-Agent` only in Node.js, where the header is supported and useful for server logs.
 
 The client should support a custom `fetch` implementation for tests and advanced runtimes.
 
@@ -692,8 +697,12 @@ Add `memind-clients/typescript/README.md` with:
 - Raw content examples
 - Retrieval example with `trace`
 - Error handling
-- Retry behavior and mutating operation warning
+- Retry behavior and a dedicated mutating-operation warning
 - Development commands
+
+The mutating-operation warning must state that callers should not pass `maxRetries` to
+`extract`, `addMessage`, or `commit` unless they can tolerate duplicated extraction, buffered
+messages, or commits after ambiguous network failures.
 
 Add a short link from the root README client/integration section after the package exists.
 
