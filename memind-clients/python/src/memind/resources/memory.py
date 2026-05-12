@@ -51,7 +51,7 @@ class MemoryResource:
             raw_content=raw_content,
             source_client=source_client,
         )
-        result = self._client._post("/memory/extract/sync", payload, ExtractMemoryResponse)
+        result = self._client._post("/memory/sync/extract", payload, ExtractMemoryResponse)
         assert result is not None
         return result
 
@@ -70,7 +70,7 @@ class MemoryResource:
             message=_required(message, "message"),
             source_client=source_client,
         )
-        self._client._post("/memory/add-message/sync", payload, AddMessageResponse)
+        self._client._post("/memory/sync/add-message", payload, AddMessageResponse)
 
     def commit(
         self,
@@ -85,7 +85,7 @@ class MemoryResource:
             agent_id=_required(agent_id, "agent_id"),
             source_client=source_client,
         )
-        self._client._post("/memory/commit/sync", payload, ExtractMemoryResponse)
+        self._client._post("/memory/sync/commit", payload, ExtractMemoryResponse)
 
     def retrieve(
         self,

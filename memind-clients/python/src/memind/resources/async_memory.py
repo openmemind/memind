@@ -51,7 +51,7 @@ class AsyncMemoryResource:
             raw_content=raw_content,
             source_client=source_client,
         )
-        result = await self._client._post("/memory/extract/sync", payload, ExtractMemoryResponse)
+        result = await self._client._post("/memory/sync/extract", payload, ExtractMemoryResponse)
         assert result is not None
         return result
 
@@ -70,7 +70,7 @@ class AsyncMemoryResource:
             message=_required(message, "message"),
             source_client=source_client,
         )
-        await self._client._post("/memory/add-message/sync", payload, AddMessageResponse)
+        await self._client._post("/memory/sync/add-message", payload, AddMessageResponse)
 
     async def commit(
         self,
@@ -85,7 +85,7 @@ class AsyncMemoryResource:
             agent_id=_required(agent_id, "agent_id"),
             source_client=source_client,
         )
-        await self._client._post("/memory/commit/sync", payload, ExtractMemoryResponse)
+        await self._client._post("/memory/sync/commit", payload, ExtractMemoryResponse)
 
     async def retrieve(
         self,

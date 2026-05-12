@@ -96,22 +96,16 @@ class TestCommonTypes:
 
     def test_success_result(self) -> None:
         data: dict[str, Any] = {
-            "code": "200",
-            "message": None,
             "data": {"status": "UP", "service": "memind-server"},
-            "timestamp": "2026-01-01T00:00:00Z",
-            "traceId": "trace-1",
         }
         result = ApiResult[dict[str, str]].model_validate(data)
-        assert result.code == "200"
         assert result.data == {"status": "UP", "service": "memind-server"}
-        assert result.trace_id == "trace-1"
         assert result.is_success()
 
     def test_unknown_fields_ignored(self) -> None:
-        data: dict[str, Any] = {"code": "200", "data": None, "extraField": "ignored"}
+        data: dict[str, Any] = {"data": None, "extraField": "ignored"}
         result = ApiResult[None].model_validate(data)
-        assert result.code == "200"
+        assert result.data is None
 
 
 class TestMessageTypes:

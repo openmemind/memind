@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from memind._models import MemindModel
 
@@ -33,11 +33,14 @@ class Strategy(str, Enum):
 
 
 class ApiResult(MemindModel, Generic[T]):
-    code: str
-    message: str | None = None
     data: T | None = None
-    timestamp: str | None = None
-    trace_id: str | None = None
+    error: ApiError | None = None
 
     def is_success(self) -> bool:
-        return self.code in ("200", "success")
+        return self.error is None
+
+
+class ApiError(MemindModel):
+    code: str
+    message: str
+    details: Any | None = None
