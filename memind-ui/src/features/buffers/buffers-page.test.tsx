@@ -45,9 +45,23 @@ const insightGroup = {
 
 function api(data: unknown) {
   return new Response(
-    JSON.stringify({ code: 'success', data, timestamp: '2026-04-30T00:00:00Z' }),
+    JSON.stringify({ data }),
     { headers: { 'content-type': 'application/json' } }
   )
+}
+
+function page(items: unknown[]) {
+  return {
+    items,
+    page: {
+      page: 1,
+      pageSize: 10,
+      totalItems: items.length,
+      totalPages: 1,
+      hasPrevious: false,
+      hasNext: false,
+    },
+  }
 }
 
 function renderPage() {
@@ -78,7 +92,7 @@ describe('BuffersPage', () => {
   })
 
   it('default tab is conversations and conversation state defaults to pending', async () => {
-    fetchMock.mockResolvedValueOnce(api({ total: 1, current: 1, list: [conversation] }))
+    fetchMock.mockResolvedValueOnce(api(page([conversation])))
 
     const { getByRole, getByText } = await renderPage()
 
@@ -86,7 +100,7 @@ describe('BuffersPage', () => {
     await expect.element(getByText('session-1')).toBeInTheDocument()
     await vi.waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
-        '/admin/v1/buffers/conversations?pageNo=1&pageSize=10&state=pending',
+        '/admin/v1/buffers/conversations?page=1&pageSize=10&state=pending',
         expect.objectContaining({ method: 'GET' })
       )
     )
@@ -94,7 +108,7 @@ describe('BuffersPage', () => {
 
   it('tab=insights opens insight buffers and insight state defaults to unbuilt', async () => {
     window.history.replaceState(null, '', '/buffers?tab=insights')
-    fetchMock.mockResolvedValueOnce(api({ total: 1, current: 1, list: [insightBuffer] }))
+    fetchMock.mockResolvedValueOnce(api(page([insightBuffer])))
 
     const { getByLabelText, getByRole, getByText } = await renderPage()
 
@@ -103,7 +117,7 @@ describe('BuffersPage', () => {
     await expect.element(getByText('preference')).toBeInTheDocument()
     await vi.waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
-        '/admin/v1/buffers/insights?pageNo=1&pageSize=10&state=unbuilt',
+        '/admin/v1/buffers/insights?page=1&pageSize=10&state=unbuilt',
         expect.objectContaining({ method: 'GET' })
       )
     )
@@ -121,7 +135,7 @@ describe('BuffersPage', () => {
 
   it('insight state options include ungrouped and grouped', async () => {
     window.history.replaceState(null, '', '/buffers?tab=insights')
-    fetchMock.mockResolvedValueOnce(api({ total: 0, current: 1, list: [] }))
+    fetchMock.mockResolvedValueOnce(api(page([])))
 
     const { getByRole } = await renderPage()
 
@@ -131,9 +145,9 @@ describe('BuffersPage', () => {
 
   it('mark extracted sends selected conversation ids', async () => {
     fetchMock
-      .mockResolvedValueOnce(api({ total: 1, current: 1, list: [conversation] }))
+      .mockResolvedValueOnce(api(page([conversation])))
       .mockResolvedValueOnce(api({ updatedCount: 1, affectedMemoryIds: ['alice:agent-a'] }))
-      .mockResolvedValue(api({ total: 0, current: 1, list: [] }))
+      .mockResolvedValue(api(page([])))
 
     const { getByLabelText, getByRole } = await renderPage()
     await userEvent.click(getByLabelText('Select conversation 1'))
@@ -153,9 +167,9 @@ describe('BuffersPage', () => {
   it('mark built sends selected insight buffer ids and built flag', async () => {
     window.history.replaceState(null, '', '/buffers?tab=insights')
     fetchMock
-      .mockResolvedValueOnce(api({ total: 1, current: 1, list: [insightBuffer] }))
+      .mockResolvedValueOnce(api(page([insightBuffer])))
       .mockResolvedValueOnce(api({ updatedCount: 1, affectedMemoryIds: ['alice:agent-a'] }))
-      .mockResolvedValue(api({ total: 0, current: 1, list: [] }))
+      .mockResolvedValue(api(page([])))
 
     const { getByLabelText, getByRole } = await renderPage()
     await userEvent.click(getByLabelText('Select insight buffer 11'))
@@ -174,7 +188,7 @@ describe('BuffersPage', () => {
 
   it('conversation row opens detail drawer with full content', async () => {
     fetchMock
-      .mockResolvedValueOnce(api({ total: 1, current: 1, list: [conversation] }))
+      .mockResolvedValueOnce(api(page([conversation])))
       .mockResolvedValueOnce(api({ ...conversation, content: 'Full conversation content' }))
 
     const { getByRole, getByText } = await renderPage()

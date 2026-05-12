@@ -13,7 +13,7 @@
  */
 package com.openmemind.ai.memory.server.controller.openapi;
 
-import com.openmemind.ai.memory.server.domain.common.ApiResult;
+import com.openmemind.ai.memory.server.domain.common.SuccessResult;
 import com.openmemind.ai.memory.server.domain.memory.response.OpenMemoryHealthResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class OpenHealthController {
 
     @GetMapping("/health")
-    public ApiResult<OpenMemoryHealthResponse> health() {
-        return ApiResult.success(new OpenMemoryHealthResponse("UP", "memind-server"));
+    public SuccessResult<OpenMemoryHealthResponse> health() {
+        return new SuccessResult<>(new OpenMemoryHealthResponse("UP", "memind-server"));
     }
 }

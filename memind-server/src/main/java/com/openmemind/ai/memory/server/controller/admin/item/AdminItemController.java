@@ -13,9 +13,9 @@
  */
 package com.openmemind.ai.memory.server.controller.admin.item;
 
-import com.openmemind.ai.memory.server.domain.common.ApiResult;
 import com.openmemind.ai.memory.server.domain.common.BatchDeleteResult;
 import com.openmemind.ai.memory.server.domain.common.PageResult;
+import com.openmemind.ai.memory.server.domain.common.SuccessResult;
 import com.openmemind.ai.memory.server.domain.item.query.ItemPageQuery;
 import com.openmemind.ai.memory.server.domain.item.request.ItemDeleteRequest;
 import com.openmemind.ai.memory.server.domain.item.view.AdminItemView;
@@ -54,8 +54,8 @@ public class AdminItemController {
     }
 
     @GetMapping
-    public ApiResult<PageResult<AdminItemView>> page(
-            @RequestParam(defaultValue = "1") @Min(1) int pageNo,
+    public SuccessResult<PageResult<AdminItemView>> page(
+            @RequestParam(name = "page", defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
             @RequestParam(required = false) String userId,
             @RequestParam(required = false) String agentId,
@@ -63,30 +63,30 @@ public class AdminItemController {
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String rawDataId) {
-        return ApiResult.success(
+        return new SuccessResult<>(
                 PageResult.from(
                         queryService.listItems(
                                 ItemPageQuery.of(
-                                        pageNo, pageSize, userId, agentId, scope, category, type,
+                                        page, pageSize, userId, agentId, scope, category, type,
                                         rawDataId))));
     }
 
     @GetMapping("/{itemId}")
-    public ApiResult<AdminItemView> detail(@PathVariable Long itemId) {
-        return ApiResult.success(queryService.getItem(itemId));
+    public SuccessResult<AdminItemView> detail(@PathVariable Long itemId) {
+        return new SuccessResult<>(queryService.getItem(itemId));
     }
 
     @GetMapping("/{itemId}/memory-threads")
-    public ApiResult<java.util.List<AdminItemMemoryThreadView>> itemThreads(
+    public SuccessResult<java.util.List<AdminItemMemoryThreadView>> itemThreads(
             @PathVariable Long itemId,
             @RequestParam String userId,
             @RequestParam(required = false) String agentId) {
-        return ApiResult.success(
+        return new SuccessResult<>(
                 memoryThreadQueryService.listThreadsByItemId(userId, agentId, itemId));
     }
 
     @DeleteMapping
-    public ApiResult<BatchDeleteResult> delete(@Valid @RequestBody ItemDeleteRequest request) {
-        return ApiResult.success(deleteService.deleteItems(request.itemIds()));
+    public SuccessResult<BatchDeleteResult> delete(@Valid @RequestBody ItemDeleteRequest request) {
+        return new SuccessResult<>(deleteService.deleteItems(request.itemIds()));
     }
 }

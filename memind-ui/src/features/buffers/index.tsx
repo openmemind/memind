@@ -87,7 +87,7 @@ export function BuffersPage() {
               setTab(nextTab)
               writeSearch({
                 tab: nextTab === 'conversations' ? undefined : nextTab,
-                pageNo: undefined,
+                page: undefined,
                 state: undefined,
               })
             }}
@@ -159,7 +159,7 @@ function ConversationBuffersPanel({
     },
   })
 
-  const rows = conversationsQuery.data?.list ?? []
+  const rows = conversationsQuery.data?.items ?? []
   const selectedConversationIds = [...selectedIds]
 
   return (
@@ -176,7 +176,7 @@ function ConversationBuffersPanel({
             className='h-9 rounded-md border bg-background px-3 text-sm'
             onChange={(event) =>
               onSearchChange({
-                pageNo: undefined,
+                page: undefined,
                 state:
                   event.target.value === DEFAULT_CONVERSATION_STATE
                     ? undefined
@@ -235,7 +235,7 @@ function ConversationBuffersPanel({
       ) : null}
       {conversationsQuery.data ? (
         <p className='text-sm text-muted-foreground'>
-          Total rows: {conversationsQuery.data.total}
+          Total rows: {conversationsQuery.data.page.totalItems}
         </p>
       ) : null}
 
@@ -306,7 +306,7 @@ function InsightBuffersPanel({
     },
   })
 
-  const rows = insightsQuery.data?.list ?? []
+  const rows = insightsQuery.data?.items ?? []
   const selectedInsightIds = [...selectedIds]
 
   return (
@@ -321,7 +321,7 @@ function InsightBuffersPanel({
             className='h-9 rounded-md border bg-background px-3 text-sm'
             onChange={(event) =>
               onSearchChange({
-                pageNo: undefined,
+                page: undefined,
                 state:
                   event.target.value === DEFAULT_INSIGHT_STATE
                     ? undefined
@@ -416,7 +416,7 @@ function InsightBuffersPanel({
       ) : null}
       {insightsQuery.data ? (
         <p className='text-sm text-muted-foreground'>
-          Total rows: {insightsQuery.data.total}
+          Total rows: {insightsQuery.data.page.totalItems}
         </p>
       ) : null}
 
@@ -541,7 +541,7 @@ function buildConversationParams(
   state: ConversationBufferState
 ): ConversationBufferListParams {
   return {
-    pageNo: search.pageNo,
+    page: search.page,
     pageSize: search.pageSize,
     memoryId: memoryId || undefined,
     sessionId: search.sessionId,
@@ -555,7 +555,7 @@ function buildInsightParams(
   state: InsightBufferState
 ): InsightBufferListParams {
   return {
-    pageNo: search.pageNo,
+    page: search.page,
     pageSize: search.pageSize,
     memoryId: memoryId || undefined,
     insightTypeName: search.insightTypeName,
@@ -564,7 +564,7 @@ function buildInsightParams(
 }
 
 type BuffersSearch = {
-  pageNo: number
+  page: number
   pageSize: number
   sessionId?: string
   insightTypeName?: string
@@ -574,7 +574,7 @@ type BuffersSearch = {
 function readBuffersSearch(): BuffersSearch {
   const params = readSearchParams()
   return {
-    pageNo: readNumberParam(params, 'pageNo', DEFAULT_PAGE),
+    page: readNumberParam(params, 'page', DEFAULT_PAGE),
     pageSize: readNumberParam(params, 'pageSize', DEFAULT_PAGE_SIZE),
     sessionId: readStringParam(params, 'sessionId'),
     insightTypeName: readStringParam(params, 'insightTypeName'),

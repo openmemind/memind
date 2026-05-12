@@ -39,6 +39,7 @@ public class MemindHttpClient implements AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(MemindHttpClient.class);
     private static final String USER_AGENT = "memind-java-client/0.2.0";
+    private static final String REQUEST_ID_HEADER = "X-Request-Id";
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -132,17 +133,36 @@ public class MemindHttpClient implements AutoCloseable {
 
         try {
             ApiResult<T> result = objectMapper.readValue(body, responseType);
-            if (status >= 200 && status < 300 && result.isSuccess()) {
+            if (status >= 200 && status < 300) {
                 return result.data();
             }
 
-            throw new MemindApiException(status, result.code(), result.message(), result.traceId());
+            throw toApiException(status, body, requestId(response));
         } catch (MemindApiException e) {
             throw e;
         } catch (IOException e) {
             throw new MemindApiException(
-                    status, "parse_error", "Failed to parse response: " + new String(body), null);
+                    status,
+                    "parse_error",
+                    "Failed to parse response: " + new String(body),
+                    requestId(response),
+                    null);
         }
+    }
+
+    private MemindApiException toApiException(int status, byte[] body, String requestId)
+            throws IOException {
+        ErrorResult errorResult = objectMapper.readValue(body, ErrorResult.class);
+        ErrorResult.ApiError error = errorResult.error();
+        if (error == null) {
+            return new MemindApiException(status, "http_error", "HTTP " + status, requestId, null);
+        }
+        return new MemindApiException(
+                status, error.code(), error.message(), requestId, error.details());
+    }
+
+    private static String requestId(HttpResponse<?> response) {
+        return response.headers().firstValue(REQUEST_ID_HEADER).orElse(null);
     }
 
     public ObjectMapper getObjectMapper() {

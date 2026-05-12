@@ -107,11 +107,14 @@ class BaseClient:
                     f"Failed to parse response data: {response.text}",
                     status_code=response.status_code,
                     error_code="parse_error",
-                    trace_id=result.trace_id,
                     body=result.data if isinstance(result.data, dict) else None,
                 ) from exc
 
-        message = result.message or f"Memind API error: HTTP {response.status_code}"
+        message = (
+            result.error.message
+            if result.error is not None
+            else f"Memind API error: HTTP {response.status_code}"
+        )
         raise self._build_api_error(response, result, body, message)
 
     def _ensure_open(self) -> None:
@@ -129,28 +132,28 @@ class BaseClient:
         message: str,
     ) -> MemindAPIError:
         body_dict = body if isinstance(body, dict) else None
+        error = result.error
+        error_code = error.code if error is not None else None
+        error_message = error.message if error is not None else message
         if response.status_code == 401:
             return MemindAuthenticationError(
-                message,
+                error_message,
                 status_code=response.status_code,
-                error_code=result.code,
-                trace_id=result.trace_id,
+                error_code=error_code,
                 body=body_dict,
             )
         if response.status_code == 429:
             return MemindRateLimitError(
-                message,
+                error_message,
                 status_code=response.status_code,
-                error_code=result.code,
-                trace_id=result.trace_id,
+                error_code=error_code,
                 body=body_dict,
                 retry_after=_retry_after_seconds(response),
             )
         return MemindAPIError(
-            message,
+            error_message,
             status_code=response.status_code,
-            error_code=result.code,
-            trace_id=result.trace_id,
+            error_code=error_code,
             body=body_dict,
         )
 

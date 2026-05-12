@@ -21,12 +21,10 @@ describe('api-client', () => {
     vi.clearAllMocks()
   })
 
-  it('unwraps success ApiResult data', async () => {
+  it('unwraps success envelope data', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
-        code: 'success',
         data: { status: 'UP' },
-        timestamp: '2026-04-30T00:00:00Z',
       })
     )
 
@@ -37,30 +35,29 @@ describe('api-client', () => {
     })
   })
 
-  it('allows async success code 200 without data', async () => {
+  it('allows command success with null data', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
-        code: '200',
-        timestamp: '2026-04-30T00:00:00Z',
+        data: null,
       })
     )
 
     await expect(
-      apiPost<void>('/open/v1/memory/extract')
-    ).resolves.toBeUndefined()
+      apiPost<null>('/open/v1/memory/sync/extract')
+    ).resolves.toBeNull()
   })
 
-  it('throws ApiError with traceId for server errors', async () => {
+  it('throws ApiError with requestId for server errors', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse(
         {
-          code: 'validation_failed',
-          message: 'userId is required',
-          data: { field: 'userId' },
-          timestamp: '2026-04-30T00:00:00Z',
-          traceId: 'trace-1',
+          error: {
+            code: 'validation_failed',
+            message: 'userId is required',
+            details: { fieldErrors: { userId: 'must not be blank' } },
+          },
         },
-        { status: 400 }
+        { status: 400, headers: { 'X-Request-Id': 'request-1' } }
       )
     )
 
@@ -68,8 +65,8 @@ describe('api-client', () => {
       status: 400,
       code: 'validation_failed',
       message: 'userId is required',
-      traceId: 'trace-1',
-      details: { field: 'userId' },
+      requestId: 'request-1',
+      details: { fieldErrors: { userId: 'must not be blank' } },
     })
   })
 
@@ -84,14 +81,12 @@ describe('api-client', () => {
   it('serializes query params without undefined values', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
-        code: 'success',
         data: [],
-        timestamp: '2026-04-30T00:00:00Z',
       })
     )
 
     await apiGet('/admin/v1/items', {
-      pageNo: 2,
+      page: 2,
       pageSize: 20,
       userId: 'alice',
       agentId: '',
@@ -101,7 +96,7 @@ describe('api-client', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/admin/v1/items?pageNo=2&pageSize=20&userId=alice&include=item&include=raw',
+      '/admin/v1/items?page=2&pageSize=20&userId=alice&include=item&include=raw',
       expect.objectContaining({ method: 'GET' })
     )
   })

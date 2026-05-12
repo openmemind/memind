@@ -31,7 +31,7 @@ def test_health_returns_response(httpx_mock) -> None:
     httpx_mock.add_response(
         method="GET",
         url="https://api.example.test/open/v1/health",
-        json={"code": "success", "data": {"status": "UP", "service": "memind-server"}},
+        json={"data": {"status": "UP", "service": "memind-server"}},
     )
 
     with MemindClient(base_url="https://api.example.test") as client:
@@ -45,8 +45,8 @@ def test_health_returns_response(httpx_mock) -> None:
 def test_add_message_sends_payload_and_auth_header(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/add-message/sync",
-        json={"code": "success", "data": {"triggered": False}},
+        url="https://api.example.test/open/v1/memory/sync/add-message",
+        json={"data": {"triggered": False}},
     )
 
     client = MemindClient(base_url="https://api.example.test", api_token="sk-test")
@@ -62,9 +62,8 @@ def test_add_message_sends_payload_and_auth_header(httpx_mock) -> None:
 def test_extract_sends_raw_content(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/extract/sync",
+        url="https://api.example.test/open/v1/memory/sync/extract",
         json={
-            "code": "success",
             "data": {
                 "status": "SUCCESS",
                 "rawDataIds": ["rd-1"],
@@ -93,9 +92,8 @@ def test_extract_sends_raw_content(httpx_mock) -> None:
 def test_commit_sends_payload(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/commit/sync",
+        url="https://api.example.test/open/v1/memory/sync/commit",
         json={
-            "code": "success",
             "data": {
                 "status": "SUCCESS",
                 "rawDataIds": [],
@@ -116,9 +114,8 @@ def test_commit_sends_payload(httpx_mock) -> None:
 def test_extract_partial_success_is_returned(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/extract/sync",
+        url="https://api.example.test/open/v1/memory/sync/extract",
         json={
-            "code": "success",
             "data": {
                 "status": "PARTIAL_SUCCESS",
                 "rawDataIds": ["rd-1"],
@@ -145,12 +142,10 @@ def test_extract_partial_success_is_returned(httpx_mock) -> None:
 def test_extract_failure_envelope_raises_api_error(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/extract/sync",
+        url="https://api.example.test/open/v1/memory/sync/extract",
         status_code=500,
         json={
-            "code": "extraction_failed",
-            "message": "extract failed",
-            "traceId": "t1",
+            "error": {"code": "extraction_failed", "message": "extract failed"},
         },
     )
 
@@ -172,7 +167,6 @@ def test_retrieve_accepts_expanded_parameters(httpx_mock) -> None:
         method="POST",
         url="https://api.example.test/open/v1/memory/retrieve",
         json={
-            "code": "success",
             "data": {
                 "status": "success",
                 "items": [{"id": "1", "text": "likes coffee", "vectorScore": 0.9}],
@@ -199,10 +193,7 @@ def test_retrieve_accepts_request_object(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",
         url="https://api.example.test/open/v1/memory/retrieve",
-        json={
-            "code": "success",
-            "data": {"items": [], "insights": [], "rawData": [], "evidences": []},
-        },
+        json={"data": {"items": [], "insights": [], "rawData": [], "evidences": []}},
     )
 
     client = MemindClient(base_url="https://api.example.test")
@@ -220,7 +211,14 @@ def test_api_error_is_raised_unwrapped(httpx_mock) -> None:
         method="POST",
         url="https://api.example.test/open/v1/memory/retrieve",
         status_code=400,
-        json={"code": "bad_request", "message": "query is required", "traceId": "t1"},
+        headers={"X-Request-Id": "rid-1"},
+        json={
+            "error": {
+                "code": "bad_request",
+                "message": "query is required",
+                "details": {"fieldErrors": {"query": "must not be blank"}},
+            }
+        },
     )
 
     client = MemindClient(base_url="https://api.example.test")
@@ -229,6 +227,8 @@ def test_api_error_is_raised_unwrapped(httpx_mock) -> None:
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.error_code == "bad_request"
+    assert exc_info.value.body is not None
+    assert exc_info.value.body["error"]["details"]["fieldErrors"]["query"] == "must not be blank"
     client.close()
 
 
@@ -243,9 +243,9 @@ def test_close_then_call_raises_memind_error() -> None:
 def test_mutating_post_methods_do_not_retry_by_default(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/add-message/sync",
+        url="https://api.example.test/open/v1/memory/sync/add-message",
         status_code=503,
-        json={"code": "unavailable"},
+        json={"error": {"code": "unavailable", "message": "try later"}},
     )
 
     client = MemindClient(base_url="https://api.example.test", max_retries=2)
@@ -262,15 +262,12 @@ def test_retrieve_retries_by_default(httpx_mock) -> None:
         method="POST",
         url="https://api.example.test/open/v1/memory/retrieve",
         status_code=503,
-        json={"code": "unavailable"},
+        json={"error": {"code": "unavailable", "message": "try later"}},
     )
     httpx_mock.add_response(
         method="POST",
         url="https://api.example.test/open/v1/memory/retrieve",
-        json={
-            "code": "success",
-            "data": {"items": [], "insights": [], "rawData": [], "evidences": []},
-        },
+        json={"data": {"items": [], "insights": [], "rawData": [], "evidences": []}},
     )
 
     client = MemindClient(base_url="https://api.example.test", max_retries=1)

@@ -1,5 +1,5 @@
 export type PageParams = {
-  pageNo?: number
+  page?: number
   pageSize?: number
 }
 

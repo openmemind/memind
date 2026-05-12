@@ -104,7 +104,7 @@ def test_process_success_response_returns_typed_data() -> None:
     client = InspectableClient(base_url="https://api.example.test")
     response = make_response(
         200,
-        {"code": "success", "data": {"status": "UP", "service": "memind-server"}},
+        {"data": {"status": "UP", "service": "memind-server"}},
     )
     result = client.process(response, HealthResponse)
     assert isinstance(result, HealthResponse)
@@ -113,13 +113,13 @@ def test_process_success_response_returns_typed_data() -> None:
 
 def test_process_success_response_without_data_returns_none() -> None:
     client = InspectableClient(base_url="https://api.example.test")
-    response = make_response(200, {"code": "200"})
+    response = make_response(200, {"data": None})
     assert client.process(response, None) is None
 
 
 def test_process_success_response_data_validation_error_is_api_error() -> None:
     client = InspectableClient(base_url="https://api.example.test")
-    response = make_response(200, {"code": "success", "data": {"unexpected": "value"}})
+    response = make_response(200, {"data": {"unexpected": "value"}})
     with pytest.raises(MemindAPIError) as exc_info:
         client.process(response, RequiredFieldResponse)
 
@@ -132,20 +132,20 @@ def test_process_api_error_raises_api_error() -> None:
     client = InspectableClient(base_url="https://api.example.test")
     response = make_response(
         400,
-        {"code": "bad_request", "message": "query is required", "traceId": "trace-1"},
+        {"error": {"code": "bad_request", "message": "query is required"}},
     )
     with pytest.raises(MemindAPIError) as exc_info:
         client.process(response, HealthResponse)
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.error_code == "bad_request"
-    assert exc_info.value.trace_id == "trace-1"
-    assert exc_info.value.body["message"] == "query is required"
+    assert exc_info.value.body is not None
+    assert exc_info.value.body["error"]["message"] == "query is required"
 
 
 def test_process_authentication_error() -> None:
     client = InspectableClient(base_url="https://api.example.test")
-    response = make_response(401, {"code": "unauthorized", "message": "bad token"})
+    response = make_response(401, {"error": {"code": "unauthorized", "message": "bad token"}})
     with pytest.raises(MemindAuthenticationError):
         client.process(response, None)
 
@@ -154,7 +154,7 @@ def test_process_rate_limit_error() -> None:
     client = InspectableClient(base_url="https://api.example.test")
     response = httpx.Response(
         429,
-        json={"code": "rate_limited", "message": "slow down"},
+        json={"error": {"code": "rate_limited", "message": "slow down"}},
         headers={"Retry-After": "3"},
         request=httpx.Request("POST", "https://x"),
     )
@@ -168,7 +168,7 @@ def test_process_rate_limit_error_accepts_http_date_retry_after() -> None:
     client = InspectableClient(base_url="https://api.example.test")
     response = httpx.Response(
         429,
-        json={"code": "rate_limited", "message": "slow down"},
+        json={"error": {"code": "rate_limited", "message": "slow down"}},
         headers={"Retry-After": "Wed, 21 Oct 2099 07:28:00 GMT"},
         request=httpx.Request("POST", "https://x"),
     )

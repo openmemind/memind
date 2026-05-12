@@ -14,10 +14,12 @@
 package com.openmemind.ai.memory.server.controller.openapi;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.openmemind.ai.memory.core.utils.JsonUtils;
+import com.openmemind.ai.memory.server.configuration.RequestIdFilter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
@@ -32,6 +34,7 @@ class OpenHealthControllerTest {
     void setUp() {
         this.mockMvc =
                 MockMvcBuilders.standaloneSetup(new OpenHealthController())
+                        .addFilters(new RequestIdFilter())
                         .setMessageConverters(
                                 new JacksonJsonHttpMessageConverter(JsonUtils.mapper()))
                         .build();
@@ -41,8 +44,9 @@ class OpenHealthControllerTest {
     void healthReturnsSuccessEnvelope() throws Exception {
         mockMvc.perform(get("/open/v1/health"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
                 .andExpect(jsonPath("$.data.status").value("UP"))
                 .andExpect(jsonPath("$.data.service").value("memind-server"));
     }

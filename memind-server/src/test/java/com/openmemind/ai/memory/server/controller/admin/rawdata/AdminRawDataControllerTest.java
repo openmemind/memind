@@ -17,9 +17,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.openmemind.ai.memory.server.configuration.RequestIdFilter;
 import com.openmemind.ai.memory.server.domain.common.PageResponse;
 import com.openmemind.ai.memory.server.domain.rawdata.query.RawDataPageQuery;
 import com.openmemind.ai.memory.server.domain.rawdata.response.RawDataDeleteResult;
@@ -53,21 +55,23 @@ class AdminRawDataControllerTest {
                 MockMvcBuilders.standaloneSetup(
                                 new AdminRawDataController(queryService, deleteService))
                         .setControllerAdvice(new ApiExceptionHandler())
+                        .addFilters(new RequestIdFilter())
                         .setValidator(validator)
                         .build();
     }
 
     @Test
-    void pageUsesDefaultPaginationAndReturnsPagePayload() throws Exception {
-        mockMvc.perform(get("/admin/v1/raw-data"))
+    void pageUsesPageParameterAndReturnsPagePayload() throws Exception {
+        mockMvc.perform(get("/admin/v1/raw-data").param("page", "2"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
-                .andExpect(jsonPath("$.data.current").value(1))
-                .andExpect(jsonPath("$.data.total").value(1))
-                .andExpect(jsonPath("$.data.list[0].rawDataId").value("rd-1"));
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
+                .andExpect(jsonPath("$.data.page.page").value(2))
+                .andExpect(jsonPath("$.data.page.totalItems").value(1))
+                .andExpect(jsonPath("$.data.items[0].rawDataId").value("rd-1"));
 
-        assertThat(queryService.recordedQuery.pageNo()).isEqualTo(1);
+        assertThat(queryService.recordedQuery.pageNo()).isEqualTo(2);
         assertThat(queryService.recordedQuery.pageSize()).isEqualTo(20);
     }
 
@@ -78,9 +82,11 @@ class AdminRawDataControllerTest {
                                 .contentType(APPLICATION_JSON)
                                 .content("{\"rawDataIds\":[]}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("bad_request"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
-                .andExpect(jsonPath("$.traceId").isNotEmpty());
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.error.code").value("validation_failed"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
+                .andExpect(jsonPath("$.traceId").doesNotExist());
     }
 
     @Test
@@ -92,8 +98,9 @@ class AdminRawDataControllerTest {
                                         objectMapper.writeValueAsBytes(
                                                 Map.of("rawDataIds", List.of("rd-1")))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
                 .andExpect(jsonPath("$.data.deletedRawDataCount").value(1))
                 .andExpect(jsonPath("$.data.deletedItemCount").value(2))
                 .andExpect(jsonPath("$.data.insightCleanupRequired").value(true));
@@ -110,7 +117,7 @@ class AdminRawDataControllerTest {
         @Override
         public PageResponse<AdminRawDataView> listRawData(RawDataPageQuery query) {
             this.recordedQuery = query;
-            return new PageResponse<>(1, 20, 1, List.of(rawDataView()));
+            return new PageResponse<>(query.pageNo(), query.pageSize(), 1, List.of(rawDataView()));
         }
 
         @Override

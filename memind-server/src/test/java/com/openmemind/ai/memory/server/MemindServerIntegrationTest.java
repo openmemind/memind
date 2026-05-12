@@ -167,8 +167,8 @@ class MemindServerIntegrationTest {
 
         mockMvc.perform(get("/admin/v1/config/memory-options"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
                 .andExpect(jsonPath("$.data.version").value(1))
                 .andExpect(jsonPath("$.data.config['extraction.common']").isArray())
                 .andExpect(jsonPath("$.data.config['extraction.itemGraph']").isArray())
@@ -184,9 +184,10 @@ class MemindServerIntegrationTest {
     void pageValidationIsAppliedInRealMvcContext() throws Exception {
         mockMvc.perform(get("/admin/v1/items").queryParam("pageSize", "101"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("bad_request"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
-                .andExpect(jsonPath("$.traceId").isNotEmpty());
+                .andExpect(jsonPath("$.error.code").value("validation_failed"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
+                .andExpect(jsonPath("$.traceId").doesNotExist());
     }
 
     @Test
@@ -231,9 +232,9 @@ class MemindServerIntegrationTest {
                                 .queryParam("startTimeFrom", "2026-03-31T10:30:00Z")
                                 .queryParam("startTimeTo", "2026-03-31T11:30:00Z"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.data.total").value(1))
-                .andExpect(jsonPath("$.data.list[0].rawDataId").value("rd-match"));
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data.page.totalItems").value(1))
+                .andExpect(jsonPath("$.data.items[0].rawDataId").value("rd-match"));
 
         mockMvc.perform(
                         get("/admin/v1/items")
@@ -244,9 +245,9 @@ class MemindServerIntegrationTest {
                                 .queryParam("type", "FACT")
                                 .queryParam("rawDataId", "rd-match"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.data.total").value(1))
-                .andExpect(jsonPath("$.data.list[0].itemId").value(101));
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data.page.totalItems").value(1))
+                .andExpect(jsonPath("$.data.items[0].itemId").value(101));
 
         mockMvc.perform(
                         get("/admin/v1/insights")
@@ -256,9 +257,9 @@ class MemindServerIntegrationTest {
                                 .queryParam("type", "profile")
                                 .queryParam("tier", "LEAF"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.data.total").value(1))
-                .andExpect(jsonPath("$.data.list[0].insightId").value(201));
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data.page.totalItems").value(1))
+                .andExpect(jsonPath("$.data.items[0].insightId").value(201));
     }
 
     @Test
@@ -279,7 +280,7 @@ class MemindServerIntegrationTest {
                                 .contentType(APPLICATION_JSON)
                                 .content("{\"rawDataIds\":[\"rd-1\"]}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.deletedRawDataCount").value(1))
                 .andExpect(jsonPath("$.data.deletedItemCount").value(1))
                 .andExpect(jsonPath("$.data.affectedMemoryIds[0]").value("u1:a1"))
@@ -341,16 +342,16 @@ class MemindServerIntegrationTest {
 
         mockMvc.perform(get("/admin/v1/memory-threads"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.data.total").value(2))
-                .andExpect(jsonPath("$.data.list[0].threadId").doesNotExist());
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data.page.totalItems").value(2))
+                .andExpect(jsonPath("$.data.items[0].threadId").doesNotExist());
 
         mockMvc.perform(
                         get("/admin/v1/memory-threads/{threadKey}", "topic:concept:travel")
                                 .queryParam("userId", "u1")
                                 .queryParam("agentId", "a1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.threadKey").value("topic:concept:travel"))
                 .andExpect(jsonPath("$.data.threadId").doesNotExist());
 
@@ -359,7 +360,7 @@ class MemindServerIntegrationTest {
                                 .queryParam("userId", "u1")
                                 .queryParam("agentId", "a1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data[0].itemId").value(101))
                 .andExpect(jsonPath("$.data[0].threadKey").value("topic:concept:travel"))
                 .andExpect(jsonPath("$.data[0].threadId").doesNotExist());
@@ -369,7 +370,7 @@ class MemindServerIntegrationTest {
                                 .queryParam("userId", "u1")
                                 .queryParam("agentId", "a1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.length()").value(2))
                 .andExpect(jsonPath("$.data[0].threadId").doesNotExist());
 
@@ -378,7 +379,7 @@ class MemindServerIntegrationTest {
                                 .queryParam("userId", "u1")
                                 .queryParam("agentId", "a1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.projectionState").value("available"))
                 .andExpect(jsonPath("$.data.pendingCount").value(0));
 
@@ -387,7 +388,7 @@ class MemindServerIntegrationTest {
                                 .queryParam("userId", "u1")
                                 .queryParam("agentId", "a1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data").value(1));
     }
 
@@ -398,10 +399,10 @@ class MemindServerIntegrationTest {
 
         mockMvc.perform(get("/admin/v1/buffers/conversations").queryParam("memoryId", "u1:a1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.data.total").value(1))
-                .andExpect(jsonPath("$.data.list[0].id").value(1001))
-                .andExpect(jsonPath("$.data.list[0].extracted").value(false));
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data.page.totalItems").value(1))
+                .andExpect(jsonPath("$.data.items[0].id").value(1001))
+                .andExpect(jsonPath("$.data.items[0].extracted").value(false));
 
         mockMvc.perform(
                         patch("/admin/v1/buffers/conversations/extracted")
@@ -474,7 +475,7 @@ class MemindServerIntegrationTest {
 
         mockMvc.perform(get("/admin/v1/dashboard").queryParam("memoryId", "u1:a1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.totals.rawData").value(1))
                 .andExpect(jsonPath("$.data.totals.items").value(1))
                 .andExpect(jsonPath("$.data.totals.memoryThreads").value(1))

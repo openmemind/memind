@@ -19,7 +19,7 @@ export function writeMemoryScopeToLocation(value: string) {
 
   const scope = parseMemoryScope(value)
   const url = new URL(window.location.href)
-  url.searchParams.delete('pageNo')
+  url.searchParams.delete('page')
 
   if (scope.memoryId) {
     url.searchParams.set(MEMORY_SCOPE_SEARCH_PARAM, scope.memoryId)

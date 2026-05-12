@@ -72,7 +72,7 @@ public class MemindClient implements AutoCloseable {
         ensureOpen();
         return httpClient
                 .post(
-                        "/open/v1/memory/add-message/sync",
+                        "/open/v1/memory/sync/add-message",
                         Objects.requireNonNull(request, "request"),
                         new TypeReference<ApiResult<AddMessageResponse>>() {})
                 .thenApply(ignored -> null);
@@ -81,7 +81,7 @@ public class MemindClient implements AutoCloseable {
     public CompletableFuture<ExtractMemoryResponse> extractAsync(ExtractMemoryRequest request) {
         ensureOpen();
         return httpClient.post(
-                "/open/v1/memory/extract/sync",
+                "/open/v1/memory/sync/extract",
                 Objects.requireNonNull(request, "request"),
                 new TypeReference<ApiResult<ExtractMemoryResponse>>() {});
     }
@@ -90,7 +90,7 @@ public class MemindClient implements AutoCloseable {
         ensureOpen();
         return httpClient
                 .post(
-                        "/open/v1/memory/commit/sync",
+                        "/open/v1/memory/sync/commit",
                         Objects.requireNonNull(request, "request"),
                         new TypeReference<ApiResult<ExtractMemoryResponse>>() {})
                 .thenApply(ignored -> null);

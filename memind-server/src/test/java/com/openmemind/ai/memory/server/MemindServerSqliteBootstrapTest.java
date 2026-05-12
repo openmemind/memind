@@ -90,7 +90,7 @@ class MemindServerSqliteBootstrapTest {
     void configEndpointWorksWhenSqliteParentDirectoryWasMissing() throws Exception {
         mockMvc.perform(get("/admin/v1/config/memory-options"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.version").value(1));
     }
 

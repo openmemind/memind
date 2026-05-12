@@ -3,7 +3,7 @@ import { RawDataPage } from '@/features/raw-data'
 
 type RawDataSearch = {
   memoryId?: string
-  pageNo?: number
+  page?: number
   pageSize?: number
   startTimeFrom?: string
   startTimeTo?: string
@@ -12,7 +12,7 @@ type RawDataSearch = {
 export const Route = createFileRoute('/_app/raw-data')({
   validateSearch: (search): RawDataSearch => ({
     memoryId: readString(search.memoryId),
-    pageNo: readNumber(search.pageNo),
+    page: readNumber(search.page),
     pageSize: readNumber(search.pageSize),
     startTimeFrom: readString(search.startTimeFrom),
     startTimeTo: readString(search.startTimeTo),

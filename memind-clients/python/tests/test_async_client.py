@@ -26,7 +26,7 @@ async def test_async_health_returns_response(httpx_mock) -> None:
     httpx_mock.add_response(
         method="GET",
         url="https://api.example.test/open/v1/health",
-        json={"code": "success", "data": {"status": "UP", "service": "memind-server"}},
+        json={"data": {"status": "UP", "service": "memind-server"}},
     )
 
     async with AsyncMemindClient(base_url="https://api.example.test") as client:
@@ -39,9 +39,8 @@ async def test_async_health_returns_response(httpx_mock) -> None:
 async def test_async_memory_methods_send_payloads(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/extract/sync",
+        url="https://api.example.test/open/v1/memory/sync/extract",
         json={
-            "code": "success",
             "data": {
                 "status": "SUCCESS",
                 "rawDataIds": ["rd-1"],
@@ -53,14 +52,13 @@ async def test_async_memory_methods_send_payloads(httpx_mock) -> None:
     )
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/add-message/sync",
-        json={"code": "success", "data": {"triggered": False}},
+        url="https://api.example.test/open/v1/memory/sync/add-message",
+        json={"data": {"triggered": False}},
     )
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/commit/sync",
+        url="https://api.example.test/open/v1/memory/sync/commit",
         json={
-            "code": "success",
             "data": {
                 "status": "SUCCESS",
                 "rawDataIds": [],
@@ -95,7 +93,6 @@ async def test_async_retrieve_returns_response(httpx_mock) -> None:
         method="POST",
         url="https://api.example.test/open/v1/memory/retrieve",
         json={
-            "code": "success",
             "data": {
                 "status": "success",
                 "items": [{"id": "1", "text": "likes coffee"}],
@@ -123,7 +120,7 @@ async def test_async_api_error_is_raised_unwrapped(httpx_mock) -> None:
         method="POST",
         url="https://api.example.test/open/v1/memory/retrieve",
         status_code=400,
-        json={"code": "bad_request", "message": "query is required"},
+        json={"error": {"code": "bad_request", "message": "query is required"}},
     )
 
     client = AsyncMemindClient(base_url="https://api.example.test")
@@ -147,9 +144,9 @@ async def test_async_close_then_call_raises_memind_error() -> None:
 async def test_async_mutating_post_methods_do_not_retry_by_default(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",
-        url="https://api.example.test/open/v1/memory/add-message/sync",
+        url="https://api.example.test/open/v1/memory/sync/add-message",
         status_code=503,
-        json={"code": "unavailable"},
+        json={"error": {"code": "unavailable", "message": "try later"}},
     )
 
     client = AsyncMemindClient(base_url="https://api.example.test", max_retries=2)
@@ -167,15 +164,12 @@ async def test_async_retrieve_retries_by_default(httpx_mock) -> None:
         method="POST",
         url="https://api.example.test/open/v1/memory/retrieve",
         status_code=503,
-        json={"code": "unavailable"},
+        json={"error": {"code": "unavailable", "message": "try later"}},
     )
     httpx_mock.add_response(
         method="POST",
         url="https://api.example.test/open/v1/memory/retrieve",
-        json={
-            "code": "success",
-            "data": {"items": [], "insights": [], "rawData": [], "evidences": []},
-        },
+        json={"data": {"items": [], "insights": [], "rawData": [], "evidences": []}},
     )
 
     client = AsyncMemindClient(base_url="https://api.example.test", max_retries=1)

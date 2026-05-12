@@ -72,7 +72,7 @@ export function RawDataPage() {
     },
   })
 
-  const rows = rawDataQuery.data?.list ?? []
+  const rows = rawDataQuery.data?.items ?? []
   const selectedRawDataIds = [...selectedIds]
 
   return (
@@ -133,7 +133,7 @@ export function RawDataPage() {
 
           {rawDataQuery.data ? (
             <p className='text-sm text-muted-foreground'>
-              Total rows: {rawDataQuery.data.total}
+              Total rows: {rawDataQuery.data.page.totalItems}
             </p>
           ) : null}
         </div>
@@ -302,7 +302,7 @@ function buildRawDataListParams(
   memoryScope: string
 ): RawDataListParams {
   return {
-    pageNo: search.pageNo,
+    page: search.page,
     pageSize: search.pageSize,
     ...toUserAgentQuery(memoryScope),
     startTimeFrom: search.startTimeFrom,
@@ -311,7 +311,7 @@ function buildRawDataListParams(
 }
 
 type RawDataSearch = {
-  pageNo: number
+  page: number
   pageSize: number
   startTimeFrom?: string
   startTimeTo?: string
@@ -320,7 +320,7 @@ type RawDataSearch = {
 function readRawDataSearch(): RawDataSearch {
   const params = readSearchParams()
   return {
-    pageNo: readNumberParam(params, 'pageNo', DEFAULT_PAGE),
+    page: readNumberParam(params, 'page', DEFAULT_PAGE),
     pageSize: readNumberParam(params, 'pageSize', DEFAULT_PAGE_SIZE),
     startTimeFrom: readStringParam(params, 'startTimeFrom'),
     startTimeTo: readStringParam(params, 'startTimeTo'),

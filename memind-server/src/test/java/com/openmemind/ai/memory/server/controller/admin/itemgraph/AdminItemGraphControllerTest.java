@@ -17,9 +17,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.openmemind.ai.memory.server.configuration.RequestIdFilter;
 import com.openmemind.ai.memory.server.domain.common.BatchDeleteResult;
 import com.openmemind.ai.memory.server.domain.common.PageResponse;
 import com.openmemind.ai.memory.server.domain.itemgraph.query.ItemGraphPageQueries;
@@ -54,6 +56,7 @@ class AdminItemGraphControllerTest {
                 MockMvcBuilders.standaloneSetup(
                                 new AdminItemGraphController(queryService, managementService))
                         .setControllerAdvice(new ApiExceptionHandler())
+                        .addFilters(new RequestIdFilter())
                         .setValidator(validator)
                         .build();
     }
@@ -62,6 +65,8 @@ class AdminItemGraphControllerTest {
     void summaryReturnsGraphCounts() throws Exception {
         mockMvc.perform(get("/admin/v1/item-graph/summary").param("memoryId", "u1:a1"))
                 .andExpect(status().isOk())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.entityCount").value(2))
                 .andExpect(jsonPath("$.data.itemLinkCountByType[0].name").value("SEMANTIC"));
     }
@@ -70,16 +75,22 @@ class AdminItemGraphControllerTest {
     void entityListReturnsPage() throws Exception {
         mockMvc.perform(
                         get("/admin/v1/item-graph/entities")
+                                .param("page", "2")
                                 .param("entityType", "PERSON")
                                 .param("q", "alice"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.list[0].entityKey").value("person:alice"));
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data.page.page").value(2))
+                .andExpect(jsonPath("$.data.items[0].entityKey").value("person:alice"));
     }
 
     @Test
     void entityDetailReturnsRelatedCounts() throws Exception {
         mockMvc.perform(get("/admin/v1/item-graph/entities/1"))
                 .andExpect(status().isOk())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.entity.entityKey").value("person:alice"))
                 .andExpect(jsonPath("$.data.mentionCount").value(3))
                 .andExpect(jsonPath("$.data.entityOverlapItemLinkCount").value(1));
@@ -89,21 +100,30 @@ class AdminItemGraphControllerTest {
     void itemLinksCanFilterByEvidenceSource() throws Exception {
         mockMvc.perform(
                         get("/admin/v1/item-graph/item-links")
+                                .param("page", "2")
                                 .param("evidenceSource", "entity_overlap"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.list[0].evidenceSource").value("entity_overlap"));
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data.page.page").value(2))
+                .andExpect(jsonPath("$.data.items[0].evidenceSource").value("entity_overlap"));
     }
 
     @Test
     void aliasListUsesSpecFilters() throws Exception {
         mockMvc.perform(
                         get("/admin/v1/item-graph/aliases")
+                                .param("page", "2")
                                 .param("memoryId", "u1:a1")
                                 .param("entityKey", "person:alice")
                                 .param("q", "ali"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.list[0].normalizedAlias").value("alice"));
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data.page.page").value(2))
+                .andExpect(jsonPath("$.data.items[0].normalizedAlias").value("alice"));
 
+        assertThat(queryService.recordedAliasQuery.pageNo()).isEqualTo(2);
         assertThat(queryService.recordedAliasQuery.memoryId()).isEqualTo("u1:a1");
         assertThat(queryService.recordedAliasQuery.entityKey()).isEqualTo("person:alice");
         assertThat(queryService.recordedAliasQuery.q()).isEqualTo("ali");
@@ -115,7 +135,9 @@ class AdminItemGraphControllerTest {
                         delete("/admin/v1/item-graph/entities")
                                 .contentType(APPLICATION_JSON)
                                 .content("{\"entityKeys\":[\"person:alice\"]}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.error.code").value("validation_failed"));
     }
 
     @Test
@@ -127,6 +149,8 @@ class AdminItemGraphControllerTest {
                                         "{\"memoryId\":\"u1:a1\","
                                                 + "\"entityKeys\":[\"person:alice\"]}"))
                 .andExpect(status().isOk())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.deletedCount").value(1))
                 .andExpect(jsonPath("$.data.deletedAliases").value(2))
                 .andExpect(jsonPath("$.data.possiblyStaleEntityOverlapLinks").value(1));
@@ -138,7 +162,9 @@ class AdminItemGraphControllerTest {
                         delete("/admin/v1/item-graph/item-links")
                                 .contentType(APPLICATION_JSON)
                                 .content("{\"ids\":[]}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.error.code").value("validation_failed"));
     }
 
     @Test
@@ -148,6 +174,8 @@ class AdminItemGraphControllerTest {
                                 .contentType(APPLICATION_JSON)
                                 .content("{\"ids\":[10,11]}"))
                 .andExpect(status().isOk())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.deletedCount").value(2))
                 .andExpect(jsonPath("$.data.affectedMemoryIds[0]").value("u1:a1"));
     }
@@ -159,6 +187,8 @@ class AdminItemGraphControllerTest {
                                 .contentType(APPLICATION_JSON)
                                 .content("{\"ids\":[20]}"))
                 .andExpect(status().isOk())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.deletedCount").value(1));
     }
 
@@ -169,6 +199,8 @@ class AdminItemGraphControllerTest {
                                 .contentType(APPLICATION_JSON)
                                 .content("{\"ids\":[30]}"))
                 .andExpect(status().isOk())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.deletedCount").value(1));
     }
 
@@ -179,6 +211,8 @@ class AdminItemGraphControllerTest {
                                 .contentType(APPLICATION_JSON)
                                 .content("{\"ids\":[40]}"))
                 .andExpect(status().isOk())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.deletedCount").value(1));
     }
 

@@ -17,9 +17,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.openmemind.ai.memory.server.configuration.RequestIdFilter;
 import com.openmemind.ai.memory.server.domain.common.BatchDeleteResult;
 import com.openmemind.ai.memory.server.domain.common.PageResponse;
 import com.openmemind.ai.memory.server.domain.item.query.ItemPageQuery;
@@ -58,21 +60,23 @@ class AdminItemControllerTest {
                                 new AdminItemController(
                                         queryService, deleteService, memoryThreadQueryService))
                         .setControllerAdvice(new ApiExceptionHandler())
+                        .addFilters(new RequestIdFilter())
                         .setValidator(validator)
                         .build();
     }
 
     @Test
-    void pageUsesDefaultPaginationAndReturnsPagePayload() throws Exception {
-        mockMvc.perform(get("/admin/v1/items"))
+    void pageUsesPageParameterAndReturnsPagePayload() throws Exception {
+        mockMvc.perform(get("/admin/v1/items").param("page", "2"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
-                .andExpect(jsonPath("$.data.current").value(1))
-                .andExpect(jsonPath("$.data.total").value(1))
-                .andExpect(jsonPath("$.data.list[0].itemId").value(101));
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
+                .andExpect(jsonPath("$.data.page.page").value(2))
+                .andExpect(jsonPath("$.data.page.totalItems").value(1))
+                .andExpect(jsonPath("$.data.items[0].itemId").value(101));
 
-        assertThat(queryService.recordedQuery.pageNo()).isEqualTo(1);
+        assertThat(queryService.recordedQuery.pageNo()).isEqualTo(2);
         assertThat(queryService.recordedQuery.pageSize()).isEqualTo(20);
     }
 
@@ -83,9 +87,11 @@ class AdminItemControllerTest {
                                 .contentType(APPLICATION_JSON)
                                 .content("{\"itemIds\":[]}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("bad_request"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
-                .andExpect(jsonPath("$.traceId").isNotEmpty());
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.error.code").value("validation_failed"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
+                .andExpect(jsonPath("$.traceId").doesNotExist());
     }
 
     @Test
@@ -97,8 +103,9 @@ class AdminItemControllerTest {
                                         objectMapper.writeValueAsBytes(
                                                 Map.of("itemIds", List.of(101L)))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
                 .andExpect(jsonPath("$.data.deletedCount").value(1))
                 .andExpect(jsonPath("$.data.affectedMemoryIds[0]").value("u1:a1"));
     }
@@ -109,9 +116,11 @@ class AdminItemControllerTest {
 
         mockMvc.perform(get("/admin/v1/items/101"))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("not_found"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
-                .andExpect(jsonPath("$.traceId").isNotEmpty());
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.error.code").value("not_found"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
+                .andExpect(jsonPath("$.traceId").doesNotExist());
     }
 
     @Test
@@ -121,8 +130,9 @@ class AdminItemControllerTest {
                                 .param("userId", "u1")
                                 .param("agentId", "a1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
                 .andExpect(jsonPath("$.data.length()").value(2))
                 .andExpect(jsonPath("$.data[0].threadKey").value("topic:concept:travel"))
                 .andExpect(jsonPath("$.data[0].threadId").doesNotExist())

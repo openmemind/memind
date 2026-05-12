@@ -13,8 +13,8 @@
  */
 package com.openmemind.ai.memory.server.controller.admin.memorythread;
 
-import com.openmemind.ai.memory.server.domain.common.ApiResult;
 import com.openmemind.ai.memory.server.domain.common.PageResult;
+import com.openmemind.ai.memory.server.domain.common.SuccessResult;
 import com.openmemind.ai.memory.server.domain.memorythread.query.MemoryThreadPageQuery;
 import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadItemView;
 import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadStatusView;
@@ -47,44 +47,44 @@ public class AdminMemoryThreadController {
     }
 
     @GetMapping
-    public ApiResult<PageResult<AdminMemoryThreadView>> page(
-            @RequestParam(defaultValue = "1") @Min(1) int pageNo,
+    public SuccessResult<PageResult<AdminMemoryThreadView>> page(
+            @RequestParam(name = "page", defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
             @RequestParam(required = false) String userId,
             @RequestParam(required = false) String agentId,
             @RequestParam(required = false) String status) {
-        return ApiResult.success(
+        return new SuccessResult<>(
                 PageResult.from(
                         queryService.listThreads(
                                 MemoryThreadPageQuery.of(
-                                        pageNo, pageSize, userId, agentId, status))));
+                                        page, pageSize, userId, agentId, status))));
     }
 
     @GetMapping("/{threadKey}")
-    public ApiResult<AdminMemoryThreadView> detail(
+    public SuccessResult<AdminMemoryThreadView> detail(
             @PathVariable String threadKey,
             @RequestParam String userId,
             @RequestParam(required = false) String agentId) {
-        return ApiResult.success(queryService.getThread(userId, agentId, threadKey));
+        return new SuccessResult<>(queryService.getThread(userId, agentId, threadKey));
     }
 
     @GetMapping("/{threadKey}/items")
-    public ApiResult<List<AdminMemoryThreadItemView>> items(
+    public SuccessResult<List<AdminMemoryThreadItemView>> items(
             @PathVariable String threadKey,
             @RequestParam String userId,
             @RequestParam(required = false) String agentId) {
-        return ApiResult.success(queryService.listThreadItems(userId, agentId, threadKey));
+        return new SuccessResult<>(queryService.listThreadItems(userId, agentId, threadKey));
     }
 
     @GetMapping("/status")
-    public ApiResult<AdminMemoryThreadStatusView> status(
+    public SuccessResult<AdminMemoryThreadStatusView> status(
             @RequestParam String userId, @RequestParam(required = false) String agentId) {
-        return ApiResult.success(queryService.getStatus(userId, agentId));
+        return new SuccessResult<>(queryService.getStatus(userId, agentId));
     }
 
     @PostMapping("/rebuild")
-    public ApiResult<Integer> rebuild(
+    public SuccessResult<Integer> rebuild(
             @RequestParam String userId, @RequestParam(required = false) String agentId) {
-        return ApiResult.success(rebuildService.rebuild(userId, agentId));
+        return new SuccessResult<>(rebuildService.rebuild(userId, agentId));
     }
 }

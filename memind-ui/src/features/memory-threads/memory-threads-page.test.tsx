@@ -55,9 +55,23 @@ const status = {
 
 function api(data: unknown) {
   return new Response(
-    JSON.stringify({ code: 'success', data, timestamp: '2026-04-30T00:00:00Z' }),
+    JSON.stringify({ data }),
     { headers: { 'content-type': 'application/json' } }
   )
+}
+
+function page(items: unknown[]) {
+  return {
+    items,
+    page: {
+      page: 1,
+      pageSize: 10,
+      totalItems: items.length,
+      totalPages: 1,
+      hasPrevious: false,
+      hasNext: false,
+    },
+  }
 }
 
 function renderPage() {
@@ -88,21 +102,21 @@ describe('MemoryThreadsPage', () => {
   })
 
   it('status filter default omits status query param', async () => {
-    fetchMock.mockResolvedValueOnce(api({ total: 1, current: 1, list: [thread] }))
+    fetchMock.mockResolvedValueOnce(api(page([thread])))
 
     const { getByText } = await renderPage()
 
     await expect.element(getByText('thread-1')).toBeInTheDocument()
     await vi.waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
-        '/admin/v1/memory-threads?pageNo=1&pageSize=10',
+        '/admin/v1/memory-threads?page=1&pageSize=10',
         expect.objectContaining({ method: 'GET' })
       )
     )
   })
 
   it('status options include ACTIVE DORMANT CLOSED', async () => {
-    fetchMock.mockResolvedValueOnce(api({ total: 0, current: 1, list: [] }))
+    fetchMock.mockResolvedValueOnce(api(page([])))
 
     const { getByRole } = await renderPage()
 
@@ -112,7 +126,7 @@ describe('MemoryThreadsPage', () => {
   })
 
   it('detail drawer is blocked when userId is missing', async () => {
-    fetchMock.mockResolvedValueOnce(api({ total: 1, current: 1, list: [thread] }))
+    fetchMock.mockResolvedValueOnce(api(page([thread])))
 
     const { getByRole, getByText } = await renderPage()
     await userEvent.click(getByRole('button', { name: 'View thread thread-1' }))
@@ -128,7 +142,7 @@ describe('MemoryThreadsPage', () => {
     window.history.replaceState(null, '', '/memory-threads?memoryId=alice%3Aagent-a')
     fetchMock
       .mockResolvedValueOnce(api(status))
-      .mockResolvedValueOnce(api({ total: 1, current: 1, list: [thread] }))
+      .mockResolvedValueOnce(api(page([thread])))
       .mockResolvedValueOnce(api(thread))
       .mockResolvedValueOnce(api([membership]))
 
@@ -155,7 +169,7 @@ describe('MemoryThreadsPage', () => {
     )
     fetchMock
       .mockResolvedValueOnce(api(status))
-      .mockResolvedValueOnce(api({ total: 0, current: 1, list: [] }))
+      .mockResolvedValueOnce(api(page([])))
 
     const { getByText } = await renderPage()
 
@@ -164,7 +178,7 @@ describe('MemoryThreadsPage', () => {
   })
 
   it('rebuild is blocked when userId is missing', async () => {
-    fetchMock.mockResolvedValueOnce(api({ total: 0, current: 1, list: [] }))
+    fetchMock.mockResolvedValueOnce(api(page([])))
 
     const { getByRole, getByText } = await renderPage()
 
@@ -176,9 +190,9 @@ describe('MemoryThreadsPage', () => {
     window.history.replaceState(null, '', '/memory-threads?memoryId=alice%3Aagent-a')
     fetchMock
       .mockResolvedValueOnce(api(status))
-      .mockResolvedValueOnce(api({ total: 1, current: 1, list: [thread] }))
+      .mockResolvedValueOnce(api(page([thread])))
       .mockResolvedValueOnce(api(1))
-      .mockResolvedValue(api({ total: 1, current: 1, list: [thread] }))
+      .mockResolvedValue(api(page([thread])))
 
     const { getByRole } = await renderPage()
     await userEvent.click(getByRole('button', { name: 'Rebuild projections' }))

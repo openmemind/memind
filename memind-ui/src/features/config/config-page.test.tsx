@@ -50,12 +50,7 @@ function option(
 
 function api(data: unknown, status = 200, code = 'success', message?: string) {
   return new Response(
-    JSON.stringify({
-      code,
-      data,
-      message,
-      timestamp: '2026-04-30T00:00:00Z',
-    }),
+    JSON.stringify(status >= 400 ? { error: { code, message, details: data } } : { data }),
     {
       status,
       headers: { 'content-type': 'application/json' },

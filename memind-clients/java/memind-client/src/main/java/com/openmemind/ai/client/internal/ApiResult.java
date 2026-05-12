@@ -14,12 +14,6 @@
 package com.openmemind.ai.client.internal;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import java.time.Instant;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ApiResult<T>(String code, String message, T data, Instant timestamp, String traceId) {
-
-    public boolean isSuccess() {
-        return "200".equals(code) || "success".equals(code);
-    }
-}
+public record ApiResult<T>(T data) {}

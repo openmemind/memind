@@ -13,9 +13,9 @@
  */
 package com.openmemind.ai.memory.server.controller.admin.insight;
 
-import com.openmemind.ai.memory.server.domain.common.ApiResult;
 import com.openmemind.ai.memory.server.domain.common.BatchDeleteResult;
 import com.openmemind.ai.memory.server.domain.common.PageResult;
+import com.openmemind.ai.memory.server.domain.common.SuccessResult;
 import com.openmemind.ai.memory.server.domain.insight.query.InsightPageQuery;
 import com.openmemind.ai.memory.server.domain.insight.request.InsightDeleteRequest;
 import com.openmemind.ai.memory.server.domain.insight.view.AdminInsightView;
@@ -48,28 +48,29 @@ public class AdminInsightController {
     }
 
     @GetMapping
-    public ApiResult<PageResult<AdminInsightView>> page(
-            @RequestParam(defaultValue = "1") @Min(1) int pageNo,
+    public SuccessResult<PageResult<AdminInsightView>> page(
+            @RequestParam(name = "page", defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
             @RequestParam(required = false) String userId,
             @RequestParam(required = false) String agentId,
             @RequestParam(required = false) String scope,
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String tier) {
-        return ApiResult.success(
+        return new SuccessResult<>(
                 PageResult.from(
                         queryService.listInsights(
                                 InsightPageQuery.of(
-                                        pageNo, pageSize, userId, agentId, scope, type, tier))));
+                                        page, pageSize, userId, agentId, scope, type, tier))));
     }
 
     @GetMapping("/{insightId}")
-    public ApiResult<AdminInsightView> detail(@PathVariable Long insightId) {
-        return ApiResult.success(queryService.getInsight(insightId));
+    public SuccessResult<AdminInsightView> detail(@PathVariable Long insightId) {
+        return new SuccessResult<>(queryService.getInsight(insightId));
     }
 
     @DeleteMapping
-    public ApiResult<BatchDeleteResult> delete(@Valid @RequestBody InsightDeleteRequest request) {
-        return ApiResult.success(deleteService.deleteInsights(request.insightIds()));
+    public SuccessResult<BatchDeleteResult> delete(
+            @Valid @RequestBody InsightDeleteRequest request) {
+        return new SuccessResult<>(deleteService.deleteInsights(request.insightIds()));
     }
 }

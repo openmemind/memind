@@ -17,9 +17,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.openmemind.ai.memory.server.configuration.RequestIdFilter;
 import com.openmemind.ai.memory.server.domain.config.response.MemoryOptionsSnapshot;
 import com.openmemind.ai.memory.server.domain.config.view.MemoryOptionItemView;
 import com.openmemind.ai.memory.server.handler.ApiExceptionHandler;
@@ -52,6 +54,7 @@ class MemoryOptionsControllerTest {
         this.mockMvc =
                 MockMvcBuilders.standaloneSetup(new MemoryOptionsController(configService))
                         .setControllerAdvice(new ApiExceptionHandler())
+                        .addFilters(new RequestIdFilter())
                         .setValidator(validator)
                         .build();
     }
@@ -60,8 +63,9 @@ class MemoryOptionsControllerTest {
     void getReturnsVersionAndGroupedConfig() throws Exception {
         mockMvc.perform(get("/admin/v1/config/memory-options"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
                 .andExpect(jsonPath("$.data.version").value(3))
                 .andExpect(
                         jsonPath("$.data.config['extraction.common'][0].key")
@@ -75,8 +79,9 @@ class MemoryOptionsControllerTest {
                                 .contentType(APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsBytes(updateRequestBody())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
                 .andExpect(jsonPath("$.data.version").value(4))
                 .andExpect(jsonPath("$.data.config['extraction.common'][0].value").value("PT45S"));
 
@@ -122,9 +127,11 @@ class MemoryOptionsControllerTest {
                                 .contentType(APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsBytes(updateRequestBody())))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("conflict"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
-                .andExpect(jsonPath("$.traceId").isNotEmpty());
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.error.code").value("version_conflict"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
+                .andExpect(jsonPath("$.traceId").doesNotExist());
     }
 
     private static Map<String, Object> updateRequestBody() {

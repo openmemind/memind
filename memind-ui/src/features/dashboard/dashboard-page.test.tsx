@@ -81,11 +81,7 @@ const zeroDashboard = {
 
 const jsonResponse = (data: unknown) =>
   new Response(
-    JSON.stringify({
-      code: 'success',
-      data,
-      timestamp: '2026-04-30T00:00:00Z',
-    }),
+    JSON.stringify({ data }),
     { headers: { 'content-type': 'application/json' } }
   )
 

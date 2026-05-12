@@ -18,9 +18,11 @@ import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.openmemind.ai.memory.server.configuration.RequestIdFilter;
 import com.openmemind.ai.memory.server.domain.buffer.query.ConversationBufferPageQuery;
 import com.openmemind.ai.memory.server.domain.buffer.query.InsightBufferPageQuery;
 import com.openmemind.ai.memory.server.domain.buffer.view.ConversationBufferView;
@@ -55,21 +57,24 @@ class AdminBufferControllerTest {
                 MockMvcBuilders.standaloneSetup(
                                 new AdminBufferController(queryService, managementService))
                         .setControllerAdvice(new ApiExceptionHandler())
+                        .addFilters(new RequestIdFilter())
                         .setValidator(validator)
                         .build();
     }
 
     @Test
     void conversationListDefaultsToPendingAndReturnsPagePayload() throws Exception {
-        mockMvc.perform(get("/admin/v1/buffers/conversations"))
+        mockMvc.perform(get("/admin/v1/buffers/conversations").param("page", "2"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.data.current").value(1))
-                .andExpect(jsonPath("$.data.list[0].sessionId").value("s1"))
-                .andExpect(jsonPath("$.data.list[0].extracted").value(false));
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
+                .andExpect(jsonPath("$.data.page.page").value(2))
+                .andExpect(jsonPath("$.data.items[0].sessionId").value("s1"))
+                .andExpect(jsonPath("$.data.items[0].extracted").value(false));
 
         assertThat(queryService.recordedConversationQuery.state()).isEqualTo("pending");
-        assertThat(queryService.recordedConversationQuery.pageNo()).isEqualTo(1);
+        assertThat(queryService.recordedConversationQuery.pageNo()).isEqualTo(2);
         assertThat(queryService.recordedConversationQuery.pageSize()).isEqualTo(20);
     }
 
@@ -77,21 +82,24 @@ class AdminBufferControllerTest {
     void conversationDetailReturnsRow() throws Exception {
         mockMvc.perform(get("/admin/v1/buffers/conversations/1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.id").value(1))
                 .andExpect(jsonPath("$.data.content").value("hello"));
     }
 
     @Test
     void insightListDefaultsToUnbuiltAndReturnsPagePayload() throws Exception {
-        mockMvc.perform(get("/admin/v1/buffers/insights"))
+        mockMvc.perform(get("/admin/v1/buffers/insights").param("page", "2"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.data.current").value(1))
-                .andExpect(jsonPath("$.data.list[0].insightTypeName").value("preference"))
-                .andExpect(jsonPath("$.data.list[0].built").value(false));
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data.page.page").value(2))
+                .andExpect(jsonPath("$.data.items[0].insightTypeName").value("preference"))
+                .andExpect(jsonPath("$.data.items[0].built").value(false));
 
         assertThat(queryService.recordedInsightQuery.state()).isEqualTo("unbuilt");
+        assertThat(queryService.recordedInsightQuery.pageNo()).isEqualTo(2);
     }
 
     @Test
@@ -101,7 +109,8 @@ class AdminBufferControllerTest {
                                 .param("memoryId", "u1:a1")
                                 .param("insightTypeName", "preference"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data[0].memoryId").value("u1:a1"))
                 .andExpect(jsonPath("$.data[0].groupName").value("project"))
                 .andExpect(jsonPath("$.data[0].unbuilt").value(2));
@@ -114,7 +123,9 @@ class AdminBufferControllerTest {
                                 .contentType(APPLICATION_JSON)
                                 .content("{\"ids\":[]}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("bad_request"));
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.error.code").value("validation_failed"))
+                .andExpect(jsonPath("$.code").doesNotExist());
     }
 
     @Test

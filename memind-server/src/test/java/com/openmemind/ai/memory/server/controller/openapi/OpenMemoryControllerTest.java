@@ -14,13 +14,13 @@
 package com.openmemind.ai.memory.server.controller.openapi;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.openmemind.ai.memory.core.utils.JsonUtils;
+import com.openmemind.ai.memory.server.configuration.RequestIdFilter;
 import com.openmemind.ai.memory.server.domain.memory.request.AddMessageRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.CommitMemoryRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.ExtractMemoryRequest;
@@ -36,7 +36,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import tools.jackson.databind.json.JsonMapper;
@@ -53,109 +52,62 @@ class OpenMemoryControllerTest {
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
         this.mockMvc =
-                MockMvcBuilders.standaloneSetup(new OpenMemoryController(service))
+                MockMvcBuilders.standaloneSetup(
+                                new OpenMemoryQueryController(service),
+                                new OpenMemorySyncController(service),
+                                new OpenMemoryAsyncController(service))
                         .setControllerAdvice(new ApiExceptionHandler())
+                        .addFilters(new RequestIdFilter())
                         .setMessageConverters(new JacksonJsonHttpMessageConverter(objectMapper))
                         .setValidator(validator)
                         .build();
     }
 
     @Test
-    void extractAcceptsConversationRawContent() throws Exception {
-        MvcResult result =
-                mockMvc.perform(
-                                post("/open/v1/memory/extract")
-                                        .contentType(APPLICATION_JSON)
-                                        .content(
-                                                """
-                                                {
-                                                  "userId": "u1",
-                                                  "agentId": "a1",
-                                                  "rawContent": {
-                                                    "type": "conversation",
-                                                    "messages": [
-                                                      {
-                                                        "role": "USER",
-                                                        "content": [
-                                                          {
-                                                            "type": "text",
-                                                            "text": "hello"
-                                                          }
-                                                        ],
-                                                        "timestamp": "2026-03-31T10:00:00Z"
-                                                      }
-                                                    ]
-                                                  }
-                                                }
-                                                """))
-                        .andExpect(request().asyncStarted())
-                        .andReturn();
-
-        mockMvc.perform(asyncDispatch(result))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("200"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
-                .andExpect(jsonPath("$.data").doesNotExist());
+    void asyncExtractAcceptsConversationRawContent() throws Exception {
+        mockMvc.perform(
+                        post("/open/v1/memory/async/extract")
+                                .contentType(APPLICATION_JSON)
+                                .content(validExtractJson()))
+                .andExpect(status().isAccepted())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.data.operationId").exists())
+                .andExpect(jsonPath("$.data.status").value("accepted"))
+                .andExpect(jsonPath("$.data.mode").value("async"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist());
 
         org.assertj.core.api.Assertions.assertThat(service.lastExtractRequest).isNotNull();
     }
 
     @Test
-    void addMessageReturnsOkWithoutPayload() throws Exception {
-        MvcResult result =
-                mockMvc.perform(
-                                post("/open/v1/memory/add-message")
-                                        .contentType(APPLICATION_JSON)
-                                        .content(
-                                                """
-                                                {
-                                                  "userId": "u1",
-                                                  "agentId": "a1",
-                                                  "message": {
-                                                    "role": "USER",
-                                                    "content": [
-                                                      {
-                                                        "type": "text",
-                                                        "text": "hello"
-                                                      }
-                                                    ],
-                                                    "timestamp": "2026-03-31T10:00:00Z"
-                                                  }
-                                                }
-                                                """))
-                        .andExpect(request().asyncStarted())
-                        .andReturn();
-
-        mockMvc.perform(asyncDispatch(result))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("200"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
-                .andExpect(jsonPath("$.data").doesNotExist());
+    void asyncAddMessageReturnsAccepted() throws Exception {
+        mockMvc.perform(
+                        post("/open/v1/memory/async/add-message")
+                                .contentType(APPLICATION_JSON)
+                                .content(validAddMessageJson()))
+                .andExpect(status().isAccepted())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.data.operationId").exists())
+                .andExpect(jsonPath("$.data.status").value("accepted"))
+                .andExpect(jsonPath("$.data.mode").value("async"))
+                .andExpect(jsonPath("$.code").doesNotExist());
 
         org.assertj.core.api.Assertions.assertThat(service.lastAddMessageRequest).isNotNull();
     }
 
     @Test
-    void commitReturnsOkWithoutPayload() throws Exception {
-        MvcResult result =
-                mockMvc.perform(
-                                post("/open/v1/memory/commit")
-                                        .contentType(APPLICATION_JSON)
-                                        .content(
-                                                """
-                                                {
-                                                  "userId": "u1",
-                                                  "agentId": "a1"
-                                                }
-                                                """))
-                        .andExpect(request().asyncStarted())
-                        .andReturn();
-
-        mockMvc.perform(asyncDispatch(result))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("200"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
-                .andExpect(jsonPath("$.data").doesNotExist());
+    void asyncCommitReturnsAccepted() throws Exception {
+        mockMvc.perform(
+                        post("/open/v1/memory/async/commit")
+                                .contentType(APPLICATION_JSON)
+                                .content(validCommitJson()))
+                .andExpect(status().isAccepted())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.data.operationId").exists())
+                .andExpect(jsonPath("$.data.status").value("accepted"))
+                .andExpect(jsonPath("$.data.mode").value("async"))
+                .andExpect(jsonPath("$.code").doesNotExist());
 
         org.assertj.core.api.Assertions.assertThat(service.lastCommitRequest).isNotNull();
     }
@@ -173,26 +125,13 @@ class OpenMemoryControllerTest {
                         null);
 
         mockMvc.perform(
-                        post("/open/v1/memory/extract/sync")
+                        post("/open/v1/memory/sync/extract")
                                 .contentType(APPLICATION_JSON)
-                                .content(
-                                        """
-                                        {
-                                          "userId": "u1",
-                                          "agentId": "a1",
-                                          "rawContent": {
-                                            "type": "conversation",
-                                            "messages": [
-                                              {
-                                                "role": "USER",
-                                                "content": [{"type": "text", "text": "hello"}]
-                                              }
-                                            ]
-                                          }
-                                        }
-                                        """))
+                                .content(validExtractJson()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
                 .andExpect(jsonPath("$.data.status").value("SUCCESS"))
                 .andExpect(jsonPath("$.data.rawDataIds[0]").value("rd-1"))
                 .andExpect(jsonPath("$.data.itemIds[0]").value(101))
@@ -215,26 +154,11 @@ class OpenMemoryControllerTest {
                         "insight scheduling deferred");
 
         mockMvc.perform(
-                        post("/open/v1/memory/extract/sync")
+                        post("/open/v1/memory/sync/extract")
                                 .contentType(APPLICATION_JSON)
-                                .content(
-                                        """
-                                        {
-                                          "userId": "u1",
-                                          "agentId": "a1",
-                                          "rawContent": {
-                                            "type": "conversation",
-                                            "messages": [
-                                              {
-                                                "role": "USER",
-                                                "content": [{"type": "text", "text": "hello"}]
-                                              }
-                                            ]
-                                          }
-                                        }
-                                        """))
+                                .content(validExtractJson()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.status").value("PARTIAL_SUCCESS"))
                 .andExpect(jsonPath("$.data.insightPending").value(true))
                 .andExpect(jsonPath("$.data.errorMessage").value("insight scheduling deferred"));
@@ -247,27 +171,16 @@ class OpenMemoryControllerTest {
                         "FAILED", List.of(), List.of(), List.of(), false, 50L, "extraction failed");
 
         mockMvc.perform(
-                        post("/open/v1/memory/extract/sync")
+                        post("/open/v1/memory/sync/extract")
                                 .contentType(APPLICATION_JSON)
-                                .content(
-                                        """
-                                        {
-                                          "userId": "u1",
-                                          "agentId": "a1",
-                                          "rawContent": {
-                                            "type": "conversation",
-                                            "messages": [
-                                              {
-                                                "role": "USER",
-                                                "content": [{"type": "text", "text": "hello"}]
-                                              }
-                                            ]
-                                          }
-                                        }
-                                        """))
+                                .content(validExtractJson()))
                 .andExpect(status().is5xxServerError())
-                .andExpect(jsonPath("$.code").value("extraction_failed"))
-                .andExpect(jsonPath("$.message").value("extraction failed"));
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.error.code").value("internal_error"))
+                .andExpect(jsonPath("$.error.message").value("Memory extraction failed"))
+                .andExpect(jsonPath("$.error.details.operation").value("extract"))
+                .andExpect(jsonPath("$.error.details.reason").value("extraction failed"))
+                .andExpect(jsonPath("$.code").doesNotExist());
     }
 
     @Test
@@ -275,21 +188,11 @@ class OpenMemoryControllerTest {
         service.addMessageResponse = new AddMessageResponse(false, null);
 
         mockMvc.perform(
-                        post("/open/v1/memory/add-message/sync")
+                        post("/open/v1/memory/sync/add-message")
                                 .contentType(APPLICATION_JSON)
-                                .content(
-                                        """
-                                        {
-                                          "userId": "u1",
-                                          "agentId": "a1",
-                                          "message": {
-                                            "role": "USER",
-                                            "content": [{"type": "text", "text": "hello"}]
-                                          }
-                                        }
-                                        """))
+                                .content(validAddMessageJson()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.triggered").value(false))
                 .andExpect(jsonPath("$.data.result").doesNotExist());
 
@@ -311,22 +214,14 @@ class OpenMemoryControllerTest {
                                 "boundary extraction failed"));
 
         mockMvc.perform(
-                        post("/open/v1/memory/add-message/sync")
+                        post("/open/v1/memory/sync/add-message")
                                 .contentType(APPLICATION_JSON)
-                                .content(
-                                        """
-                                        {
-                                          "userId": "u1",
-                                          "agentId": "a1",
-                                          "message": {
-                                            "role": "USER",
-                                            "content": [{"type": "text", "text": "hello"}]
-                                          }
-                                        }
-                                        """))
+                                .content(validAddMessageJson()))
                 .andExpect(status().is5xxServerError())
-                .andExpect(jsonPath("$.code").value("extraction_failed"))
-                .andExpect(jsonPath("$.message").value("boundary extraction failed"));
+                .andExpect(jsonPath("$.error.code").value("internal_error"))
+                .andExpect(jsonPath("$.error.message").value("Memory extraction failed"))
+                .andExpect(jsonPath("$.error.details.operation").value("add-message"))
+                .andExpect(jsonPath("$.error.details.reason").value("boundary extraction failed"));
     }
 
     @Test
@@ -336,17 +231,11 @@ class OpenMemoryControllerTest {
                         "SUCCESS", List.of("rd-2"), List.of(102L), List.of(), false, 77L, null);
 
         mockMvc.perform(
-                        post("/open/v1/memory/commit/sync")
+                        post("/open/v1/memory/sync/commit")
                                 .contentType(APPLICATION_JSON)
-                                .content(
-                                        """
-                                        {
-                                          "userId": "u1",
-                                          "agentId": "a1"
-                                        }
-                                        """))
+                                .content(validCommitJson()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.status").value("SUCCESS"))
                 .andExpect(jsonPath("$.data.rawDataIds[0]").value("rd-2"));
 
@@ -366,18 +255,14 @@ class OpenMemoryControllerTest {
                         "commit extraction failed");
 
         mockMvc.perform(
-                        post("/open/v1/memory/commit/sync")
+                        post("/open/v1/memory/sync/commit")
                                 .contentType(APPLICATION_JSON)
-                                .content(
-                                        """
-                                        {
-                                          "userId": "u1",
-                                          "agentId": "a1"
-                                        }
-                                        """))
+                                .content(validCommitJson()))
                 .andExpect(status().is5xxServerError())
-                .andExpect(jsonPath("$.code").value("extraction_failed"))
-                .andExpect(jsonPath("$.message").value("commit extraction failed"));
+                .andExpect(jsonPath("$.error.code").value("internal_error"))
+                .andExpect(jsonPath("$.error.message").value("Memory extraction failed"))
+                .andExpect(jsonPath("$.error.details.operation").value("commit"))
+                .andExpect(jsonPath("$.error.details.reason").value("commit extraction failed"));
     }
 
     @Test
@@ -395,11 +280,54 @@ class OpenMemoryControllerTest {
                                         }
                                         """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.timestamp").isNotEmpty())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
                 .andExpect(jsonPath("$.data.items[0].id").value("item-1"))
                 .andExpect(jsonPath("$.data.insights[0].tier").value("LEAF"))
                 .andExpect(jsonPath("$.data.rawData[0].rawDataId").value("rd-1"));
+    }
+
+    private static String validExtractJson() {
+        return """
+        {
+          "userId": "u1",
+          "agentId": "a1",
+          "rawContent": {
+            "type": "conversation",
+            "messages": [
+              {
+                "role": "USER",
+                "content": [{"type": "text", "text": "hello"}],
+                "timestamp": "2026-03-31T10:00:00Z"
+              }
+            ]
+          }
+        }
+        """;
+    }
+
+    private static String validAddMessageJson() {
+        return """
+        {
+          "userId": "u1",
+          "agentId": "a1",
+          "message": {
+            "role": "USER",
+            "content": [{"type": "text", "text": "hello"}],
+            "timestamp": "2026-03-31T10:00:00Z"
+          }
+        }
+        """;
+    }
+
+    private static String validCommitJson() {
+        return """
+        {
+          "userId": "u1",
+          "agentId": "a1"
+        }
+        """;
     }
 
     private static final class StubOpenMemoryApplicationService

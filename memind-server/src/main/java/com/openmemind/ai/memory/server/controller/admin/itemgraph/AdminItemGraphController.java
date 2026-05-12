@@ -13,9 +13,9 @@
  */
 package com.openmemind.ai.memory.server.controller.admin.itemgraph;
 
-import com.openmemind.ai.memory.server.domain.common.ApiResult;
 import com.openmemind.ai.memory.server.domain.common.BatchDeleteResult;
 import com.openmemind.ai.memory.server.domain.common.PageResult;
+import com.openmemind.ai.memory.server.domain.common.SuccessResult;
 import com.openmemind.ai.memory.server.domain.itemgraph.query.ItemGraphPageQueries;
 import com.openmemind.ai.memory.server.domain.itemgraph.request.GraphEntityDeleteRequest;
 import com.openmemind.ai.memory.server.domain.itemgraph.request.GraphIdsRequest;
@@ -51,89 +51,90 @@ public class AdminItemGraphController {
     }
 
     @GetMapping("/summary")
-    public ApiResult<ItemGraphViews.SummaryView> summary(
+    public SuccessResult<ItemGraphViews.SummaryView> summary(
             @RequestParam(required = false) String memoryId) {
-        return ApiResult.success(queryService.summary(memoryId));
+        return new SuccessResult<>(queryService.summary(memoryId));
     }
 
     @GetMapping("/entities")
-    public ApiResult<PageResult<ItemGraphViews.EntityView>> entities(
-            @RequestParam(defaultValue = "1") @Min(1) int pageNo,
+    public SuccessResult<PageResult<ItemGraphViews.EntityView>> entities(
+            @RequestParam(name = "page", defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
             @RequestParam(required = false) String memoryId,
             @RequestParam(required = false) String entityType,
             @RequestParam(required = false) String q) {
-        return ApiResult.success(
+        return new SuccessResult<>(
                 PageResult.from(
                         queryService.listEntities(
                                 new ItemGraphPageQueries.EntityPageQuery(
-                                        pageNo, pageSize, memoryId, entityType, q))));
+                                        page, pageSize, memoryId, entityType, q))));
     }
 
     @GetMapping("/entities/{id}")
-    public ApiResult<GraphEntityDetailView> entityDetail(@PathVariable Integer id) {
-        return ApiResult.success(queryService.getEntity(id));
+    public SuccessResult<GraphEntityDetailView> entityDetail(@PathVariable Integer id) {
+        return new SuccessResult<>(queryService.getEntity(id));
     }
 
     @DeleteMapping("/entities")
-    public ApiResult<AdminGraphEntityDeleteResult> deleteEntities(
+    public SuccessResult<AdminGraphEntityDeleteResult> deleteEntities(
             @Valid @RequestBody GraphEntityDeleteRequest request) {
-        return ApiResult.success(
+        return new SuccessResult<>(
                 managementService.deleteEntities(request.memoryId(), request.entityKeys()));
     }
 
     @GetMapping("/aliases")
-    public ApiResult<PageResult<ItemGraphViews.AliasView>> aliases(
-            @RequestParam(defaultValue = "1") @Min(1) int pageNo,
+    public SuccessResult<PageResult<ItemGraphViews.AliasView>> aliases(
+            @RequestParam(name = "page", defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
             @RequestParam(required = false) String memoryId,
             @RequestParam(required = false) String entityKey,
             @RequestParam(required = false) String q) {
-        return ApiResult.success(
+        return new SuccessResult<>(
                 PageResult.from(
                         queryService.listAliases(
                                 new ItemGraphPageQueries.AliasPageQuery(
-                                        pageNo, pageSize, memoryId, entityKey, q))));
+                                        page, pageSize, memoryId, entityKey, q))));
     }
 
     @DeleteMapping("/aliases")
-    public ApiResult<BatchDeleteResult> deleteAliases(@Valid @RequestBody GraphIdsRequest request) {
-        return ApiResult.success(managementService.deleteAliases(request.ids()));
+    public SuccessResult<BatchDeleteResult> deleteAliases(
+            @Valid @RequestBody GraphIdsRequest request) {
+        return new SuccessResult<>(managementService.deleteAliases(request.ids()));
     }
 
     @GetMapping("/mentions")
-    public ApiResult<PageResult<ItemGraphViews.MentionView>> mentions(
-            @RequestParam(defaultValue = "1") @Min(1) int pageNo,
+    public SuccessResult<PageResult<ItemGraphViews.MentionView>> mentions(
+            @RequestParam(name = "page", defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
             @RequestParam(required = false) String memoryId,
             @RequestParam(required = false) Long itemId,
             @RequestParam(required = false) String entityKey) {
-        return ApiResult.success(
+        return new SuccessResult<>(
                 PageResult.from(
                         queryService.listMentions(
                                 new ItemGraphPageQueries.MentionPageQuery(
-                                        pageNo, pageSize, memoryId, itemId, entityKey))));
+                                        page, pageSize, memoryId, itemId, entityKey))));
     }
 
     @DeleteMapping("/mentions")
-    public ApiResult<BatchDeleteResult> deleteMentions(
+    public SuccessResult<BatchDeleteResult> deleteMentions(
             @Valid @RequestBody GraphIdsRequest request) {
-        return ApiResult.success(managementService.deleteMentions(request.ids()));
+        return new SuccessResult<>(managementService.deleteMentions(request.ids()));
     }
 
     @GetMapping("/item-links")
-    public ApiResult<PageResult<ItemGraphViews.ItemLinkView>> itemLinks(
-            @RequestParam(defaultValue = "1") @Min(1) int pageNo,
+    public SuccessResult<PageResult<ItemGraphViews.ItemLinkView>> itemLinks(
+            @RequestParam(name = "page", defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
             @RequestParam(required = false) String memoryId,
             @RequestParam(required = false) Long itemId,
             @RequestParam(required = false) String linkType,
             @RequestParam(required = false) String evidenceSource) {
-        return ApiResult.success(
+        return new SuccessResult<>(
                 PageResult.from(
                         queryService.listItemLinks(
                                 new ItemGraphPageQueries.ItemLinkPageQuery(
-                                        pageNo,
+                                        page,
                                         pageSize,
                                         memoryId,
                                         itemId,
@@ -142,40 +143,40 @@ public class AdminItemGraphController {
     }
 
     @DeleteMapping("/item-links")
-    public ApiResult<BatchDeleteResult> deleteItemLinks(
+    public SuccessResult<BatchDeleteResult> deleteItemLinks(
             @Valid @RequestBody GraphIdsRequest request) {
-        return ApiResult.success(managementService.deleteItemLinks(request.ids()));
+        return new SuccessResult<>(managementService.deleteItemLinks(request.ids()));
     }
 
     @GetMapping("/cooccurrences")
-    public ApiResult<PageResult<ItemGraphViews.CooccurrenceView>> cooccurrences(
-            @RequestParam(defaultValue = "1") @Min(1) int pageNo,
+    public SuccessResult<PageResult<ItemGraphViews.CooccurrenceView>> cooccurrences(
+            @RequestParam(name = "page", defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
             @RequestParam(required = false) String memoryId,
             @RequestParam(required = false) String entityKey) {
-        return ApiResult.success(
+        return new SuccessResult<>(
                 PageResult.from(
                         queryService.listCooccurrences(
                                 new ItemGraphPageQueries.CooccurrencePageQuery(
-                                        pageNo, pageSize, memoryId, entityKey))));
+                                        page, pageSize, memoryId, entityKey))));
     }
 
     @DeleteMapping("/cooccurrences")
-    public ApiResult<BatchDeleteResult> deleteCooccurrences(
+    public SuccessResult<BatchDeleteResult> deleteCooccurrences(
             @Valid @RequestBody GraphIdsRequest request) {
-        return ApiResult.success(managementService.deleteCooccurrences(request.ids()));
+        return new SuccessResult<>(managementService.deleteCooccurrences(request.ids()));
     }
 
     @GetMapping("/batches")
-    public ApiResult<PageResult<ItemGraphViews.BatchView>> batches(
-            @RequestParam(defaultValue = "1") @Min(1) int pageNo,
+    public SuccessResult<PageResult<ItemGraphViews.BatchView>> batches(
+            @RequestParam(name = "page", defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
             @RequestParam(required = false) String memoryId,
             @RequestParam(required = false) String state) {
-        return ApiResult.success(
+        return new SuccessResult<>(
                 PageResult.from(
                         queryService.listBatches(
                                 new ItemGraphPageQueries.BatchPageQuery(
-                                        pageNo, pageSize, memoryId, state))));
+                                        page, pageSize, memoryId, state))));
     }
 }
