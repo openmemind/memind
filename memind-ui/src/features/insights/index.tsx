@@ -71,7 +71,7 @@ export function InsightsPage() {
     },
   })
 
-  const rows = insightsQuery.data?.list ?? []
+  const rows = insightsQuery.data?.items ?? []
   const selectedInsightIds = [...selectedIds]
 
   return (
@@ -133,7 +133,7 @@ export function InsightsPage() {
 
           {insightsQuery.data ? (
             <p className='text-sm text-muted-foreground'>
-              Total rows: {insightsQuery.data.total}
+              Total rows: {insightsQuery.data.page.totalItems}
             </p>
           ) : null}
         </div>
@@ -324,7 +324,7 @@ function buildInsightListParams(
   memoryScope: string
 ): InsightListParams {
   return {
-    pageNo: search.pageNo,
+    page: search.page,
     pageSize: search.pageSize,
     ...toUserAgentQuery(memoryScope),
     scope: search.scope,
@@ -334,7 +334,7 @@ function buildInsightListParams(
 }
 
 type InsightSearch = {
-  pageNo: number
+  page: number
   pageSize: number
   scope?: string
   type?: string
@@ -344,7 +344,7 @@ type InsightSearch = {
 function readInsightsSearch(): InsightSearch {
   const params = readSearchParams()
   return {
-    pageNo: readNumberParam(params, 'pageNo', DEFAULT_PAGE),
+    page: readNumberParam(params, 'page', DEFAULT_PAGE),
     pageSize: readNumberParam(params, 'pageSize', DEFAULT_PAGE_SIZE),
     scope: readStringParam(params, 'scope'),
     type: readStringParam(params, 'type'),

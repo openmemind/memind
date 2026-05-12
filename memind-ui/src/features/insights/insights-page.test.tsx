@@ -29,9 +29,23 @@ const insight = {
 
 function api(data: unknown) {
   return new Response(
-    JSON.stringify({ code: 'success', data, timestamp: '2026-04-30T00:00:00Z' }),
+    JSON.stringify({ data }),
     { headers: { 'content-type': 'application/json' } }
   )
+}
+
+function page(items: unknown[]) {
+  return {
+    items,
+    page: {
+      page: 1,
+      pageSize: 10,
+      totalItems: items.length,
+      totalPages: 1,
+      hasPrevious: false,
+      hasNext: false,
+    },
+  }
 }
 
 function renderPage() {
@@ -61,7 +75,7 @@ describe('InsightsPage', () => {
   })
 
   it('uses the Insight Tree page title', async () => {
-    fetchMock.mockResolvedValueOnce(api({ total: 0, current: 1, list: [] }))
+    fetchMock.mockResolvedValueOnce(api(page([])))
 
     const { getByRole } = await renderPage()
 
@@ -72,9 +86,9 @@ describe('InsightsPage', () => {
 
   it('selecting two rows sends only the selected insight ids', async () => {
     fetchMock
-      .mockResolvedValueOnce(api({ total: 2, current: 1, list: [insight, { ...insight, insightId: 202 }] }))
+      .mockResolvedValueOnce(api(page([insight, { ...insight, insightId: 202 }])))
       .mockResolvedValueOnce(api({ deletedCount: 2, affectedMemoryIds: ['alice:agent-a'] }))
-      .mockResolvedValue(api({ total: 0, current: 1, list: [] }))
+      .mockResolvedValue(api(page([])))
 
     const { getByLabelText, getByRole } = await renderPage()
     await userEvent.click(getByLabelText('Select insight 201'))
@@ -95,7 +109,7 @@ describe('InsightsPage', () => {
 
   it('detail drawer shows content, points, categories, relations, embedding, version, and timestamps', async () => {
     fetchMock
-      .mockResolvedValueOnce(api({ total: 1, current: 1, list: [insight] }))
+      .mockResolvedValueOnce(api(page([insight])))
       .mockResolvedValueOnce(api(insight))
 
     const { getByRole, getByText } = await renderPage()

@@ -14,6 +14,11 @@
 package com.openmemind.ai.client.internal;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.JsonNode;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ApiResult<T>(T data) {}
+record ErrorResult(ApiError error) {
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record ApiError(String code, String message, JsonNode details) {}
+}

@@ -98,7 +98,7 @@ export function ItemGraphPage() {
               setTab(next)
               writeSearch({
                 tab: next === 'summary' ? undefined : next,
-                pageNo: undefined,
+                page: undefined,
                 state: undefined,
               })
             }}
@@ -158,11 +158,11 @@ function EntitiesTab({
   const [detailId, setDetailId] = useState<number | null>(null)
   const params = useMemo(
     () => ({
-      pageNo: search.pageNo,
+      page: search.page,
       pageSize: search.pageSize,
       memoryId: memoryId || undefined,
     }),
-    [memoryId, search.pageNo, search.pageSize]
+    [memoryId, search.page, search.pageSize]
   )
   const query = useQuery({
     queryKey: ['item-graph', 'entities', params],
@@ -176,7 +176,7 @@ function EntitiesTab({
       await invalidateGraph(queryClient)
     },
   })
-  const rows = query.data?.list ?? []
+  const rows = query.data?.items ?? []
   const selectedEntityKeys = [...selectedKeys]
 
   return (
@@ -282,7 +282,7 @@ function AliasesTab(props: GraphTabProps) {
   })
   return (
     <IdDeleteTab
-      rows={query.data?.list ?? []}
+      rows={query.data?.items ?? []}
       query={query}
       selectLabel={(row: GraphAliasView) => `Select alias ${row.id}`}
       deleteLabel='Delete selected aliases'
@@ -311,7 +311,7 @@ function MentionsTab(props: GraphTabProps) {
   })
   return (
     <IdDeleteTab
-      rows={query.data?.list ?? []}
+      rows={query.data?.items ?? []}
       query={query}
       selectLabel={(row: GraphMentionView) => `Select mention ${row.id}`}
       deleteLabel='Delete selected mentions'
@@ -339,7 +339,7 @@ function ItemLinksTab(props: GraphTabProps) {
   })
   return (
     <IdDeleteTab
-      rows={query.data?.list ?? []}
+      rows={query.data?.items ?? []}
       query={query}
       selectLabel={(row: GraphItemLinkView) => `Select item link ${row.id}`}
       deleteLabel='Delete selected item links'
@@ -370,7 +370,7 @@ function CooccurrencesTab(props: GraphTabProps) {
   })
   return (
     <IdDeleteTab
-      rows={query.data?.list ?? []}
+      rows={query.data?.items ?? []}
       query={query}
       selectLabel={(row: GraphCooccurrenceView) =>
         `Select cooccurrence ${row.id}`}
@@ -401,18 +401,18 @@ function BatchesTab({
   const state = normalizeBatchState(search.state)
   const params = useMemo(
     () => ({
-      pageNo: search.pageNo,
+      page: search.page,
       pageSize: search.pageSize,
       memoryId: memoryId || undefined,
       ...(state === 'all' ? {} : { state }),
     }),
-    [memoryId, search.pageNo, search.pageSize, state]
+    [memoryId, search.page, search.pageSize, state]
   )
   const query = useQuery({
     queryKey: ['item-graph', 'batches', params],
     queryFn: () => listGraphBatches(params),
   })
-  const rows = query.data?.list ?? []
+  const rows = query.data?.items ?? []
 
   return (
     <div className='flex flex-col gap-4'>
@@ -425,7 +425,7 @@ function BatchesTab({
           className='h-9 rounded-md border bg-background px-3 text-sm'
           onChange={(event) =>
             onSearchChange({
-              pageNo: undefined,
+              page: undefined,
               state:
                 event.target.value === 'all' ? undefined : event.target.value,
             })
@@ -629,14 +629,14 @@ type GraphTabProps = {
 }
 
 type GraphSearch = {
-  pageNo: number
+  page: number
   pageSize: number
   state?: string
 }
 
 function buildPageParams({ search, memoryId }: GraphTabProps) {
   return {
-    pageNo: search.pageNo,
+    page: search.page,
     pageSize: search.pageSize,
     memoryId: memoryId || undefined,
   }
@@ -645,7 +645,7 @@ function buildPageParams({ search, memoryId }: GraphTabProps) {
 function readGraphSearch(): GraphSearch {
   const params = readSearchParams()
   return {
-    pageNo: readNumberParam(params, 'pageNo', DEFAULT_PAGE),
+    page: readNumberParam(params, 'page', DEFAULT_PAGE),
     pageSize: readNumberParam(params, 'pageSize', DEFAULT_PAGE_SIZE),
     state: readStringParam(params, 'state'),
   }

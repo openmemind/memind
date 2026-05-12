@@ -81,7 +81,7 @@ With `memind-server` running at `http://127.0.0.1:8366`, verify:
 
 - Server status changes to `connected`.
 - Dashboard loads real data or real zero counts.
-- List pages load with `pageNo` and `pageSize`; filters change request query strings.
+- List pages load with `page` and `pageSize`; filters change request query strings.
 - Items, Raw Data, Insights, Memory Threads, and Item Graph detail drawers load detail data.
 - Buffers and Item Graph tab links preserve the expected `tab` and filter search params.
 - Delete dialogs send selected row ids only; run destructive checks only on disposable test data.

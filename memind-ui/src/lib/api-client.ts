@@ -1,26 +1,36 @@
-type ApiResult<T> = {
-  code: string
-  message?: string
-  data?: T
-  timestamp: string
-  traceId?: string
+type SuccessEnvelope<T> = {
+  data: T
+}
+
+type ErrorEnvelope = {
+  error?: {
+    code?: string
+    message?: string
+    details?: unknown
+  }
 }
 
 export type PageResult<T> = {
-  total: number
-  list: T[]
-  current: number
+  items: T[]
+  page: PageMeta
+}
+
+export type PageMeta = {
+  page: number
+  pageSize: number
+  totalItems: number
+  totalPages: number
+  hasPrevious: boolean
+  hasNext: boolean
 }
 
 export type ApiError = {
   status?: number
   code?: string
   message: string
-  traceId?: string
+  requestId?: string
   details?: unknown
 }
-
-const SUCCESS_CODES = new Set(['success', '200'])
 
 type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
 
@@ -102,8 +112,8 @@ async function apiRequest<T>(
   query?: Record<string, unknown>
 ): Promise<T> {
   if (import.meta.env.VITE_MEMIND_MOCK_API === 'true') {
-    const { mockApiRequest } = await import('./mock-api')
-    return mockApiRequest<T>(method, path, body, query)
+    const { mockApiResponse } = await import('./mock-api')
+    return handleResponse<T>(await mockApiResponse(method, path, body, query))
   }
 
   const init: RequestInit = {
@@ -122,13 +132,21 @@ async function apiRequest<T>(
     throw toNetworkError(error)
   }
 
-  const payload = await readJson<ApiResult<T>>(response)
+  return handleResponse<T>(response)
+}
 
-  if (!payload || !response.ok || !SUCCESS_CODES.has(payload.code)) {
+async function handleResponse<T>(response: Response): Promise<T> {
+  const payload = await readJson<SuccessEnvelope<T> | ErrorEnvelope>(response)
+
+  if (!response.ok || isErrorEnvelope(payload)) {
     throw toApiError(response, payload)
   }
 
-  return payload.data as T
+  if (isSuccessEnvelope(payload)) {
+    return payload.data
+  }
+
+  return undefined as T
 }
 
 async function readJson<T>(response: Response): Promise<T | undefined> {
@@ -144,14 +162,25 @@ async function readJson<T>(response: Response): Promise<T | undefined> {
 
 function toApiError<T>(
   response: Response,
-  payload: ApiResult<T> | undefined
+  payload: SuccessEnvelope<T> | ErrorEnvelope | undefined
 ): ApiError {
+  const requestId = response.headers.get('X-Request-Id') ?? undefined
+  if (isErrorEnvelope(payload)) {
+    return {
+      status: response.status,
+      code: payload.error?.code,
+      message:
+        payload.error?.message || response.statusText || 'Request failed',
+      requestId,
+      details: payload.error?.details,
+    }
+  }
+
   return {
     status: response.status,
-    code: payload?.code,
-    message: payload?.message || response.statusText || 'Request failed',
-    traceId: payload?.traceId,
-    details: payload?.data,
+    message: response.statusText || 'Request failed',
+    requestId,
+    details: payload,
   }
 }
 
@@ -161,4 +190,23 @@ function toNetworkError(error: unknown): ApiError {
   }
 
   return { message: 'Network request failed', details: error }
+}
+
+function isSuccessEnvelope<T>(
+  payload: SuccessEnvelope<T> | ErrorEnvelope | undefined
+): payload is SuccessEnvelope<T> {
+  return Boolean(
+    payload && typeof payload === 'object' && 'data' in payload
+  )
+}
+
+function isErrorEnvelope(
+  payload: SuccessEnvelope<unknown> | ErrorEnvelope | undefined
+): payload is ErrorEnvelope {
+  return Boolean(
+    payload &&
+      typeof payload === 'object' &&
+      'error' in payload &&
+      payload.error
+  )
 }

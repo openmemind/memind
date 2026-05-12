@@ -52,7 +52,7 @@ class MemindClientTest {
                         .willReturn(
                                 okJson(
                                         """
-                                        {"code":"success","data":{"status":"UP","service":"memind-server"}}
+                                        {"data":{"status":"UP","service":"memind-server"}}
                                         """)));
 
         try (MemindClient client = MemindClient.builder().baseUrl(wmInfo.getHttpBaseUrl()).build()) {
@@ -64,11 +64,11 @@ class MemindClientTest {
     @Test
     void addMessage_sendsCorrectPayload(WireMockRuntimeInfo wmInfo) {
         stubFor(
-                post("/open/v1/memory/add-message/sync")
+                post("/open/v1/memory/sync/add-message")
                         .willReturn(
                                 okJson(
                                         """
-                                        {"code":"success","data":{"triggered":false}}
+                                        {"data":{"triggered":false}}
                                         """)));
 
         try (MemindClient client = MemindClient.builder().baseUrl(wmInfo.getHttpBaseUrl()).build()) {
@@ -81,7 +81,7 @@ class MemindClientTest {
         }
 
         verify(
-                postRequestedFor(urlEqualTo("/open/v1/memory/add-message/sync"))
+                postRequestedFor(urlEqualTo("/open/v1/memory/sync/add-message"))
                         .withRequestBody(matchingJsonPath("$.userId", equalTo("user-1")))
                         .withRequestBody(matchingJsonPath("$.message.role", equalTo("USER"))));
     }
@@ -89,11 +89,11 @@ class MemindClientTest {
     @Test
     void extract_sendsRawContent(WireMockRuntimeInfo wmInfo) {
         stubFor(
-                post("/open/v1/memory/extract/sync")
+                post("/open/v1/memory/sync/extract")
                         .willReturn(
                                 okJson(
                                         """
-                                        {"code":"success","data":{
+                                        {"data":{
                                             "status":"SUCCESS",
                                             "rawDataIds":["rd-1"],
                                             "itemIds":[101],
@@ -117,7 +117,7 @@ class MemindClientTest {
         }
 
         verify(
-                postRequestedFor(urlEqualTo("/open/v1/memory/extract/sync"))
+                postRequestedFor(urlEqualTo("/open/v1/memory/sync/extract"))
                         .withRequestBody(
                                 matchingJsonPath("$.rawContent.type", equalTo("conversation"))));
     }
@@ -125,11 +125,11 @@ class MemindClientTest {
     @Test
     void commit_usesSyncEndpoint(WireMockRuntimeInfo wmInfo) {
         stubFor(
-                post("/open/v1/memory/commit/sync")
+                post("/open/v1/memory/sync/commit")
                         .willReturn(
                                 okJson(
                                         """
-                                        {"code":"success","data":{
+                                        {"data":{
                                             "status":"SUCCESS",
                                             "rawDataIds":[],
                                             "itemIds":[],
@@ -143,17 +143,17 @@ class MemindClientTest {
                     CommitMemoryRequest.builder().userId("user-1").agentId("agent-1").build());
         }
 
-        verify(postRequestedFor(urlEqualTo("/open/v1/memory/commit/sync")));
+        verify(postRequestedFor(urlEqualTo("/open/v1/memory/sync/commit")));
     }
 
     @Test
     void extract_partialSuccessIsReturnedToCaller(WireMockRuntimeInfo wmInfo) {
         stubFor(
-                post("/open/v1/memory/extract/sync")
+                post("/open/v1/memory/sync/extract")
                         .willReturn(
                                 okJson(
                                         """
-                                        {"code":"success","data":{
+                                        {"data":{
                                             "status":"PARTIAL_SUCCESS",
                                             "rawDataIds":["rd-1"],
                                             "itemIds":[],
@@ -180,14 +180,14 @@ class MemindClientTest {
     @Test
     void extract_failureEnvelopeThrowsApiException(WireMockRuntimeInfo wmInfo) {
         stubFor(
-                post("/open/v1/memory/extract/sync")
+                post("/open/v1/memory/sync/extract")
                         .willReturn(
                                 aResponse()
                                         .withStatus(500)
                                         .withHeader("Content-Type", "application/json")
                                         .withBody(
                                                 """
-                                                {"code":"extraction_failed","message":"extract failed","traceId":"t1"}
+                                                {"error":{"code":"extraction_failed","message":"extract failed"}}
                                                 """)));
 
         try (MemindClient client = MemindClient.builder().baseUrl(wmInfo.getHttpBaseUrl()).build()) {
@@ -214,11 +214,11 @@ class MemindClientTest {
     @Test
     void extractAsync_returnsExtractionResponse(WireMockRuntimeInfo wmInfo) {
         stubFor(
-                post("/open/v1/memory/extract/sync")
+                post("/open/v1/memory/sync/extract")
                         .willReturn(
                                 okJson(
                                         """
-                                        {"code":"success","data":{
+                                        {"data":{
                                             "status":"SUCCESS",
                                             "rawDataIds":["rd-async"],
                                             "itemIds":[],
@@ -240,7 +240,7 @@ class MemindClientTest {
             assertThat(response.rawDataIds()).containsExactly("rd-async");
         }
 
-        verify(postRequestedFor(urlEqualTo("/open/v1/memory/extract/sync")));
+        verify(postRequestedFor(urlEqualTo("/open/v1/memory/sync/extract")));
     }
 
     @Test
@@ -250,7 +250,7 @@ class MemindClientTest {
                         .willReturn(
                                 okJson(
                                         """
-                                        {"code":"success","data":{
+                                        {"data":{
                                             "status":"success","items":[{"id":"1","text":"memory text","vectorScore":0.9,"finalScore":0.85}],
                                             "insights":[],"rawData":[],"evidences":[],"strategy":"SIMPLE","query":"test"
                                         }}
@@ -289,7 +289,7 @@ class MemindClientTest {
                                         .withHeader("Content-Type", "application/json")
                                         .withBody(
                                                 """
-                                                {"code":"bad_request","message":"query is required","traceId":"t1"}
+                                                {"error":{"code":"bad_request","message":"query is required"}}
                                                 """)));
 
         try (MemindClient client = MemindClient.builder().baseUrl(wmInfo.getHttpBaseUrl()).build()) {

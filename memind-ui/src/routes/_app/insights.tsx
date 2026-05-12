@@ -3,7 +3,7 @@ import { InsightsPage } from '@/features/insights'
 
 type InsightsSearch = {
   memoryId?: string
-  pageNo?: number
+  page?: number
   pageSize?: number
   scope?: string
   type?: string
@@ -13,7 +13,7 @@ type InsightsSearch = {
 export const Route = createFileRoute('/_app/insights')({
   validateSearch: (search): InsightsSearch => ({
     memoryId: readString(search.memoryId),
-    pageNo: readNumber(search.pageNo),
+    page: readNumber(search.page),
     pageSize: readNumber(search.pageSize),
     scope: readString(search.scope),
     type: readString(search.type),

@@ -3,7 +3,7 @@ import { ItemsPage } from '@/features/items'
 
 type ItemsSearch = {
   memoryId?: string
-  pageNo?: number
+  page?: number
   pageSize?: number
   scope?: string
   category?: string
@@ -14,7 +14,7 @@ type ItemsSearch = {
 export const Route = createFileRoute('/_app/items')({
   validateSearch: (search): ItemsSearch => ({
     memoryId: readString(search.memoryId),
-    pageNo: readNumber(search.pageNo),
+    page: readNumber(search.page),
     pageSize: readNumber(search.pageSize),
     scope: readString(search.scope),
     category: readString(search.category),

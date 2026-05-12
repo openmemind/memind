@@ -48,7 +48,7 @@ class MemindHttpClientTest {
                         .willReturn(
                                 okJson(
                                         """
-                                        {"code":"success","data":{"status":"UP","service":"memind-server"},"timestamp":"2026-01-01T00:00:00Z"}
+                                        {"data":{"status":"UP","service":"memind-server"}}
                                         """)));
 
         MemindHttpClient httpClient =
@@ -72,9 +72,10 @@ class MemindHttpClientTest {
                                 aResponse()
                                         .withStatus(400)
                                         .withHeader("Content-Type", "application/json")
+                                        .withHeader("X-Request-Id", "request-123")
                                         .withBody(
                                                 """
-                                                {"code":"bad_request","message":"query is required","timestamp":"2026-01-01T00:00:00Z","traceId":"abc123"}
+                                                {"error":{"code":"bad_request","message":"query is required","details":{"fieldErrors":{"query":"must not be blank"}}}}
                                                 """)));
 
         MemindHttpClient httpClient =
@@ -95,18 +96,19 @@ class MemindHttpClientTest {
                         ex -> {
                             assertThat(ex.getHttpStatus()).isEqualTo(400);
                             assertThat(ex.getErrorCode()).isEqualTo("bad_request");
-                            assertThat(ex.getTraceId()).isEqualTo("abc123");
+                            assertThat(ex.getRequestId()).isEqualTo("request-123");
+                            assertThat(ex.getDetails()).isNotNull();
                         });
     }
 
     @Test
     void post_withApiToken_sendsAuthorizationHeader(WireMockRuntimeInfo wmInfo) {
         stubFor(
-                post("/open/v1/memory/commit")
+                post("/open/v1/memory/sync/commit")
                         .willReturn(
                                 okJson(
                                         """
-                                        {"code":"200","timestamp":"2026-01-01T00:00:00Z"}
+                                        {"data":null}
                                         """)));
 
         MemindHttpClient httpClient =
@@ -118,13 +120,13 @@ class MemindHttpClientTest {
 
         httpClient
                 .post(
-                        "/open/v1/memory/commit",
+                        "/open/v1/memory/sync/commit",
                         Map.of("userId", "u1", "agentId", "a1"),
                         new TypeReference<ApiResult<Void>>() {})
                 .join();
 
         verify(
-                postRequestedFor(urlEqualTo("/open/v1/memory/commit"))
+                postRequestedFor(urlEqualTo("/open/v1/memory/sync/commit"))
                         .withHeader("Authorization", equalTo("Bearer mk-test-token"))
                         .withHeader("User-Agent", matching("memind-java-client/.*")));
     }
@@ -154,7 +156,7 @@ class MemindHttpClientTest {
                         .willReturn(
                                 okJson(
                                         """
-                                        {"code":"success","data":{"status":"UP","service":"memind-server"}}
+                                        {"data":{"status":"UP","service":"memind-server"}}
                                         """)));
 
         MemindHttpClient httpClient =

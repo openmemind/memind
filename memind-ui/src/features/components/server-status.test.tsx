@@ -44,11 +44,7 @@ describe('ServerStatus', () => {
 
   it('shows connected after health returns success', async () => {
     fetchMock.mockResolvedValueOnce(
-      jsonResponse({
-        code: 'success',
-        data: { status: 'UP', service: 'memind-server' },
-        timestamp: '2026-04-30T00:00:00Z',
-      })
+      jsonResponse({ data: { status: 'UP', service: 'memind-server' } })
     )
 
     const { getByText } = await renderWithQueryClient(<ServerStatus />)
@@ -67,11 +63,7 @@ describe('ServerStatus', () => {
   it('polls with a 30 second interval', async () => {
     vi.useFakeTimers()
     fetchMock.mockResolvedValue(
-      jsonResponse({
-        code: 'success',
-        data: { status: 'UP', service: 'memind-server' },
-        timestamp: '2026-04-30T00:00:00Z',
-      })
+      jsonResponse({ data: { status: 'UP', service: 'memind-server' } })
     )
 
     await renderWithQueryClient(<ServerStatus />)

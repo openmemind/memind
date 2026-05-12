@@ -13,15 +13,22 @@
  */
 package com.openmemind.ai.client.exception;
 
+import com.fasterxml.jackson.databind.JsonNode;
+
 public class MemindApiException extends MemindClientException {
 
     private final int httpStatus;
     private final String errorCode;
     private final String errorMessage;
-    private final String traceId;
+    private final String requestId;
+    private final JsonNode details;
 
     public MemindApiException(
-            int httpStatus, String errorCode, String errorMessage, String traceId) {
+            int httpStatus,
+            String errorCode,
+            String errorMessage,
+            String requestId,
+            JsonNode details) {
         super("Memind API error ["
                 + httpStatus
                 + "]: "
@@ -31,7 +38,8 @@ public class MemindApiException extends MemindClientException {
         this.httpStatus = httpStatus;
         this.errorCode = errorCode;
         this.errorMessage = errorMessage;
-        this.traceId = traceId;
+        this.requestId = requestId;
+        this.details = details;
     }
 
     public int getHttpStatus() {
@@ -46,7 +54,11 @@ public class MemindApiException extends MemindClientException {
         return errorMessage;
     }
 
-    public String getTraceId() {
-        return traceId;
+    public String getRequestId() {
+        return requestId;
+    }
+
+    public JsonNode getDetails() {
+        return details;
     }
 }

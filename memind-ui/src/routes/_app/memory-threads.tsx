@@ -3,7 +3,7 @@ import { MemoryThreadsPage } from '@/features/memory-threads'
 
 type MemoryThreadsSearch = {
   memoryId?: string
-  pageNo?: number
+  page?: number
   pageSize?: number
   status?: string
   focus?: string
@@ -12,7 +12,7 @@ type MemoryThreadsSearch = {
 export const Route = createFileRoute('/_app/memory-threads')({
   validateSearch: (search): MemoryThreadsSearch => ({
     memoryId: readString(search.memoryId),
-    pageNo: readNumber(search.pageNo),
+    page: readNumber(search.page),
     pageSize: readNumber(search.pageSize),
     status: readString(search.status),
     focus: readString(search.focus),

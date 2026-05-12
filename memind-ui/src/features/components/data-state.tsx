@@ -50,11 +50,11 @@ export function EmptyState({
 
 export function PageError({
   message,
-  traceId,
+  requestId,
   onRetry,
 }: {
   message: string
-  traceId?: string
+  requestId?: string
   onRetry?: () => void
 }) {
   return (
@@ -64,7 +64,7 @@ export function PageError({
       <AlertDescription>
         <div className='flex flex-col gap-3'>
           <p>{message}</p>
-          {traceId ? <p>traceId: {traceId}</p> : null}
+          {requestId ? <p>requestId: {requestId}</p> : null}
           {onRetry ? (
             <Button type='button' variant='outline' size='sm' onClick={onRetry}>
               Retry

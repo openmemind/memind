@@ -4,7 +4,7 @@ import { ItemGraphPage } from '@/features/item-graph'
 type ItemGraphSearch = {
   memoryId?: string
   tab?: string
-  pageNo?: number
+  page?: number
   pageSize?: number
   entityType?: string
   entityKey?: string
@@ -19,7 +19,7 @@ export const Route = createFileRoute('/_app/item-graph')({
   validateSearch: (search): ItemGraphSearch => ({
     memoryId: readString(search.memoryId),
     tab: readString(search.tab),
-    pageNo: readNumber(search.pageNo),
+    page: readNumber(search.page),
     pageSize: readNumber(search.pageSize),
     entityType: readString(search.entityType),
     entityKey: readString(search.entityKey),

@@ -74,7 +74,7 @@ export function ItemsPage() {
     },
   })
 
-  const rows = itemsQuery.data?.list ?? []
+  const rows = itemsQuery.data?.items ?? []
   const selectedItemIds = [...selectedIds]
 
   return (
@@ -136,7 +136,7 @@ export function ItemsPage() {
 
           {itemsQuery.data ? (
             <p className='text-sm text-muted-foreground'>
-              Total rows: {itemsQuery.data.total}
+              Total rows: {itemsQuery.data.page.totalItems}
             </p>
           ) : null}
         </div>
@@ -396,7 +396,7 @@ function buildItemListParams(
   memoryScope: string
 ): ItemListParams {
   return {
-    pageNo: search.pageNo,
+    page: search.page,
     pageSize: search.pageSize,
     ...toUserAgentQuery(memoryScope),
     scope: search.scope,
@@ -407,7 +407,7 @@ function buildItemListParams(
 }
 
 type ItemSearch = {
-  pageNo: number
+  page: number
   pageSize: number
   scope?: string
   category?: string
@@ -418,7 +418,7 @@ type ItemSearch = {
 function readItemsSearch(): ItemSearch {
   const params = readSearchParams()
   return {
-    pageNo: readNumberParam(params, 'pageNo', DEFAULT_PAGE),
+    page: readNumberParam(params, 'page', DEFAULT_PAGE),
     pageSize: readNumberParam(params, 'pageSize', DEFAULT_PAGE_SIZE),
     scope: readStringParam(params, 'scope'),
     category: readStringParam(params, 'category'),

@@ -100,13 +100,23 @@ const batch = {
 
 function api(data: unknown) {
   return new Response(
-    JSON.stringify({ code: 'success', data, timestamp: '2026-04-30T00:00:00Z' }),
+    JSON.stringify({ data }),
     { headers: { 'content-type': 'application/json' } }
   )
 }
 
-function page(list: unknown[]) {
-  return { total: list.length, current: 1, list }
+function page(items: unknown[]) {
+  return {
+    items,
+    page: {
+      page: 1,
+      pageSize: 10,
+      totalItems: items.length,
+      totalPages: 1,
+      hasPrevious: false,
+      hasNext: false,
+    },
+  }
 }
 
 function renderPage() {
@@ -157,7 +167,7 @@ describe('ItemGraphPage', () => {
     await expect.element(getByText('batch-1')).toBeInTheDocument()
     await vi.waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
-        '/admin/v1/item-graph/batches?pageNo=1&pageSize=10',
+        '/admin/v1/item-graph/batches?page=1&pageSize=10',
         expect.objectContaining({ method: 'GET' })
       )
     )

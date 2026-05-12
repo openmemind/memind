@@ -25,9 +25,23 @@ const rawData = {
 
 function api(data: unknown) {
   return new Response(
-    JSON.stringify({ code: 'success', data, timestamp: '2026-04-30T00:00:00Z' }),
+    JSON.stringify({ data }),
     { headers: { 'content-type': 'application/json' } }
   )
+}
+
+function page(items: unknown[]) {
+  return {
+    items,
+    page: {
+      page: 1,
+      pageSize: 10,
+      totalItems: items.length,
+      totalPages: 1,
+      hasPrevious: false,
+      hasNext: false,
+    },
+  }
 }
 
 function renderPage() {
@@ -58,9 +72,9 @@ describe('RawDataPage', () => {
 
   it('selecting two rows sends only the selected raw data ids', async () => {
     fetchMock
-      .mockResolvedValueOnce(api({ total: 2, current: 1, list: [rawData, { ...rawData, rawDataId: 'raw-2' }] }))
+      .mockResolvedValueOnce(api(page([rawData, { ...rawData, rawDataId: 'raw-2' }])))
       .mockResolvedValueOnce(api({ deletedRawDataCount: 2, deletedItemCount: 3, affectedMemoryIds: ['alice:agent-a'], insightCleanupRequired: true }))
-      .mockResolvedValue(api({ total: 0, current: 1, list: [] }))
+      .mockResolvedValue(api(page([])))
 
     const { getByLabelText, getByRole, getByText } = await renderPage()
     await userEvent.click(getByLabelText('Select raw data raw-1'))
@@ -84,7 +98,7 @@ describe('RawDataPage', () => {
 
   it('detail drawer shows caption, JSON fields, content id, vector id, and timestamps', async () => {
     fetchMock
-      .mockResolvedValueOnce(api({ total: 1, current: 1, list: [rawData] }))
+      .mockResolvedValueOnce(api(page([rawData])))
       .mockResolvedValueOnce(api(rawData))
 
     const { getByRole, getByText } = await renderPage()

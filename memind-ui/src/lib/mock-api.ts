@@ -36,15 +36,19 @@ const memoryIds = ['alice:agent-a', 'alice:agent-b', 'bob:agent-a']
 const longText =
   'This is deliberately long mock content used to validate table wrapping, drawer spacing, JSON sections, and dense operational review workflows in Memind UI.'
 
-export async function mockApiRequest<T>(
+export async function mockApiResponse(
   method: MockMethod,
   path: string,
   body?: unknown,
   query?: Record<string, unknown>
-): Promise<T> {
+): Promise<Response> {
   await delay(80)
-  const data = routeMockRequest(method, path, body, normalizeQuery(query))
-  return clone(data) as T
+  try {
+    const data = routeMockRequest(method, path, body, normalizeQuery(query))
+    return jsonResponse({ data })
+  } catch (error) {
+    return mockErrorResponse(error)
+  }
 }
 
 function routeMockRequest(
@@ -949,13 +953,20 @@ function filterByUserAgent<
 }
 
 function page<T>(rows: T[], query: URLSearchParams): PageResult<T> {
-  const pageNo = numberParam(query, 'pageNo', 1)
+  const pageNumber = numberParam(query, 'page', 1)
   const pageSize = numberParam(query, 'pageSize', 10)
-  const start = (pageNo - 1) * pageSize
+  const totalPages = Math.ceil(rows.length / pageSize)
+  const start = (pageNumber - 1) * pageSize
   return {
-    total: rows.length,
-    current: pageNo,
-    list: rows.slice(start, start + pageSize),
+    items: rows.slice(start, start + pageSize),
+    page: {
+      page: pageNumber,
+      pageSize,
+      totalItems: rows.length,
+      totalPages,
+      hasPrevious: pageNumber > 1,
+      hasNext: pageNumber < totalPages,
+    },
   }
 }
 
@@ -1103,6 +1114,53 @@ function traceStage(
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
+}
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(clone(body)), {
+    status,
+    headers: {
+      'content-type': 'application/json',
+      'X-Request-Id': 'mock-request-id',
+    },
+  })
+}
+
+function mockErrorResponse(error: unknown) {
+  const value = isMockError(error)
+    ? error
+    : {
+        status: 500,
+        code: 'internal_error',
+        message: 'Mock request failed',
+        details: error,
+      }
+
+  return jsonResponse(
+    {
+      error: {
+        code: value.code,
+        message: value.message,
+        details: value.details,
+      },
+    },
+    value.status
+  )
+}
+
+function isMockError(error: unknown): error is {
+  status: number
+  code: string
+  message: string
+  details?: unknown
+} {
+  return Boolean(
+    error &&
+      typeof error === 'object' &&
+      'status' in error &&
+      'code' in error &&
+      'message' in error
+  )
 }
 
 function delay(ms: number) {

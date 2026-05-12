@@ -48,7 +48,7 @@ export function MemoryThreadsPage() {
     queryKey: ['memory-threads', 'list', params],
     queryFn: () => listMemoryThreads(params),
   })
-  const rows = threadsQuery.data?.list ?? []
+  const rows = threadsQuery.data?.items ?? []
 
   const writeSearch = (patch: Record<string, string | number | undefined>) => {
     writeUrlSearch(patch)
@@ -82,7 +82,7 @@ export function MemoryThreadsPage() {
                 className='h-9 rounded-md border bg-background px-3 text-sm'
                 onChange={(event) =>
                   writeSearch({
-                    pageNo: undefined,
+                    page: undefined,
                     status:
                       event.target.value === 'all'
                         ? undefined
@@ -113,7 +113,7 @@ export function MemoryThreadsPage() {
           ) : null}
           {threadsQuery.data ? (
             <p className='text-sm text-muted-foreground'>
-              Total rows: {threadsQuery.data.total}
+              Total rows: {threadsQuery.data.page.totalItems}
             </p>
           ) : null}
         </div>
@@ -191,7 +191,7 @@ function buildMemoryThreadParams(
   status: StatusFilter
 ): MemoryThreadListParams {
   return {
-    pageNo: search.pageNo,
+    page: search.page,
     pageSize: search.pageSize,
     ...toUserAgentQuery(memoryScope),
     ...(status === 'all' ? {} : { status }),
@@ -199,7 +199,7 @@ function buildMemoryThreadParams(
 }
 
 type MemoryThreadsSearch = {
-  pageNo: number
+  page: number
   pageSize: number
   status?: string
 }
@@ -207,7 +207,7 @@ type MemoryThreadsSearch = {
 function readMemoryThreadsSearch(): MemoryThreadsSearch {
   const params = readSearchParams()
   return {
-    pageNo: readNumberParam(params, 'pageNo', DEFAULT_PAGE),
+    page: readNumberParam(params, 'page', DEFAULT_PAGE),
     pageSize: readNumberParam(params, 'pageSize', DEFAULT_PAGE_SIZE),
     status: readStringParam(params, 'status'),
   }

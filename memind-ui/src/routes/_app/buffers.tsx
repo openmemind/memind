@@ -4,7 +4,7 @@ import { BuffersPage } from '@/features/buffers'
 type BuffersSearch = {
   memoryId?: string
   tab?: string
-  pageNo?: number
+  page?: number
   pageSize?: number
   sessionId?: string
   insightTypeName?: string
@@ -15,7 +15,7 @@ export const Route = createFileRoute('/_app/buffers')({
   validateSearch: (search): BuffersSearch => ({
     memoryId: readString(search.memoryId),
     tab: readString(search.tab),
-    pageNo: readNumber(search.pageNo),
+    page: readNumber(search.page),
     pageSize: readNumber(search.pageSize),
     sessionId: readString(search.sessionId),
     insightTypeName: readString(search.insightTypeName),

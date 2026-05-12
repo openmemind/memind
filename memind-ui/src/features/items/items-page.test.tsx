@@ -28,9 +28,23 @@ const item = {
 
 function api(data: unknown) {
   return new Response(
-    JSON.stringify({ code: 'success', data, timestamp: '2026-04-30T00:00:00Z' }),
+    JSON.stringify({ data }),
     { headers: { 'content-type': 'application/json' } }
   )
+}
+
+function page(items: unknown[]) {
+  return {
+    items,
+    page: {
+      page: 1,
+      pageSize: 10,
+      totalItems: items.length,
+      totalPages: 1,
+      hasPrevious: false,
+      hasNext: false,
+    },
+  }
 }
 
 function renderPage() {
@@ -61,9 +75,9 @@ describe('ItemsPage', () => {
 
   it('selecting two rows sends only the selected item ids', async () => {
     fetchMock
-      .mockResolvedValueOnce(api({ total: 2, current: 1, list: [item, { ...item, itemId: 102 }] }))
+      .mockResolvedValueOnce(api(page([item, { ...item, itemId: 102 }])))
       .mockResolvedValueOnce(api({ deletedCount: 2, affectedMemoryIds: ['alice:agent-a'] }))
-      .mockResolvedValue(api({ total: 0, current: 1, list: [] }))
+      .mockResolvedValue(api(page([])))
 
     const { getByLabelText, getByRole } = await renderPage()
     await userEvent.click(getByLabelText('Select item 101'))
@@ -83,7 +97,7 @@ describe('ItemsPage', () => {
   })
 
   it('empty state is visible for an empty list', async () => {
-    fetchMock.mockResolvedValueOnce(api({ total: 0, current: 1, list: [] }))
+    fetchMock.mockResolvedValueOnce(api(page([])))
 
     const { getByText } = await renderPage()
 
@@ -92,7 +106,7 @@ describe('ItemsPage', () => {
 
   it('detail drawer shows full content and scope prompt when userId is missing', async () => {
     fetchMock
-      .mockResolvedValueOnce(api({ total: 1, current: 1, list: [item] }))
+      .mockResolvedValueOnce(api(page([item])))
       .mockResolvedValueOnce(api(item))
 
     const { getByRole, getByText } = await renderPage()
@@ -114,7 +128,7 @@ describe('ItemsPage', () => {
   it('associated threads load when userId is present', async () => {
     window.history.replaceState(null, '', '/items?memoryId=alice%3Aagent-a')
     fetchMock
-      .mockResolvedValueOnce(api({ total: 1, current: 1, list: [item] }))
+      .mockResolvedValueOnce(api(page([item])))
       .mockResolvedValueOnce(api(item))
       .mockResolvedValueOnce(api([{ threadKey: 'thread-1', role: 'PRIMARY' }]))
 

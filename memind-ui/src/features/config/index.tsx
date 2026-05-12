@@ -152,7 +152,7 @@ export function ConfigPage() {
           {saveError && saveError.status !== 409 ? (
             <PageError
               message={saveError.message}
-              traceId={saveError.traceId}
+              requestId={saveError.requestId}
             />
           ) : null}
 
