@@ -67,12 +67,13 @@ Build outputs:
 - Type declarations
 - Source maps
 
-The published `package.json` must include:
+The published `package.json` must include this shape. The snippet is a template, not a literal file:
 
-```json
+```jsonc
 {
   "name": "@openmemind/memind",
-  "version": "<release-version>",
+  // Set to the release version before publishing.
+  "version": "0.2.0",
   "description": "Official TypeScript client for the Memind memory engine API",
   "license": "Apache-2.0",
   "type": "module",
@@ -107,12 +108,13 @@ The published `package.json` must include:
 }
 ```
 
-`<release-version>` should match the client release version used by Java and Python clients unless
-a future release policy explicitly decouples client versions.
+The package version should match the client release version used by Java and Python clients unless a
+future release policy explicitly decouples client versions. The release workflow must verify that
+the workflow input version matches the concrete `package.json` version.
 
 ## Public API
 
-Primary usage:
+Primary Node.js usage:
 
 ```ts
 import { MemindClient, Message, Strategy } from '@openmemind/memind'
@@ -167,6 +169,11 @@ Configuration precedence:
 2. Node environment variables `MEMIND_BASE_URL` and `MEMIND_API_TOKEN`
 3. Defaults for optional values
 
+Environment lookup must be browser-safe. The implementation must not import `process` or assume it
+exists. It may only read environment variables through a guarded runtime check such as
+`globalThis.process?.env` in runtimes that expose it. Browser and edge bundles must work when no
+Node-like `process` global exists.
+
 Defaults:
 
 - `timeoutMs = 30000`
@@ -174,6 +181,8 @@ Defaults:
 
 `baseUrl` is required after constructor and environment resolution. Blank strings are invalid.
 `apiToken` is optional. Blank tokens are treated as absent.
+`timeoutMs` must be a positive finite number. `maxRetries` must be a non-negative integer.
+Constructor options and per-request overrides must both enforce these constraints.
 
 The client has these methods and resources:
 
@@ -204,6 +213,12 @@ response data is currently an implementation detail for these operations.
 Per-request `timeoutMs` and `maxRetries` override client defaults for that call only. `signal` lets
 callers cancel a request. If both a caller signal and an SDK timeout are active, either one may abort
 the underlying `fetch`; the error mapping must distinguish which source triggered the abort.
+
+For mutating memory operations, retries stay disabled regardless of the client-level `maxRetries`.
+`memory.extract`, `memory.addMessage`, and `memory.commit` may retry only when their per-request
+`options.maxRetries` is explicitly set to a positive value. This opt-in is intentionally verbose
+because these operations can duplicate extraction, buffered messages, or commits after ambiguous
+network failures.
 
 ## Type Model
 
@@ -389,8 +404,10 @@ Validator rules:
 
 - Required scalar fields must have the expected primitive type.
 - Optional scalar fields may be absent or `null`.
-- Arrays that the public response type exposes as arrays must be normalized to `[]` when absent or
-  `null`, matching the Python client defaults.
+- Arrays that the public response type exposes as arrays may be normalized to `[]` when absent,
+  matching the Python client defaults for missing fields.
+- Explicit `null` for a non-nullable response array is a malformed contract and must raise
+  `MemindAPIError` with `errorCode = 'parse_error'`.
 - If a present field has the wrong type, raise `MemindAPIError` with `errorCode = 'parse_error'`.
 - Unknown response fields are ignored.
 - ISO date/time fields such as `occurredAt`, `startedAt`, and `completedAt` remain strings in the
@@ -501,6 +518,9 @@ Default retry behavior:
 This split is required because retrieval is read-like, while extraction, add-message, and commit can
 create duplicate effects if retried after an ambiguous failure.
 
+Client-level `maxRetries` applies only to retry-enabled operations by default. Mutating operations
+ignore the client-level value and require explicit per-request opt-in with `options.maxRetries`.
+
 Retry logging should not include authorization headers or request bodies.
 
 ## File Layout
@@ -512,6 +532,7 @@ memind-clients/typescript/
   LICENSE
   README.md
   package.json
+  pnpm-lock.yaml
   tsconfig.json
   tsup.config.ts
   vitest.config.ts
@@ -561,6 +582,8 @@ Recommended scripts:
 
 TypeScript settings should be strict. The package should include `.d.ts` and source maps in the
 published artifact. The package should not depend on `memind-ui` tooling or lockfiles.
+Commit a package-local `pnpm-lock.yaml` so `pnpm install --frozen-lockfile` is reproducible in
+`memind-clients/typescript`.
 
 ## Tests
 
@@ -571,6 +594,9 @@ Minimum test coverage:
 - Constructor options override environment variables.
 - Blank `baseUrl` is rejected.
 - Blank `apiToken` is ignored.
+- `timeoutMs` rejects zero, negative, `NaN`, and infinite values.
+- `maxRetries` rejects negative and non-integer values.
+- Environment variable lookup works when `globalThis.process` is absent.
 - URLs are built under `/open/v1`.
 - Auth and JSON headers are sent correctly.
 - `extraHeaders` can add custom headers.
@@ -583,16 +609,18 @@ Minimum test coverage:
 - Invalid raw content payloads are rejected before network calls.
 - Success envelopes return typed data.
 - Malformed success `data` is rejected with a parse error.
-- Missing or null response arrays are normalized to `[]` where the public response type exposes
-  arrays.
+- Missing response arrays are normalized to `[]` where the public response type exposes arrays.
 - Error envelopes map to the correct error classes.
 - `X-Request-Id` is captured.
 - `Retry-After` seconds and HTTP-date values are respected.
 - `retrieve` retries retryable responses.
 - mutating memory calls do not retry by default.
+- Client-level `maxRetries` does not enable retries for mutating memory calls.
+- Mutating memory calls retry only when per-request `maxRetries` is explicitly set.
 - network failures map to `MemindConnectionError`.
 - timeout failures map to `MemindTimeoutError`.
 - non-JSON and malformed envelope responses map to parse errors.
+- Explicit `null` response arrays are parse errors for non-nullable array fields.
 - README examples typecheck or are covered by tests.
 
 ## CI
