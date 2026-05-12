@@ -13,17 +13,6 @@
  */
 package com.openmemind.ai.memory.server.domain.common;
 
-public sealed interface ApiResult<T> permits SuccessResult, ErrorResult {
+import java.util.Map;
 
-    static ApiResult<Void> ok() {
-        return new SuccessResult<>(null);
-    }
-
-    static <T> SuccessResult<T> success(T data) {
-        return new SuccessResult<>(data);
-    }
-
-    static <T> ErrorResult<T> failure(String code, String message, T details, String traceId) {
-        return new ErrorResult<>(new ApiError<>(ApiErrorCode.fromValue(code), message, details));
-    }
-}
+public record ValidationErrorDetails(Map<String, String> fieldErrors) {}
