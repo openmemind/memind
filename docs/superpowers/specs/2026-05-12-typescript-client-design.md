@@ -67,6 +67,49 @@ Build outputs:
 - Type declarations
 - Source maps
 
+The published `package.json` must include:
+
+```json
+{
+  "name": "@openmemind/memind",
+  "version": "<release-version>",
+  "description": "Official TypeScript client for the Memind memory engine API",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openmemind/memind.git",
+    "directory": "memind-clients/typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/openmemind/memind/issues"
+  },
+  "homepage": "https://github.com/openmemind/memind#readme",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
+```
+
+`<release-version>` should match the client release version used by Java and Python clients unless
+a future release policy explicitly decouples client versions.
+
 ## Public API
 
 Primary usage:
@@ -114,7 +157,7 @@ type MemindClientOptions = {
   timeoutMs?: number
   maxRetries?: number
   fetch?: typeof fetch
-  headers?: Record<string, string>
+  extraHeaders?: Record<string, string>
 }
 ```
 
@@ -135,16 +178,32 @@ Defaults:
 The client has these methods and resources:
 
 ```ts
-client.health(): Promise<HealthResponse>
+type RequestOptions = {
+  signal?: AbortSignal
+  timeoutMs?: number
+  maxRetries?: number
+}
 
-client.memory.extract(request: ExtractMemoryRequest): Promise<ExtractMemoryResponse>
-client.memory.addMessage(request: AddMessageRequest): Promise<void>
-client.memory.commit(request: CommitMemoryRequest): Promise<void>
-client.memory.retrieve(request: RetrieveMemoryRequest): Promise<RetrieveMemoryResponse>
+client.health(options?: RequestOptions): Promise<HealthResponse>
+
+client.memory.extract(
+  request: ExtractMemoryRequest,
+  options?: RequestOptions,
+): Promise<ExtractMemoryResponse>
+client.memory.addMessage(request: AddMessageRequest, options?: RequestOptions): Promise<void>
+client.memory.commit(request: CommitMemoryRequest, options?: RequestOptions): Promise<void>
+client.memory.retrieve(
+  request: RetrieveMemoryRequest,
+  options?: RequestOptions,
+): Promise<RetrieveMemoryResponse>
 ```
 
 `addMessage` and `commit` return `void`, matching the existing Java and Python clients. The HTTP
 response data is currently an implementation detail for these operations.
+
+Per-request `timeoutMs` and `maxRetries` override client defaults for that call only. `signal` lets
+callers cancel a request. If both a caller signal and an SDK timeout are active, either one may abort
+the underlying `fetch`; the error mapping must distinguish which source triggered the abort.
 
 ## Type Model
 
@@ -237,23 +296,45 @@ Message.assistant(text: string, options?: { timestamp?: string }): Message
 Raw content model:
 
 ```ts
+type JsonPrimitive = string | number | boolean | null
+type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue }
+
 type ConversationContent = {
   type: 'conversation'
   messages: Message[]
 }
 
-type MapRawContent = {
+type JsonObjectRawContent = {
   type: string
-  [key: string]: unknown
+  [key: string]: JsonValue
 }
 
-type RawContent = ConversationContent | MapRawContent
+type RawContent = ConversationContent | JsonObjectRawContent
 ```
 
-`MapRawContent` intentionally supports flat extension fields such as:
+`JsonObjectRawContent` intentionally supports flat extension fields such as:
 
 ```ts
 { type: 'document', title: 'Test', body: 'Content' }
+```
+
+Implementation must still validate raw content before sending:
+
+- `type` must be a non-blank string.
+- `type === 'conversation'` requires `messages` to be a non-empty array of valid `Message` values.
+- Non-conversation raw content must contain only JSON-serializable values.
+- `undefined`, functions, symbols, and cyclic objects are invalid request payload values.
+- `RawContent.map()` must reject `type === 'conversation'` at runtime because TypeScript cannot
+  exclude one literal from arbitrary `string` values.
+- `RawContent.map()` must reject a `fields` object that contains its own `type` key.
+
+Provide helper factories so users do not have to remember the exact object shape:
+
+```ts
+const RawContent = {
+  conversation(messages: Message[]): ConversationContent,
+  map(type: string, fields?: Record<string, JsonValue>): JsonObjectRawContent,
+} as const
 ```
 
 Memory request and response types mirror the Java/Python clients and server records:
@@ -291,16 +372,42 @@ type RetrieveMemoryRequest = {
 Response types should include all currently exposed fields and tolerate future fields at runtime.
 The TypeScript type surface does not need to model unknown future fields.
 
+Because TypeScript types do not exist at runtime, the client must perform lightweight response data
+validation before returning public response objects. This must not depend on a runtime schema
+library, but it must validate enough shape to avoid returning arbitrary malformed server payloads as
+typed data.
+
+Required validators:
+
+- `assertHealthResponse(data): HealthResponse`
+- `assertExtractMemoryResponse(data): ExtractMemoryResponse`
+- `assertAddMessageResponse(data): AddMessageResponse`
+- `assertRetrieveMemoryResponse(data): RetrieveMemoryResponse`
+- `assertOperationAccepted(data): OperationAccepted` for async endpoints if they are added later
+
+Validator rules:
+
+- Required scalar fields must have the expected primitive type.
+- Optional scalar fields may be absent or `null`.
+- Arrays that the public response type exposes as arrays must be normalized to `[]` when absent or
+  `null`, matching the Python client defaults.
+- If a present field has the wrong type, raise `MemindAPIError` with `errorCode = 'parse_error'`.
+- Unknown response fields are ignored.
+- ISO date/time fields such as `occurredAt`, `startedAt`, and `completedAt` remain strings in the
+  TypeScript client. The client does not convert them to `Date`, preserving server JSON and avoiding
+  timezone surprises.
+
 ## HTTP Layer
 
 The HTTP layer is internal and should be small:
 
 - Normalize `baseUrl` by trimming whitespace and removing trailing slashes.
 - Resolve all request paths under `/open/v1`.
-- Serialize request bodies with `JSON.stringify`, omitting `undefined` values.
+- Serialize request bodies with a helper that recursively drops `undefined` object properties and
+  rejects non-JSON values before calling `JSON.stringify`.
 - Parse response bodies as JSON.
-- Validate only the response envelope shape at runtime.
-- Leave deeper response data validation to TypeScript types and tests, not runtime schema libraries.
+- Validate the response envelope shape at runtime.
+- Validate public response data with the lightweight validators described above.
 
 Headers:
 
@@ -308,12 +415,31 @@ Headers:
 - `Content-Type: application/json` when a body is present
 - `Authorization: Bearer <token>` when `apiToken` is present
 - `User-Agent: memind-typescript/<version>` only when the runtime allows setting it
-- Additional caller headers from `options.headers`
+- Additional caller headers from `options.extraHeaders`
 
-Caller headers may extend defaults, but they must not silently remove `Accept` or produce invalid
-authorization behavior.
+`extraHeaders` may add application-specific headers, but it must not override SDK-owned headers. The
+client must reject case-insensitive attempts to set these names through `extraHeaders`:
+
+- `accept`
+- `content-type`
+- `authorization`
+- `user-agent`
+
+This keeps authentication, content negotiation, and browser-forbidden headers deterministic. If
+callers need a different token, they must use `apiToken`. If they need a different runtime fetch,
+they must use the `fetch` option.
 
 The client should support a custom `fetch` implementation for tests and advanced runtimes.
+
+Timeout and cancellation behavior:
+
+- The SDK implements timeouts with `AbortController`.
+- A caller-provided `signal` is composed with the SDK timeout signal.
+- If the SDK timeout fires first, raise `MemindTimeoutError`.
+- If the caller signal aborts first, raise `MemindConnectionError` with a message that identifies
+  caller cancellation.
+- If the runtime reports another network-level fetch failure, raise `MemindConnectionError`.
+- Timeout cleanup must clear timers after every request attempt.
 
 ## Errors
 
@@ -343,7 +469,8 @@ class MemindTimeoutError extends MemindError {}
 Error mapping:
 
 - Network failures become `MemindConnectionError`.
-- Abort/timeout failures become `MemindTimeoutError`.
+- SDK timeout aborts become `MemindTimeoutError`.
+- Caller-triggered aborts become `MemindConnectionError`.
 - Non-JSON responses become `MemindAPIError` with `errorCode = 'parse_error'`.
 - JSON responses without a valid `{ data }` or `{ error }` envelope become `MemindAPIError` with
   `errorCode = 'parse_error'`.
@@ -397,6 +524,7 @@ memind-clients/typescript/
       http.ts
       retry.ts
       serialize.ts
+      validate.ts
     resources/
       memory.ts
     types/
@@ -432,7 +560,7 @@ Recommended scripts:
 ```
 
 TypeScript settings should be strict. The package should include `.d.ts` and source maps in the
-published artifact.
+published artifact. The package should not depend on `memind-ui` tooling or lockfiles.
 
 ## Tests
 
@@ -445,9 +573,18 @@ Minimum test coverage:
 - Blank `apiToken` is ignored.
 - URLs are built under `/open/v1`.
 - Auth and JSON headers are sent correctly.
+- `extraHeaders` can add custom headers.
+- `extraHeaders` rejects SDK-owned headers case-insensitively.
+- Per-request `timeoutMs` overrides the client default.
+- Per-request `maxRetries` overrides the client default.
+- Caller-provided `AbortSignal` cancels the request without being reported as an SDK timeout.
 - `Message.user` and `Message.assistant` produce expected payloads.
-- `ConversationContent` and flat `MapRawContent` serialize correctly.
+- `RawContent.conversation` and `RawContent.map` produce expected payloads.
+- Invalid raw content payloads are rejected before network calls.
 - Success envelopes return typed data.
+- Malformed success `data` is rejected with a parse error.
+- Missing or null response arrays are normalized to `[]` where the public response type exposes
+  arrays.
 - Error envelopes map to the correct error classes.
 - `X-Request-Id` is captured.
 - `Retry-After` seconds and HTTP-date values are respected.
@@ -475,6 +612,7 @@ It should run on changes to:
 Required checks:
 
 ```bash
+cd memind-clients/typescript
 pnpm install --frozen-lockfile
 pnpm format:check
 pnpm lint
@@ -483,6 +621,9 @@ pnpm test:coverage
 pnpm build
 pnpm pack --dry-run
 ```
+
+The workflow must set `working-directory: memind-clients/typescript` for every package command
+instead of assuming a root pnpm workspace.
 
 ## Release
 
@@ -508,7 +649,8 @@ The release workflow should:
 - Verify the requested version matches `package.json`.
 - Run the full verification suite.
 - Build and pack-check the package.
-- Publish to npm.
+- Publish to npm with provenance enabled.
+- Run every package command with `working-directory: memind-clients/typescript`.
 
 ## Documentation
 
