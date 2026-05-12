@@ -13,8 +13,8 @@
  */
 package com.openmemind.ai.memory.server.controller.admin.rawdata;
 
-import com.openmemind.ai.memory.server.domain.common.ApiResult;
 import com.openmemind.ai.memory.server.domain.common.PageResult;
+import com.openmemind.ai.memory.server.domain.common.SuccessResult;
 import com.openmemind.ai.memory.server.domain.rawdata.query.RawDataPageQuery;
 import com.openmemind.ai.memory.server.domain.rawdata.request.RawDataDeleteRequest;
 import com.openmemind.ai.memory.server.domain.rawdata.response.RawDataDeleteResult;
@@ -49,18 +49,18 @@ public class AdminRawDataController {
     }
 
     @GetMapping
-    public ApiResult<PageResult<AdminRawDataView>> page(
-            @RequestParam(defaultValue = "1") @Min(1) int pageNo,
+    public SuccessResult<PageResult<AdminRawDataView>> page(
+            @RequestParam(name = "page", defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
             @RequestParam(required = false) String userId,
             @RequestParam(required = false) String agentId,
             @RequestParam(required = false) Instant startTimeFrom,
             @RequestParam(required = false) Instant startTimeTo) {
-        return ApiResult.success(
+        return new SuccessResult<>(
                 PageResult.from(
                         queryService.listRawData(
                                 RawDataPageQuery.of(
-                                        pageNo,
+                                        page,
                                         pageSize,
                                         userId,
                                         agentId,
@@ -69,12 +69,13 @@ public class AdminRawDataController {
     }
 
     @GetMapping("/{rawDataId}")
-    public ApiResult<AdminRawDataView> detail(@PathVariable String rawDataId) {
-        return ApiResult.success(queryService.getRawData(rawDataId));
+    public SuccessResult<AdminRawDataView> detail(@PathVariable String rawDataId) {
+        return new SuccessResult<>(queryService.getRawData(rawDataId));
     }
 
     @DeleteMapping
-    public ApiResult<RawDataDeleteResult> delete(@Valid @RequestBody RawDataDeleteRequest request) {
-        return ApiResult.success(deleteService.deleteRawData(request.rawDataIds()));
+    public SuccessResult<RawDataDeleteResult> delete(
+            @Valid @RequestBody RawDataDeleteRequest request) {
+        return new SuccessResult<>(deleteService.deleteRawData(request.rawDataIds()));
     }
 }

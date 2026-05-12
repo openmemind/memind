@@ -16,9 +16,11 @@ package com.openmemind.ai.memory.server.controller.admin.memorythread;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.openmemind.ai.memory.server.configuration.RequestIdFilter;
 import com.openmemind.ai.memory.server.domain.common.PageResponse;
 import com.openmemind.ai.memory.server.domain.memorythread.query.MemoryThreadPageQuery;
 import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadItemView;
@@ -52,20 +54,24 @@ class AdminMemoryThreadControllerTest {
                 MockMvcBuilders.standaloneSetup(
                                 new AdminMemoryThreadController(queryService, rebuildService))
                         .setControllerAdvice(new ApiExceptionHandler())
+                        .addFilters(new RequestIdFilter())
                         .setValidator(validator)
                         .build();
     }
 
     @Test
     void pageEndpointReturnsMemoryThreads() throws Exception {
-        mockMvc.perform(get("/admin/v1/memory-threads"))
+        mockMvc.perform(get("/admin/v1/memory-threads").param("page", "2"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
-                .andExpect(jsonPath("$.data.total").value(1))
-                .andExpect(jsonPath("$.data.list[0].threadKey").value("topic:concept:travel"))
-                .andExpect(jsonPath("$.data.list[0].threadId").doesNotExist());
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
+                .andExpect(jsonPath("$.data.page.page").value(2))
+                .andExpect(jsonPath("$.data.page.totalItems").value(1))
+                .andExpect(jsonPath("$.data.items[0].threadKey").value("topic:concept:travel"))
+                .andExpect(jsonPath("$.data.items[0].threadId").doesNotExist());
 
-        assertThat(queryService.recordedQuery.pageNo()).isEqualTo(1);
+        assertThat(queryService.recordedQuery.pageNo()).isEqualTo(2);
         assertThat(queryService.recordedQuery.pageSize()).isEqualTo(20);
     }
 
@@ -76,7 +82,8 @@ class AdminMemoryThreadControllerTest {
                                 .param("userId", "u1")
                                 .param("agentId", "a1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.threadKey").value("topic:concept:travel"))
                 .andExpect(jsonPath("$.data.threadId").doesNotExist());
     }
@@ -88,7 +95,8 @@ class AdminMemoryThreadControllerTest {
                                 .param("userId", "u1")
                                 .param("agentId", "a1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data[0].threadKey").value("topic:concept:travel"))
                 .andExpect(jsonPath("$.data[0].itemId").value(301))
                 .andExpect(jsonPath("$.data[0].role").value("core"))
@@ -102,7 +110,8 @@ class AdminMemoryThreadControllerTest {
                                 .param("userId", "u1")
                                 .param("agentId", "a1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data.projectionState").value("available"))
                 .andExpect(jsonPath("$.data.pendingCount").value(0));
     }
@@ -114,7 +123,8 @@ class AdminMemoryThreadControllerTest {
                                 .param("userId", "u1")
                                 .param("agentId", "a1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
                 .andExpect(jsonPath("$.data").value(1));
     }
 

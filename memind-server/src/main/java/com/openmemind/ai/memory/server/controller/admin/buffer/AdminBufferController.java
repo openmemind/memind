@@ -23,9 +23,9 @@ import com.openmemind.ai.memory.server.domain.buffer.view.ConversationBufferView
 import com.openmemind.ai.memory.server.domain.buffer.view.InsightBufferGroupView;
 import com.openmemind.ai.memory.server.domain.buffer.view.InsightBufferView;
 import com.openmemind.ai.memory.server.domain.common.AdminUpdateResult;
-import com.openmemind.ai.memory.server.domain.common.ApiResult;
 import com.openmemind.ai.memory.server.domain.common.BatchDeleteResult;
 import com.openmemind.ai.memory.server.domain.common.PageResult;
+import com.openmemind.ai.memory.server.domain.common.SuccessResult;
 import com.openmemind.ai.memory.server.service.buffer.BufferManagementService;
 import com.openmemind.ai.memory.server.service.buffer.BufferQueryService;
 import jakarta.validation.Valid;
@@ -57,74 +57,74 @@ public class AdminBufferController {
     }
 
     @GetMapping("/conversations")
-    public ApiResult<PageResult<ConversationBufferView>> conversations(
-            @RequestParam(defaultValue = "1") @Min(1) int pageNo,
+    public SuccessResult<PageResult<ConversationBufferView>> conversations(
+            @RequestParam(name = "page", defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
             @RequestParam(required = false) String memoryId,
             @RequestParam(required = false) String sessionId,
             @RequestParam(defaultValue = "pending") String state) {
-        return ApiResult.success(
+        return new SuccessResult<>(
                 PageResult.from(
                         queryService.listConversations(
                                 ConversationBufferPageQuery.of(
-                                        pageNo, pageSize, memoryId, sessionId, state))));
+                                        page, pageSize, memoryId, sessionId, state))));
     }
 
     @GetMapping("/conversations/{id}")
-    public ApiResult<ConversationBufferView> conversationDetail(@PathVariable Long id) {
-        return ApiResult.success(queryService.getConversation(id));
+    public SuccessResult<ConversationBufferView> conversationDetail(@PathVariable Long id) {
+        return new SuccessResult<>(queryService.getConversation(id));
     }
 
     @PatchMapping("/conversations/extracted")
-    public ApiResult<AdminUpdateResult> markConversationsExtracted(
+    public SuccessResult<AdminUpdateResult> markConversationsExtracted(
             @Valid @RequestBody AdminLongIdsRequest request) {
-        return ApiResult.success(managementService.markConversationsExtracted(request.ids()));
+        return new SuccessResult<>(managementService.markConversationsExtracted(request.ids()));
     }
 
     @DeleteMapping("/conversations")
-    public ApiResult<BatchDeleteResult> deleteConversations(
+    public SuccessResult<BatchDeleteResult> deleteConversations(
             @Valid @RequestBody AdminLongIdsRequest request) {
-        return ApiResult.success(managementService.deleteConversations(request.ids()));
+        return new SuccessResult<>(managementService.deleteConversations(request.ids()));
     }
 
     @GetMapping("/insights")
-    public ApiResult<PageResult<InsightBufferView>> insights(
-            @RequestParam(defaultValue = "1") @Min(1) int pageNo,
+    public SuccessResult<PageResult<InsightBufferView>> insights(
+            @RequestParam(name = "page", defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
             @RequestParam(required = false) String memoryId,
             @RequestParam(required = false) String insightTypeName,
             @RequestParam(defaultValue = "unbuilt") String state) {
-        return ApiResult.success(
+        return new SuccessResult<>(
                 PageResult.from(
                         queryService.listInsights(
                                 InsightBufferPageQuery.of(
-                                        pageNo, pageSize, memoryId, insightTypeName, state))));
+                                        page, pageSize, memoryId, insightTypeName, state))));
     }
 
     @GetMapping("/insights/groups")
-    public ApiResult<List<InsightBufferGroupView>> insightGroups(
+    public SuccessResult<List<InsightBufferGroupView>> insightGroups(
             @RequestParam(required = false) String memoryId,
             @RequestParam(required = false) String insightTypeName) {
-        return ApiResult.success(queryService.listInsightGroups(memoryId, insightTypeName));
+        return new SuccessResult<>(queryService.listInsightGroups(memoryId, insightTypeName));
     }
 
     @PatchMapping("/insights/group")
-    public ApiResult<AdminUpdateResult> updateInsightGroup(
+    public SuccessResult<AdminUpdateResult> updateInsightGroup(
             @Valid @RequestBody InsightBufferGroupUpdateRequest request) {
-        return ApiResult.success(
+        return new SuccessResult<>(
                 managementService.updateInsightGroup(request.ids(), request.groupName()));
     }
 
     @PatchMapping("/insights/built")
-    public ApiResult<AdminUpdateResult> updateInsightBuilt(
+    public SuccessResult<AdminUpdateResult> updateInsightBuilt(
             @Valid @RequestBody InsightBufferBuiltUpdateRequest request) {
-        return ApiResult.success(
+        return new SuccessResult<>(
                 managementService.updateInsightBuilt(request.ids(), request.built()));
     }
 
     @DeleteMapping("/insights")
-    public ApiResult<BatchDeleteResult> deleteInsights(
+    public SuccessResult<BatchDeleteResult> deleteInsights(
             @Valid @RequestBody AdminIdsRequest request) {
-        return ApiResult.success(managementService.deleteInsightBuffers(request.ids()));
+        return new SuccessResult<>(managementService.deleteInsightBuffers(request.ids()));
     }
 }

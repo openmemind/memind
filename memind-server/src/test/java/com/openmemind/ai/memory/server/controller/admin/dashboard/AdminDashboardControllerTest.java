@@ -15,9 +15,11 @@ package com.openmemind.ai.memory.server.controller.admin.dashboard;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.openmemind.ai.memory.server.configuration.RequestIdFilter;
 import com.openmemind.ai.memory.server.domain.dashboard.view.AdminDashboardView;
 import com.openmemind.ai.memory.server.handler.ApiExceptionHandler;
 import com.openmemind.ai.memory.server.service.dashboard.DashboardQueryService;
@@ -41,6 +43,7 @@ class AdminDashboardControllerTest {
         this.mockMvc =
                 MockMvcBuilders.standaloneSetup(new AdminDashboardController(queryService))
                         .setControllerAdvice(new ApiExceptionHandler())
+                        .addFilters(new RequestIdFilter())
                         .setValidator(validator)
                         .build();
     }
@@ -49,7 +52,9 @@ class AdminDashboardControllerTest {
     void dashboardDefaultsToSevenDaysAndReturnsSections() throws Exception {
         mockMvc.perform(get("/admin/v1/dashboard"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("success"))
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.timestamp").doesNotExist())
                 .andExpect(jsonPath("$.data.totals.rawData").value(3))
                 .andExpect(jsonPath("$.data.backlog.conversationPending").value(1))
                 .andExpect(jsonPath("$.data.activity.days").value(7))
@@ -67,7 +72,9 @@ class AdminDashboardControllerTest {
     void dashboardRejectsTooManyDays() throws Exception {
         mockMvc.perform(get("/admin/v1/dashboard").param("days", "31"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("bad_request"));
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.error.code").value("bad_request"))
+                .andExpect(jsonPath("$.code").doesNotExist());
     }
 
     @Test

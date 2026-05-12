@@ -13,7 +13,7 @@
  */
 package com.openmemind.ai.memory.server.controller.admin.dashboard;
 
-import com.openmemind.ai.memory.server.domain.common.ApiResult;
+import com.openmemind.ai.memory.server.domain.common.SuccessResult;
 import com.openmemind.ai.memory.server.domain.dashboard.view.AdminDashboardView;
 import com.openmemind.ai.memory.server.service.dashboard.DashboardQueryService;
 import jakarta.validation.constraints.Max;
@@ -36,12 +36,12 @@ public class AdminDashboardController {
     }
 
     @GetMapping
-    public ApiResult<AdminDashboardView> get(
+    public SuccessResult<AdminDashboardView> get(
             @RequestParam(required = false) String memoryId,
             @RequestParam(defaultValue = "7") @Min(1) @Max(30) int days) {
         if (days < 1 || days > 30) {
             throw new IllegalArgumentException("days must be between 1 and 30");
         }
-        return ApiResult.success(queryService.getDashboard(memoryId, days));
+        return new SuccessResult<>(queryService.getDashboard(memoryId, days));
     }
 }

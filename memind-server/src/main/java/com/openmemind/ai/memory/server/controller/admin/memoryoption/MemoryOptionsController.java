@@ -13,7 +13,7 @@
  */
 package com.openmemind.ai.memory.server.controller.admin.memoryoption;
 
-import com.openmemind.ai.memory.server.domain.common.ApiResult;
+import com.openmemind.ai.memory.server.domain.common.SuccessResult;
 import com.openmemind.ai.memory.server.domain.config.request.MemoryOptionsPutRequest;
 import com.openmemind.ai.memory.server.domain.config.response.MemoryOptionsGetResponse;
 import com.openmemind.ai.memory.server.service.config.MemoryOptionService;
@@ -35,17 +35,17 @@ public class MemoryOptionsController {
     }
 
     @GetMapping
-    public ApiResult<MemoryOptionsGetResponse> get() {
+    public SuccessResult<MemoryOptionsGetResponse> get() {
         var snapshot = memoryOptionService.getCurrent();
-        return ApiResult.success(
+        return new SuccessResult<>(
                 new MemoryOptionsGetResponse(snapshot.version(), snapshot.config()));
     }
 
     @PutMapping
-    public ApiResult<MemoryOptionsGetResponse> update(
+    public SuccessResult<MemoryOptionsGetResponse> update(
             @Valid @RequestBody MemoryOptionsPutRequest request) {
         var snapshot = memoryOptionService.update(request.expectedVersion(), request.config());
-        return ApiResult.success(
+        return new SuccessResult<>(
                 new MemoryOptionsGetResponse(snapshot.version(), snapshot.config()));
     }
 }
