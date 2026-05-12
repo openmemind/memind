@@ -35,6 +35,7 @@ class MemindServerCorsConfigurationTest {
         assertThat(cors.getAllowedOrigins()).containsExactly(CorsConfiguration.ALL);
         assertThat(cors.getAllowedMethods()).containsExactly(CorsConfiguration.ALL);
         assertThat(cors.getAllowedHeaders()).containsExactly(CorsConfiguration.ALL);
+        assertThat(cors.getExposedHeaders()).containsExactly(RequestIdFilter.HEADER);
         assertThat(cors.getAllowCredentials()).isFalse();
     }
 
@@ -53,6 +54,10 @@ class MemindServerCorsConfigurationTest {
                                         HttpMethod.GET.name()))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "*"))
-                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS, "GET"));
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS, "GET"))
+                .andExpect(
+                        header().string(
+                                        HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
+                                        RequestIdFilter.HEADER));
     }
 }

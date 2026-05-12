@@ -34,6 +34,7 @@ public class MemindServerCorsConfiguration {
         configuration.addAllowedOrigin(CorsConfiguration.ALL);
         configuration.addAllowedMethod(CorsConfiguration.ALL);
         configuration.addAllowedHeader(CorsConfiguration.ALL);
+        configuration.addExposedHeader(RequestIdFilter.HEADER);
         configuration.setAllowCredentials(false);
         return configuration;
     }
