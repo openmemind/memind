@@ -15,9 +15,22 @@ package com.openmemind.ai.memory.server.domain.common;
 
 import java.util.List;
 
-public record PageResult<T>(long total, List<T> list, long current) {
+public record PageResult<T>(List<T> items, PageMeta page) {
 
     public static <T> PageResult<T> from(PageResponse<T> pageResponse) {
-        return new PageResult<>(pageResponse.total(), pageResponse.items(), pageResponse.pageNo());
+        long totalPages =
+                pageResponse.pageSize() <= 0
+                        ? 0
+                        : (pageResponse.total() + pageResponse.pageSize() - 1)
+                                / pageResponse.pageSize();
+        return new PageResult<>(
+                pageResponse.items(),
+                new PageMeta(
+                        pageResponse.pageNo(),
+                        pageResponse.pageSize(),
+                        pageResponse.total(),
+                        totalPages,
+                        pageResponse.pageNo() > 1,
+                        pageResponse.pageNo() < totalPages));
     }
 }
