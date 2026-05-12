@@ -13,16 +13,21 @@
  */
 package com.openmemind.ai.memory.server.handler;
 
-import com.openmemind.ai.memory.server.domain.common.ApiResult;
+import com.openmemind.ai.memory.server.configuration.RequestIdFilter;
+import com.openmemind.ai.memory.server.domain.common.ApiError;
+import com.openmemind.ai.memory.server.domain.common.ApiErrorCode;
+import com.openmemind.ai.memory.server.domain.common.ErrorResult;
+import com.openmemind.ai.memory.server.domain.common.ValidationErrorDetails;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeUnavailableException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -40,11 +45,11 @@ public class ApiExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     @ExceptionHandler(MemoryRuntimeUnavailableException.class)
-    public ResponseEntity<ApiResult<Object>> handleServiceUnavailable(
+    public ResponseEntity<ErrorResult<Void>> handleServiceUnavailable(
             MemoryRuntimeUnavailableException exception, HttpServletRequest request) {
         return response(
                 HttpStatus.SERVICE_UNAVAILABLE,
-                "service_unavailable",
+                ApiErrorCode.RUNTIME_UNAVAILABLE,
                 exception.getMessage(),
                 null,
                 request,
@@ -52,37 +57,66 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(OptimisticLockingFailureException.class)
-    public ResponseEntity<ApiResult<Object>> handleConflict(
+    public ResponseEntity<ErrorResult<Void>> handleConflict(
             OptimisticLockingFailureException exception, HttpServletRequest request) {
         return response(
-                HttpStatus.CONFLICT, "conflict", exception.getMessage(), null, request, exception);
+                HttpStatus.CONFLICT,
+                ApiErrorCode.VERSION_CONFLICT,
+                exception.getMessage(),
+                null,
+                request,
+                exception);
     }
 
     @ExceptionHandler({
         MethodArgumentNotValidException.class,
         HandlerMethodValidationException.class,
-        ConstraintViolationException.class,
-        HttpMessageNotReadableException.class,
-        MissingServletRequestParameterException.class,
-        IllegalArgumentException.class
+        ConstraintViolationException.class
     })
-    public ResponseEntity<ApiResult<Object>> handleBadRequest(
+    public ResponseEntity<ErrorResult<ValidationErrorDetails>> handleValidationFailure(
             Exception exception, HttpServletRequest request) {
         return response(
                 HttpStatus.BAD_REQUEST,
-                "bad_request",
-                exception.getMessage(),
+                ApiErrorCode.VALIDATION_FAILED,
+                "Request validation failed",
                 validationDetails(exception),
                 request,
                 exception);
     }
 
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResult<Void>> handleMalformedJson(
+            HttpMessageNotReadableException exception, HttpServletRequest request) {
+        return response(
+                HttpStatus.BAD_REQUEST,
+                ApiErrorCode.MALFORMED_JSON,
+                "Malformed JSON request body",
+                null,
+                request,
+                exception);
+    }
+
+    @ExceptionHandler({
+        MissingServletRequestParameterException.class,
+        IllegalArgumentException.class
+    })
+    public ResponseEntity<ErrorResult<Void>> handleBadRequest(
+            Exception exception, HttpServletRequest request) {
+        return response(
+                HttpStatus.BAD_REQUEST,
+                ApiErrorCode.BAD_REQUEST,
+                exception.getMessage(),
+                null,
+                request,
+                exception);
+    }
+
     @ExceptionHandler(NoSuchElementException.class)
-    public ResponseEntity<ApiResult<Object>> handleNotFound(
+    public ResponseEntity<ErrorResult<Void>> handleNotFound(
             NoSuchElementException exception, HttpServletRequest request) {
         return response(
                 HttpStatus.NOT_FOUND,
-                "not_found",
+                ApiErrorCode.NOT_FOUND,
                 exception.getMessage(),
                 null,
                 request,
@@ -90,34 +124,37 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResult<Object>> handleInternalError(
+    public ResponseEntity<ErrorResult<Void>> handleInternalError(
             Exception exception, HttpServletRequest request) {
         return response(
                 HttpStatus.INTERNAL_SERVER_ERROR,
-                "internal_error",
+                ApiErrorCode.INTERNAL_ERROR,
                 "Internal server error",
                 null,
                 request,
                 exception);
     }
 
-    private ResponseEntity<ApiResult<Object>> response(
+    private <T> ResponseEntity<ErrorResult<T>> response(
             HttpStatus status,
-            String code,
+            ApiErrorCode code,
             String message,
-            Object details,
+            T details,
             HttpServletRequest request,
             Exception exception) {
-        String traceId = resolveTraceId(request);
-        logException(status, code, request, traceId, exception);
+        String requestId = resolveRequestId(request);
+        logException(status, code.value(), request, requestId, exception);
         return ResponseEntity.status(status)
-                .body(ApiResult.failure(code, message, details, traceId));
+                .body(new ErrorResult<>(new ApiError<>(code, message, details)));
     }
 
-    private static String resolveTraceId(HttpServletRequest request) {
-        String requestId = request.getHeader("X-Request-Id");
+    private static String resolveRequestId(HttpServletRequest request) {
+        String requestId = MDC.get(RequestIdFilter.MDC_KEY);
         if (requestId == null || requestId.isBlank()) {
-            return UUID.randomUUID().toString();
+            requestId = request.getHeader(RequestIdFilter.HEADER);
+        }
+        if (requestId == null || requestId.isBlank()) {
+            return "-";
         }
         return requestId;
     }
@@ -126,47 +163,52 @@ public class ApiExceptionHandler {
             HttpStatus status,
             String code,
             HttpServletRequest request,
-            String traceId,
+            String requestId,
             Exception exception) {
         String requestSummary = request.getMethod() + " " + request.getRequestURI();
         if (status.is5xxServerError()) {
             if (status == HttpStatus.SERVICE_UNAVAILABLE) {
                 log.warn(
-                        "Request failed: status={}, code={}, request={}, traceId={}, message={}",
+                        "Request failed: status={}, code={}, request={}, requestId={}, message={}",
                         status.value(),
                         code,
                         requestSummary,
-                        traceId,
+                        requestId,
                         exception.getMessage());
                 return;
             }
             log.error(
-                    "Request failed: status={}, code={}, request={}, traceId={}, message={}",
+                    "Request failed: status={}, code={}, request={}, requestId={}, message={}",
                     status.value(),
                     code,
                     requestSummary,
-                    traceId,
+                    requestId,
                     exception.getMessage(),
                     exception);
             return;
         }
         log.warn(
-                "Request failed: status={}, code={}, request={}, traceId={}, message={}",
+                "Request failed: status={}, code={}, request={}, requestId={}, message={}",
                 status.value(),
                 code,
                 requestSummary,
-                traceId,
+                requestId,
                 exception.getMessage());
     }
 
-    private static Object validationDetails(Exception exception) {
+    private static ValidationErrorDetails validationDetails(Exception exception) {
+        Map<String, String> fieldErrors = new LinkedHashMap<>();
         if (exception instanceof MethodArgumentNotValidException validationException) {
-            Map<String, String> fieldErrors = new LinkedHashMap<>();
             for (FieldError fieldError : validationException.getBindingResult().getFieldErrors()) {
                 fieldErrors.put(fieldError.getField(), fieldError.getDefaultMessage());
             }
-            return Map.of("fieldErrors", fieldErrors);
+            return new ValidationErrorDetails(fieldErrors);
         }
-        return null;
+        if (exception instanceof ConstraintViolationException validationException) {
+            for (ConstraintViolation<?> violation : validationException.getConstraintViolations()) {
+                fieldErrors.put(violation.getPropertyPath().toString(), violation.getMessage());
+            }
+        }
+        return new ValidationErrorDetails(fieldErrors);
     }
 }
