@@ -1,0 +1,59 @@
+name: TypeScript Client CI
+
+on:
+  push:
+    paths:
+      - 'memind-clients/typescript/**'
+      - '.github/workflows/typescript-client.yml'
+      - '.github/workflows/release-typescript-client.yml'
+  pull_request:
+    paths:
+      - 'memind-clients/typescript/**'
+      - '.github/workflows/typescript-client.yml'
+      - '.github/workflows/release-typescript-client.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: memind-clients/typescript/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: memind-clients/typescript
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        working-directory: memind-clients/typescript
+        run: pnpm format:check
+
+      - name: Lint
+        working-directory: memind-clients/typescript
+        run: pnpm lint
+
+      - name: Type check
+        working-directory: memind-clients/typescript
+        run: pnpm typecheck
+
+      - name: Test with coverage
+        working-directory: memind-clients/typescript
+        run: pnpm test:coverage
+
+      - name: Build
+        working-directory: memind-clients/typescript
+        run: pnpm build
+
+      - name: Pack check
+        working-directory: memind-clients/typescript
+        run: pnpm pack --json --pack-destination .pack-check
