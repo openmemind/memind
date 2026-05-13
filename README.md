@@ -316,13 +316,15 @@ For a runnable version with centralized configuration defaults, start with
 
 ### Open API ingestion semantics
 
-The default ingestion endpoints (`/open/v1/memory/extract`, `/add-message`, and `/commit`) are
+The default ingestion endpoints (`/open/v1/memory/extract`, `/open/v1/memory/add-message`, and `/open/v1/memory/commit`) are
 fire-and-forget: a successful HTTP response means Memind accepted and dispatched the work, not that extraction
-completed. Retry-aware clients should use `/open/v1/memory/extract/sync` with a caller-owned raw-content payload
+completed. Retry-aware clients should use `/open/v1/memory/sync/extract` with a caller-owned raw-content payload
 and clear their local retry state only when the returned extraction status is `SUCCESS`.
 
-`/open/v1/memory/add-message/sync` and `/open/v1/memory/commit/sync` report immediate server-buffer success or
+`/open/v1/memory/sync/add-message` and `/open/v1/memory/sync/commit` report immediate server-buffer success or
 failure, but they are not durable replay boundaries because the server owns the buffered conversation state.
+
+The official TypeScript client lives in [`memind-clients/typescript`](./memind-clients/typescript).
 
 ---
 

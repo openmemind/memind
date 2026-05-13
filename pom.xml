@@ -351,6 +351,8 @@
                         <exclude>memind-clients/python/uv.lock</exclude>
                         <exclude>memind-clients/python/**/__pycache__/**</exclude>
                         <exclude>memind-clients/python/**/*.pyc</exclude>
+                        <exclude>memind-clients/typescript/**</exclude>
+                        <exclude>.corepack/**</exclude>
                     </excludes>
                 </configuration>
                 <dependencies>
