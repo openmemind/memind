@@ -1,0 +1,77 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Release Rust Client to crates.io
+
+# Release prerequisites:
+# - The `memind` crate name must be available on crates.io or owned by OpenMemind maintainers.
+# - The GitHub repository must define an environment named `crates-io`.
+# - The `crates-io` environment must expose a `CARGO_REGISTRY_TOKEN` secret.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Rust client release version, for example 0.2.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build and publish Rust client
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: crates-io
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Validate release version
+        working-directory: memind-clients/rust
+        shell: bash
+        run: |
+          version="${{ inputs.version }}"
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release version must be a stable semver version like 0.2.0." >&2
+            exit 1
+          fi
+          package_version="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json, sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
+          if [[ "${package_version}" != "${version}" ]]; then
+            echo "Workflow version ${version} does not match Cargo.toml version ${package_version}." >&2
+            exit 1
+          fi
+
+      - name: Verify
+        working-directory: memind-clients/rust
+        run: |
+          rustup toolchain install 1.86.0 --profile minimal
+          cargo +1.86.0 check --lib --all-features
+          cargo fmt --check
+          cargo clippy --all-targets --all-features -- -D warnings
+          cargo test --all-features
+          cargo doc --all-features --no-deps
+          cargo package
+
+      - name: Publish to crates.io
+        working-directory: memind-clients/rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish

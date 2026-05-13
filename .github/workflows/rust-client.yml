@@ -1,0 +1,82 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Rust Client CI
+
+on:
+  push:
+    paths:
+      - 'memind-clients/rust/**'
+      - '.github/workflows/rust-client.yml'
+      - '.github/workflows/release-rust-client.yml'
+  pull_request:
+    paths:
+      - 'memind-clients/rust/**'
+      - '.github/workflows/rust-client.yml'
+      - '.github/workflows/release-rust-client.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Rust ${{ matrix.toolchain }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [1.86.0, stable]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: rustfmt, clippy
+
+      - name: Cargo check MSRV
+        if: matrix.toolchain == '1.86.0'
+        working-directory: memind-clients/rust
+        run: cargo check --lib --all-features
+
+      - name: Cargo check stable
+        if: matrix.toolchain == 'stable'
+        working-directory: memind-clients/rust
+        run: cargo check --all-targets --all-features
+
+      - name: Format check
+        if: matrix.toolchain == 'stable'
+        working-directory: memind-clients/rust
+        run: cargo fmt --check
+
+      - name: Clippy
+        if: matrix.toolchain == 'stable'
+        working-directory: memind-clients/rust
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Test
+        if: matrix.toolchain == 'stable'
+        working-directory: memind-clients/rust
+        run: cargo test --all-features
+
+      - name: Docs
+        if: matrix.toolchain == 'stable'
+        working-directory: memind-clients/rust
+        run: cargo doc --all-features --no-deps
+
+      - name: Package check
+        if: matrix.toolchain == 'stable'
+        working-directory: memind-clients/rust
+        run: cargo package

@@ -1,0 +1,13 @@
+# Cargo build output.
+/target/
+
+# This directory is a library crate; Cargo generates this during local checks,
+# but published dependencies are resolved by Cargo for downstream applications.
+/Cargo.lock
+
+# Local packaging and publishing scratch files.
+*.crate
+
+# Local environment files used for integration testing.
+.env
+.env.*

@@ -352,6 +352,7 @@
                         <exclude>memind-clients/python/**/__pycache__/**</exclude>
                         <exclude>memind-clients/python/**/*.pyc</exclude>
                         <exclude>memind-clients/typescript/**</exclude>
+                        <exclude>memind-clients/rust/**</exclude>
                         <exclude>.corepack/**</exclude>
                     </excludes>
                 </configuration>
@@ -382,6 +383,7 @@
                     <consoleOutput>true</consoleOutput>
                     <failOnViolation>true</failOnViolation>
                     <includeTestSourceDirectory>true</includeTestSourceDirectory>
+                    <excludes>memind-clients/rust/**</excludes>
                 </configuration>
                 <executions>
                     <execution>
