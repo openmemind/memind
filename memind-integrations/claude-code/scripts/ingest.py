@@ -13,6 +13,7 @@
 # limitations under the License.
 #
 
+import asyncio
 import json
 import os
 import sys
@@ -64,9 +65,9 @@ def _spool_extract(retry_spool, identity, source_client, session_id, messages):
     )
 
 
-def ingest_messages(config, hook_input, commit=False, max_messages=None):
+async def ingest_messages_async(config, hook_input, commit=False, max_messages=None):
     identity = resolve_identity(config, hook_input)
-    client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=10)
+    client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=10, max_retries=0)
     transcript_path = hook_input.get("transcript_path")
     messages = []
     if config.get("autoIngest", True) and transcript_path and Path(transcript_path).exists():
@@ -83,7 +84,7 @@ def ingest_messages(config, hook_input, commit=False, max_messages=None):
         if selected:
             response = None
             try:
-                response = client.extract(
+                response = await client.extract(
                     identity["userId"],
                     identity["agentId"],
                     _extract_payload(selected),
@@ -92,7 +93,7 @@ def ingest_messages(config, hook_input, commit=False, max_messages=None):
             except Exception:
                 _spool_extract(retry_spool, identity, source_client, session_id, selected)
             else:
-                status = ((response or {}).get("data") or {}).get("status")
+                status = getattr(response, "status", None)
                 if status == "SUCCESS":
                     submitted = [message["fingerprint"] for message in selected]
                 else:
@@ -100,6 +101,10 @@ def ingest_messages(config, hook_input, commit=False, max_messages=None):
         state.mark_submitted(submitted)
     committed = False
     return {"submitted": len(submitted), "committed": committed}
+
+
+def ingest_messages(config, hook_input, commit=False, max_messages=None):
+    return asyncio.run(ingest_messages_async(config, hook_input, commit=commit, max_messages=max_messages))
 
 
 def main():

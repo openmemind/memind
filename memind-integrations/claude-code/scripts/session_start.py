@@ -13,6 +13,7 @@
 # limitations under the License.
 #
 
+import asyncio
 import json
 import os
 import socket
@@ -37,12 +38,11 @@ def _tcp_check(url, timeout=1):
         return True
 
 
-def main():
-    config = load_config()
+async def _run_session_start_async(config):
     try:
-        client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=2)
+        client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=2, max_retries=0)
         try:
-            client.health()
+            await client.health()
         except Exception:
             _tcp_check(config["memindApiUrl"], timeout=1)
         claimed = None
@@ -51,15 +51,15 @@ def main():
             claimed = spool.claim_next()
             if claimed:
                 payload = spool.load_claimed(claimed)
-                replay_client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=10)
+                replay_client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=10, max_retries=0)
                 if payload.get("kind") == "extract":
-                    response = replay_client.extract(
+                    response = await replay_client.extract(
                         payload["userId"],
                         payload["agentId"],
                         payload["rawContent"],
                         payload.get("sourceClient"),
                     )
-                    status = ((response or {}).get("data") or {}).get("status")
+                    status = getattr(response, "status", None)
                     if status != "SUCCESS":
                         raise RuntimeError(f"extract replay did not fully succeed: {status}")
                     if payload.get("sessionId") and payload.get("fingerprints"):
@@ -67,7 +67,7 @@ def main():
                             state.mark_submitted(payload["fingerprints"])
                     spool.complete(claimed)
                 elif payload.get("kind") == "add-message":
-                    replay_client.add_message(
+                    await replay_client.add_message(
                         payload["userId"],
                         payload["agentId"],
                         payload["message"],
@@ -78,7 +78,7 @@ def main():
                             state.mark_submitted([payload["fingerprint"]])
                     spool.complete(claimed)
                 elif payload.get("kind") == "commit":
-                    replay_client.commit(payload["userId"], payload["agentId"], payload.get("sourceClient"))
+                    await replay_client.commit(payload["userId"], payload["agentId"], payload.get("sourceClient"))
                     spool.complete(claimed)
                 else:
                     spool.complete(claimed)
@@ -94,6 +94,18 @@ def main():
             SessionStateStore(state_root()).cleanup(int(config.get("stateMaxAgeDays", 14)))
         except Exception as exc:
             debug_log(config, "state_cleanup_failed", {"error": str(exc)})
+    except Exception as exc:
+        debug_log(config, "session_start_health_failed", {"error": str(exc)})
+
+
+def run_session_start(config):
+    asyncio.run(_run_session_start_async(config))
+
+
+def main():
+    config = load_config()
+    try:
+        run_session_start(config)
     except Exception as exc:
         debug_log(config, "session_start_health_failed", {"error": str(exc)})
     print(json.dumps({"continue": True, "suppressOutput": True}))

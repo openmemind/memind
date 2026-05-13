@@ -16,6 +16,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -142,7 +143,8 @@ class HookTest(unittest.TestCase):
                     with mock.patch.object(ingest, "retry_root", return_value=Path(tmp) / "retry"):
                         with mock.patch.object(ingest, "MemindClient") as client_cls:
                             client = client_cls.return_value
-                            client.extract.return_value = {"data": {"status": "SUCCESS"}}
+                            client.extract = mock.AsyncMock(return_value=types.SimpleNamespace(status="SUCCESS"))
+                            client.commit = mock.AsyncMock(return_value=None)
                             result = ingest.ingest_messages(
                                 config,
                                 {
@@ -154,9 +156,9 @@ class HookTest(unittest.TestCase):
                             )
             self.assertEqual(result["submitted"], 1)
             self.assertFalse(result["committed"])
-            client.extract.assert_called_once()
-            client.commit.assert_not_called()
-            raw_content = client.extract.call_args.args[2]
+            client.extract.assert_awaited_once()
+            client.commit.assert_not_awaited()
+            raw_content = client.extract.await_args.args[2]
             self.assertEqual(raw_content["type"], "conversation")
             self.assertEqual(raw_content["messages"][0]["role"], "USER")
         finally:
@@ -198,12 +200,8 @@ class HookTest(unittest.TestCase):
                     with mock.patch.object(ingest, "retry_root", return_value=retry_dir):
                         with mock.patch.object(ingest, "MemindClient") as client_cls:
                             client = client_cls.return_value
-                            client.extract.return_value = {
-                                "data": {
-                                    "status": "PARTIAL_SUCCESS",
-                                    "errorMessage": "partial",
-                                }
-                            }
+                            client.extract = mock.AsyncMock(return_value=types.SimpleNamespace(status="PARTIAL_SUCCESS"))
+                            client.commit = mock.AsyncMock(return_value=None)
                             result = ingest.ingest_messages(
                                 config,
                                 {
@@ -259,15 +257,17 @@ class HookTest(unittest.TestCase):
                     with mock.patch.object(session_start, "state_root", return_value=state_dir):
                         with mock.patch.object(session_start, "MemindClient") as client_cls:
                             client = client_cls.return_value
-                            client.health.return_value = {"data": {"status": "UP"}}
-                            client.extract.return_value = {"data": {"status": "SUCCESS"}}
+                            client.health = mock.AsyncMock(return_value=types.SimpleNamespace(status="UP"))
+                            client.extract = mock.AsyncMock(return_value=types.SimpleNamespace(status="SUCCESS"))
+                            client.add_message = mock.AsyncMock(return_value=None)
+                            client.commit = mock.AsyncMock(return_value=None)
                             session_start.main()
             with SessionStateStore(state_dir).locked("s1") as state:
                 self.assertTrue(state.is_submitted("fp1"))
             self.assertEqual(list(retry_dir.glob("*.json")), [])
-            client.extract.assert_called_once()
-            client.add_message.assert_not_called()
-            client.commit.assert_not_called()
+            client.extract.assert_awaited_once()
+            client.add_message.assert_not_awaited()
+            client.commit.assert_not_awaited()
 
     def test_session_start_keeps_extract_payload_when_replay_is_not_success(self):
         sys.path.insert(0, str(ROOT / "scripts"))
@@ -307,13 +307,15 @@ class HookTest(unittest.TestCase):
                     with mock.patch.object(session_start, "state_root", return_value=state_dir):
                         with mock.patch.object(session_start, "MemindClient") as client_cls:
                             client = client_cls.return_value
-                            client.health.return_value = {"data": {"status": "UP"}}
-                            client.extract.return_value = {"data": {"status": "PARTIAL_SUCCESS"}}
+                            client.health = mock.AsyncMock(return_value=types.SimpleNamespace(status="UP"))
+                            client.extract = mock.AsyncMock(return_value=types.SimpleNamespace(status="PARTIAL_SUCCESS"))
+                            client.add_message = mock.AsyncMock(return_value=None)
+                            client.commit = mock.AsyncMock(return_value=None)
                             session_start.main()
             with SessionStateStore(state_dir).locked("s1") as state:
                 self.assertFalse(state.is_submitted("fp1"))
             self.assertEqual(len(list(retry_dir.glob("*.json"))), 1)
-            client.extract.assert_called_once()
+            client.extract.assert_awaited_once()
 
 
 if __name__ == "__main__":

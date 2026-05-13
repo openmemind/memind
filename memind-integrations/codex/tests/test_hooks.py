@@ -3,6 +3,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -99,13 +100,15 @@ class HookTest(unittest.TestCase):
                     with mock.patch.object(ingest, "retry_root", return_value=Path(tmp) / "retry"):
                         with mock.patch.object(ingest, "MemindClient") as client_cls:
                             client = client_cls.return_value
-                            client.extract.return_value = {"data": {"status": "SUCCESS"}}
+                            client.extract = mock.AsyncMock(return_value=types.SimpleNamespace(status="SUCCESS"))
+                            client.add_message = mock.AsyncMock(return_value=None)
+                            client.commit = mock.AsyncMock(return_value=None)
                             result = ingest.ingest_messages(config, {"session_id": "s1", "transcript_path": str(transcript), "cwd": tmp})
             self.assertEqual(result["submitted"], 1)
             self.assertFalse(result["committed"])
-            client.extract.assert_called_once()
-            client.add_message.assert_not_called()
-            client.commit.assert_not_called()
+            client.extract.assert_awaited_once()
+            client.add_message.assert_not_awaited()
+            client.commit.assert_not_awaited()
         finally:
             transcript.unlink()
 
@@ -138,7 +141,9 @@ class HookTest(unittest.TestCase):
                     with mock.patch.object(ingest, "retry_root", return_value=Path(tmp) / "retry"):
                         with mock.patch.object(ingest, "MemindClient") as client_cls:
                             client = client_cls.return_value
-                            client.extract.side_effect = RuntimeError("down")
+                            client.extract = mock.AsyncMock(side_effect=RuntimeError("down"))
+                            client.add_message = mock.AsyncMock(return_value=None)
+                            client.commit = mock.AsyncMock(return_value=None)
                             result = ingest.ingest_messages(config, {"session_id": "s1", "transcript_path": str(transcript), "cwd": tmp})
                 messages = extract_messages(transcript, ["user", "assistant"])
                 with SessionStateStore(Path(tmp) / "state").locked("s1") as state:
@@ -146,9 +151,9 @@ class HookTest(unittest.TestCase):
                     self.assertFalse(state.is_submitted(messages[1]["fingerprint"]))
             self.assertEqual(result["submitted"], 0)
             self.assertFalse(result["committed"])
-            client.extract.assert_called_once()
-            client.add_message.assert_not_called()
-            client.commit.assert_not_called()
+            client.extract.assert_awaited_once()
+            client.add_message.assert_not_awaited()
+            client.commit.assert_not_awaited()
         finally:
             transcript.unlink()
 
@@ -180,7 +185,9 @@ class HookTest(unittest.TestCase):
                     with mock.patch.object(ingest, "retry_root", return_value=retry_dir):
                         with mock.patch.object(ingest, "MemindClient") as client_cls:
                             client = client_cls.return_value
-                            client.extract.side_effect = RuntimeError("down")
+                            client.extract = mock.AsyncMock(side_effect=RuntimeError("down"))
+                            client.add_message = mock.AsyncMock(return_value=None)
+                            client.commit = mock.AsyncMock(return_value=None)
                             result = ingest.ingest_messages(config, {"session_id": "s1", "transcript_path": str(transcript), "cwd": tmp})
                 payload_files = list(retry_dir.glob("*.json"))
                 self.assertEqual(len(payload_files), 1)
@@ -192,9 +199,9 @@ class HookTest(unittest.TestCase):
             self.assertEqual(len(payload["rawContent"]["messages"]), 2)
             self.assertEqual(len(payload["fingerprints"]), 2)
             self.assertNotIn("commitOnSuccess", payload)
-            client.extract.assert_called_once()
-            client.add_message.assert_not_called()
-            client.commit.assert_not_called()
+            client.extract.assert_awaited_once()
+            client.add_message.assert_not_awaited()
+            client.commit.assert_not_awaited()
         finally:
             transcript.unlink()
 
@@ -225,7 +232,9 @@ class HookTest(unittest.TestCase):
                     with mock.patch.object(ingest, "retry_root", return_value=retry_dir):
                         with mock.patch.object(ingest, "MemindClient") as client_cls:
                             client = client_cls.return_value
-                            client.extract.return_value = {"data": {"status": "PARTIAL_SUCCESS"}}
+                            client.extract = mock.AsyncMock(return_value=types.SimpleNamespace(status="PARTIAL_SUCCESS"))
+                            client.add_message = mock.AsyncMock(return_value=None)
+                            client.commit = mock.AsyncMock(return_value=None)
                             result = ingest.ingest_messages(config, {"session_id": "s1", "transcript_path": str(transcript), "cwd": tmp})
                 payload = json.loads(next(retry_dir.glob("*.json")).read_text())
             self.assertEqual(result["submitted"], 0)
@@ -285,9 +294,19 @@ class HookTest(unittest.TestCase):
                 with mock.patch.object(session_start, "state_root", return_value=state_root):
                     with mock.patch.object(session_start, "MemindClient") as client_cls:
                         client = client_cls.return_value
+                        events = []
+
+                        async def add_message_side_effect(*args, **kwargs):
+                            events.append("add_message")
+
+                        async def commit_side_effect(*args, **kwargs):
+                            events.append("commit")
+
+                        client.health = mock.AsyncMock(return_value=types.SimpleNamespace(status="UP"))
+                        client.add_message = mock.AsyncMock(side_effect=add_message_side_effect)
+                        client.commit = mock.AsyncMock(side_effect=commit_side_effect)
                         session_start.run_session_start(config)
-        method_names = [call[0] for call in client.method_calls]
-        self.assertLess(method_names.index("add_message"), method_names.index("commit"))
+        self.assertEqual(events, ["add_message", "commit"])
 
     def test_session_start_replays_extract_payload_and_marks_fingerprints(self):
         sys.path.insert(0, str(ROOT / "scripts"))
@@ -326,15 +345,17 @@ class HookTest(unittest.TestCase):
                 with mock.patch.object(session_start, "state_root", return_value=state_root):
                     with mock.patch.object(session_start, "MemindClient") as client_cls:
                         client = client_cls.return_value
-                        client.health.return_value = {"data": {"status": "UP"}}
-                        client.extract.return_value = {"data": {"status": "SUCCESS"}}
+                        client.health = mock.AsyncMock(return_value=types.SimpleNamespace(status="UP"))
+                        client.extract = mock.AsyncMock(return_value=types.SimpleNamespace(status="SUCCESS"))
+                        client.add_message = mock.AsyncMock(return_value=None)
+                        client.commit = mock.AsyncMock(return_value=None)
                         session_start.run_session_start(config)
             with SessionStateStore(state_root).locked("s1") as state:
                 self.assertTrue(state.is_submitted("fp1"))
             self.assertEqual(list(retry_root.glob("*.json")), [])
-            client.extract.assert_called_once()
-            client.add_message.assert_not_called()
-            client.commit.assert_not_called()
+            client.extract.assert_awaited_once()
+            client.add_message.assert_not_awaited()
+            client.commit.assert_not_awaited()
 
     def test_session_start_keeps_extract_payload_when_replay_is_not_success(self):
         sys.path.insert(0, str(ROOT / "scripts"))
@@ -373,13 +394,15 @@ class HookTest(unittest.TestCase):
                 with mock.patch.object(session_start, "state_root", return_value=state_root):
                     with mock.patch.object(session_start, "MemindClient") as client_cls:
                         client = client_cls.return_value
-                        client.health.return_value = {"data": {"status": "UP"}}
-                        client.extract.return_value = {"data": {"status": "PARTIAL_SUCCESS"}}
+                        client.health = mock.AsyncMock(return_value=types.SimpleNamespace(status="UP"))
+                        client.extract = mock.AsyncMock(return_value=types.SimpleNamespace(status="PARTIAL_SUCCESS"))
+                        client.add_message = mock.AsyncMock(return_value=None)
+                        client.commit = mock.AsyncMock(return_value=None)
                         session_start.run_session_start(config)
             with SessionStateStore(state_root).locked("s1") as state:
                 self.assertFalse(state.is_submitted("fp1"))
             self.assertEqual(len(list(retry_root.glob("*.json"))), 1)
-            client.extract.assert_called_once()
+            client.extract.assert_awaited_once()
 
     def test_session_start_skips_replayed_message_already_submitted_by_later_stop(self):
         sys.path.insert(0, str(ROOT / "scripts"))
@@ -423,8 +446,12 @@ class HookTest(unittest.TestCase):
                 with mock.patch.object(session_start, "state_root", return_value=state_root):
                     with mock.patch.object(session_start, "MemindClient") as client_cls:
                         client = client_cls.return_value
+                        client.health = mock.AsyncMock(return_value=types.SimpleNamespace(status="UP"))
+                        client.add_message = mock.AsyncMock(return_value=None)
+                        client.commit = mock.AsyncMock(return_value=None)
                         session_start.run_session_start(config)
-        client.add_message.assert_not_called()
+        client.add_message.assert_not_awaited()
+        client.commit.assert_not_awaited()
 
 
 if __name__ == "__main__":

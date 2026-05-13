@@ -1,83 +1,152 @@
-import json
+import importlib
+import sys
+import types
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 
-from scripts.lib.client import MemindClient, MemindClientError, is_success_envelope
+
+class _FakeAsyncMemory:
+    def __init__(self):
+        self.calls = []
+
+    async def extract(self, **kwargs):
+        self.calls.append(("extract", kwargs))
+        return SimpleNamespace(status="SUCCESS", raw_data_ids=["rd-1"])
+
+    async def add_message(self, **kwargs):
+        self.calls.append(("add_message", kwargs))
+        return None
+
+    async def commit(self, **kwargs):
+        self.calls.append(("commit", kwargs))
+        return None
 
 
-class _FakeResponse:
-    def __init__(self, body):
-        self.body = body
+class _FakeAsyncMemindClient:
+    instances = []
+
+    def __init__(self, *, base_url=None, api_token=None, timeout=None, max_retries=None):
+        self.base_url = base_url
+        self.api_token = api_token
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.memory = _FakeAsyncMemory()
+        self.closed = False
+        _FakeAsyncMemindClient.instances.append(self)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self.closed = True
+
+    async def health(self):
+        return SimpleNamespace(status="UP")
+
+
+class _FakeSyncMemory:
+    def __init__(self):
+        self.calls = []
+
+    def retrieve(self, **kwargs):
+        self.calls.append(("retrieve", kwargs))
+        return SimpleNamespace(
+            model_dump=lambda by_alias=True: {
+                "status": "success",
+                "items": [{"id": "1", "text": "remember espresso"}],
+                "insights": [],
+            }
+        )
+
+
+class _FakeSyncMemindClient:
+    instances = []
+
+    def __init__(self, *, base_url=None, api_token=None, timeout=None, max_retries=None):
+        self.base_url = base_url
+        self.api_token = api_token
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.memory = _FakeSyncMemory()
+        self.closed = False
+        _FakeSyncMemindClient.instances.append(self)
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        return False
-
-    def read(self):
-        return self.body.encode("utf-8")
+        self.closed = True
 
 
-class ClientTest(unittest.TestCase):
-    def test_success_codes_match_api_result_variants(self):
-        self.assertTrue(is_success_envelope({"code": "200"}))
-        self.assertTrue(is_success_envelope({"code": "success"}))
-        self.assertFalse(is_success_envelope({"code": "500"}))
+class _Strategy(str):
+    SIMPLE = "SIMPLE"
+    DEEP = "DEEP"
 
-    @mock.patch("urllib.request.urlopen")
-    def test_add_message_sends_source_client(self, urlopen):
-        urlopen.return_value = _FakeResponse(json.dumps({"code": "200"}))
-        client = MemindClient("http://127.0.0.1:8366")
-        client.add_message("u", "a", {"role": "USER", "content": []}, "codex")
-        payload = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
-        self.assertEqual(payload["sourceClient"], "codex")
-        self.assertEqual(payload["message"]["role"], "USER")
+    def __new__(cls, value):
+        return str.__new__(cls, value)
 
-    @mock.patch("urllib.request.urlopen")
-    def test_commit_sends_source_client(self, urlopen):
-        urlopen.return_value = _FakeResponse(json.dumps({"code": "200"}))
-        client = MemindClient("http://127.0.0.1:8366")
-        client.commit("u", "a", "codex")
-        payload = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
-        self.assertEqual(payload, {"userId": "u", "agentId": "a", "sourceClient": "codex"})
 
-    @mock.patch("urllib.request.urlopen")
-    def test_extract_sync_sends_source_client_and_raw_content(self, urlopen):
-        urlopen.return_value = _FakeResponse(
-            json.dumps(
-                {
-                    "code": "success",
-                    "data": {
-                        "status": "SUCCESS",
-                        "rawDataIds": ["rd-1"],
-                        "itemIds": [],
-                        "insightIds": [],
-                        "insightPending": False,
-                    },
-                }
+def _fake_memind_module():
+    module = types.ModuleType("memind")
+    module.AsyncMemindClient = _FakeAsyncMemindClient
+    module.MemindClient = _FakeSyncMemindClient
+    module.Strategy = _Strategy
+    return module
+
+
+def _load_client_class():
+    import scripts.lib.client as client_module
+
+    return importlib.reload(client_module).MemindClient
+
+
+class ClientTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        _FakeAsyncMemindClient.instances = []
+        _FakeSyncMemindClient.instances = []
+
+    async def test_async_methods_use_official_client_with_codex_source(self):
+        with mock.patch.dict(sys.modules, {"memind": _fake_memind_module()}):
+            MemindClient = _load_client_class()
+            client = MemindClient("http://127.0.0.1:8366", "token", timeout=10, max_retries=0)
+            health = await client.health()
+            response = await client.extract(
+                "u",
+                "a",
+                {"type": "conversation", "messages": []},
+                "codex",
             )
-        )
-        client = MemindClient("http://127.0.0.1:8366")
-        response = client.extract(
-            "u",
-            "a",
-            {"type": "conversation", "messages": [{"role": "USER", "content": []}]},
-            "codex",
-        )
-        request = urlopen.call_args.args[0]
-        payload = json.loads(request.data.decode("utf-8"))
-        self.assertTrue(request.full_url.endswith("/open/v1/memory/extract/sync"))
-        self.assertEqual(response["data"]["status"], "SUCCESS")
-        self.assertEqual(payload["sourceClient"], "codex")
-        self.assertEqual(payload["rawContent"]["type"], "conversation")
+            await client.add_message("u", "a", {"role": "USER", "content": []}, "codex")
+            await client.commit("u", "a", "codex")
 
-    @mock.patch("urllib.request.urlopen")
-    def test_retrieve_requires_data(self, urlopen):
-        urlopen.return_value = _FakeResponse(json.dumps({"code": "success"}))
-        client = MemindClient("http://127.0.0.1:8366")
-        with self.assertRaises(MemindClientError):
-            client.retrieve("u", "a", "q")
+        self.assertEqual(health.status, "UP")
+        self.assertEqual(response.status, "SUCCESS")
+        self.assertEqual(len(_FakeAsyncMemindClient.instances), 4)
+        for instance in _FakeAsyncMemindClient.instances:
+            self.assertEqual(instance.base_url, "http://127.0.0.1:8366")
+            self.assertEqual(instance.api_token, "token")
+            self.assertEqual(instance.timeout, 10)
+            self.assertEqual(instance.max_retries, 0)
+            self.assertTrue(instance.closed)
+        extract_call = _FakeAsyncMemindClient.instances[1].memory.calls[0][1]
+        self.assertEqual(extract_call["source_client"], "codex")
+
+    def test_retrieve_uses_official_sync_client(self):
+        with mock.patch.dict(sys.modules, {"memind": _fake_memind_module()}):
+            MemindClient = _load_client_class()
+            client = MemindClient("http://127.0.0.1:8366", timeout=12, max_retries=0)
+            result = client.retrieve("u", "a", "query", "SIMPLE", False)
+
+        self.assertEqual(result.model_dump(by_alias=True)["items"][0]["text"], "remember espresso")
+        self.assertTrue(_FakeSyncMemindClient.instances[0].closed)
+
+    async def test_missing_official_client_import_propagates_to_hook_fail_open_boundary(self):
+        with mock.patch.dict(sys.modules, {"memind": None}):
+            MemindClient = _load_client_class()
+            client = MemindClient("http://127.0.0.1:8366", timeout=10, max_retries=0)
+            with self.assertRaises(ModuleNotFoundError):
+                await client.extract("u", "a", {"type": "conversation", "messages": []}, "codex")
 
 
 if __name__ == "__main__":

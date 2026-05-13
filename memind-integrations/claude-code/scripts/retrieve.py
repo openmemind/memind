@@ -74,9 +74,9 @@ def main():
         context_turns = int(config.get("retrieveContextTurns", 0))
         recent_context = read_recent_context(hook_input.get("transcript_path"), context_turns)
         query = prompt if not recent_context else f"{recent_context}\ncurrent: {prompt}"
-        client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=12)
-        envelope = client.retrieve(identity["userId"], identity["agentId"], query, config.get("retrieveStrategy", "SIMPLE"), False)
-        context = _format_context(envelope.get("data") or {}, config)
+        client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=12, max_retries=0)
+        result = client.retrieve(identity["userId"], identity["agentId"], query, config.get("retrieveStrategy", "SIMPLE"), False)
+        context = _format_context(result.model_dump(by_alias=True), config)
         if not context:
             print(json.dumps({"continue": True}))
             return

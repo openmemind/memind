@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import asyncio
 import json
 import os
 import socket
@@ -24,7 +25,7 @@ def _tcp_check(url, timeout=1):
         return True
 
 
-def _replay_ingestion_batch(client, payload):
+async def _replay_ingestion_batch(client, payload):
     session_key = payload.get("sessionKey")
     fingerprints = payload.get("fingerprints") or []
     operations = payload.get("operations") or []
@@ -38,7 +39,7 @@ def _replay_ingestion_batch(client, payload):
             with store.locked(session_key) as state:
                 if state.is_submitted(fingerprint):
                     continue
-        client.add_message(
+        await client.add_message(
             operation["userId"],
             operation["agentId"],
             operation["message"],
@@ -47,21 +48,21 @@ def _replay_ingestion_batch(client, payload):
         appended += 1
         if fingerprint and session_key:
             store.mark_submitted(session_key, [fingerprint])
-    if payload.get("commitOnSuccess"):
-        client.commit(payload["userId"], payload["agentId"], payload.get("sourceClient"))
+    if appended and payload.get("commitOnSuccess"):
+        await client.commit(payload["userId"], payload["agentId"], payload.get("sourceClient"))
     return appended
 
 
-def _replay_payload(client, payload):
+async def _replay_payload(client, payload):
     kind = payload.get("kind")
     if kind == "extract":
-        response = client.extract(
+        response = await client.extract(
             payload["userId"],
             payload["agentId"],
             payload["rawContent"],
             payload.get("sourceClient"),
         )
-        status = ((response or {}).get("data") or {}).get("status")
+        status = getattr(response, "status", None)
         if status != "SUCCESS":
             raise RuntimeError(f"extract replay did not fully succeed: {status}")
         session_key = payload.get("sessionKey")
@@ -70,18 +71,18 @@ def _replay_payload(client, payload):
             SessionStateStore(state_root()).mark_submitted(session_key, fingerprints)
         return len(fingerprints)
     if kind == "ingestion-batch":
-        return _replay_ingestion_batch(client, payload)
+        return await _replay_ingestion_batch(client, payload)
     if kind == "commit":
-        client.commit(payload["userId"], payload["agentId"], payload.get("sourceClient"))
+        await client.commit(payload["userId"], payload["agentId"], payload.get("sourceClient"))
         return 0
     return 0
 
 
-def run_session_start(config):
+async def run_session_start_async(config):
     try:
-        client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=2)
+        client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=2, max_retries=0)
         try:
-            client.health()
+            await client.health()
         except Exception:
             _tcp_check(config["memindApiUrl"], timeout=1)
     except Exception as exc:
@@ -94,8 +95,8 @@ def run_session_start(config):
         claimed = spool.claim_next()
         if claimed:
             payload = spool.load_claimed(claimed)
-            replay_client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=10)
-            _replay_payload(replay_client, payload)
+            replay_client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=10, max_retries=0)
+            await _replay_payload(replay_client, payload)
             spool.complete(claimed)
         spool.cleanup(int(config.get("ingestRetryMaxFiles", 20)), int(config.get("ingestRetryMaxAgeDays", 7)))
     except Exception as exc:
@@ -110,6 +111,10 @@ def run_session_start(config):
         SessionStateStore(state_root()).cleanup(int(config.get("stateMaxAgeDays", 14)))
     except Exception as exc:
         debug_log(config, "state_cleanup_failed", {"error": str(exc)})
+
+
+def run_session_start(config):
+    asyncio.run(run_session_start_async(config))
 
 
 def main():

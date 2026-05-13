@@ -1,131 +1,160 @@
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-
-import json
-import threading
+import importlib
+import sys
+import types
 import unittest
-from http.server import BaseHTTPRequestHandler, HTTPServer
-
-from scripts.lib.client import MemindClient, MemindClientError, is_success_envelope
-
-
-class Handler(BaseHTTPRequestHandler):
-    responses = []
-    requests = []
-
-    def do_GET(self):
-        self._handle()
-
-    def do_POST(self):
-        self._handle()
-
-    def _handle(self):
-        length = int(self.headers.get("Content-Length", "0"))
-        body = self.rfile.read(length).decode("utf-8") if length else ""
-        Handler.requests.append((self.command, self.path, json.loads(body) if body else None))
-        status, payload = Handler.responses.pop(0)
-        encoded = json.dumps(payload).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(encoded)))
-        self.end_headers()
-        self.wfile.write(encoded)
-
-    def log_message(self, format, *args):
-        return
+from types import SimpleNamespace
+from unittest import mock
 
 
-class ClientTest(unittest.TestCase):
+class _FakeAsyncMemory:
+    def __init__(self):
+        self.calls = []
+
+    async def extract(self, **kwargs):
+        self.calls.append(("extract", kwargs))
+        return SimpleNamespace(status="SUCCESS", raw_data_ids=["rd-1"])
+
+    async def add_message(self, **kwargs):
+        self.calls.append(("add_message", kwargs))
+        return None
+
+    async def commit(self, **kwargs):
+        self.calls.append(("commit", kwargs))
+        return None
+
+
+class _FakeAsyncMemindClient:
+    instances = []
+
+    def __init__(self, *, base_url=None, api_token=None, timeout=None, max_retries=None):
+        self.base_url = base_url
+        self.api_token = api_token
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.memory = _FakeAsyncMemory()
+        self.closed = False
+        _FakeAsyncMemindClient.instances.append(self)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self.closed = True
+
+    async def health(self):
+        return SimpleNamespace(status="UP")
+
+
+class _FakeSyncMemory:
+    def __init__(self):
+        self.calls = []
+
+    def retrieve(self, **kwargs):
+        self.calls.append(("retrieve", kwargs))
+        return SimpleNamespace(
+            model_dump=lambda by_alias=True: {
+                "status": "success",
+                "items": [{"id": "1", "text": "remember espresso"}],
+                "insights": [],
+            }
+        )
+
+
+class _FakeSyncMemindClient:
+    instances = []
+
+    def __init__(self, *, base_url=None, api_token=None, timeout=None, max_retries=None):
+        self.base_url = base_url
+        self.api_token = api_token
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.memory = _FakeSyncMemory()
+        self.closed = False
+        _FakeSyncMemindClient.instances.append(self)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.closed = True
+
+
+class _Strategy(str):
+    SIMPLE = "SIMPLE"
+    DEEP = "DEEP"
+
+    def __new__(cls, value):
+        return str.__new__(cls, value)
+
+
+def _fake_memind_module():
+    module = types.ModuleType("memind")
+    module.AsyncMemindClient = _FakeAsyncMemindClient
+    module.MemindClient = _FakeSyncMemindClient
+    module.Strategy = _Strategy
+    return module
+
+
+def _load_client_class():
+    import scripts.lib.client as client_module
+
+    return importlib.reload(client_module).MemindClient
+
+
+class ClientTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        Handler.responses = []
-        Handler.requests = []
-        self.server = HTTPServer(("127.0.0.1", 0), Handler)
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
-        self.thread.start()
-        self.base_url = f"http://127.0.0.1:{self.server.server_port}"
+        _FakeAsyncMemindClient.instances = []
+        _FakeSyncMemindClient.instances = []
 
-    def tearDown(self):
-        self.server.shutdown()
-        self.server.server_close()
-        self.thread.join(timeout=2)
-
-    def test_success_envelope_accepts_200_and_success(self):
-        self.assertTrue(is_success_envelope({"code": "200"}))
-        self.assertTrue(is_success_envelope({"code": "success"}))
-        self.assertFalse(is_success_envelope({"code": "500"}))
-
-    def test_health(self):
-        Handler.responses.append((200, {"code": "success", "data": {"status": "UP"}}))
-        client = MemindClient(self.base_url, timeout=2)
-        self.assertEqual(client.health()["data"]["status"], "UP")
-        self.assertEqual(Handler.requests[0][1], "/open/v1/health")
-
-    def test_add_message_and_commit(self):
-        Handler.responses.append((200, {"code": "200", "data": None}))
-        Handler.responses.append((200, {"code": "200", "data": None}))
-        client = MemindClient(self.base_url, timeout=2)
-        message = {"role": "USER", "content": [{"type": "text", "text": "hello"}], "timestamp": None}
-        client.add_message("u", "a", message, "claude-code")
-        client.commit("u", "a", "claude-code")
-        self.assertEqual(Handler.requests[0][1], "/open/v1/memory/add-message")
-        self.assertEqual(Handler.requests[0][2]["sourceClient"], "claude-code")
-        self.assertEqual(Handler.requests[1][1], "/open/v1/memory/commit")
-        self.assertEqual(Handler.requests[1][2]["sourceClient"], "claude-code")
-
-    def test_extract_sync_sends_raw_content_and_returns_data(self):
-        Handler.responses.append(
-            (
-                200,
-                {
-                    "code": "success",
-                    "data": {
-                        "status": "SUCCESS",
-                        "rawDataIds": ["rd-1"],
-                        "itemIds": [],
-                        "insightIds": [],
-                        "insightPending": False,
-                    },
-                },
+    async def test_async_methods_use_official_client_with_hook_budget(self):
+        with mock.patch.dict(sys.modules, {"memind": _fake_memind_module()}):
+            MemindClient = _load_client_class()
+            client = MemindClient("http://127.0.0.1:8366", "token", timeout=10, max_retries=0)
+            health = await client.health()
+            response = await client.extract(
+                "u",
+                "a",
+                {"type": "conversation", "messages": []},
+                "claude-code",
             )
-        )
-        client = MemindClient(self.base_url, timeout=2)
-        response = client.extract(
-            "u",
-            "a",
-            {
-                "type": "conversation",
-                "messages": [
-                    {"role": "USER", "content": [{"type": "text", "text": "hello"}]}
-                ],
-            },
-            "claude-code",
-        )
-        self.assertEqual(response["data"]["status"], "SUCCESS")
-        self.assertEqual(Handler.requests[0][1], "/open/v1/memory/extract/sync")
-        self.assertEqual(Handler.requests[0][2]["sourceClient"], "claude-code")
+            await client.add_message("u", "a", {"role": "USER", "content": []}, "claude-code")
+            await client.commit("u", "a", "claude-code")
 
-    def test_retrieve_requires_data(self):
-        Handler.responses.append((200, {"code": "success", "data": {"items": [], "insights": []}}))
-        client = MemindClient(self.base_url, timeout=2)
-        response = client.retrieve("u", "a", "query", "SIMPLE", False)
-        self.assertEqual(response["data"]["items"], [])
+        self.assertEqual(health.status, "UP")
+        self.assertEqual(response.status, "SUCCESS")
+        self.assertEqual(len(_FakeAsyncMemindClient.instances), 4)
+        for instance in _FakeAsyncMemindClient.instances:
+            self.assertEqual(instance.base_url, "http://127.0.0.1:8366")
+            self.assertEqual(instance.api_token, "token")
+            self.assertEqual(instance.timeout, 10)
+            self.assertEqual(instance.max_retries, 0)
+            self.assertTrue(instance.closed)
+        extract_call = _FakeAsyncMemindClient.instances[1].memory.calls[0][1]
+        self.assertEqual(extract_call["source_client"], "claude-code")
+        self.assertEqual(extract_call["raw_content"]["type"], "conversation")
 
-    def test_bad_status_raises(self):
-        Handler.responses.append((500, {"code": "500"}))
-        client = MemindClient(self.base_url, timeout=2)
-        with self.assertRaises(MemindClientError):
-            client.health()
+    def test_retrieve_uses_official_sync_client_and_returns_model(self):
+        with mock.patch.dict(sys.modules, {"memind": _fake_memind_module()}):
+            MemindClient = _load_client_class()
+            client = MemindClient("http://127.0.0.1:8366", timeout=12, max_retries=0)
+            result = client.retrieve("u", "a", "query", "SIMPLE", False)
+
+        self.assertEqual(result.model_dump(by_alias=True)["items"][0]["text"], "remember espresso")
+        self.assertEqual(len(_FakeSyncMemindClient.instances), 1)
+        instance = _FakeSyncMemindClient.instances[0]
+        self.assertEqual(instance.timeout, 12)
+        self.assertEqual(instance.max_retries, 0)
+        self.assertTrue(instance.closed)
+        retrieve_call = instance.memory.calls[0][1]
+        self.assertEqual(retrieve_call["strategy"], "SIMPLE")
+        self.assertFalse(retrieve_call["trace"])
+
+    async def test_missing_official_client_import_propagates_to_hook_fail_open_boundary(self):
+        with mock.patch.dict(sys.modules, {"memind": None}):
+            MemindClient = _load_client_class()
+            client = MemindClient("http://127.0.0.1:8366", timeout=10, max_retries=0)
+            with self.assertRaises(ModuleNotFoundError):
+                await client.health()
 
 
 if __name__ == "__main__":

@@ -68,6 +68,35 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
+check_python_runtime() {
+  python3 - <<'PY'
+import sys
+
+if sys.version_info < (3, 10):
+    raise SystemExit("error: Python 3.10+ is required for Memind Codex hooks")
+
+try:
+    import memind
+except Exception as exc:
+    raise SystemExit(f"error: Memind Python client is required: {exc}")
+
+required = [
+    "AsyncMemindClient",
+    "MemindClient",
+    "ConversationContent",
+    "Message",
+    "Strategy",
+]
+missing = [name for name in required if not hasattr(memind, name)]
+if missing:
+    joined = ", ".join(missing)
+    raise SystemExit(
+        "error: Memind Python client is missing required public APIs: "
+        f"{joined}. Install or upgrade the official memind package."
+    )
+PY
+}
+
 if [[ "${DRY_RUN}" == true ]]; then
   echo "Dry run: no files will be written."
   if [[ "${UNINSTALL}" == true ]]; then
@@ -179,6 +208,10 @@ if [[ "${UNINSTALL}" == true ]]; then
   run_hook_installer --uninstall
   echo "Uninstall complete. Memind state and user config under ~/.memind are preserved."
   exit 0
+fi
+
+if [[ "${UNINSTALL}" != true ]]; then
+  check_python_runtime
 fi
 
 install_files

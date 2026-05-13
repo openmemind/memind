@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import asyncio
 import json
 import os
 import sys
@@ -51,9 +52,9 @@ def _spool_extract(retry_spool, identity, source_client, session_key, messages):
     )
 
 
-def ingest_messages(config, hook_input):
+async def ingest_messages_async(config, hook_input):
     identity = resolve_identity(config, hook_input)
-    client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=10)
+    client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=10, max_retries=0)
     transcript_path = hook_input.get("transcript_path")
     messages = []
     if config.get("autoIngest", True) and transcript_path and Path(transcript_path).exists():
@@ -71,7 +72,7 @@ def ingest_messages(config, hook_input):
     submitted = []
     if selected:
         try:
-            response = client.extract(
+            response = await client.extract(
                 identity["userId"],
                 identity["agentId"],
                 _extract_payload(selected),
@@ -80,7 +81,7 @@ def ingest_messages(config, hook_input):
         except Exception:
             _spool_extract(retry_spool, identity, source_client, session_key, selected)
         else:
-            status = ((response or {}).get("data") or {}).get("status")
+            status = getattr(response, "status", None)
             if status == "SUCCESS":
                 submitted = [message["fingerprint"] for message in selected]
                 store.mark_submitted(session_key, submitted)
@@ -88,6 +89,10 @@ def ingest_messages(config, hook_input):
                 _spool_extract(retry_spool, identity, source_client, session_key, selected)
 
     return {"submitted": len(submitted), "committed": False}
+
+
+def ingest_messages(config, hook_input):
+    return asyncio.run(ingest_messages_async(config, hook_input))
 
 
 def main():

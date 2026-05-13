@@ -10,18 +10,18 @@ does not start the server itself.
 
 The integration is intentionally small:
 
-- No Python third-party packages.
+- Uses the official Memind Python client.
 - No local daemon management.
 - No MCP dependency.
 - No tool-call ingestion in v0.1.
 
 ## What It Does
 
-- **Retrieval**: `UserPromptSubmit` calls Memind `/open/v1/memory/retrieve` and injects relevant memories into
+- **Retrieval**: `UserPromptSubmit` calls `MemindClient.memory.retrieve(...)` and injects relevant memories into
   Claude Code as `<memind_memories>...</memind_memories>` additional context.
 - **Ingestion**: `Stop`, `PreCompact`, and `SessionEnd` read the Claude Code transcript, filter
-  user/assistant messages, and submit a caller-owned conversation payload to Memind
-  `/open/v1/memory/extract/sync`.
+  user/assistant messages, and submit a caller-owned conversation payload through
+  `AsyncMemindClient.memory.extract(...)`.
 - **Retry**: failed ingestion payloads are spooled under `~/.memind/claude-code/retry/` and replayed on later
   `SessionStart` hooks.
 - **Source tagging**: all requests use `sourceClient = "claude-code"` by default, so Memind can distinguish
@@ -30,8 +30,17 @@ The integration is intentionally small:
 ## Requirements
 
 - Claude Code with plugin and hook support.
-- Python 3.9+ available as `python3`.
+- Python 3.10+ available as `python3`.
+- The official `memind` Python package installed in the same `python3` environment used by hooks.
 - A running Memind server, usually at `http://127.0.0.1:8366`.
+
+Install the official client before enabling hooks:
+
+```bash
+python3 -m pip install memind
+```
+
+The official `memind` package installs its runtime dependencies, including `httpx` and `pydantic`.
 
 Check the Memind server before installing:
 
@@ -79,7 +88,7 @@ Claude Code installs the plugin from that directory and loads:
 - `.claude-plugin/plugin.json`: plugin metadata.
 - `hooks/hooks.json`: lifecycle hook commands.
 - `settings.json`: default Memind integration settings.
-- `scripts/`: stdlib-only Python hook runtime.
+- `scripts/`: Python hook runtime using the official Memind Python client.
 
 The plugin does not modify Memind server configuration. User overrides are read from
 `~/.memind/claude-code.json` only when you create that file.
@@ -229,7 +238,8 @@ The ingestion flow:
 3. Strips previously injected `<memind_memories>` blocks to avoid feedback loops.
 4. Skips tool/event payloads, unsupported roles, and Claude Code interruption placeholders.
 5. Computes stable fingerprints and sends only messages that have not already been submitted.
-6. Builds one caller-owned conversation raw-content payload and submits it to `/open/v1/memory/extract/sync`.
+6. Builds one caller-owned conversation raw-content payload and submits it through
+   `AsyncMemindClient.memory.extract(...)`.
 
 The local retry spool stores the full extraction payload plus the covered message fingerprints. Fingerprints are
 marked submitted only after Memind returns `SUCCESS`; `PARTIAL_SUCCESS` and failures keep the payload available
@@ -288,7 +298,8 @@ Then start a new Claude Code session and say something specific:
 Please remember: the Memind Claude Code smoke test topic is blue-lake-42.
 ```
 
-After Claude Code responds, the `Stop` hook should submit the turn to Memind via `/open/v1/memory/extract/sync`.
+After Claude Code responds, the `Stop` hook should submit the turn to Memind through
+`AsyncMemindClient.memory.extract(...)`.
 No manual commit is needed for the default reliable path.
 
 Finally, verify retrieval:
@@ -401,9 +412,9 @@ curl -fsSL http://127.0.0.1:8366/open/v1/health
 
 ### New memories are not immediately retrieved
 
-The default reliable mode submits transcript batches through `/open/v1/memory/extract/sync`, so a `SUCCESS`
-response means extraction finished for that batch. If retrieval still does not surface the expected memory,
-confirm the same `userId` and `agentId` are used for ingestion and retrieval, then inspect
+The default reliable mode submits transcript batches through `AsyncMemindClient.memory.extract(...)`, so a
+`SUCCESS` response means extraction finished for that batch. If retrieval still does not surface the expected
+memory, confirm the same `userId` and `agentId` are used for ingestion and retrieval, then inspect
 `~/.memind/claude-code.log` with `MEMIND_DEBUG=true`.
 
 ### Duplicate messages appear

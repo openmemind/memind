@@ -9,17 +9,17 @@ sessions. The plugin connects Codex to an already-running Memind server; it does
 
 The integration is intentionally small:
 
-- No Python third-party packages.
+- Uses the official Memind Python client.
 - No Codex marketplace dependency.
 - No overwrite of existing Codex hooks or config.
 - No tool-call ingestion in v0.1.
 
 ## What It Does
 
-- **Retrieval**: `UserPromptSubmit` calls Memind `/open/v1/memory/retrieve` and injects relevant memories into
+- **Retrieval**: `UserPromptSubmit` calls `MemindClient.memory.retrieve(...)` and injects relevant memories into
   the Codex prompt as `<memind_memories>...</memind_memories>`.
 - **Ingestion**: `Stop` reads the Codex transcript, filters user/assistant messages, and submits a caller-owned
-  conversation payload to Memind `/open/v1/memory/extract/sync`.
+  conversation payload through `AsyncMemindClient.memory.extract(...)`.
 - **Retry**: failed ingestion batches are spooled under `~/.memind/codex/retry/` and replayed on the next
   `SessionStart`.
 - **Source tagging**: all requests use `sourceClient = "codex"` by default, so Memind can distinguish Codex
@@ -28,8 +28,17 @@ The integration is intentionally small:
 ## Requirements
 
 - Codex CLI with hook support.
-- Python 3.9+ available as `python3`.
+- Python 3.10+ available as `python3`.
+- The official `memind` Python package installed in the same `python3` environment used by hooks.
 - A running Memind server, usually at `http://127.0.0.1:8366`.
+
+Install the official client before running `install.sh`:
+
+```bash
+python3 -m pip install memind
+```
+
+The official `memind` package installs its runtime dependencies, including `httpx` and `pydantic`.
 
 Check the Memind server before installing:
 
@@ -46,6 +55,9 @@ curl -fsSL http://127.0.0.1:8366/open/v1/health
 ```bash
 bash memind-integrations/codex/install.sh
 ```
+
+The installer validates that `python3` can import the official `memind` package and that the package exposes the
+client APIs used by the hooks. Install or upgrade `memind` before running the installer if validation fails.
 
 Published installs use the same script directly from the repository:
 
@@ -236,7 +248,8 @@ The Stop hook:
 3. Strips previously injected `<memind_memories>` blocks to avoid feedback loops.
 4. Skips tool/event payloads and Codex control context blocks.
 5. Computes stable fingerprints and sends only messages that have not already been submitted.
-6. Builds one caller-owned conversation raw-content payload and submits it to `/open/v1/memory/extract/sync`.
+6. Builds one caller-owned conversation raw-content payload and submits it through
+   `AsyncMemindClient.memory.extract(...)`.
 
 The local retry spool stores the full extraction payload plus the covered message fingerprints. Fingerprints are
 marked submitted only after Memind returns `SUCCESS`; `PARTIAL_SUCCESS` and failures keep the payload available
