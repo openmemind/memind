@@ -324,7 +324,12 @@ and clear their local retry state only when the returned extraction status is `S
 `/open/v1/memory/sync/add-message` and `/open/v1/memory/sync/commit` report immediate server-buffer success or
 failure, but they are not durable replay boundaries because the server owns the buffered conversation state.
 
-The official TypeScript client lives in [`memind-clients/typescript`](./memind-clients/typescript).
+Official API clients:
+
+- TypeScript: [`memind-clients/typescript`](./memind-clients/typescript)
+- Python: [`memind-clients/python`](./memind-clients/python)
+- Java: [`memind-clients/java`](./memind-clients/java)
+- Go: [`github.com/openmemind/memind/memind-clients/go`](./memind-clients/go)
 
 ---
 

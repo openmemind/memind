@@ -1,0 +1,46 @@
+name: Go Client CI
+
+on:
+  push:
+    paths:
+      - 'memind-clients/go/**'
+      - '.github/workflows/go-client.yml'
+  pull_request:
+    paths:
+      - 'memind-clients/go/**'
+      - '.github/workflows/go-client.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version:
+          - '1.25.x'
+          - 'stable'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: false
+
+      - name: Test
+        working-directory: memind-clients/go
+        run: go test ./...
+
+      - name: Race test
+        working-directory: memind-clients/go
+        run: go test -race ./...
+
+      - name: Vet
+        working-directory: memind-clients/go
+        run: go vet ./...
+
+      - name: Format check
+        working-directory: memind-clients/go
+        run: test -z "$(gofmt -l .)"
