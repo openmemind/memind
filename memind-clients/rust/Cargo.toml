@@ -1,0 +1,42 @@
+[package]
+name = "memind"
+version = "0.2.0"
+edition = "2021"
+resolver = "3"
+rust-version = "1.86"
+license = "Apache-2.0"
+description = "Official Rust client for the Memind memory engine API"
+homepage = "https://github.com/openmemind/memind"
+repository = "https://github.com/openmemind/memind"
+readme = "README.md"
+keywords = ["memind", "memory", "ai", "client"]
+categories = ["api-bindings", "web-programming::http-client"]
+include = [
+    "Cargo.toml",
+    "LICENSE",
+    "README.md",
+    "src/**/*.rs",
+    "tests/**/*.rs",
+]
+
+[features]
+default = ["rustls"]
+rustls = ["reqwest/rustls"]
+native-tls = ["reqwest/native-tls"]
+tracing = ["dep:tracing"]
+
+[dependencies]
+fastrand = "2"
+httpdate = "1"
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+time = { version = "0.3", features = ["serde", "serde-well-known", "formatting", "parsing"] }
+tokio = { version = "1", default-features = false, features = ["time"] }
+tracing = { version = "0.1", optional = true }
+url = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+wiremock = "0.6"

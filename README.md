@@ -330,6 +330,7 @@ Official API clients:
 - Python: [`memind-clients/python`](./memind-clients/python)
 - Java: [`memind-clients/java`](./memind-clients/java)
 - Go: [`github.com/openmemind/memind/memind-clients/go`](./memind-clients/go)
+- Rust: [`memind-clients/rust`](./memind-clients/rust)
 
 ---
 
