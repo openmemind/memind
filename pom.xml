@@ -328,32 +328,59 @@
                 <version>${license.plugin.version}</version>
                 <configuration>
                     <header>etc/APACHEV2.txt</header>
+                    <includes>
+                        <!-- JVM sources and checked configuration/resources -->
+                        <include>**/*.java</include>
+                        <include>**/*.xml</include>
+                        <include>**/*.yml</include>
+                        <include>**/*.yaml</include>
+                        <include>**/*.sql</include>
+
+                        <!-- Non-JVM Memind-owned source files -->
+                        <include>**/*.go</include>
+                        <include>**/*.py</include>
+                        <include>**/*.rs</include>
+                        <include>**/*.ts</include>
+                        <include>**/*.tsx</include>
+                        <include>**/*.js</include>
+                        <include>**/*.sh</include>
+                        <include>**/*.css</include>
+                    </includes>
+                    <mapping>
+                        <go>SLASHSTAR_STYLE</go>
+                        <rs>SINGLE_LINE_DOUBLESLASH_STYLE</rs>
+                        <ts>DOUBLESLASH_STYLE</ts>
+                        <tsx>DOUBLESLASH_STYLE</tsx>
+                        <js>DOUBLESLASH_STYLE</js>
+                        <sh>SCRIPT_STYLE</sh>
+                        <css>SLASHSTAR_STYLE</css>
+                        <sql>DOUBLEDASHES_STYLE</sql>
+                    </mapping>
                     <excludes>
                         <exclude>LICENSE</exclude>
                         <exclude>NOTICE</exclude>
                         <exclude>.worktrees/**</exclude>
+                        <exclude>.corepack/**</exclude>
                         <exclude>data/**</exclude>
                         <exclude>etc/**</exclude>
                         <exclude>eval-data/**</exclude>
-                        <exclude>memind-integrations/claude-code/**</exclude>
-                        <exclude>memind-integrations/codex/**</exclude>
-                        <exclude>memind-ui/**</exclude>
                         <exclude>memind-evaluation/data/**</exclude>
-                        <exclude>memind-clients/python/.coverage</exclude>
-                        <exclude>memind-clients/python/.mypy_cache/**</exclude>
-                        <exclude>memind-clients/python/.pytest_cache/**</exclude>
-                        <exclude>memind-clients/python/.ruff_cache/**</exclude>
-                        <exclude>memind-clients/python/.uv-cache/**</exclude>
-                        <exclude>memind-clients/python/.venv/**</exclude>
-                        <exclude>memind-clients/python/build/**</exclude>
-                        <exclude>memind-clients/python/dist/**</exclude>
-                        <exclude>memind-clients/python/src/*.egg-info/**</exclude>
-                        <exclude>memind-clients/python/uv.lock</exclude>
-                        <exclude>memind-clients/python/**/__pycache__/**</exclude>
-                        <exclude>memind-clients/python/**/*.pyc</exclude>
-                        <exclude>memind-clients/typescript/**</exclude>
-                        <exclude>memind-clients/rust/**</exclude>
-                        <exclude>.corepack/**</exclude>
+                        <exclude>memind-ui/src/routeTree.gen.ts</exclude>
+                        <exclude>**/.coverage</exclude>
+                        <exclude>**/.mypy_cache/**</exclude>
+                        <exclude>**/.pytest_cache/**</exclude>
+                        <exclude>**/.ruff_cache/**</exclude>
+                        <exclude>**/.uv-cache/**</exclude>
+                        <exclude>**/.venv/**</exclude>
+                        <exclude>**/build/**</exclude>
+                        <exclude>**/coverage/**</exclude>
+                        <exclude>**/dist/**</exclude>
+                        <exclude>**/node_modules/**</exclude>
+                        <exclude>**/target/**</exclude>
+                        <exclude>**/*.egg-info/**</exclude>
+                        <exclude>**/__pycache__/**</exclude>
+                        <exclude>**/*.pyc</exclude>
+                        <exclude>**/pnpm-lock.yaml</exclude>
                     </excludes>
                 </configuration>
                 <dependencies>

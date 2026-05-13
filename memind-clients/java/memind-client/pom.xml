@@ -27,6 +27,10 @@
     <name>Memind Client</name>
     <description>Official Java Client for Memind API</description>
 
+    <properties>
+        <license.header.path>../../../etc/APACHEV2.txt</license.header.path>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>

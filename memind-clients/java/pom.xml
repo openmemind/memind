@@ -75,6 +75,7 @@
         <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
         <flatten-maven-plugin.version>1.7.3</flatten-maven-plugin.version>
         <central-publishing-maven-plugin.version>0.10.0</central-publishing-maven-plugin.version>
+        <license.plugin.version>4.1</license.plugin.version>
         <jackson.version>2.18.3</jackson.version>
         <slf4j.version>2.0.17</slf4j.version>
         <spring-boot.version>3.4.5</spring-boot.version>
@@ -85,6 +86,7 @@
         <central.autoPublish>false</central.autoPublish>
         <central.skipPublishing>false</central.skipPublishing>
         <central.waitUntil>validated</central.waitUntil>
+        <license.header.path>../../etc/APACHEV2.txt</license.header.path>
         <maven.deploy.skip>true</maven.deploy.skip>
     </properties>
 
@@ -126,6 +128,27 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>com.mycila</groupId>
+                <artifactId>license-maven-plugin</artifactId>
+                <version>${license.plugin.version}</version>
+                <configuration>
+                    <header>${license.header.path}</header>
+                    <includes>
+                        <include>pom.xml</include>
+                        <include>**/*.java</include>
+                        <include>**/*.xml</include>
+                    </includes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <phase>process-sources</phase>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>

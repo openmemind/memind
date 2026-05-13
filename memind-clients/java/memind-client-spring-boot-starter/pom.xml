@@ -27,6 +27,10 @@
     <name>Memind Client Spring Boot Starter</name>
     <description>Spring Boot auto-configuration for Memind Client</description>
 
+    <properties>
+        <license.header.path>../../../etc/APACHEV2.txt</license.header.path>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>com.openmemind.ai</groupId>
