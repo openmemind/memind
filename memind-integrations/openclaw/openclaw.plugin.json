@@ -1,0 +1,137 @@
+{
+  "id": "memind-openclaw",
+  "name": "Memind Memory",
+  "description": "Memind memory backend for OpenClaw. Retrieves relevant memories before prompts and extracts durable text-only conversation memory after successful turns.",
+  "version": "0.1.0",
+  "kind": "memory",
+  "configContracts": {
+    "secretInputs": {
+      "paths": [
+        {
+          "path": "memindApiToken",
+          "expected": "string"
+        }
+      ]
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "memindApiUrl": {
+        "type": "string",
+        "default": "http://127.0.0.1:8366"
+      },
+      "memindApiToken": {
+        "type": ["string", "object"],
+        "sensitive": true
+      },
+      "userId": {
+        "type": ["string", "null"]
+      },
+      "agentId": {
+        "type": "string",
+        "default": "openclaw"
+      },
+      "agentIdMode": {
+        "type": "string",
+        "enum": ["project", "fixed", "session"],
+        "default": "project"
+      },
+      "sourceClient": {
+        "type": "string",
+        "default": "openclaw"
+      },
+      "autoRetrieve": {
+        "type": "boolean",
+        "default": true
+      },
+      "autoIngest": {
+        "type": "boolean",
+        "default": true
+      },
+      "retrieveStrategy": {
+        "type": "string",
+        "enum": ["SIMPLE"],
+        "default": "SIMPLE"
+      },
+      "retrieveMaxEntries": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 8
+      },
+      "retrieveMaxChars": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 6000
+      },
+      "retrieveContextTurns": {
+        "type": "integer",
+        "minimum": 0,
+        "default": 1
+      },
+      "retrievePromptPreamble": {
+        "type": "string"
+      },
+      "recallInjectionPosition": {
+        "type": "string",
+        "enum": ["context", "system-prepend", "system-append"],
+        "default": "context"
+      },
+      "ingestionRoles": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": ["user", "assistant"]
+        },
+        "default": ["user", "assistant"]
+      },
+      "ingestionMaxMessagesPerHook": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 20
+      },
+      "ingestRetrySpool": {
+        "type": "boolean",
+        "default": true
+      },
+      "stateMaxAgeDays": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 14
+      },
+      "ingestRetryMaxFiles": {
+        "type": "integer",
+        "minimum": 0,
+        "default": 20
+      },
+      "ingestRetryMaxAgeDays": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 7
+      },
+      "captureToolCalls": {
+        "type": "boolean",
+        "const": false,
+        "default": false
+      },
+      "captureMedia": {
+        "type": "boolean",
+        "const": false,
+        "default": false
+      },
+      "skipNonInteractiveTriggers": {
+        "type": "boolean",
+        "default": true
+      },
+      "captureSubagents": {
+        "type": "boolean",
+        "default": false
+      },
+      "debug": {
+        "type": "boolean",
+        "default": false
+      }
+    }
+  }
+}
