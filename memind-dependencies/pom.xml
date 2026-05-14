@@ -65,6 +65,7 @@
 
         <reactor-bom.version>2025.0.2</reactor-bom.version>
         <spring-boot.version>4.0.1</spring-boot.version>
+        <springdoc-openapi.version>3.0.3</springdoc-openapi.version>
         <spring-ai.version>2.0.0-M2</spring-ai.version>
         <jackson.version>3.0.3</jackson.version>
         <slf4j.version>2.0.17</slf4j.version>
@@ -134,6 +135,13 @@
                 <version>${spring-ai.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+
+            <!-- Springdoc OpenAPI -->
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-webmvc-api</artifactId>
+                <version>${springdoc-openapi.version}</version>
             </dependency>
 
             <!-- JUnit -->
