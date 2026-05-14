@@ -174,9 +174,34 @@ docker compose up -d --build
 - 服务健康检查：`http://localhost:8366/open/v1/health`
 - Open API 基础路径：`http://localhost:8366/open/v1`
 - Admin API 基础路径：`http://localhost:8366/admin/v1`
+- HTTP MCP 端点：`http://localhost:8366/mcp`
 
 UI 容器会把 `/open/*` 和 `/admin/*` 代理到 `memind-server`，因此浏览器可以把 UI
 当作同源的本地管理控制台使用。
+
+### HTTP MCP Server
+
+`memind-server` 内置了一个无状态 HTTP MCP server，默认路径为 `/mcp`，默认启用。它会把
+Memind 记忆能力暴露给兼容 MCP 的 Agent，并复用同一套运行时、数据库、配置和日志。
+
+Claude Code 可以这样连接本地服务：
+
+```bash
+claude mcp add --transport http memind http://localhost:8366/mcp
+```
+
+当前暴露的 MCP tools：
+
+- `memind_retrieve`：按 `userId`、`agentId` 和自然语言 `query` 检索记忆；`strategy`
+  可选 `SIMPLE` 或 `DEEP`，默认是 `SIMPLE`。
+- `memind_extract_text`：立即从一段独立文本中提取记忆，适合用户粘贴的笔记、文档片段或总结。
+- `memind_add_message`：向 Memind 的待提交对话缓冲区添加一条 `user` 或 `assistant` 消息。
+- `memind_commit`：提交同一个 `userId` 和 `agentId` 下的待处理对话消息。
+
+`memind_extract_text` 适合一次性的文本记忆；`memind_add_message` 加 `memind_commit` 适合对话流式记忆。
+如果要关闭 MCP 端点，在启动 `memind-server` 前设置 `MEMIND_MCP_ENABLED=false`。
+
+不要在没有鉴权网关或等价网络控制的情况下把 `/mcp` 直接暴露到公网。MCP tools 可以读写对应作用域下的记忆。
 
 ### 常用命令
 

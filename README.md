@@ -168,9 +168,39 @@ After the images are built and the containers start:
 - Server health check: `http://localhost:8366/open/v1/health`
 - Open API base path: `http://localhost:8366/open/v1`
 - Admin API base path: `http://localhost:8366/admin/v1`
+- HTTP MCP endpoint: `http://localhost:8366/mcp`
 
 The UI container proxies `/open/*` and `/admin/*` to `memind-server`, so the browser can use
 the UI as a same-origin local admin console.
+
+### HTTP MCP server
+
+`memind-server` includes a stateless HTTP MCP server at `/mcp`, enabled by default. It exposes
+Memind memory tools for MCP-compatible agents and uses the same runtime, database, configuration,
+and logs as the REST APIs.
+
+Claude Code can connect to the local server with:
+
+```bash
+claude mcp add --transport http memind http://localhost:8366/mcp
+```
+
+Available MCP tools:
+
+- `memind_retrieve`: retrieve memory for a `userId` and `agentId` with a natural-language `query`;
+  `strategy` can be `SIMPLE` or `DEEP`, and defaults to `SIMPLE`.
+- `memind_extract_text`: immediately extract memory from standalone text, such as pasted notes,
+  document excerpts, or summaries.
+- `memind_add_message`: add one `user` or `assistant` conversation message to Memind's pending
+  conversation buffer.
+- `memind_commit`: commit pending conversation messages for the same `userId` and `agentId`.
+
+Use `memind_extract_text` for one-off text memory. Use `memind_add_message` followed by
+`memind_commit` for conversation-style memory. To disable the MCP endpoint, set
+`MEMIND_MCP_ENABLED=false` before starting `memind-server`.
+
+Do not expose `/mcp` directly to public networks without an authentication gateway or equivalent
+network controls. MCP tools can read and write scoped memory.
 
 ### Common commands
 

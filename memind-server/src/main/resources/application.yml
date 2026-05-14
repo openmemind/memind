@@ -38,6 +38,23 @@ spring:
     # Switch this to qdrant in the commented example below when enabling Qdrant.
     vectorstore:
       type: simple
+    mcp:
+      server:
+        enabled: ${MEMIND_MCP_ENABLED:true}
+        name: memind-mcp-server
+        version: ${MEMIND_MCP_SERVER_VERSION:0.2.0-SNAPSHOT}
+        type: SYNC
+        protocol: STATELESS
+        request-timeout: ${MEMIND_MCP_REQUEST_TIMEOUT:30s}
+        instructions: "Memind memory tools for AI agents."
+        tool-callback-converter: false
+        annotation-scanner:
+          enabled: true
+        capabilities:
+          tool: true
+          resource: false
+          prompt: false
+          completion: false
     openai:
       base-url: ${OPENAI_BASE_URL:https://openrouter.ai/api}
       api-key: ${OPENAI_API_KEY:}

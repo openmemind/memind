@@ -38,6 +38,8 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -111,9 +113,13 @@ public class ApiExceptionHandler {
                 exception);
     }
 
-    @ExceptionHandler(NoSuchElementException.class)
+    @ExceptionHandler({
+        NoSuchElementException.class,
+        NoHandlerFoundException.class,
+        NoResourceFoundException.class
+    })
     public ResponseEntity<ErrorResult<Void>> handleNotFound(
-            NoSuchElementException exception, HttpServletRequest request) {
+            Exception exception, HttpServletRequest request) {
         return response(
                 HttpStatus.NOT_FOUND,
                 ApiErrorCode.NOT_FOUND,
