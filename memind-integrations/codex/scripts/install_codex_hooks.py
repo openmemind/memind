@@ -22,7 +22,9 @@ from pathlib import Path
 OWNER_MARKER = "memind-integrations/codex"
 OWNER_MARKERS = (OWNER_MARKER, "memind/codex")
 PLACEHOLDER = "${CODEX_PLUGIN_ROOT}"
-CODEX_HOOKS_RE = re.compile(r"^codex_hooks\s*=\s*true(?:\s*(?:#.*)?)?$")
+HOOKS_ENABLED_RE = re.compile(r"^hooks\s*=\s*true(?:\s*(?:#.*)?)?$")
+HOOKS_KEY_RE = re.compile(r"^hooks\s*=.*$")
+CODEX_HOOKS_KEY_RE = re.compile(r"^codex_hooks\s*=.*$")
 
 
 def _default_hooks_path():
@@ -110,12 +112,12 @@ def _load_template(plugin_root):
 
 def _feature_flag_message(config_path):
     config_path = Path(config_path)
-    if config_path.exists() and _codex_hooks_enabled(config_path.read_text()):
+    if config_path.exists() and _hooks_enabled(config_path.read_text()):
         return ""
-    return f"Reminder: enable Codex hooks by adding `[features]` with `codex_hooks = true` to {config_path}."
+    return f"Reminder: enable Codex hooks by adding `[features]` with `hooks = true` to {config_path}."
 
 
-def _codex_hooks_enabled(config_text):
+def _hooks_enabled(config_text):
     in_features = False
     for raw_line in config_text.splitlines():
         line = raw_line.strip()
@@ -124,29 +126,81 @@ def _codex_hooks_enabled(config_text):
         if line.startswith("[") and line.endswith("]"):
             in_features = line == "[features]"
             continue
-        if in_features and CODEX_HOOKS_RE.match(line):
+        if in_features and HOOKS_ENABLED_RE.match(line):
             return True
     return False
 
 
-def _enable_codex_hooks(config_path):
-    config_path = Path(config_path)
-    config_text = config_path.read_text() if config_path.exists() else ""
-    if _codex_hooks_enabled(config_text):
-        return False
+def _line_ending(raw_line):
+    if raw_line.endswith("\r\n"):
+        return "\r\n"
+    if raw_line.endswith("\n"):
+        return "\n"
+    return ""
+
+
+def _ensure_hooks_feature_enabled(config_text):
+    if not config_text:
+        return "[features]\nhooks = true\n", True
 
     lines = config_text.splitlines(keepends=True)
+    features_start = None
+    features_end = len(lines)
     for index, raw_line in enumerate(lines):
-        if raw_line.strip() == "[features]":
-            lines.insert(index + 1, "codex_hooks = true\n")
-            _write_text_atomic(config_path, "".join(lines))
-            return True
+        line = raw_line.strip()
+        if line.startswith("[") and line.endswith("]"):
+            if line == "[features]" and features_start is None:
+                features_start = index
+            elif features_start is not None:
+                features_end = index
+                break
 
-    if not config_text:
-        _write_text_atomic(config_path, "[features]\ncodex_hooks = true\n")
-        return True
-    suffix = "" if config_text.endswith("\n") else "\n"
-    _write_text_atomic(config_path, f"{config_text}{suffix}\n[features]\ncodex_hooks = true\n")
+    if features_start is None:
+        suffix = "" if config_text.endswith("\n") else "\n"
+        return f"{config_text}{suffix}\n[features]\nhooks = true\n", True
+
+    changed = False
+    hooks_written = False
+    body = []
+    for raw_line in lines[features_start + 1 : features_end]:
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            body.append(raw_line)
+            continue
+        if CODEX_HOOKS_KEY_RE.match(line):
+            changed = True
+            continue
+        if HOOKS_KEY_RE.match(line):
+            if hooks_written:
+                changed = True
+                continue
+            hooks_written = True
+            if HOOKS_ENABLED_RE.match(line):
+                body.append(raw_line)
+            else:
+                indent = raw_line[: len(raw_line) - len(raw_line.lstrip())]
+                body.append(f"{indent}hooks = true{_line_ending(raw_line)}")
+                changed = True
+            continue
+        body.append(raw_line)
+
+    if not hooks_written:
+        body.insert(0, "hooks = true\n")
+        changed = True
+
+    if not changed:
+        return config_text, False
+
+    return "".join(lines[: features_start + 1] + body + lines[features_end:]), True
+
+
+def _enable_hooks_feature(config_path):
+    config_path = Path(config_path)
+    config_text = config_path.read_text() if config_path.exists() else ""
+    updated, changed = _ensure_hooks_feature_enabled(config_text)
+    if not changed:
+        return False
+    _write_text_atomic(config_path, updated)
     return True
 
 
@@ -159,7 +213,7 @@ def install_hooks(plugin_root, hooks_path=None, codex_config_path=None, enable_f
         existing["hooks"].setdefault(event, []).extend(groups)
     _write_json_atomic(hooks_path, existing)
     message = f"Installed Memind Codex hooks into {hooks_path}."
-    if enable_feature_flag and _enable_codex_hooks(codex_config_path):
+    if enable_feature_flag and _enable_hooks_feature(codex_config_path):
         return f"{message}\nEnabled Codex hooks feature flag in {codex_config_path}."
     if not enable_feature_flag:
         reminder = _feature_flag_message(codex_config_path)

@@ -118,7 +118,7 @@ if [[ "${DRY_RUN}" == true ]]; then
   else
     echo "Would install Memind Codex files to: ${INSTALL_ROOT}"
     echo "Would merge Memind hook entries into: ${HOOKS_PATH}"
-    echo "Would ensure [features] codex_hooks = true in: ${CONFIG_PATH}"
+    echo "Would ensure [features] hooks = true in: ${CONFIG_PATH}"
   fi
   exit 0
 fi

@@ -105,7 +105,7 @@ The installer writes only these locations by default:
 
 - `~/.memind/codex/`: installed hook scripts, default settings, plugin metadata, and this README.
 - `~/.codex/hooks.json`: Memind hook entries are merged into the existing hooks file.
-- `~/.codex/config.toml`: `[features] codex_hooks = true` is added only when it is missing.
+- `~/.codex/config.toml`: `[features] hooks = true` is added only when it is missing.
 
 The installer does **not** overwrite unrelated Codex hooks or settings. Re-running the installer is idempotent:
 old Memind-owned hook entries are removed before fresh entries are added.
@@ -272,7 +272,7 @@ curl -fsSL http://127.0.0.1:8366/open/v1/health
 
 ```toml
 [features]
-codex_hooks = true
+hooks = true
 ```
 
 3. Confirm `~/.codex/hooks.json` contains Memind commands pointing to `~/.memind/codex/scripts/...`.
@@ -333,7 +333,7 @@ Uninstall removes only Memind hook entries from `~/.codex/hooks.json`. It preser
 - `~/.memind/codex.json`
 - `~/.memind/codex/state/`
 - `~/.memind/codex/retry/`
-- `[features] codex_hooks = true`
+- `[features] hooks = true`
 
 The feature flag is preserved because other Codex hooks may depend on it.
 
@@ -346,7 +346,7 @@ The feature flag is preserved because other Codex hooks may depend on it.
 
 ```toml
 [features]
-codex_hooks = true
+hooks = true
 ```
 
 - Confirm `~/.codex/hooks.json` contains Memind entries pointing to `~/.memind/codex/scripts/...`.
