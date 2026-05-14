@@ -145,6 +145,13 @@ class OpenApiDocumentationTest {
         assertThat(root.path("paths").size()).isEqualTo(37);
         assertThat(countOperations(root.path("paths"))).isGreaterThanOrEqualTo(40);
         assertThat(tagNames(root.path("tags"))).containsExactly("memory", "admin");
+        assertThat(
+                        fieldNames(
+                                root.path("paths")
+                                        .path("/open/v1/memory/async/add-message")
+                                        .path("post")
+                                        .path("x-mint")))
+                .containsExactly("href", "content", "metadata");
         assertThat(root.toString()).doesNotContain("controller", "http://localhost:8366");
     }
 
@@ -183,6 +190,12 @@ class OpenApiDocumentationTest {
         for (JsonNode tag : tags.values()) {
             names.add(tag.path("name").asString());
         }
+        return names;
+    }
+
+    private static java.util.List<String> fieldNames(JsonNode node) {
+        java.util.List<String> names = new java.util.ArrayList<>();
+        names.addAll(node.propertyNames());
         return names;
     }
 

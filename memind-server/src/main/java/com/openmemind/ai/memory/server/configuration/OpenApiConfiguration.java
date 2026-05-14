@@ -18,6 +18,7 @@ import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.PathItem;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.tags.Tag;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -148,17 +149,19 @@ public class OpenApiConfiguration {
         operation.setTags(List.of(tag));
         operation.setSummary(summary);
         operation.setOperationId(operationId(summary));
-        operation.addExtension(
-                "x-mint",
-                Map.of(
-                        "href",
-                        href(tag, group, summary),
-                        "content",
-                        API_PREVIEW_WARNING,
-                        "metadata",
-                        Map.of(
-                                "title", summary,
-                                "sidebarTitle", summary)));
+        operation.addExtension("x-mint", mintExtension(tag, group, summary));
+    }
+
+    private static Map<String, Object> mintExtension(String tag, String group, String summary) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("title", summary);
+        metadata.put("sidebarTitle", summary);
+
+        Map<String, Object> extension = new LinkedHashMap<>();
+        extension.put("href", href(tag, group, summary));
+        extension.put("content", API_PREVIEW_WARNING);
+        extension.put("metadata", metadata);
+        return extension;
     }
 
     private static Tag tag(String name, String description) {
