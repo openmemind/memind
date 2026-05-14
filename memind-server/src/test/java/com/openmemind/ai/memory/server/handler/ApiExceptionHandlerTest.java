@@ -130,6 +130,15 @@ class ApiExceptionHandlerTest {
     }
 
     @Test
+    void missingMvcResourcesReturnNotFoundError() throws Exception {
+        mockMvc.perform(post("/missing-resource").contentType(APPLICATION_JSON).content("{}"))
+                .andExpect(status().isNotFound())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.error.code").value("not_found"))
+                .andExpect(jsonPath("$.traceId").doesNotExist());
+    }
+
+    @Test
     void internalErrorsReturnInternalErrorEnvelope(CapturedOutput output) throws Exception {
         mockMvc.perform(get("/boom/internal").header("X-Request-Id", "rid-2"))
                 .andExpect(status().isInternalServerError())

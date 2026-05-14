@@ -14,6 +14,12 @@
 package com.openmemind.ai.memory.server.mcp;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.http.MediaType.TEXT_EVENT_STREAM;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.openmemind.ai.memory.server.MemindServerApplication;
 import com.openmemind.ai.memory.server.support.NoopRuntimeTestConfiguration;
@@ -33,6 +39,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 
 class MemindMcpApplicationTest {
 
@@ -45,6 +54,7 @@ class MemindMcpApplicationTest {
                         .toAbsolutePath();
 
         @Autowired private ApplicationContext applicationContext;
+        @Autowired private WebApplicationContext webApplicationContext;
 
         @Autowired
         private ObjectProvider<List<McpStatelessServerFeatures.SyncToolSpecification>>
@@ -118,6 +128,38 @@ class MemindMcpApplicationTest {
                             });
         }
 
+        @Test
+        void mcpEndpointListsToolsWhenEnabled() throws Exception {
+            mcpClient()
+                    .perform(
+                            post("/mcp")
+                                    .contentType(APPLICATION_JSON)
+                                    .accept(APPLICATION_JSON, TEXT_EVENT_STREAM)
+                                    .content(
+                                            """
+                                            {
+                                              "jsonrpc": "2.0",
+                                              "id": 1,
+                                              "method": "tools/list",
+                                              "params": {}
+                                            }
+                                            """))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.error").doesNotExist())
+                    .andExpect(
+                            jsonPath("$.result.tools[*].name")
+                                    .value(
+                                            containsInAnyOrder(
+                                                    "memind_add_message",
+                                                    "memind_commit",
+                                                    "memind_extract_text",
+                                                    "memind_retrieve")));
+        }
+
+        private MockMvc mcpClient() {
+            return MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
+        }
+
         private List<McpStatelessServerFeatures.SyncToolSpecification> toolSpecifications() {
             return syncToolSpecifications.stream().flatMap(List::stream).toList();
         }
@@ -136,6 +178,7 @@ class MemindMcpApplicationTest {
                         .toAbsolutePath();
 
         @Autowired private ApplicationContext applicationContext;
+        @Autowired private WebApplicationContext webApplicationContext;
 
         @Autowired
         private ObjectProvider<List<McpStatelessServerFeatures.SyncToolSpecification>>
@@ -161,6 +204,26 @@ class MemindMcpApplicationTest {
             assertThat(applicationContext.getBeanProvider(McpStatelessSyncServer.class).stream())
                     .isEmpty();
             assertThat(syncToolSpecifications.stream()).isEmpty();
+        }
+
+        @Test
+        void mcpEndpointIsUnavailableWhenDisabled() throws Exception {
+            MockMvcBuilders.webAppContextSetup(webApplicationContext)
+                    .build()
+                    .perform(
+                            post("/mcp")
+                                    .contentType(APPLICATION_JSON)
+                                    .accept(APPLICATION_JSON, TEXT_EVENT_STREAM)
+                                    .content(
+                                            """
+                                            {
+                                              "jsonrpc": "2.0",
+                                              "id": 1,
+                                              "method": "tools/list",
+                                              "params": {}
+                                            }
+                                            """))
+                    .andExpect(status().is4xxClientError());
         }
     }
 
