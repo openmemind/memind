@@ -15,7 +15,12 @@
 import { readRecentContext, stripInjectedContext } from './content.js'
 import { formatMemindContext } from './format.js'
 import { isNonInteractiveTrigger } from './identity.js'
-import type { Identity, MemindMemoryClient, MemindOpenClawConfig, OpenClawMessage } from './types.js'
+import type {
+  Identity,
+  MemindMemoryClient,
+  MemindOpenClawConfig,
+  OpenClawMessage,
+} from './types.js'
 
 export type RecallInput = {
   cfg: MemindOpenClawConfig
@@ -26,12 +31,15 @@ export type RecallInput = {
   logger?: { warn(message: string): void; debug(message: string): void }
 }
 
-export async function handleRecall(input: RecallInput): Promise<Record<string, string> | undefined> {
+export async function handleRecall(
+  input: RecallInput,
+): Promise<Record<string, string> | undefined> {
   const { cfg, client, identity, event, ctx, logger } = input
   if (!cfg.autoRetrieve) return undefined
   const trigger = typeof ctx?.trigger === 'string' ? ctx.trigger : undefined
   const sessionKey = typeof ctx?.sessionKey === 'string' ? ctx.sessionKey : undefined
-  if (cfg.skipNonInteractiveTriggers && isNonInteractiveTrigger(trigger, sessionKey)) return undefined
+  if (cfg.skipNonInteractiveTriggers && isNonInteractiveTrigger(trigger, sessionKey))
+    return undefined
 
   const prompt = extractPrompt(event)
   if (!prompt || prompt.length < 5 || isBootstrapPrompt(prompt)) return undefined

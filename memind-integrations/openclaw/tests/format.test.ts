@@ -41,7 +41,9 @@ describe('formatMemindContext', () => {
 
   it('returns empty string when no memories are available', () => {
     const cfg = parseConfig({})
-    expect(formatMemindContext({ insights: [], items: [], rawData: [], evidences: [] }, cfg)).toBe('')
+    expect(formatMemindContext({ insights: [], items: [], rawData: [], evidences: [] }, cfg)).toBe(
+      '',
+    )
   })
 
   it('respects max chars', () => {

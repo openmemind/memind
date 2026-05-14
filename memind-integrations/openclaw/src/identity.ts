@@ -51,7 +51,13 @@ export function isSubagentSession(sessionKey: string | undefined): boolean {
 }
 
 export function sanitizeIdentityPart(value: string): string {
-  const base = value.trim().replace(/\.git$/i, '').split(/[\\/]/).filter(Boolean).pop() ?? ''
+  const base =
+    value
+      .trim()
+      .replace(/\.git$/i, '')
+      .split(/[\\/]/)
+      .filter(Boolean)
+      .pop() ?? ''
   const normalized = base
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, '-')

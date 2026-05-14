@@ -16,7 +16,12 @@ import { RawContent, type RawContentValue } from '@openmemind/memind'
 
 import { extractMessages } from './content.js'
 import { isNonInteractiveTrigger, isSubagentSession } from './identity.js'
-import type { Identity, MemindMemoryClient, MemindOpenClawConfig, OpenClawMessage } from './types.js'
+import type {
+  Identity,
+  MemindMemoryClient,
+  MemindOpenClawConfig,
+  OpenClawMessage,
+} from './types.js'
 
 export type CaptureInput = {
   cfg: MemindOpenClawConfig

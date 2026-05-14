@@ -80,7 +80,14 @@ const plugin = definePluginEntry({
           cwd,
           sessionKey: stringValue(hookCtx.sessionKey),
         })
-        return handleRecall({ cfg, client, identity, event: hookEvent, ctx: hookCtx, logger: api.logger })
+        return handleRecall({
+          cfg,
+          client,
+          identity,
+          event: hookEvent,
+          ctx: hookCtx,
+          logger: api.logger,
+        })
       })
     }
 

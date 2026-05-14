@@ -75,9 +75,9 @@ describe('parseConfig', () => {
 
 describe('shouldRunAutomaticHooks', () => {
   it('runs hooks only when selected in the memory slot or the legacy memoryPluginId field', () => {
-    expect(shouldRunAutomaticHooks('memind-openclaw', { slots: { memory: 'memind-openclaw' } })).toBe(
-      true,
-    )
+    expect(
+      shouldRunAutomaticHooks('memind-openclaw', { slots: { memory: 'memind-openclaw' } }),
+    ).toBe(true)
     expect(shouldRunAutomaticHooks('memind-openclaw', { memoryPluginId: 'memind-openclaw' })).toBe(
       true,
     )

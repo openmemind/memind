@@ -140,7 +140,11 @@ export function parseConfig(value: unknown): MemindOpenClawConfig {
     cfg.skipNonInteractiveTriggers,
     'skipNonInteractiveTriggers',
   )
-  cfg.captureSubagents = booleanValue(raw.captureSubagents, cfg.captureSubagents, 'captureSubagents')
+  cfg.captureSubagents = booleanValue(
+    raw.captureSubagents,
+    cfg.captureSubagents,
+    'captureSubagents',
+  )
   cfg.debug = booleanValue(raw.debug, cfg.debug, 'debug')
 
   return cfg

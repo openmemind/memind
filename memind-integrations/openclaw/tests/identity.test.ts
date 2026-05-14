@@ -43,7 +43,10 @@ describe('resolveIdentity', () => {
   it('adds stable project suffix in project mode', () => {
     const cfg = parseConfig({ userId: 'u1', agentId: 'openclaw' })
     const first = resolveIdentity(cfg, { cwd: '/repo/a', gitRemoteUrl: 'git@github.com:x/y.git' })
-    const second = resolveIdentity(cfg, { cwd: '/different', gitRemoteUrl: 'git@github.com:x/y.git' })
+    const second = resolveIdentity(cfg, {
+      cwd: '/different',
+      gitRemoteUrl: 'git@github.com:x/y.git',
+    })
     expect(first.agentId).toMatch(/^openclaw__y-[a-f0-9]{10}$/)
     expect(second.agentId).toBe(first.agentId)
   })

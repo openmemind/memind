@@ -19,7 +19,12 @@ import { parseConfig } from '../src/config.js'
 import { handleCapture } from '../src/capture.js'
 import type { Identity, MemindMemoryClient } from '../src/types.js'
 
-const identity: Identity = { userId: 'u1', agentId: 'a1', sourceClient: 'openclaw', sessionKey: 's1' }
+const identity: Identity = {
+  userId: 'u1',
+  agentId: 'a1',
+  sourceClient: 'openclaw',
+  sessionKey: 's1',
+}
 
 function successfulExtractResponse(): ExtractMemoryResponse {
   return {
@@ -97,7 +102,10 @@ describe('handleCapture', () => {
         rawContent: expect.objectContaining({
           type: 'conversation',
           messages: [
-            expect.objectContaining({ role: 'USER', content: [{ type: 'text', text: 'new question' }] }),
+            expect.objectContaining({
+              role: 'USER',
+              content: [{ type: 'text', text: 'new question' }],
+            }),
             expect.objectContaining({
               role: 'ASSISTANT',
               content: [{ type: 'text', text: 'new answer' }],

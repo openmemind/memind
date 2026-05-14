@@ -19,7 +19,9 @@ import plugin from '../src/index.js'
 type HookHandler = (...args: unknown[]) => unknown | Promise<unknown>
 type RegisteredService = { start(args: { stateDir?: string }): void; stop(): void }
 type TestApi = ReturnType<typeof api>['api']
-type OptionalPluginConfigApi = Omit<TestApi, 'pluginConfig'> & { pluginConfig?: Record<string, unknown> }
+type OptionalPluginConfigApi = Omit<TestApi, 'pluginConfig'> & {
+  pluginConfig?: Record<string, unknown>
+}
 
 function api(slots: Record<string, string> | undefined = { memory: 'memind-openclaw' }) {
   const handlers: Record<string, HookHandler> = {}
@@ -72,7 +74,9 @@ describe('plugin entry', () => {
     const fixture = api()
     const registerMemoryCapability = vi.fn()
     const apiWithCapability = { ...fixture.api, registerMemoryCapability }
-    plugin.register(apiWithCapability as TestApi & { registerMemoryCapability: typeof registerMemoryCapability })
+    plugin.register(
+      apiWithCapability as TestApi & { registerMemoryCapability: typeof registerMemoryCapability },
+    )
     expect(registerMemoryCapability).toHaveBeenCalledWith(
       expect.objectContaining({
         runtime: expect.objectContaining({ provider: 'memind' }),
