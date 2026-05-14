@@ -109,7 +109,8 @@ class InstallerTest(unittest.TestCase):
             config_text = config_path.read_text()
         self.assertIn("Enabled Codex hooks feature flag", output)
         self.assertIn("[features]", config_text)
-        self.assertIn("codex_hooks = true", config_text)
+        self.assertIn("hooks = true", config_text)
+        self.assertNotIn("codex_hooks", config_text)
 
     def test_install_preserves_existing_config_when_enabling_feature_flag(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -120,18 +121,60 @@ class InstallerTest(unittest.TestCase):
             config_text = config_path.read_text()
         self.assertIn("Enabled Codex hooks feature flag", output)
         self.assertIn('model = "gpt-5.5"', config_text)
-        self.assertIn("[features]\ncodex_hooks = true\nfoo = true", config_text)
+        self.assertIn("[features]\nhooks = true\nfoo = true", config_text)
         self.assertIn('[projects."/tmp/example"]', config_text)
 
     def test_no_feature_flag_change_when_enabled_under_features(self):
         with tempfile.TemporaryDirectory() as tmp:
             hooks_path = Path(tmp) / "hooks.json"
             config_path = Path(tmp) / "config.toml"
-            config_path.write_text("[features]\n  codex_hooks   =   true\n")
+            config_path.write_text("[features]\n  hooks   =   true\n")
             output = install_hooks(ROOT, hooks_path, codex_config_path=config_path)
             config_text = config_path.read_text()
         self.assertNotIn("Enabled Codex hooks feature flag", output)
-        self.assertEqual(config_text, "[features]\n  codex_hooks   =   true\n")
+        self.assertEqual(config_text, "[features]\n  hooks   =   true\n")
+
+    def test_install_migrates_deprecated_feature_flag_under_features(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            hooks_path = Path(tmp) / "hooks.json"
+            config_path = Path(tmp) / "config.toml"
+            config_path.write_text("[features]\n  codex_hooks   =   true\nfoo = true\n")
+            output = install_hooks(ROOT, hooks_path, codex_config_path=config_path)
+            config_text = config_path.read_text()
+        self.assertIn("Enabled Codex hooks feature flag", output)
+        self.assertIn("hooks = true", config_text)
+        self.assertIn("foo = true", config_text)
+        self.assertNotIn("codex_hooks", config_text)
+
+    def test_install_removes_deprecated_feature_flag_when_hooks_already_enabled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            hooks_path = Path(tmp) / "hooks.json"
+            config_path = Path(tmp) / "config.toml"
+            config_path.write_text("[features]\nhooks = true\ncodex_hooks = false\n")
+            output = install_hooks(ROOT, hooks_path, codex_config_path=config_path)
+            config_text = config_path.read_text()
+        self.assertIn("Enabled Codex hooks feature flag", output)
+        self.assertIn("[features]\nhooks = true\n", config_text)
+        self.assertNotIn("codex_hooks", config_text)
+
+    def test_install_enables_hooks_when_existing_value_is_false(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            hooks_path = Path(tmp) / "hooks.json"
+            config_path = Path(tmp) / "config.toml"
+            config_path.write_text("[features]\nhooks = false\n")
+            output = install_hooks(ROOT, hooks_path, codex_config_path=config_path)
+            config_text = config_path.read_text()
+        self.assertIn("Enabled Codex hooks feature flag", output)
+        self.assertEqual(config_text, "[features]\nhooks = true\n")
+
+    def test_install_without_feature_flag_change_prints_current_reminder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            hooks_path = Path(tmp) / "hooks.json"
+            config_path = Path(tmp) / "config.toml"
+            output = install_hooks(ROOT, hooks_path, codex_config_path=config_path, enable_feature_flag=False)
+        self.assertIn("hooks = true", output)
+        self.assertNotIn("codex_hooks", output)
+        self.assertFalse(config_path.exists())
 
     def test_shell_installer_installs_to_overridden_paths_without_home_writes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -165,7 +208,8 @@ class InstallerTest(unittest.TestCase):
             self.assertTrue((install_root / "install.sh").exists())
             self.assertTrue((install_root / "scripts" / "retrieve.py").exists())
             self.assertIn("UserPromptSubmit", hooks["hooks"])
-            self.assertIn("codex_hooks = true", config_text)
+            self.assertIn("hooks = true", config_text)
+            self.assertNotIn("codex_hooks", config_text)
 
     def test_shell_installer_reinstall_and_uninstall_are_owned_entry_safe(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -245,6 +289,8 @@ class InstallerTest(unittest.TestCase):
                 timeout=10,
             )
             self.assertIn("Dry run", result.stdout)
+            self.assertIn("[features] hooks = true", result.stdout)
+            self.assertNotIn("codex_hooks", result.stdout)
             self.assertFalse(install_root.exists())
             self.assertFalse(hooks_path.exists())
             self.assertFalse(config_path.exists())
