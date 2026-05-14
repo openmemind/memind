@@ -1,0 +1,6 @@
+node_modules/
+dist/
+coverage/
+.pack-check/
+*.tsbuildinfo
+*.tgz

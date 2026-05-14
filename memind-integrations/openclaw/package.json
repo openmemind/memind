@@ -1,0 +1,78 @@
+{
+  "name": "@openmemind/memind-openclaw",
+  "version": "0.1.0",
+  "description": "Memind memory backend for OpenClaw",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@10.15.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "openclaw.plugin.json",
+    "LICENSE",
+    "README.md"
+  ],
+  "keywords": [
+    "openclaw",
+    "plugin",
+    "memory",
+    "memind",
+    "long-term-memory"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openmemind/memind.git",
+    "directory": "memind-integrations/openclaw"
+  },
+  "bugs": {
+    "url": "https://github.com/openmemind/memind/issues"
+  },
+  "homepage": "https://github.com/openmemind/memind#readme",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint .",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
+    "pack:check": "pnpm pack --json --pack-destination .pack-check"
+  },
+  "dependencies": {
+    "@openmemind/memind": "^0.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^3.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.4.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^3.0.0"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ],
+    "install": {
+      "npmSpec": "@openmemind/memind-openclaw"
+    }
+  }
+}
