@@ -115,6 +115,15 @@ class OpenApiDocumentationTest {
                         .andExpect(
                                 jsonPath(
                                                 "$.paths['/open/v1/memory/async/add-message']"
+                                                        + ".post.x-mint.content")
+                                        .value(
+                                                "<Warning>The API Reference is under active"
+                                                    + " development. Request and response schemas"
+                                                    + " may change before a stable"
+                                                    + " release.</Warning>"))
+                        .andExpect(
+                                jsonPath(
+                                                "$.paths['/open/v1/memory/async/add-message']"
                                                         + ".post.x-mint.href")
                                         .value("/api-reference/memory/add-message-async"))
                         .andExpect(jsonPath("$.paths['/admin/v1/items']").exists())

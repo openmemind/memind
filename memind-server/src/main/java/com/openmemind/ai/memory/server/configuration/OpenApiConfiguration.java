@@ -31,6 +31,9 @@ public class OpenApiConfiguration {
 
     private static final String TAG_MEMORY = "memory";
     private static final String TAG_ADMIN = "admin";
+    private static final String API_PREVIEW_WARNING =
+            "<Warning>The API Reference is under active development. Request and response schemas"
+                    + " may change before a stable release.</Warning>";
 
     private static final Map<String, String> OPERATION_SUMMARIES =
             Map.ofEntries(
@@ -150,6 +153,8 @@ public class OpenApiConfiguration {
                 Map.of(
                         "href",
                         href(tag, group, summary),
+                        "content",
+                        API_PREVIEW_WARNING,
                         "metadata",
                         Map.of(
                                 "title", summary,
