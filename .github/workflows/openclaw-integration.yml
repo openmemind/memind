@@ -1,0 +1,71 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: OpenClaw Integration CI
+
+on:
+  push:
+    paths:
+      - 'memind-integrations/openclaw/**'
+      - '.github/workflows/openclaw-integration.yml'
+      - '.github/workflows/release-openclaw-integration.yml'
+  pull_request:
+    paths:
+      - 'memind-integrations/openclaw/**'
+      - '.github/workflows/openclaw-integration.yml'
+      - '.github/workflows/release-openclaw-integration.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: memind-integrations/openclaw/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: memind-integrations/openclaw
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        working-directory: memind-integrations/openclaw
+        run: pnpm format:check
+
+      - name: Lint
+        working-directory: memind-integrations/openclaw
+        run: pnpm lint
+
+      - name: Type check
+        working-directory: memind-integrations/openclaw
+        run: pnpm typecheck
+
+      - name: Test with coverage
+        working-directory: memind-integrations/openclaw
+        run: pnpm test:coverage
+
+      - name: Build
+        working-directory: memind-integrations/openclaw
+        run: pnpm build
+
+      - name: Pack check
+        working-directory: memind-integrations/openclaw
+        run: pnpm pack --json --pack-destination .pack-check

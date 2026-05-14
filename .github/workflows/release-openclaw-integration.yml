@@ -1,0 +1,94 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Release OpenClaw Integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (must match package.json)'
+        required: true
+        type: string
+
+jobs:
+  release:
+    name: Build and publish OpenClaw integration
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+          cache-dependency-path: memind-integrations/openclaw/pnpm-lock.yaml
+
+      - name: Validate version input
+        working-directory: memind-integrations/openclaw
+        shell: bash
+        run: |
+          if [ -z "${{ inputs.version }}" ]; then
+            echo "Error: version input is required"
+            exit 1
+          fi
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$PKG_VERSION" != "${{ inputs.version }}" ]; then
+            echo "Error: input version (${{ inputs.version }}) does not match package.json ($PKG_VERSION)"
+            exit 1
+          fi
+          if ! echo "${{ inputs.version }}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Error: release version must be a stable semver version like 0.1.0"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        working-directory: memind-integrations/openclaw
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        working-directory: memind-integrations/openclaw
+        run: pnpm format:check
+
+      - name: Lint
+        working-directory: memind-integrations/openclaw
+        run: pnpm lint
+
+      - name: Type check
+        working-directory: memind-integrations/openclaw
+        run: pnpm typecheck
+
+      - name: Test
+        working-directory: memind-integrations/openclaw
+        run: pnpm test:coverage
+
+      - name: Build
+        working-directory: memind-integrations/openclaw
+        run: pnpm build
+
+      - name: Pack check
+        working-directory: memind-integrations/openclaw
+        run: pnpm pack --json --pack-destination .pack-check
+
+      - name: Publish
+        working-directory: memind-integrations/openclaw
+        run: npm publish --access public --provenance
