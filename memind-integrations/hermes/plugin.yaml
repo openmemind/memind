@@ -1,0 +1,8 @@
+name: memind
+version: 0.1.0
+description: "Persistent long-term memory for Hermes Agent via Memind."
+author: "OpenMemind"
+homepage: "https://github.com/openmemind/memind"
+hooks:
+  - on_pre_compress
+  - on_memory_write

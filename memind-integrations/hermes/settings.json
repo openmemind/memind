@@ -1,0 +1,18 @@
+{
+  "memindApiUrl": "http://127.0.0.1:8366",
+  "memindApiToken": null,
+  "userId": null,
+  "agentId": "hermes",
+  "agentIdMode": "project",
+  "sourceClient": "hermes",
+  "memoryMode": "hybrid",
+  "autoRetrieve": true,
+  "autoIngest": true,
+  "retrieveStrategy": "SIMPLE",
+  "retrieveMaxEntries": 8,
+  "retrieveMaxChars": 6000,
+  "retrieveContextTurns": 1,
+  "retrievePromptPreamble": "Relevant memories from Memind. Use only when directly helpful:",
+  "ingestionRoles": ["user", "assistant"],
+  "debug": false
+}

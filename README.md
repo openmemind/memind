@@ -202,6 +202,14 @@ Use `memind_extract_text` for one-off text memory. Use `memind_add_message` foll
 Do not expose `/mcp` directly to public networks without an authentication gateway or equivalent
 network controls. MCP tools can read and write scoped memory.
 
+### Hermes Agent
+
+Memind also provides a Hermes Agent memory-provider integration under
+`memind-integrations/hermes`. It retrieves relevant Memind context before Hermes turns,
+captures user/assistant turns after responses, and can expose `memind_retrieve` and
+`memind_extract_text` as Hermes-native tools. See
+[`memind-integrations/hermes/README.md`](./memind-integrations/hermes/README.md).
+
 ### Common commands
 
 ```bash
