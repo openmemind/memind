@@ -48,6 +48,7 @@ async def _run_session_start_async(config):
         claimed = None
         try:
             spool = RetrySpool(retry_root())
+            spool.recover_orphaned_claims()
             claimed = spool.claim_next()
             if claimed:
                 payload = spool.load_claimed(claimed)
