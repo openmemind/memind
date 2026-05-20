@@ -13,11 +13,13 @@
 #
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import types
 import unittest
+import time
 from pathlib import Path
 from unittest import mock
 
@@ -315,6 +317,56 @@ class HookTest(unittest.TestCase):
             with SessionStateStore(state_dir).locked("s1") as state:
                 self.assertFalse(state.is_submitted("fp1"))
             self.assertEqual(len(list(retry_dir.glob("*.json"))), 1)
+            client.extract.assert_awaited_once()
+
+    def test_session_start_recovers_orphaned_claims_before_replay(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import session_start
+        from scripts.lib.retry import RetrySpool
+
+        with tempfile.TemporaryDirectory() as tmp:
+            retry_dir = Path(tmp) / "retry"
+            state_dir = Path(tmp) / "state"
+            spool = RetrySpool(retry_dir)
+            original = spool.enqueue(
+                {
+                    "kind": "extract",
+                    "userId": "u",
+                    "agentId": "a",
+                    "sourceClient": "claude-code",
+                    "sessionId": "s1",
+                    "fingerprints": ["fp1"],
+                    "rawContent": {
+                        "type": "conversation",
+                        "messages": [
+                            {"role": "USER", "content": [{"type": "text", "text": "hello"}]}
+                        ],
+                    },
+                }
+            )
+            claimed = original.with_suffix(".claimed")
+            original.replace(claimed)
+            old_time = time.time() - 10 * 60
+            os.utime(claimed, (old_time, old_time))
+            config = {
+                "memindApiUrl": "http://127.0.0.1:8366",
+                "memindApiToken": None,
+                "ingestRetryMaxFiles": 20,
+                "ingestRetryMaxAgeDays": 7,
+                "stateMaxAgeDays": 14,
+                "debug": False,
+            }
+            with mock.patch.object(session_start, "load_config", return_value=config):
+                with mock.patch.object(session_start, "retry_root", return_value=retry_dir):
+                    with mock.patch.object(session_start, "state_root", return_value=state_dir):
+                        with mock.patch.object(session_start, "MemindClient") as client_cls:
+                            client = client_cls.return_value
+                            client.health = mock.AsyncMock(return_value=types.SimpleNamespace(status="UP"))
+                            client.extract = mock.AsyncMock(return_value=types.SimpleNamespace(status="SUCCESS"))
+                            client.add_message = mock.AsyncMock(return_value=None)
+                            client.commit = mock.AsyncMock(return_value=None)
+                            session_start.main()
+            self.assertEqual(list(retry_dir.glob("*.json")), [])
             client.extract.assert_awaited_once()
 
 

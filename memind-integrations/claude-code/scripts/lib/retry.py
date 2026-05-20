@@ -19,6 +19,8 @@ from pathlib import Path
 
 
 class RetrySpool:
+    DEFAULT_CLAIM_STALE_SECONDS = 5 * 60
+
     def __init__(self, root):
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
@@ -39,10 +41,30 @@ class RetrySpool:
             claimed = path.with_suffix(".claimed")
             try:
                 path.replace(claimed)
+                claimed.touch()
                 return claimed
             except OSError:
                 continue
         return None
+
+    def recover_orphaned_claims(self, max_age_seconds=None):
+        cutoff = time.time() - (
+            self.DEFAULT_CLAIM_STALE_SECONDS
+            if max_age_seconds is None
+            else max_age_seconds
+        )
+        recovered = 0
+        for path in sorted(self.root.glob("*.claimed"), key=lambda item: item.stat().st_mtime):
+            try:
+                if path.stat().st_mtime > cutoff:
+                    continue
+                target = path.with_suffix(".json")
+                path.replace(target)
+                target.touch()
+                recovered += 1
+            except OSError:
+                continue
+        return recovered
 
     def load_claimed(self, path):
         return json.loads(Path(path).read_text())

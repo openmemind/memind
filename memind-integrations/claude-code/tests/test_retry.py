@@ -51,6 +51,22 @@ class RetrySpoolTest(unittest.TestCase):
             spool.release(claimed)
             self.assertIsNotNone(spool.claim_next())
 
+    def test_recover_orphaned_claims_restores_dead_claims(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            spool = RetrySpool(Path(tmp))
+            original = spool.enqueue({"kind": "commit", "payload": {"userId": "u"}})
+            claimed = original.with_suffix(".claimed")
+            original.replace(claimed)
+            old_time = time.time() - 10 * 60
+            os.utime(claimed, (old_time, old_time))
+
+            recovered = spool.recover_orphaned_claims()
+
+            self.assertEqual(recovered, 1)
+            self.assertTrue(original.exists())
+            self.assertFalse(claimed.exists())
+            self.assertIsNotNone(spool.claim_next())
+
     def test_cleanup_discards_old_payloads(self):
         with tempfile.TemporaryDirectory() as tmp:
             spool = RetrySpool(Path(tmp))
