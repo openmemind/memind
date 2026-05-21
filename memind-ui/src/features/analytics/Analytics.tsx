@@ -51,8 +51,10 @@ import {
 import {
   MetricCard,
   PageHeader,
+  PageSurface,
   Panel,
   StatusBadge,
+  TableSurface,
   type Tone,
 } from "@/features/shared/ui"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -126,7 +128,7 @@ function traceStatusTone(status: RecentTrace["status"]): Tone {
 
 function RequestHealthChart({ points }: { points: RequestHealthPoint[] }) {
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader>
         <CardTitle>Request Health</CardTitle>
         <CardDescription>
@@ -228,13 +230,15 @@ function LatencyChart({ points }: { points: LatencyPoint[] }) {
 
 function RecentTraces({ traces }: { traces: RecentTrace[] }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Recent Traces</CardTitle>
-        <CardDescription>
-          Latest API calls across open and admin endpoints.
-        </CardDescription>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-base font-semibold">Recent Traces</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Latest API calls across open and admin endpoints.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 rounded-lg bg-muted/35 p-2 sm:flex-row sm:items-center">
           <InputGroup className="h-8 sm:w-72">
             <InputGroupAddon>
               <Search />
@@ -246,8 +250,8 @@ function RecentTraces({ traces }: { traces: RecentTrace[] }) {
             Filter
           </Button>
         </div>
-      </CardHeader>
-      <CardContent>
+      </div>
+      <TableSurface>
         <div className="max-h-[420px] overflow-auto">
           <Table className="min-w-[1120px]">
             <TableHeader>
@@ -291,8 +295,8 @@ function RecentTraces({ traces }: { traces: RecentTrace[] }) {
             </TableBody>
           </Table>
         </div>
-      </CardContent>
-    </Card>
+      </TableSurface>
+    </section>
   )
 }
 
@@ -318,14 +322,14 @@ export function Analytics() {
   const data = analyticsQuery.data
 
   return (
-    <main className="flex min-h-full flex-col px-4 py-10 lg:px-10 lg:py-12">
+    <PageSurface>
       <PageHeader
         action={<TimeRangeToggle />}
         description="Observe runtime health, latency, failures, and memory activity."
         title="Analytics"
       />
 
-      <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+      <section className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
         {data.metrics.map((metric, index) => {
           const Icon =
             metric.tone === "success"
@@ -348,12 +352,12 @@ export function Analytics() {
         })}
       </section>
 
-      <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <section className="mb-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <RequestHealthChart points={data.requestHealth} />
         <LatencyChart points={data.latency} />
       </section>
 
       <RecentTraces traces={data.traces} />
-    </main>
+    </PageSurface>
   )
 }

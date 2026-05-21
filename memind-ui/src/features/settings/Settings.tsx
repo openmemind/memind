@@ -8,12 +8,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Field,
   FieldContent,
@@ -49,7 +44,7 @@ const settingsNavItems = [
 
 function SettingsNav() {
   return (
-    <nav className="hidden w-64 shrink-0 border-r bg-card lg:block">
+    <nav className="hidden w-64 shrink-0 border-r border-border/80 bg-sidebar/80 lg:block">
       <div className="flex flex-col gap-6 p-4">
         <InputGroup className="h-8">
           <InputGroupAddon>
@@ -63,10 +58,10 @@ function SettingsNav() {
             <li key={item.label}>
               <button
                 className={cn(
-                  "flex h-8 w-full items-center justify-between rounded-lg px-3 text-left text-sm transition-colors",
+                  "flex h-8 w-full cursor-pointer items-center justify-between rounded-lg px-3 text-left text-sm transition-colors",
                   item.active
-                    ? "bg-muted font-semibold text-foreground"
-                    : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                    ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
                 )}
                 type="button"
               >
@@ -85,9 +80,11 @@ function SettingsNav() {
 
 function SettingsHeader() {
   return (
-    <div className="mb-10 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+    <div className="mb-6 flex flex-col gap-5 border-b border-border/70 pb-6 md:flex-row md:items-end md:justify-between">
       <div className="max-w-2xl">
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
+          Settings
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Configure memory runtime behavior, model providers, security, and
           system preferences.
@@ -121,8 +118,8 @@ function SectionCard({
 }) {
   return (
     <Card className="gap-0 py-0">
-      <CardHeader className="border-b py-5">
-        <CardTitle className="text-xl">{title}</CardTitle>
+      <CardHeader className="border-b border-border/70 py-5">
+        <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
       <CardContent className="p-6">{children}</CardContent>
     </Card>
@@ -256,12 +253,12 @@ function EmptyStateBehavior({
 
 function DangerZone() {
   return (
-    <section className="pt-10">
+    <section className="pt-4">
       <div className="border-t border-destructive/20 pt-6">
         <h2 className="mb-4 text-xl font-semibold text-destructive">
           Danger Zone
         </h2>
-        <Card className="border-destructive/30 bg-destructive/5 py-0">
+        <Card className="border-destructive/30 bg-destructive/5 py-0 ring-destructive/20">
           <CardContent className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
             <div className="flex items-start gap-3">
               <AlertTriangle className="mt-0.5 text-destructive" />
@@ -308,8 +305,8 @@ export function Settings() {
   return (
     <main className="flex min-h-full overflow-hidden">
       <SettingsNav />
-      <div className="min-w-0 flex-1 overflow-y-auto bg-background">
-        <div className="mx-auto max-w-4xl px-4 py-10 md:px-10">
+      <div className="min-w-0 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
           <SettingsHeader />
 
           <div className="flex flex-col gap-6">
@@ -318,7 +315,7 @@ export function Settings() {
             <DangerZone />
           </div>
 
-          <div className="mt-8 flex items-center justify-end gap-2">
+          <div className="mt-8 flex items-center justify-end gap-2 rounded-lg bg-card/95 p-3 shadow-sm ring-1 ring-border/80">
             <span className="mr-auto hidden items-center gap-2 font-mono text-xs text-muted-foreground md:flex">
               <Circle className="fill-destructive text-destructive" />
               General

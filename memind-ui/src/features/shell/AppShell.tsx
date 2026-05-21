@@ -1,13 +1,12 @@
 import {
   BarChart3,
   Brain,
-  CircleDot,
+  GitBranch,
   KeyRound,
   LayoutDashboard,
   Settings,
 } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import {
   SidebarContent,
   SidebarFooter,
@@ -46,13 +45,17 @@ const navItems = [
 
 function BrandMark() {
   return (
-    <div className="flex items-center gap-3 px-2 py-1">
-      <div className="flex size-9 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
+    <div
+      aria-label="Memind console"
+      className="flex items-center gap-3 rounded-lg px-2 py-1.5"
+      role="img"
+    >
+      <div className="flex size-10 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground ring-1 ring-sidebar-primary/20">
         <Brain />
       </div>
       <div className="min-w-0">
-        <div className="text-sm font-semibold">Memind</div>
-        <div className="text-xs text-muted-foreground">Memory runtime</div>
+        <div className="text-sm font-semibold tracking-tight">Memind</div>
+        <div className="text-xs text-sidebar-foreground/65">Memory runtime</div>
       </div>
     </div>
   )
@@ -68,15 +71,17 @@ export function AppShell({
       contentKey={activePage}
       sidebar={
         <>
-          <SidebarHeader className="gap-6 p-4">
+          <SidebarHeader className="gap-5 px-4 pt-4 pb-3">
             <BrandMark />
           </SidebarHeader>
 
           <SidebarContent>
-            <SidebarGroup>
-              <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+            <SidebarGroup className="px-3">
+              <SidebarGroupLabel className="px-2 font-medium tracking-[0.08em] text-sidebar-foreground/55 uppercase">
+                Workspace
+              </SidebarGroupLabel>
               <SidebarGroupContent>
-                <SidebarMenu>
+                <SidebarMenu className="gap-1">
                   {navItems.map((item) => {
                     const isActive = item.id === activePage
                     const isSwitchable =
@@ -89,6 +94,7 @@ export function AppShell({
                     return (
                       <SidebarMenuItem key={item.id}>
                         <SidebarMenuButton
+                          aria-current={isActive ? "page" : undefined}
                           aria-disabled={!isSwitchable}
                           disabled={!isSwitchable}
                           isActive={isActive}
@@ -99,6 +105,9 @@ export function AppShell({
                           }}
                           type="button"
                           className={cn(
+                            "h-9 cursor-pointer rounded-lg text-[13px] transition-colors",
+                            isActive &&
+                              "bg-sidebar-accent text-sidebar-accent-foreground",
                             !isSwitchable && "cursor-not-allowed opacity-55"
                           )}
                         >
@@ -114,19 +123,18 @@ export function AppShell({
           </SidebarContent>
 
           <SidebarFooter className="p-4">
-            <SidebarSeparator />
-            <div className="flex flex-col gap-2 rounded-lg bg-background/70 p-3 ring-1 ring-sidebar-border">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-xs font-medium">
-                  <CircleDot className="text-primary" />
-                  Local runtime
-                </div>
-                <Badge variant="outline">Live</Badge>
-              </div>
-              <div className="font-mono text-[11px] text-muted-foreground">
-                admin/v1 connected
-              </div>
-            </div>
+            <SidebarSeparator className="mb-2" />
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  aria-label="GitHub"
+                  className="h-9 cursor-pointer rounded-lg text-[13px]"
+                  type="button"
+                >
+                  <GitBranch />
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
           </SidebarFooter>
         </>
       }

@@ -12,8 +12,8 @@ import {
 import { Analytics } from "@/features/analytics/Analytics"
 import { ApiKeys } from "@/features/api-keys/ApiKeys"
 import { Dashboard } from "@/features/dashboard/Dashboard"
-import { MemoryDashboard } from "@/features/memory-dashboard/MemoryDashboard"
 import { Memories } from "@/features/memories/Memories"
+import { MemoryDashboard } from "@/features/memories/memory-dashboard/MemoryDashboard"
 import { Settings } from "@/features/settings/Settings"
 import { AppShell, type AppPage } from "@/features/shell/AppShell"
 
@@ -84,7 +84,17 @@ function MemoryWorkspaceRouteComponent() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   })
-  const activePage = pathname.endsWith("/raw-data") ? "raw-data" : "overview"
+  const activePage = pathname.endsWith("/raw-data")
+    ? "raw-data"
+    : pathname.endsWith("/items")
+      ? "items"
+      : pathname.endsWith("/graph")
+        ? "graph"
+        : pathname.endsWith("/threads")
+          ? "threads"
+          : pathname.endsWith("/insights")
+            ? "insights"
+            : "overview"
 
   return (
     <MemoryDashboard
@@ -104,6 +114,34 @@ function MemoryWorkspaceRouteComponent() {
         if (page === "raw-data") {
           void navigate({
             to: "/memories/$memoryId/raw-data",
+            params: { memoryId },
+          })
+        }
+
+        if (page === "items") {
+          void navigate({
+            to: "/memories/$memoryId/items",
+            params: { memoryId },
+          })
+        }
+
+        if (page === "graph") {
+          void navigate({
+            to: "/memories/$memoryId/graph",
+            params: { memoryId },
+          })
+        }
+
+        if (page === "threads") {
+          void navigate({
+            to: "/memories/$memoryId/threads",
+            params: { memoryId },
+          })
+        }
+
+        if (page === "insights") {
+          void navigate({
+            to: "/memories/$memoryId/insights",
             params: { memoryId },
           })
         }
@@ -172,6 +210,26 @@ const memoryRawDataRoute = createRoute({
   path: "raw-data",
 })
 
+const memoryItemsRoute = createRoute({
+  getParentRoute: () => memoryWorkspaceRoute,
+  path: "items",
+})
+
+const memoryGraphRoute = createRoute({
+  getParentRoute: () => memoryWorkspaceRoute,
+  path: "graph",
+})
+
+const memoryThreadsRoute = createRoute({
+  getParentRoute: () => memoryWorkspaceRoute,
+  path: "threads",
+})
+
+const memoryInsightsRoute = createRoute({
+  getParentRoute: () => memoryWorkspaceRoute,
+  path: "insights",
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   consoleLayoutRoute.addChildren([
@@ -184,6 +242,10 @@ const routeTree = rootRoute.addChildren([
   memoryWorkspaceRoute.addChildren([
     memoryWorkspaceIndexRoute,
     memoryRawDataRoute,
+    memoryItemsRoute,
+    memoryGraphRoute,
+    memoryThreadsRoute,
+    memoryInsightsRoute,
   ]),
 ])
 

@@ -29,8 +29,9 @@ import {
   MetricCard,
   PageHeader,
   PagePagination,
-  Panel,
+  PageSurface,
   StatusBadge,
+  TableSurface,
   type Tone,
 } from "@/features/shared/ui"
 
@@ -73,8 +74,8 @@ function statusLabel(status: MemoryStatus) {
 
 function FilterToolbar() {
   return (
-    <Card className="mb-6">
-      <CardContent>
+    <Card className="mb-5 bg-card/95">
+      <CardContent className="py-3">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
           <InputGroup className="h-9 min-w-0 flex-1">
             <InputGroupAddon>
@@ -226,7 +227,7 @@ function MemoryTable({
   onOpenMemory?: (memoryId: string) => void
 }) {
   return (
-    <Panel contentClassName="px-0">
+    <TableSurface>
       <Table className="min-w-[940px]">
         <TableHeader>
           <TableRow>
@@ -241,16 +242,12 @@ function MemoryTable({
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
-            <MemoryRow
-              key={row.id}
-              onOpenMemory={onOpenMemory}
-              row={row}
-            />
+            <MemoryRow key={row.id} onOpenMemory={onOpenMemory} row={row} />
           ))}
         </TableBody>
       </Table>
       <PagePagination label="Showing 1 to 25 of 2,840 results" />
-    </Panel>
+    </TableSurface>
   )
 }
 
@@ -280,13 +277,13 @@ export function Memories({
   const data = memoriesQuery.data
 
   return (
-    <main className="flex min-h-full flex-col px-4 py-10 lg:px-10 lg:py-12">
+    <PageSurface>
       <PageHeader
         description="Browse, filter, and open memory workspaces."
         title="Memories"
       />
 
-      <section className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+      <section className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {data.summaries.map((summary) => (
           <MetricCard
             key={summary.label}
@@ -300,6 +297,6 @@ export function Memories({
 
       <FilterToolbar />
       <MemoryTable onOpenMemory={onOpenMemory} rows={data.workspaces} />
-    </main>
+    </PageSurface>
   )
 }

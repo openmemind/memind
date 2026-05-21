@@ -23,8 +23,9 @@ import {
 import {
   PageHeader,
   PagePagination,
-  Panel,
+  PageSurface,
   StatusBadge,
+  TableSurface,
   type Tone,
 } from "@/features/shared/ui"
 import { cn } from "@/lib/utils"
@@ -135,7 +136,7 @@ function ApiKeyRow({ apiKey }: { apiKey: ApiKeyRecord }) {
 
 function ApiKeysTable({ keys }: { keys: ApiKeyRecord[] }) {
   return (
-    <Panel contentClassName="px-0">
+    <TableSurface>
       <Table className="min-w-[920px]">
         <TableHeader>
           <TableRow>
@@ -156,7 +157,7 @@ function ApiKeysTable({ keys }: { keys: ApiKeyRecord[] }) {
         </TableBody>
       </Table>
       <PagePagination label="Showing 3 of 12 keys" />
-    </Panel>
+    </TableSurface>
   )
 }
 
@@ -180,7 +181,7 @@ export function ApiKeys() {
   }
 
   return (
-    <main className="px-4 py-10 lg:px-10 lg:py-12">
+    <PageSurface>
       <PageHeader
         action={
           <Button>
@@ -193,6 +194,6 @@ export function ApiKeys() {
       />
 
       <ApiKeysTable keys={apiKeysQuery.data.keys} />
-    </main>
+    </PageSurface>
   )
 }

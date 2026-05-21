@@ -1,11 +1,5 @@
 import { AlertTriangle, CheckCircle2, Filter, Info, Search } from "lucide-react"
-import {
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-} from "recharts"
+import { Line, LineChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -34,6 +28,8 @@ import {
   MetricCard,
   PageHeader,
   PagePagination,
+  PageSurface,
+  TableSurface,
   type Tone,
 } from "@/features/shared/ui"
 
@@ -50,11 +46,7 @@ const metricTone = (tone: MetricTone): Tone => tone
 
 function TimeRangeToggle() {
   return (
-    <ToggleGroup
-      defaultValue={["24h"]}
-      spacing={0}
-      variant="outline"
-    >
+    <ToggleGroup defaultValue={["24h"]} spacing={0} variant="outline">
       <ToggleGroupItem value="24h">24h</ToggleGroupItem>
       <ToggleGroupItem value="7d">7d</ToggleGroupItem>
       <ToggleGroupItem value="30d">30d</ToggleGroupItem>
@@ -64,7 +56,7 @@ function TimeRangeToggle() {
 
 function DashboardSearch() {
   return (
-    <div className="mb-6">
+    <div className="mb-5 rounded-lg bg-card/95 p-2 shadow-sm ring-1 ring-border/80">
       <InputGroup className="h-12">
         <InputGroupAddon>
           <Search />
@@ -92,7 +84,7 @@ function DashboardMetricCard({ metric }: { metric: DashboardMetric }) {
 
 function RequestActivityChart({ points }: { points: ActivityPoint[] }) {
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader>
         <CardTitle>Request Activity</CardTitle>
         <CardAction>
@@ -145,7 +137,7 @@ function RequestActivityChart({ points }: { points: ActivityPoint[] }) {
 
 function AlertsSummary({ alerts }: { alerts: AlertSummaryItem[] }) {
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader>
         <CardTitle>Alerts Summary</CardTitle>
       </CardHeader>
@@ -190,17 +182,15 @@ function AlertIcon({ alert }: { alert: MemoryActivity["alert"] }) {
 
 function RecentlyAddedMemories({ rows }: { rows: MemoryActivity[] }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Recently Added Memories</CardTitle>
-        <CardAction>
-          <Button variant="outline">
-            <Filter data-icon="inline-start" />
-            Filter
-          </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent>
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-base font-semibold">Recently Added Memories</h2>
+        <Button className="w-fit" variant="outline">
+          <Filter data-icon="inline-start" />
+          Filter
+        </Button>
+      </div>
+      <TableSurface>
         <Table className="min-w-[960px]">
           <TableHeader>
             <TableRow>
@@ -240,8 +230,8 @@ function RecentlyAddedMemories({ rows }: { rows: MemoryActivity[] }) {
           </TableBody>
         </Table>
         <PagePagination label="Showing 4 of 1,284 memories" />
-      </CardContent>
-    </Card>
+      </TableSurface>
+    </section>
   )
 }
 
@@ -267,7 +257,7 @@ export function Dashboard() {
   const data = dashboardQuery.data
 
   return (
-    <main className="px-4 py-10 lg:px-10 lg:py-12">
+    <PageSurface>
       <PageHeader
         action={<TimeRangeToggle />}
         description="Track memory growth, requests, alerts, and recent activity."
@@ -276,13 +266,13 @@ export function Dashboard() {
 
       <DashboardSearch />
 
-      <section className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-5">
+      <section className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         {data.metrics.map((metric) => (
           <DashboardMetricCard key={metric.label} metric={metric} />
         ))}
       </section>
 
-      <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
+      <section className="mb-5 grid grid-cols-1 gap-5 xl:grid-cols-3">
         <div className="xl:col-span-2">
           <RequestActivityChart points={data.activity} />
         </div>
@@ -290,6 +280,6 @@ export function Dashboard() {
       </section>
 
       <RecentlyAddedMemories rows={data.recentActivity} />
-    </main>
+    </PageSurface>
   )
 }
