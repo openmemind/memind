@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import {
-  act,
   fireEvent,
   render,
   screen,
@@ -9,6 +8,431 @@ import {
 } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { vi } from "vitest"
+
+const apiFixtures = vi.hoisted(() => {
+  function page<T>(items: T[], totalItems = items.length) {
+    return {
+      items,
+      page: {
+        hasNext: false,
+        hasPrevious: false,
+        page: 1,
+        pageSize: 20,
+        totalItems,
+        totalPages: Math.max(1, Math.ceil(totalItems / 20)),
+      },
+    }
+  }
+
+  const dashboard = {
+    activity: {
+      days: 7,
+      insightsCreated: [{ count: 12, date: "2026-05-20" }],
+      itemsCreated: [{ count: 48, date: "2026-05-20" }],
+      rawDataCreated: [{ count: 124, date: "2026-05-20" }],
+    },
+    backlog: {
+      conversationPending: 3,
+      graphBatchRepairRequired: 1,
+      insightUnbuilt: 12,
+      insightUngrouped: 0,
+      threadOutboxFailed: 0,
+      threadOutboxPending: 18,
+    },
+    breakdown: {
+      graphLinkTypes: [{ count: 8103, name: "semantic" }],
+      insightTypes: [{ count: 124, name: "pattern" }],
+      itemTypes: [
+        { count: 2800, name: "FACT" },
+        { count: 612, name: "FORESIGHT" },
+      ],
+      rawDataTypes: [
+        { count: 2952, name: "conversation" },
+        { count: 844, name: "document" },
+        { count: 422, name: "audio" },
+      ],
+      sourceClients: [{ count: 4218, name: "slack" }],
+    },
+    healthSignals: {
+      graphEnabled: true,
+      retrievalGraphAssistEnabled: true,
+      threadProjectionStates: [{ count: 18, state: "COMMITTED" }],
+    },
+    totals: {
+      graphEntities: 1284,
+      insights: 124,
+      itemLinks: 8103,
+      items: 3412,
+      memoryThreads: 18,
+      rawData: 4218,
+    },
+  }
+  const dashboardRecentMemories = [
+    {
+      agentId: "Agent-L4-Prime",
+      alert: "healthy",
+      createdAt: "2026-05-20T08:00:00Z",
+      memoryId: "MEM-8429-XQ",
+      requests: 4,
+      updatedAt: "2026-05-21T08:00:00Z",
+      userId: "u_alex_chen",
+    },
+  ]
+
+  const rawData = [
+    {
+      caption: "User inquired about API rate limits for the Nexus endpoint...",
+      captionVectorId: "vec_8213-90",
+      createdAt: "2026-05-20T14:30:00Z",
+      metadata: {
+        source: "slack_integration",
+        tags: ["critical", "api-errors"],
+        vector_id: "vec_8213-90",
+      },
+      rawDataId: "rd_7a2b9c1d-84e1-4f02-9844-01938ae2",
+      segment: {
+        confidence: 0.992,
+        end: 1709214015,
+        language: "en-US",
+        speaker_id: "user_491",
+        start: 1709214000,
+        tokens: 42,
+      },
+      sourceClient: "Slack (Prod)",
+      type: "conversation",
+    },
+    {
+      caption: "Architecture schema for distributed memory nodes v2.4...",
+      captionVectorId: "vec_9241-12",
+      createdAt: "2026-05-20T14:16:00Z",
+      metadata: { source: "drive_document" },
+      rawDataId: "rd_8b1f0a62-83bd-44aa-8f89-13fc77b1e296",
+      segment: { page: 12, tokens: 186 },
+      sourceClient: "G-Drive",
+      type: "document",
+    },
+    {
+      caption: "Meeting transcript from Sync Call #42 regarding Q3 metrics...",
+      captionVectorId: "vec_3912-71",
+      createdAt: "2026-05-20T13:32:00Z",
+      metadata: { source: "zoom_transcript" },
+      rawDataId: "rd_4c9ae720-1a37-4d49-9b54-cccb9b5a9010",
+      segment: { speaker_count: 5, tokens: 512 },
+      sourceClient: "Zoom",
+      type: "audio",
+    },
+    {
+      caption: "get_weather called for coordinates 34.0522 N...",
+      captionVectorId: "vec_1880-44",
+      createdAt: "2026-05-20T12:30:00Z",
+      metadata: { source: "agent_tool_call" },
+      rawDataId: "rd_2e4fa0c7-54f9-4a4b-a2a4-d26a14b02f13",
+      segment: { result: "cached", tool: "get_weather" },
+      sourceClient: "Agent-API",
+      type: "tool",
+    },
+  ]
+
+  const items = [
+    {
+      category: "behavior",
+      content: "User prefers dark mode for all dashboard interfaces.",
+      contentHash: "h_9f2e...88a2",
+      createdAt: "2026-05-20T14:30:05Z",
+      itemId: 293712,
+      metadata: {
+        confidence: 0.98,
+        entities: ["user", "dark mode"],
+      },
+      observedAt: "2026-05-20T14:30:05Z",
+      rawDataId: "rd_7a2b9c1d-84e1-4f02-9844-01938ae2",
+      rawDataType: "conversation",
+      scope: "USER",
+      sourceClient: "slack_integration",
+      type: "FACT",
+      vectorId: "vec_8213_f9a1_223b_091c",
+    },
+    {
+      category: "behavior",
+      content: "User frequently analyzes Q3 revenue spikes via SQL workbench.",
+      contentHash: "h_0a44...31bd",
+      createdAt: "2026-05-20T14:17:21Z",
+      itemId: 512611,
+      metadata: { confidence: 0.94 },
+      observedAt: "2026-05-20T14:17:21Z",
+      rawDataId: "rd_8b1f0a62-83bd-44aa-8f89-13fc77b1e296",
+      rawDataType: "document",
+      scope: "USER",
+      sourceClient: "drive_document",
+      type: "FACT",
+      vectorId: "vec_9241_a031_551d_0ac2",
+    },
+    {
+      category: "directive",
+      content:
+        "Agent should prioritize latency over token efficiency for mobile clients.",
+      contentHash: "h_8c92...124e",
+      createdAt: "2026-05-20T13:32:44Z",
+      itemId: 840409,
+      metadata: { confidence: 0.91 },
+      observedAt: "2026-05-20T13:32:44Z",
+      rawDataId: "rd_4c9ae720-1a37-4d49-9b54-cccb9b5a9010",
+      rawDataType: "audio",
+      scope: "AGENT",
+      sourceClient: "zoom_transcript",
+      type: "FORESIGHT",
+      vectorId: "vec_3912_b89d_224a_77c0",
+    },
+  ]
+
+  const threads = [
+    {
+      displayLabel: "Career transition toward backend architecture",
+      eventCount: 3,
+      headline:
+        "User repeatedly discusses Java backend leadership and distributed systems.",
+      lastEventAt: "2026-05-20T14:22:00Z",
+      lifecycleStatus: "ACTIVE",
+      memberCount: 18,
+      snapshotJson: {
+        latestUpdate:
+          "The user has shifted focus from full-stack engineering to backend systems.",
+      },
+      threadKey: "thr_k9x_02931",
+      threadType: "career",
+      updatedAt: "2026-05-20T14:22:00Z",
+    },
+    {
+      displayLabel: "Health and Fitness Goals 2024",
+      eventCount: 3,
+      headline:
+        "Monitoring consistency in morning workouts and dietary preferences.",
+      lastEventAt: "2026-05-20T08:10:00Z",
+      lifecycleStatus: "ACTIVE",
+      memberCount: 8,
+      snapshotJson: {
+        latestUpdate:
+          "The user is tracking consistency across morning workouts.",
+      },
+      threadKey: "thr_health_2218",
+      threadType: "goal",
+      updatedAt: "2026-05-20T08:10:00Z",
+    },
+    {
+      displayLabel: "Home Renovation Logistics",
+      eventCount: 3,
+      headline:
+        "Tracking contractor quotes and interior design mood boards for kitchen.",
+      lastEventAt: "2026-05-19T16:05:00Z",
+      lifecycleStatus: "DORMANT",
+      memberCount: 24,
+      snapshotJson: {
+        latestUpdate:
+          "The renovation thread groups contractor quotes and kitchen layout decisions.",
+      },
+      threadKey: "thr_home_8031",
+      threadType: "home",
+      updatedAt: "2026-05-19T16:05:00Z",
+    },
+  ]
+
+  const insights = [
+    {
+      categories: ["Optimization", "Frontend", "Critical"],
+      childInsightIds: [118, 442],
+      content:
+        "Comprehensive synthesis of infrastructure constraints and growth projection modeling.",
+      groupName: "Technical Debt",
+      insightId: 1,
+      name: "Platform Scalability Thesis",
+      points: [
+        {
+          content:
+            "Rendering latency spikes observed during high-frequency updates.",
+          type: "SUMMARY",
+        },
+      ],
+      scope: "USER",
+      tier: "ROOT",
+      type: "Strategic",
+    },
+    {
+      categories: ["Architecture"],
+      childInsightIds: [104, 102],
+      content: "Summarizing database and networking latency issues.",
+      insightId: 118,
+      name: "Architecture Bottlenecks",
+      points: [{ content: "Database latency is recurring.", type: "SUMMARY" }],
+      scope: "USER",
+      tier: "BRANCH",
+      type: "Architecture",
+    },
+    {
+      categories: ["Optimization", "Frontend", "Critical"],
+      childInsightIds: [331],
+      content: "Analysis of rendering cycles and memory management.",
+      insightId: 442,
+      name: "Frontend Performance",
+      points: [
+        {
+          content: "Memory footprint increases linearly with node count.",
+          type: "SUMMARY",
+        },
+      ],
+      scope: "USER",
+      tier: "BRANCH",
+      type: "Frontend",
+    },
+  ]
+
+  return {
+    alertsSummary: {
+      critical: 0,
+      items: [
+        { memoryId: "Graph repair required", time: "1" },
+        { memoryId: "Unbuilt insights", time: "12" },
+      ],
+      warning: 31,
+    },
+    dashboard,
+    dashboardRecentMemories,
+    graphBatches: page([
+      {
+        errorMessage: "Schema mismatch",
+        extractionBatchId: "BATCH_EXT_9921",
+        id: 1,
+        state: "repair_required",
+        updatedAt: "2026-05-20T14:22:11Z",
+      },
+    ]),
+    graphEntities: page([
+      {
+        displayName: "Elon Musk",
+        entityKey: "person:elon-musk",
+        entityType: "PERSON",
+        id: 1,
+        metadata: { confidence: 0.982 },
+      },
+      {
+        displayName: "SpaceX",
+        entityKey: "org:spacex",
+        entityType: "ORGANIZATION",
+        id: 2,
+        metadata: { confidence: 0.972 },
+      },
+    ]),
+    graphSummary: {
+      aliasCount: 3492,
+      cooccurrenceCount: 542,
+      entityCount: 1284,
+      entityCountByType: [{ count: 1, name: "PERSON" }],
+      graphBatchCountByState: [{ count: 7, name: "repair_required" }],
+      itemLinkCount: 8103,
+      itemLinkCountByType: [{ count: 8103, name: "semantic" }],
+      mentionCount: 142,
+    },
+    insights: page(insights, 3),
+    items: page(items, 3412),
+    memoryOptions: {
+      config: {
+        "extraction.common": [
+          {
+            description: "Maximum extraction timeout",
+            key: "extraction.common.timeout",
+            type: "duration",
+            value: "PT30S",
+          },
+        ],
+        "extraction.item": [
+          {
+            description: "Enable item graph extraction",
+            key: "extraction.item.graph.enabled",
+            type: "boolean",
+            value: true,
+          },
+        ],
+        "retrieval.simple": [
+          {
+            description: "Enable graph-assisted retrieval",
+            key: "retrieval.simple.graphAssist.enabled",
+            type: "boolean",
+            value: true,
+          },
+        ],
+        memoryThread: [
+          {
+            description: "Enable memory thread projection",
+            key: "memoryThread.projection.enabled",
+            type: "boolean",
+            value: true,
+          },
+        ],
+      },
+      version: 3,
+    },
+    uiPreferences: {
+      autoHideEmptyCollections: false,
+      defaultMemoryView: "table",
+      defaultTimeRange: "7d",
+      showOnboardingTips: true,
+      theme: "system",
+    },
+    memoriesPage: {
+      items: [
+        {
+          agentId: "Agent-L4-Prime",
+          alerts: { critical: 0, warning: 0 },
+          createdAt: "May 18, 2026",
+          id: "MEM-8429-XQ",
+          insights: 12,
+          items: 429,
+          lastActivity: "2m ago",
+          name: "Customer-Core-01",
+          rawData: 1200,
+          requests: 1200,
+          status: "active",
+          userId: "u_alex_chen",
+        },
+        {
+          agentId: "Agent-Zeta",
+          alerts: { critical: 1, warning: 2 },
+          createdAt: "May 17, 2026",
+          id: "MEM-3310-ZZ",
+          insights: 2,
+          items: 15,
+          lastActivity: "1h ago",
+          name: "Support-Context-B",
+          rawData: 892,
+          requests: 892,
+          status: "error",
+          userId: "u_sarah_j",
+        },
+      ],
+      page: {
+        hasNext: false,
+        hasPrevious: false,
+        page: 1,
+        pageSize: 25,
+        totalItems: 2,
+        totalPages: 1,
+      },
+    },
+    rawData: page(rawData, 4218),
+    threadStatus: {
+      failedCount: 0,
+      materializationPolicyVersion: "mi_8f2x...k82",
+      pendingCount: 0,
+      projectionState: "committed",
+      rebuildInProgress: false,
+      updatedAt: "2026-05-21T00:00:00Z",
+    },
+    threads: page(threads, 18),
+  }
+})
+
+vi.mock("./features/memories/memories-api", () => ({
+  fetchMemoriesPage: vi.fn(async () => apiFixtures.memoriesPage),
+}))
 
 import App from "./App"
 
@@ -32,20 +456,104 @@ function renderApp() {
   )
 }
 
+function jsonResponse(data: unknown) {
+  return Promise.resolve(
+    new Response(JSON.stringify({ data }), {
+      headers: { "Content-Type": "application/json" },
+      status: 200,
+    })
+  )
+}
+
+function routeFixture(url: string) {
+  const parsed = new URL(url, "http://localhost")
+  const path = parsed.pathname
+
+  if (path === "/admin/v1/dashboard") {
+    return apiFixtures.dashboard
+  }
+
+  if (path === "/admin/v1/alerts/summary") {
+    return apiFixtures.alertsSummary
+  }
+
+  if (path === "/admin/v1/dashboard/recent-memories") {
+    return apiFixtures.dashboardRecentMemories
+  }
+
+  if (path === "/admin/v1/memories") {
+    return apiFixtures.memoriesPage
+  }
+
+  if (path === "/admin/v1/raw-data") {
+    return apiFixtures.rawData
+  }
+
+  if (path === "/admin/v1/items") {
+    return apiFixtures.items
+  }
+
+  if (path === "/admin/v1/item-graph/summary") {
+    return apiFixtures.graphSummary
+  }
+
+  if (path === "/admin/v1/item-graph/entities") {
+    return apiFixtures.graphEntities
+  }
+
+  if (path === "/admin/v1/item-graph/batches") {
+    return apiFixtures.graphBatches
+  }
+
+  if (path === "/admin/v1/memory-threads") {
+    return apiFixtures.threads
+  }
+
+  if (path === "/admin/v1/memory-threads/status") {
+    return apiFixtures.threadStatus
+  }
+
+  if (path === "/admin/v1/insights") {
+    return apiFixtures.insights
+  }
+
+  if (path === "/admin/v1/config/memory-options") {
+    return apiFixtures.memoryOptions
+  }
+
+  if (path === "/admin/v1/settings/ui-preferences") {
+    return apiFixtures.uiPreferences
+  }
+
+  throw new Error(`Unhandled API fixture: ${path}`)
+}
+
 describe("Dashboard", () => {
   beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        jsonResponse(routeFixture(String(input)))
+      )
+    )
     window.history.pushState({}, "", "/dashboard")
   })
 
   afterEach(() => {
+    vi.unstubAllGlobals()
     delete (document as DocumentWithViewTransition).startViewTransition
   })
 
-  it("renders the template dashboard sections", async () => {
+  it("renders the dashboard from the template structure", async () => {
     renderApp()
 
     expect(
-      await screen.findByRole("heading", { name: "Dashboard" })
+      await screen.findByRole("heading", { name: "Overview" })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        "Track memory growth, requests, alerts, and recent activity."
+      )
     ).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "24h" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "7d" })).toBeInTheDocument()
@@ -56,6 +564,78 @@ describe("Dashboard", () => {
     expect(screen.getByText("Request Activity")).toBeInTheDocument()
     expect(screen.getByText("Alerts Summary")).toBeInTheDocument()
     expect(screen.getByText("Recently Added Memories")).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Filter" })
+    ).not.toBeInTheDocument()
+    const metricCards = screen.getAllByTestId("dashboard-metric-card")
+    expect(metricCards).toHaveLength(3)
+    expect(within(metricCards[0]).getByText("memories")).toBeInTheDocument()
+    expect(within(metricCards[0]).getByText("2")).toBeInTheDocument()
+    expect(
+      within(metricCards[1]).getByText("req count extract")
+    ).toBeInTheDocument()
+    expect(within(metricCards[1]).getByText("3,412")).toBeInTheDocument()
+    expect(within(metricCards[2]).getByText("req count")).toBeInTheDocument()
+    expect(within(metricCards[2]).getByText("4,218")).toBeInTheDocument()
+    expect(screen.queryByText("Raw Data")).not.toBeInTheDocument()
+    expect(screen.queryByText("Memory Items")).not.toBeInTheDocument()
+    expect(screen.queryByText("Insights")).not.toBeInTheDocument()
+    expect(screen.queryByText("Graph Entities")).not.toBeInTheDocument()
+    expect(screen.queryByText("Backlog")).not.toBeInTheDocument()
+    expect(screen.queryByText("Total Memories")).not.toBeInTheDocument()
+    expect(screen.queryByText("Total Requests")).not.toBeInTheDocument()
+    expect(screen.queryByText("Failed Requests")).not.toBeInTheDocument()
+    expect(screen.queryByText("Active Alerts")).not.toBeInTheDocument()
+    expect(screen.queryByText("New Memories")).not.toBeInTheDocument()
+    expect(screen.getAllByText("Critical").length).toBeGreaterThan(0)
+    expect(screen.getByText("Warning")).toBeInTheDocument()
+    const table = screen.getByRole("table")
+    expect(within(table).getAllByRole("row")).toHaveLength(2)
+    expect(within(table).getByText("MEM-8429-XQ")).toBeInTheDocument()
+    expect(within(table).getByText("Agent-L4-Prime")).toBeInTheDocument()
+    expect(screen.getByText("Showing 1 recent memories")).toBeInTheDocument()
+  })
+
+  it("renders request activity through the chart component", async () => {
+    renderApp()
+
+    expect(await screen.findByText("Request Activity")).toBeInTheDocument()
+
+    const panel = screen.getByTestId("request-activity-panel")
+    expect(within(panel).getByText("7-day flow")).toBeInTheDocument()
+    expect(within(panel).getAllByText("req count").length).toBeGreaterThan(0)
+    expect(
+      within(panel).getAllByText("req count extract").length
+    ).toBeGreaterThan(0)
+    expect(within(panel).getByText("insights")).toBeInTheDocument()
+    expect(within(panel).queryByText("Failed")).not.toBeInTheDocument()
+    expect(
+      within(panel).queryByText("Successful")
+    ).not.toBeInTheDocument()
+
+    const chart = screen.getByTestId("request-activity-chart")
+    expect(chart).toHaveAttribute("data-slot", "chart")
+    expect(chart).toHaveClass("h-56")
+    expect(
+      screen.queryByLabelText("Request activity trend")
+    ).not.toBeInTheDocument()
+  })
+
+  it("opens a recent memory workspace from the dashboard table", async () => {
+    const user = userEvent.setup()
+    renderApp()
+
+    expect(
+      await screen.findByText("Recently Added Memories")
+    ).toBeInTheDocument()
+
+    const recentTable = screen.getByRole("table")
+    await user.click(within(recentTable).getByRole("button", { name: "Open" }))
+
+    expect(
+      await screen.findByRole("heading", { name: "Memory Overview" })
+    ).toBeInTheDocument()
+    expect(window.location.pathname).toBe("/memories/MEM-8429-XQ")
   })
 
   it("renders the calm console shell polish", async () => {
@@ -66,7 +646,7 @@ describe("Dashboard", () => {
       "aria-current",
       "page"
     )
-    expect(screen.getByRole("button", { name: "GitHub" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Memories" })).toBeInTheDocument()
     expect(screen.queryByText("Runtime healthy")).not.toBeInTheDocument()
     expect(screen.queryByText("Local runtime")).not.toBeInTheDocument()
     expect(screen.getByTestId("console-content-surface")).toBeInTheDocument()
@@ -84,8 +664,22 @@ describe("Dashboard", () => {
     expect(
       screen.getByText("Browse, filter, and open memory workspaces.")
     ).toBeInTheDocument()
-    expect(screen.getByText("Total Memories")).toBeInTheDocument()
-    expect(screen.getByText("Customer-Core-01")).toBeInTheDocument()
+    const table = screen.getByRole("table")
+    expect(within(table).getByText("ID")).toBeInTheDocument()
+    expect(within(table).getByText("User / Agent")).toBeInTheDocument()
+    expect(within(table).getByText("Status")).toBeInTheDocument()
+    expect(within(table).getByText("Items")).toBeInTheDocument()
+    expect(within(table).getByText("Insight")).toBeInTheDocument()
+    expect(within(table).getByText("Raw Data")).toBeInTheDocument()
+    expect(within(table).getByText("Activity")).toBeInTheDocument()
+    expect(within(table).getByText("MEM-8429-XQ")).toBeInTheDocument()
+    expect(within(table).getByText("u_alex_chen")).toBeInTheDocument()
+    expect(within(table).getByText("Agent-L4-Prime")).toBeInTheDocument()
+    expect(within(table).getByText("429")).toBeInTheDocument()
+    expect(within(table).getByText("1,200")).toBeInTheDocument()
+    expect(
+      within(table).queryByText("Customer-Core-01")
+    ).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Sort" })).toBeInTheDocument()
     expect(screen.getAllByRole("combobox")).toHaveLength(3)
     expect(window.location.pathname).toBe("/memories")
@@ -109,13 +703,13 @@ describe("Dashboard", () => {
     expect(screen.queryByText("Identity Context")).not.toBeInTheDocument()
     expect(screen.queryByText("ID: mem_8f2a9c1d")).not.toBeInTheDocument()
     expect(screen.queryByText("Agent: nexus-v1")).not.toBeInTheDocument()
-    expect(screen.getAllByText("mem_8f2a9c1d").length).toBeGreaterThan(0)
-    expect(screen.getByText("nexus-v1")).toBeInTheDocument()
+    expect(screen.getAllByText("MEM-8429-XQ").length).toBeGreaterThan(0)
+    expect(screen.getByText("All agents")).toBeInTheDocument()
     expect(
-      screen.getByRole("button", { name: "Copy mem_8f2a9c1d" })
+      screen.getByRole("button", { name: "Copy MEM-8429-XQ" })
     ).toBeInTheDocument()
     expect(
-      screen.getByRole("button", { name: "Copy nexus-v1" })
+      screen.getByRole("button", { name: "Copy All agents" })
     ).toBeInTheDocument()
     expect(screen.getByText("Memory Formation Pipeline")).toBeInTheDocument()
     expect(screen.getByText("Quick Retrieve")).toBeInTheDocument()
@@ -128,7 +722,7 @@ describe("Dashboard", () => {
     expect(
       await screen.findByRole("heading", { name: "Memories" })
     ).toBeInTheDocument()
-    expect(screen.getByText("Customer-Core-01")).toBeInTheDocument()
+    expect(screen.getByText("MEM-8429-XQ")).toBeInTheDocument()
     expect(window.location.pathname).toBe("/memories")
   })
 
@@ -168,16 +762,11 @@ describe("Dashboard", () => {
       await screen.findByRole("heading", { name: "Raw Data" })
     ).toBeInTheDocument()
     expect(screen.getByTestId("memory-workspace-surface")).toBeInTheDocument()
-    expect(screen.getByTestId("raw-data-toolbar")).toBeInTheDocument()
     expect(
       screen.getByText(
         "Inspect source records, captions, segments, metadata, and cleanup impact for this Memory."
       )
     ).toBeInTheDocument()
-    expect(screen.getByText("Total Records")).toBeInTheDocument()
-    expect(screen.getByText("With Caption")).toBeInTheDocument()
-    expect(screen.getByPlaceholderText("Search records...")).toBeInTheDocument()
-    expect(screen.getAllByRole("combobox")).toHaveLength(2)
     expect(screen.getByText("rd_7a2...")).toBeInTheDocument()
     expect(
       screen.getByRole("checkbox", {
@@ -193,74 +782,54 @@ describe("Dashboard", () => {
 
     await user.click(screen.getAllByRole("button", { name: "View" })[0])
 
-    expect(screen.getByRole("dialog")).toBeInTheDocument()
-    expect(screen.getByTestId("record-details-sheet")).toHaveClass(
-      "data-starting-style:translate-x-full"
-    )
-    expect(screen.getByText("Record Details")).toBeInTheDocument()
-    expect(screen.getByText("Raw Caption")).toBeInTheDocument()
-    expect(screen.getAllByText('"start"')[0]).toHaveClass("hljs-attr")
-    expect(screen.getByText("1709214000")).toHaveClass("hljs-number")
-    expect(screen.getByText('"speaker_id"')).toHaveClass("hljs-attr")
-    expect(screen.getByText('"user_491"')).toHaveClass("hljs-string")
-    expect(screen.getByText('"critical"')).toHaveClass("hljs-string")
-    expect(
-      screen.queryByTestId("record-details-overlay")
-    ).not.toBeInTheDocument()
+    const details = screen.getByTestId("record-details-panel")
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(details).toHaveAttribute("data-animation", "slide-scale")
+    expect(details).toHaveAttribute("data-anchor", "right")
+    expect(details).toHaveAttribute("data-expanded", "false")
+    await waitFor(() => {
+      expect(details).toHaveAttribute("data-state", "open")
+    })
+    expect(within(details).getByText("Record Details")).toBeInTheDocument()
+    expect(within(details).getByText("Raw Caption")).toBeInTheDocument()
+    expect(within(details).getAllByText('"start"')[0]).toHaveClass("hljs-attr")
+    expect(within(details).getByText("1709214000")).toHaveClass("hljs-number")
+    expect(within(details).getByText('"speaker_id"')).toHaveClass("hljs-attr")
+    expect(within(details).getByText('"user_491"')).toHaveClass("hljs-string")
+    expect(within(details).getByText('"critical"')).toHaveClass("hljs-string")
     expect(window.location.pathname).toBe("/memories/MEM-8429-XQ/raw-data")
   })
 
-  it("keeps the Record Details sheet mounted until the close animation completes", async () => {
+  it("keeps the Record Details panel mounted until the close animation completes", async () => {
     const user = userEvent.setup()
-    let finishCloseAnimation: () => void
-    const closeAnimation = new Promise<void>((resolve) => {
-      finishCloseAnimation = resolve
-    })
-    const originalGetAnimations = HTMLElement.prototype.getAnimations
     window.history.pushState({}, "", "/memories/MEM-8429-XQ/raw-data")
     renderApp()
 
     await screen.findByRole("heading", { name: "Raw Data" })
     await user.click(screen.getAllByRole("button", { name: "View" })[0])
 
-    expect(screen.getByTestId("record-details-sheet")).toBeInTheDocument()
+    const details = screen.getByTestId("record-details-panel")
 
-    Object.defineProperty(HTMLElement.prototype, "getAnimations", {
-      configurable: true,
-      value: vi.fn(() => [
-        {
-          finished: closeAnimation,
-          pending: false,
-          playState: "running",
-        },
-      ]),
+    await waitFor(() => {
+      expect(details).toHaveAttribute("data-state", "open")
     })
 
-    try {
-      await user.click(screen.getByRole("button", { name: "Close" }))
+    await user.click(
+      within(details).getByRole("button", { name: "Close record details" })
+    )
 
-      expect(screen.getByTestId("record-details-sheet")).toBeInTheDocument()
+    expect(screen.getByTestId("record-details-panel")).toBeInTheDocument()
+    expect(screen.getByTestId("record-details-panel")).toHaveAttribute(
+      "data-state",
+      "closed"
+    )
 
-      await act(async () => {
-        finishCloseAnimation()
-        await closeAnimation
-      })
+    fireEvent.transitionEnd(screen.getByTestId("record-details-panel"))
 
-      await waitFor(() => {
-        expect(
-          screen.queryByTestId("record-details-sheet")
-        ).not.toBeInTheDocument()
-      })
-    } finally {
-      if (originalGetAnimations) {
-        Object.defineProperty(HTMLElement.prototype, "getAnimations", {
-          configurable: true,
-          value: originalGetAnimations,
-        })
-      } else {
-        delete HTMLElement.prototype.getAnimations
-      }
-    }
+    await waitFor(() => {
+      expect(screen.queryByTestId("record-details-panel")).not.toBeInTheDocument()
+    })
   })
 
   it("keeps the Memory sidebar mounted while switching workspace tabs", async () => {
@@ -292,9 +861,7 @@ describe("Dashboard", () => {
     expect(
       await screen.findByRole("heading", { name: "Raw Data" })
     ).toBeInTheDocument()
-    expect(
-      screen.getByText("Showing 1-15 of 4,218 records")
-    ).toBeInTheDocument()
+    expect(screen.getByText("Showing 4 of 4,218 records")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Overview" })).toBeInTheDocument()
   })
 
@@ -315,18 +882,11 @@ describe("Dashboard", () => {
         "Inspect extracted memory facts, source raw data, metadata, vectors, and related threads."
       )
     ).toBeInTheDocument()
-    expect(screen.getByText("Total Items")).toBeInTheDocument()
-    expect(screen.getByText("USER Scope")).toBeInTheDocument()
-    expect(screen.getByText("AGENT Scope")).toBeInTheDocument()
-    expect(
-      screen.getByPlaceholderText("Search memory items...")
-    ).toBeInTheDocument()
-    expect(screen.getAllByRole("combobox")).toHaveLength(4)
-    expect(screen.getByText("mi_2b9c7...")).toBeInTheDocument()
+    expect(screen.getByText("293712")).toBeInTheDocument()
     expect(
       screen.getByText("User prefers dark mode for all dashboard interfaces.")
     ).toBeInTheDocument()
-    expect(screen.getByText("Showing 1-25 of 3,412 items")).toBeInTheDocument()
+    expect(screen.getByText("Showing 3 of 3,412 items")).toBeInTheDocument()
     expect(window.location.pathname).toBe("/memories/MEM-8429-XQ/items")
   })
 
@@ -354,9 +914,9 @@ describe("Dashboard", () => {
     expect(details).toHaveAttribute("data-anchor", "right")
     expect(details).toHaveClass("ml-auto")
     expect(details).toHaveClass("w-full")
-    expect(details).toHaveClass("max-w-[30rem]")
+    expect(details).toHaveClass("max-w-120")
     expect(within(details).getByText("Itemdetails")).toBeInTheDocument()
-    expect(within(details).getByText("mi_2b9c7a1d")).toBeInTheDocument()
+    expect(within(details).getByText("293712")).toBeInTheDocument()
     expect(within(details).getByText("View Raw Data")).toBeInTheDocument()
     expect(
       within(details).getByText("Vector & Deduplication")
@@ -387,7 +947,7 @@ describe("Dashboard", () => {
 
     expect(screen.getByTestId("item-details-panel")).toHaveClass("ml-auto")
     expect(screen.getByTestId("item-details-panel")).toHaveClass(
-      "max-w-[30rem]"
+      "max-w-120"
     )
     expect(screen.getByTestId("item-details-panel")).not.toHaveClass(
       "left-[calc(100vw-min(30rem,calc(100vw-2rem))-1rem)]"
@@ -426,7 +986,7 @@ describe("Dashboard", () => {
 
     expect(screen.getByTestId("item-details-panel")).toBeInTheDocument()
 
-    await user.click(screen.getByTestId("items-toolbar"))
+    await user.click(screen.getByRole("heading", { name: "Memory Items" }))
 
     await waitFor(() => {
       expect(screen.queryByTestId("item-details-panel")).not.toBeInTheDocument()
@@ -509,8 +1069,10 @@ describe("Dashboard", () => {
       )
     ).toBeInTheDocument()
     expect(screen.getByText("COMMITTED")).toBeInTheDocument()
-    expect(screen.getByText("Active Threads")).toBeInTheDocument()
-    expect(screen.getByText("Total Members")).toBeInTheDocument()
+    expect(screen.getByTestId("thread-workbench")).toBeInTheDocument()
+    expect(screen.getByTestId("thread-sidebar")).toBeInTheDocument()
+    expect(screen.getByTestId("thread-detail")).toBeInTheDocument()
+    expect(screen.getByText("ACTIVE THREAD")).toBeInTheDocument()
     expect(screen.getByPlaceholderText("Filter threads...")).toBeInTheDocument()
     expect(
       screen.getAllByText("Career transition toward backend architecture")
@@ -522,8 +1084,8 @@ describe("Dashboard", () => {
     expect(screen.getByText("thr_k9x_02931")).toBeInTheDocument()
     expect(screen.getByText("Narrative Snapshot")).toBeInTheDocument()
     expect(screen.getByText("Item Membership Timeline")).toBeInTheDocument()
-    expect(screen.getByText("mi_02x_982")).toBeInTheDocument()
-    expect(screen.getAllByRole("button", { name: /View Item/ })).toHaveLength(3)
+    expect(screen.getByText("thr_k9x_02931-snapshot")).toBeInTheDocument()
+    expect(screen.getAllByRole("button", { name: /View Item/ })).toHaveLength(1)
     expect(window.location.pathname).toBe("/memories/MEM-8429-XQ/threads")
   })
 
@@ -557,7 +1119,7 @@ describe("Dashboard", () => {
     expect(
       screen.getAllByText("Health and Fitness Goals 2024").length
     ).toBeGreaterThan(0)
-    expect(screen.getByText("mi_fit_204")).toBeInTheDocument()
+    expect(screen.getByText("thr_health_2218-snapshot")).toBeInTheDocument()
     expect(screen.queryByText("thr_k9x_02931")).not.toBeInTheDocument()
   })
 
@@ -634,11 +1196,13 @@ describe("Dashboard", () => {
     expect(screen.getByText("Branches")).toBeInTheDocument()
     expect(screen.getByText("Leaves")).toBeInTheDocument()
     expect(screen.getAllByText("Platform Scalability Thesis").length).toBe(2)
-    expect(screen.getByText("Market Expansion Strategy")).toBeInTheDocument()
-    expect(screen.getByText("User Retention Flow")).toBeInTheDocument()
+    expect(
+      screen.queryByText("Market Expansion Strategy")
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText("User Retention Flow")).not.toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: /Open root insight/ })
-    ).toHaveAttribute("data-id", "INS-R-001")
+    ).toHaveAttribute("data-id", "1")
     expect(screen.getByTestId("memory-insight-flow")).toHaveClass("react-flow")
     expect(
       screen.queryByTestId("memory-insight-link-canvas")
@@ -649,11 +1213,9 @@ describe("Dashboard", () => {
     expect(screen.getAllByText("Frontend Performance").length).toBeGreaterThan(
       0
     )
-    expect(screen.getAllByText("V8 Engine JIT Delay").length).toBeGreaterThan(0)
-    expect(screen.getAllByText("Canvas Overflow #102").length).toBeGreaterThan(
-      0
-    )
-    expect(screen.getAllByText("DOM Depth Nesting").length).toBeGreaterThan(0)
+    expect(screen.queryByText("V8 Engine JIT Delay")).not.toBeInTheDocument()
+    expect(screen.queryByText("Canvas Overflow #102")).not.toBeInTheDocument()
+    expect(screen.queryByText("DOM Depth Nesting")).not.toBeInTheDocument()
     expect(screen.queryByText("Node Details")).not.toBeInTheDocument()
     expect(window.location.pathname).toBe("/memories/MEM-8429-XQ/insights")
   })
@@ -685,8 +1247,8 @@ describe("Dashboard", () => {
       within(explorer).getByText("Architecture Bottlenecks")
     ).toBeInTheDocument()
     expect(
-      within(explorer).getByText("V8 Engine JIT Delay")
-    ).toBeInTheDocument()
+      within(explorer).queryByText("V8 Engine JIT Delay")
+    ).not.toBeInTheDocument()
 
     await user.click(branchesToggle)
     expect(branchesToggle).toHaveAttribute("aria-expanded", "false")
@@ -697,7 +1259,7 @@ describe("Dashboard", () => {
     await user.click(leavesToggle)
     expect(leavesToggle).toHaveAttribute("aria-expanded", "false")
     expect(
-      within(explorer).queryByText("V8 Engine JIT Delay")
+      within(explorer).queryByText("Architecture Bottlenecks")
     ).not.toBeInTheDocument()
 
     await user.click(rootsToggle)
@@ -724,17 +1286,17 @@ describe("Dashboard", () => {
     )
 
     expect(screen.getByText("Node Details")).toBeInTheDocument()
-    expect(
-      screen.getByText("Frontend Performance Analysis")
-    ).toBeInTheDocument()
     const details = screen.getByTestId("memory-insight-details")
 
+    expect(
+      within(details).getByText("Frontend Performance")
+    ).toBeInTheDocument()
     expect(within(details).getByText("Insight Points")).toBeInTheDocument()
-    expect(within(details).getByText("ID: INS-B-442")).toBeInTheDocument()
-    expect(within(details).getByText("Technical Debt")).toBeInTheDocument()
-    expect(within(details).getByText("Strategic (B)")).toBeInTheDocument()
+    expect(within(details).getByText("ID: 442")).toBeInTheDocument()
+    expect(within(details).getAllByText("Frontend").length).toBeGreaterThan(0)
+    expect(within(details).getByText("USER")).toBeInTheDocument()
+    expect(within(details).getByText("BRANCH")).toBeInTheDocument()
     expect(within(details).getByText("Optimization")).toBeInTheDocument()
-    expect(within(details).getByText("Frontend")).toBeInTheDocument()
     expect(within(details).getByText("Critical")).toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: "Regenerate" })
@@ -822,6 +1384,16 @@ describe("Dashboard", () => {
     expect(screen.getByText("Request Health")).toBeInTheDocument()
     expect(screen.getByText("Recent Traces")).toBeInTheDocument()
     expect(screen.getByText("TRC_882x_12")).toBeInTheDocument()
+    expect(screen.getByTestId("planning-content-inset")).toHaveClass(
+      "overflow-hidden"
+    )
+    expect(screen.getByTestId("analytics-planning-overlay")).toHaveTextContent(
+      "Planning"
+    )
+    expect(screen.getByTestId("analytics-planning-overlay")).toHaveClass(
+      "backdrop-blur-md"
+    )
+    expect(screen.getByText("Roadmap in progress")).toBeInTheDocument()
     expect(window.location.pathname).toBe("/analytics")
   })
 
@@ -860,6 +1432,16 @@ describe("Dashboard", () => {
     expect(screen.getByText("Production-Server-1")).toBeInTheDocument()
     expect(screen.getByText("mem_sk_abc123••••")).toBeInTheDocument()
     expect(screen.queryByText("Active keys")).not.toBeInTheDocument()
+    expect(screen.getByTestId("planning-content-inset")).toHaveClass(
+      "overflow-hidden"
+    )
+    expect(screen.getByTestId("api-keys-planning-overlay")).toHaveTextContent(
+      "Planning"
+    )
+    expect(screen.getByTestId("api-keys-planning-overlay")).toHaveClass(
+      "backdrop-blur-md"
+    )
+    expect(screen.getByText("Roadmap in progress")).toBeInTheDocument()
     expect(window.location.pathname).toBe("/api-keys")
   })
 
@@ -882,10 +1464,192 @@ describe("Dashboard", () => {
     ).toBeInTheDocument()
     expect(screen.getByText("Display Preferences")).toBeInTheDocument()
     expect(screen.getByText("Empty State Behavior")).toBeInTheDocument()
-    expect(screen.getByText("Danger Zone")).toBeInTheDocument()
     expect(
-      screen.getAllByRole("button", { name: "Save changes" })
-    ).toHaveLength(2)
+      screen.queryByRole("heading", { name: "Extraction Common" })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText("Maximum extraction timeout")
+    ).not.toBeInTheDocument()
+    expect(screen.queryByDisplayValue("PT30S")).not.toBeInTheDocument()
+    expect(screen.queryByText("Danger Zone")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Purge Cache" })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Save changes" })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Reset changes" })
+    ).not.toBeInTheDocument()
+    expect(screen.getByTestId("settings-secondary-nav")).toHaveClass(
+      "h-full",
+      "overflow-hidden"
+    )
+    expect(
+      within(screen.getByTestId("settings-secondary-nav")).getByRole("button", {
+        name: "General",
+      })
+    ).toHaveAttribute("aria-current", "page")
+    expect(
+      within(screen.getByTestId("settings-secondary-nav")).getByRole("button", {
+        name: "Extraction Common",
+      })
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId("settings-secondary-nav")).getByRole("button", {
+        name: "Extraction Item",
+      })
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId("settings-secondary-nav")).getByRole("button", {
+        name: "Retrieval Simple",
+      })
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId("settings-secondary-nav")).getByRole("button", {
+        name: "Memory Thread",
+      })
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId("settings-secondary-nav")).queryByRole(
+        "button",
+        {
+          name: "Models",
+        }
+      )
+    ).not.toBeInTheDocument()
+    expect(screen.getByTestId("settings-detail-pane")).toHaveClass(
+      "overflow-y-auto"
+    )
+
+    await user.click(
+      within(screen.getByTestId("settings-secondary-nav")).getByRole("button", {
+        name: "Extraction Common",
+      })
+    )
+
+    expect(screen.queryByText("Display Preferences")).not.toBeInTheDocument()
+    expect(screen.queryByText("Empty State Behavior")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Common" })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Item" })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: "Extraction Common" })
+    ).toBeInTheDocument()
+    expect(screen.getByText("Maximum extraction timeout")).toBeInTheDocument()
+    expect(screen.getByDisplayValue("PT30S")).toBeInTheDocument()
+    expect(
+      screen.queryByText("Enable item graph extraction")
+    ).not.toBeInTheDocument()
+
+    await user.click(
+      within(screen.getByTestId("settings-secondary-nav")).getByRole("button", {
+        name: "Extraction Item",
+      })
+    )
+
+    expect(
+      screen.getByRole("heading", { name: "Extraction Item" })
+    ).toBeInTheDocument()
+    expect(screen.getByText("Enable item graph extraction")).toBeInTheDocument()
+    expect(
+      screen.queryByText("Maximum extraction timeout")
+    ).not.toBeInTheDocument()
     expect(window.location.pathname).toBe("/settings")
+  })
+
+  it("shows floating settings actions only after a setting changes", async () => {
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(await screen.findByRole("button", { name: "Settings" }))
+
+    expect(
+      screen.queryByRole("button", { name: "Save changes" })
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "List" }))
+
+    expect(
+      await screen.findByRole("button", { name: "Save changes" })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Discard changes" })
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Discard changes" }))
+
+    expect(
+      screen.queryByRole("button", { name: "Save changes" })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Discard changes" })
+    ).not.toBeInTheDocument()
+  })
+
+  it("saves edited backend memory options", async () => {
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(await screen.findByRole("button", { name: "Settings" }))
+    await user.click(
+      within(screen.getByTestId("settings-secondary-nav")).getByRole("button", {
+        name: "Extraction Common",
+      })
+    )
+
+    const timeoutInput = await screen.findByLabelText("Timeout")
+    await user.clear(timeoutInput)
+    await user.type(timeoutInput, "PT45S")
+    await user.click(screen.getByRole("button", { name: "Save changes" }))
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/admin/v1/config/memory-options",
+        expect.objectContaining({
+          body: JSON.stringify({
+            config: {
+              "extraction.common": [
+                {
+                  description: "Maximum extraction timeout",
+                  key: "extraction.common.timeout",
+                  type: "duration",
+                  value: "PT45S",
+                },
+              ],
+              "extraction.item": [
+                {
+                  description: "Enable item graph extraction",
+                  key: "extraction.item.graph.enabled",
+                  type: "boolean",
+                  value: true,
+                },
+              ],
+              "retrieval.simple": [
+                {
+                  description: "Enable graph-assisted retrieval",
+                  key: "retrieval.simple.graphAssist.enabled",
+                  type: "boolean",
+                  value: true,
+                },
+              ],
+              memoryThread: [
+                {
+                  description: "Enable memory thread projection",
+                  key: "memoryThread.projection.enabled",
+                  type: "boolean",
+                  value: true,
+                },
+              ],
+            },
+            expectedVersion: 3,
+          }),
+          method: "PUT",
+        })
+      )
+    })
   })
 })
