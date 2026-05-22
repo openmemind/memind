@@ -25,6 +25,7 @@ import com.openmemind.ai.memory.server.domain.common.PageResponse;
 import com.openmemind.ai.memory.server.domain.memorythread.query.MemoryThreadPageQuery;
 import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadItemView;
 import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadStatusView;
+import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadTimelineItemView;
 import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadView;
 import com.openmemind.ai.memory.server.handler.ApiExceptionHandler;
 import com.openmemind.ai.memory.server.service.memorythread.MemoryThreadQueryService;
@@ -104,6 +105,19 @@ class AdminMemoryThreadControllerTest {
     }
 
     @Test
+    void timelineEndpointReturnsThreadEvents() throws Exception {
+        mockMvc.perform(
+                        get("/admin/v1/memory-threads/{threadKey}/timeline", "topic:concept:travel")
+                                .param("userId", "u1")
+                                .param("agentId", "a1"))
+                .andExpect(status().isOk())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data[0].id").value("event-1"))
+                .andExpect(jsonPath("$.data[0].role").value("PRIMARY"));
+    }
+
+    @Test
     void statusEndpointIsMemoryScoped() throws Exception {
         mockMvc.perform(
                         get("/admin/v1/memory-threads/status")
@@ -157,6 +171,18 @@ class AdminMemoryThreadControllerTest {
         public List<AdminMemoryThreadItemView> listThreadItems(
                 String userId, String agentId, String threadKey) {
             return List.of(threadItemView());
+        }
+
+        @Override
+        public List<AdminMemoryThreadTimelineItemView> timeline(
+                String userId, String agentId, String threadKey) {
+            return List.of(
+                    new AdminMemoryThreadTimelineItemView(
+                            "event-1",
+                            "PRIMARY",
+                            "2026-03-31T10:00:00Z",
+                            "Discussing a summer trip.",
+                            "thread event"));
         }
 
         @Override

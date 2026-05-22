@@ -1,74 +1,29 @@
-import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
 import {
-  ArrowUpDown,
-  CalendarDays,
   Copy,
   ExternalLink,
   FileText,
+  Maximize2,
+  Minimize2,
   RefreshCcw,
-  Search,
+  X,
 } from "lucide-react"
-import { type MouseEvent, useState } from "react"
+import type * as React from "react"
+import { type MouseEvent, useEffect, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group"
-import {
-  Sheet,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  FilterSelect,
-  PageHeader,
-  PagePagination,
-  TableSurface,
-} from "@/features/shared/ui"
+import { PaginatedTable } from "@/components/PaginatedTable"
+import { TableCell, TableHead, TableRow } from "@/components/ui/table"
+import { PageHeader } from "@/features/shared/ui"
+import { cn } from "@/lib/utils"
 
 import { JsonBlock } from "../components/JsonBlock"
-import { SheetPanel } from "../components/SheetPanel"
 import { VectorStatus } from "../components/VectorStatus"
 import type {
   MemoryDashboardData,
   MemoryRawDataRecord,
 } from "../memory-dashboard-data"
-
-const rawDataTypeOptions = [
-  { value: "all", label: "All types" },
-  { value: "conversation", label: "Conversation" },
-  { value: "document", label: "Document" },
-  { value: "image", label: "Image" },
-  { value: "audio", label: "Audio" },
-]
-
-const rawDataSourceOptions = [
-  { value: "all", label: "Source" },
-  { value: "slack", label: "Slack" },
-  { value: "discord", label: "Discord" },
-  { value: "email", label: "Email" },
-]
 
 export function RawDataHeader() {
   return (
@@ -89,73 +44,6 @@ export function RawDataHeader() {
     />
   )
 }
-
-function RawDataSummary({ data }: { data: MemoryDashboardData }) {
-  return (
-    <section className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-      {data.rawData.summary.map((item) => (
-        <Card key={item.label}>
-          <CardHeader>
-            <CardDescription>{item.label}</CardDescription>
-            <CardTitle className="mt-3 text-3xl font-semibold">
-              {item.value}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {item.trend ? (
-              <Badge variant="outline">{item.trend}</Badge>
-            ) : (
-              <span className="text-muted-foreground">
-                {item.detail ?? "Current workspace"}
-              </span>
-            )}
-          </CardContent>
-        </Card>
-      ))}
-    </section>
-  )
-}
-
-function RawDataToolbar() {
-  return (
-    <Card className="mb-4 bg-card/95" data-testid="raw-data-toolbar">
-      <CardContent className="py-3">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-          <InputGroup className="h-9 min-w-0 flex-1">
-            <InputGroupAddon>
-              <Search />
-            </InputGroupAddon>
-            <InputGroupInput placeholder="Search records..." type="search" />
-          </InputGroup>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <FilterSelect
-              aria-label="Raw data type"
-              className="min-w-32"
-              defaultValue="all"
-              items={rawDataTypeOptions}
-            />
-            <FilterSelect
-              aria-label="Raw data source"
-              className="min-w-32"
-              defaultValue="all"
-              items={rawDataSourceOptions}
-            />
-            <Button type="button" variant="outline">
-              <CalendarDays data-icon="inline-start" />
-              Date range
-            </Button>
-            <Button type="button" variant="outline">
-              <ArrowUpDown data-icon="inline-start" />
-              Sort
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
 function RawDataId({ record }: { record: MemoryRawDataRecord }) {
   function handleCopy(event: MouseEvent<HTMLButtonElement>) {
     event.stopPropagation()
@@ -189,189 +77,327 @@ function RawDataTable({
   onViewRecord: (record: MemoryRawDataRecord) => void
 }) {
   return (
-    <TableSurface className="mb-6">
-      <Table className="min-w-[1080px]">
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-12">
-              <Checkbox aria-label="Select all raw data records" />
-            </TableHead>
-            <TableHead>Raw Data ID</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Caption</TableHead>
-            <TableHead>Source</TableHead>
-            <TableHead>Vector</TableHead>
-            <TableHead>Created</TableHead>
-            <TableHead className="text-right">Action</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data.rawData.records.map((record) => (
-            <TableRow key={record.id}>
-              <TableCell>
-                <Checkbox
-                  aria-label={`Select ${record.id}`}
-                  onClick={(event) => event.stopPropagation()}
-                />
-              </TableCell>
-              <TableCell>
-                <RawDataId record={record} />
-              </TableCell>
-              <TableCell>
-                <Badge variant="secondary">{record.typeLabel}</Badge>
-              </TableCell>
-              <TableCell className="max-w-[28rem] truncate font-medium">
-                {record.caption}
-              </TableCell>
-              <TableCell className="font-mono text-[11px] text-muted-foreground">
-                {record.source}
-              </TableCell>
-              <TableCell>
-                <VectorStatus status={record.vectorStatus} />
-              </TableCell>
-              <TableCell className="font-mono text-[11px] text-muted-foreground">
-                {record.createdAt}
-              </TableCell>
-              <TableCell className="text-right">
-                <Button
-                  onClick={() => onViewRecord(record)}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  View
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      <PagePagination label={data.rawData.paginationLabel} />
-    </TableSurface>
+    <PaginatedTable
+      className="mb-6"
+      columnCount={8}
+      columns={
+        <TableRow>
+          <TableHead className="w-12">
+            <Checkbox aria-label="Select all raw data records" />
+          </TableHead>
+          <TableHead>Raw Data ID</TableHead>
+          <TableHead>Type</TableHead>
+          <TableHead>Caption</TableHead>
+          <TableHead>Source</TableHead>
+          <TableHead>Vector</TableHead>
+          <TableHead>Created</TableHead>
+          <TableHead className="text-right">Action</TableHead>
+        </TableRow>
+      }
+      emptyState={{
+        description: "Source records matching the current filters show here.",
+        title: "No raw data records",
+      }}
+      pagination={{ summary: data.rawData.paginationLabel }}
+      tableClassName="min-w-[1080px]"
+    >
+      {data.rawData.records.map((record) => (
+        <TableRow key={record.id}>
+          <TableCell>
+            <Checkbox
+              aria-label={`Select ${record.id}`}
+              onClick={(event) => event.stopPropagation()}
+            />
+          </TableCell>
+          <TableCell>
+            <RawDataId record={record} />
+          </TableCell>
+          <TableCell>
+            <Badge variant="secondary">{record.typeLabel}</Badge>
+          </TableCell>
+          <TableCell className="max-w-md truncate font-medium">
+            {record.caption}
+          </TableCell>
+          <TableCell className="font-mono text-[11px] text-muted-foreground">
+            {record.source}
+          </TableCell>
+          <TableCell>
+            <VectorStatus status={record.vectorStatus} />
+          </TableCell>
+          <TableCell className="font-mono text-[11px] text-muted-foreground">
+            {record.createdAt}
+          </TableCell>
+          <TableCell className="text-right">
+            <Button
+              onClick={() => onViewRecord(record)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              View
+            </Button>
+          </TableCell>
+        </TableRow>
+      ))}
+    </PaginatedTable>
   )
 }
 
-function RecordDetailsSheet({
-  onCloseComplete,
-  onOpenChange,
-  open,
+function DetailsSection({
+  children,
+  title,
+}: {
+  children: React.ReactNode
+  title: string
+}) {
+  return (
+    <section>
+      <h3 className="mb-3 text-xs font-medium tracking-[0.08em] text-muted-foreground uppercase">
+        {title}
+      </h3>
+      {children}
+    </section>
+  )
+}
+
+function RecordDetailsPanel({
+  isExpanded,
+  isVisible,
+  onClose,
+  onCloseAnimationEnd,
+  onToggleExpanded,
   record,
 }: {
-  onCloseComplete: () => void
-  onOpenChange: (open: boolean) => void
-  open: boolean
-  record: MemoryRawDataRecord | null
+  isExpanded: boolean
+  isVisible: boolean
+  onClose: () => void
+  onCloseAnimationEnd: () => void
+  onToggleExpanded: () => void
+  record: MemoryRawDataRecord
 }) {
-  if (!record) {
-    return null
+  const panelRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    panelRef.current?.focus()
+  }, [record.id])
+
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      if (!panelRef.current?.contains(event.target as Node)) {
+        onClose()
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose()
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown)
+    document.addEventListener("keydown", handleKeyDown)
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [onClose])
+
+  function handleBlur(event: React.FocusEvent<HTMLElement>) {
+    const nextTarget = event.relatedTarget
+
+    if (
+      nextTarget instanceof Node &&
+      event.currentTarget.contains(nextTarget)
+    ) {
+      return
+    }
+
+    onClose()
+  }
+
+  function handleTransitionEnd(event: React.TransitionEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget || isVisible) {
+      return
+    }
+
+    onCloseAnimationEnd()
   }
 
   return (
-    <Sheet
-      onOpenChange={onOpenChange}
-      onOpenChangeComplete={(isOpen) => {
-        if (!isOpen) {
-          onCloseComplete()
-        }
-      }}
-      open={open}
-    >
-      <SheetPanel>
-        <SheetHeader className="border-b">
-          <SheetTitle>Record Details</SheetTitle>
-          <SheetDescription className="font-mono">{record.id}</SheetDescription>
-          <SheetPrimitive.Close
-            className="absolute top-4 right-4 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Close"
+    <div className="pointer-events-none fixed inset-4 z-50">
+      <aside
+        ref={panelRef}
+        aria-label="Record details"
+        className={cn(
+          "pointer-events-auto ml-auto flex h-full w-full flex-col overflow-hidden rounded-lg border bg-popover text-xs/relaxed text-popover-foreground shadow-2xl transition-[max-width,transform,opacity] duration-300 ease-in-out focus-visible:outline-none",
+          isExpanded ? "max-w-[calc(100vw-2rem)]" : "max-w-120",
+          isVisible
+            ? "translate-x-0 scale-100 opacity-100"
+            : "translate-x-8 scale-[0.98] opacity-0"
+        )}
+        data-anchor="right"
+        data-animation="slide-scale"
+        data-expanded={isExpanded ? "true" : "false"}
+        data-state={isVisible ? "open" : "closed"}
+        data-testid="record-details-panel"
+        tabIndex={-1}
+        onBlur={handleBlur}
+        onTransitionEnd={handleTransitionEnd}
+      >
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b bg-popover px-6 py-5">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-foreground">
+              Record Details
+            </h2>
+            <code className="mt-1 inline-flex rounded bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+              {record.id}
+            </code>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Badge variant="secondary">{record.type}</Badge>
+              <span className="font-mono text-[11px] text-muted-foreground">
+                Created {record.createdAt}
+              </span>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              aria-label={
+                isExpanded ? "Shrink record details" : "Expand record details"
+              }
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+              onClick={onToggleExpanded}
+            >
+              {isExpanded ? <Minimize2 /> : <Maximize2 />}
+            </Button>
+            <Button
+              aria-label="Close record details"
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+              onClick={onClose}
+            >
+              <X />
+            </Button>
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto",
+            isExpanded ? "px-8 py-7 lg:px-10" : "px-6 py-5"
+          )}
+        >
+          <div
+            className={cn(
+              "mx-auto grid gap-7",
+              isExpanded ? "max-w-6xl lg:grid-cols-[minmax(0,1fr)_24rem]" : ""
+            )}
           >
-            <span className="sr-only">Close</span>
-          </SheetPrimitive.Close>
-        </SheetHeader>
-        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 py-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{record.type}</Badge>
-            <span className="font-mono text-[11px] text-muted-foreground">
-              Created {record.createdAt}
-            </span>
-          </div>
-
-          <div className="rounded-md border bg-muted/30 p-4">
-            <div className="mb-2 text-xs font-medium text-muted-foreground">
-              Raw Caption
-            </div>
-            <p className="leading-relaxed">
-              User inquired about API rate limits for the Nexus endpoint. They
-              mentioned encountering 429 errors intermittently over the last 15
-              minutes while attempting to sync vector batches from the
-              development staging environment.
-            </p>
-          </div>
-
-          <JsonBlock label="Segment Data" value={record.segmentJson} />
-          <JsonBlock label="Metadata Objects" value={record.metadataJson} />
-
-          <div>
-            <div className="mb-2 text-xs font-medium text-muted-foreground">
-              Associated Memory Items
-            </div>
-            <div className="flex flex-col gap-2">
-              {record.associatedItems.map((item) => (
-                <button
-                  key={item.label}
-                  className="flex items-center justify-between gap-3 rounded-md border bg-card px-3 py-3 text-left transition-colors hover:bg-muted/50"
-                  type="button"
+            <div className="flex min-w-0 flex-col gap-7">
+              <DetailsSection title="Raw Caption">
+                <div
+                  className={cn(
+                    "rounded-md border bg-muted/30 p-4 leading-relaxed",
+                    isExpanded ? "text-base" : "text-sm"
+                  )}
                 >
-                  <span className="flex min-w-0 items-center gap-3">
-                    <FileText className="shrink-0 text-muted-foreground" />
-                    <span className="truncate font-medium">{item.label}</span>
-                  </span>
-                  <ExternalLink className="shrink-0 text-muted-foreground" />
-                </button>
-              ))}
+                  {record.caption}
+                </div>
+              </DetailsSection>
+
+              <JsonBlock label="Segment Data" value={record.segmentJson} />
+            </div>
+
+            <div className="flex min-w-0 flex-col gap-7">
+              <JsonBlock label="Metadata Objects" value={record.metadataJson} />
+
+              <DetailsSection title="Associated Memory Items">
+                <div className="flex flex-col gap-2">
+                  {record.associatedItems.map((item) => (
+                    <button
+                      key={item.label}
+                      className="flex items-center justify-between gap-3 rounded-md border bg-card px-3 py-3 text-left transition-colors hover:bg-muted/50"
+                      type="button"
+                    >
+                      <span className="flex min-w-0 items-center gap-3">
+                        <FileText className="shrink-0 text-muted-foreground" />
+                        <span className="truncate font-medium">
+                          {item.label}
+                        </span>
+                      </span>
+                      <ExternalLink className="shrink-0 text-muted-foreground" />
+                    </button>
+                  ))}
+                </div>
+              </DetailsSection>
             </div>
           </div>
         </div>
-        <SheetFooter className="border-t">
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button className="flex-1" type="button">
-              Reprocess
-            </Button>
-            <Button type="button" variant="destructive">
-              Delete
-            </Button>
-          </div>
-        </SheetFooter>
-      </SheetPanel>
-    </Sheet>
+      </aside>
+    </div>
   )
 }
 
 export function RawDataPage({ data }: { data: MemoryDashboardData }) {
   const [selectedRecord, setSelectedRecord] =
     useState<MemoryRawDataRecord | null>(null)
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+  const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
+  const [isDetailsVisible, setIsDetailsVisible] = useState(false)
+
+  useEffect(() => {
+    if (!selectedRecord) {
+      return
+    }
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      setIsDetailsVisible(true)
+    })
+
+    return () => window.cancelAnimationFrame(animationFrame)
+  }, [selectedRecord])
+
+  useEffect(() => {
+    if (!selectedRecord || isDetailsVisible) {
+      return
+    }
+
+    const closeTimer = window.setTimeout(() => {
+      setSelectedRecord(null)
+    }, 300)
+
+    return () => window.clearTimeout(closeTimer)
+  }, [isDetailsVisible, selectedRecord])
 
   function handleViewRecord(record: MemoryRawDataRecord) {
     setSelectedRecord(record)
-    setIsDetailsOpen(true)
+    setIsDetailsExpanded(false)
+    setIsDetailsVisible(false)
+  }
+
+  function handleCloseDetails() {
+    setIsDetailsVisible(false)
+    setIsDetailsExpanded(false)
   }
 
   return (
     <>
       <RawDataHeader />
-      <RawDataSummary data={data} />
-      <RawDataToolbar />
+      {/*<RawDataSummary data={data} />*/}
+      {/*<RawDataToolbar />*/}
       <RawDataTable data={data} onViewRecord={handleViewRecord} />
-      <RecordDetailsSheet
-        onCloseComplete={() => setSelectedRecord(null)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setIsDetailsOpen(false)
-          }
-        }}
-        open={isDetailsOpen}
-        record={selectedRecord}
-      />
+      {selectedRecord ? (
+        <RecordDetailsPanel
+          isExpanded={isDetailsExpanded}
+          isVisible={isDetailsVisible}
+          onClose={handleCloseDetails}
+          onCloseAnimationEnd={() => setSelectedRecord(null)}
+          onToggleExpanded={() => setIsDetailsExpanded((value) => !value)}
+          record={selectedRecord}
+        />
+      ) : null}
     </>
   )
 }

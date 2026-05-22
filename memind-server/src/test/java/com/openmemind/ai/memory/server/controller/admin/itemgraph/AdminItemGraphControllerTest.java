@@ -86,6 +86,17 @@ class AdminItemGraphControllerTest {
     }
 
     @Test
+    void explorerReturnsSummaryNodesAndEdges() throws Exception {
+        mockMvc.perform(get("/admin/v1/item-graph/explorer").param("memoryId", "u1:a1"))
+                .andExpect(status().isOk())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data.summary.entityCount").value(2))
+                .andExpect(jsonPath("$.data.nodes[0].entityKey").value("person:alice"))
+                .andExpect(jsonPath("$.data.edges[0].sourceItemId").value(101));
+    }
+
+    @Test
     void entityDetailReturnsRelatedCounts() throws Exception {
         mockMvc.perform(get("/admin/v1/item-graph/entities/1"))
                 .andExpect(status().isOk())
@@ -260,6 +271,12 @@ class AdminItemGraphControllerTest {
         public PageResponse<ItemGraphViews.ItemLinkView> listItemLinks(
                 ItemGraphPageQueries.ItemLinkPageQuery query) {
             return new PageResponse<>(query.pageNo(), query.pageSize(), 1, List.of(itemLink()));
+        }
+
+        @Override
+        public ItemGraphViews.ExplorerView explorer(String memoryId) {
+            return new ItemGraphViews.ExplorerView(
+                    summary(memoryId), List.of(entity()), List.of(itemLink()));
         }
     }
 

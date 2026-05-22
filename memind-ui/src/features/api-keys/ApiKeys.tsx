@@ -3,6 +3,7 @@ import { Clock3, Copy, MoreVertical, Plus, Trash2 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { PaginatedTable } from "@/components/PaginatedTable"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,19 +14,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
-  Table,
-  TableBody,
   TableCell,
   TableHead,
-  TableHeader,
   TableRow,
 } from "@/components/ui/table"
 import {
   PageHeader,
-  PagePagination,
   PageSurface,
   StatusBadge,
-  TableSurface,
   type Tone,
 } from "@/features/shared/ui"
 import { cn } from "@/lib/utils"
@@ -136,64 +132,56 @@ function ApiKeyRow({ apiKey }: { apiKey: ApiKeyRecord }) {
 
 function ApiKeysTable({ keys }: { keys: ApiKeyRecord[] }) {
   return (
-    <TableSurface>
-      <Table className="min-w-[920px]">
-        <TableHeader>
-          <TableRow>
-            <TableHead>Key Name & Prefix</TableHead>
-            <TableHead>Owner</TableHead>
-            <TableHead>Scopes</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Last Used</TableHead>
-            <TableHead>Requests</TableHead>
-            <TableHead className="text-right">Expires</TableHead>
-            <TableHead className="text-center">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {keys.map((apiKey) => (
-            <ApiKeyRow key={apiKey.id} apiKey={apiKey} />
-          ))}
-        </TableBody>
-      </Table>
-      <PagePagination label="Showing 3 of 12 keys" />
-    </TableSurface>
+    <PaginatedTable
+      columnCount={8}
+      columns={
+        <TableRow>
+          <TableHead>Key Name & Prefix</TableHead>
+          <TableHead>Owner</TableHead>
+          <TableHead>Scopes</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Last Used</TableHead>
+          <TableHead>Requests</TableHead>
+          <TableHead className="text-right">Expires</TableHead>
+          <TableHead className="text-center">Actions</TableHead>
+        </TableRow>
+      }
+      emptyState={{
+        description: "Create an API key to access Memind from applications.",
+        title: "No API keys",
+      }}
+      pagination={{ summary: "Showing 3 of 12 keys" }}
+      tableClassName="min-w-[920px]"
+    >
+      {keys.map((apiKey) => (
+        <ApiKeyRow key={apiKey.id} apiKey={apiKey} />
+      ))}
+    </PaginatedTable>
   )
 }
 
 export function ApiKeys() {
   const apiKeysQuery = useApiKeysData()
 
-  if (apiKeysQuery.isLoading) {
-    return (
-      <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">
-        Loading API keys...
-      </div>
-    )
-  }
-
-  if (apiKeysQuery.isError || !apiKeysQuery.data) {
-    return (
-      <div className="flex min-h-svh items-center justify-center text-sm text-destructive">
-        Failed to load API keys.
-      </div>
-    )
-  }
-
   return (
-    <PageSurface>
-      <PageHeader
-        action={
-          <Button>
-            <Plus data-icon="inline-start" />
-            Create API Key
-          </Button>
-        }
-        description="Create, rotate, and monitor keys used to access Memind."
-        title="API Keys"
-      />
+    <PageSurface className="h-full overflow-hidden">
+      {apiKeysQuery.isLoading ? null : apiKeysQuery.isError ||
+        !apiKeysQuery.data ? null : (
+        <div>
+          <PageHeader
+            action={
+              <Button>
+                <Plus data-icon="inline-start" />
+                Create API Key
+              </Button>
+            }
+            description="Create, rotate, and monitor keys used to access Memind."
+            title="API Keys"
+          />
 
-      <ApiKeysTable keys={apiKeysQuery.data.keys} />
+          <ApiKeysTable keys={apiKeysQuery.data.keys} />
+        </div>
+      )}
     </PageSurface>
   )
 }

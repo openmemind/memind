@@ -1,5 +1,11 @@
 import { useQuery } from "@tanstack/react-query"
 
+import {
+  fetchMemoryOptions,
+  fetchUiPreferences,
+  type MemoryOptionsResponse,
+} from "./settings-api"
+
 export type RuntimeMode = "balanced" | "low-latency" | "high-accuracy"
 export type RetentionWindow = "30d" | "90d" | "180d" | "365d"
 export type DefaultTimeRange = "24h" | "7d" | "30d"
@@ -39,6 +45,7 @@ export type SettingsData = {
     showOnboardingTips: boolean
     autoHideEmptyCollections: boolean
   }
+  memoryOptions?: MemoryOptionsResponse
 }
 
 const settingsData: SettingsData = {
@@ -78,7 +85,24 @@ const settingsData: SettingsData = {
 }
 
 async function fetchSettingsData() {
-  return settingsData
+  const [memoryOptions, uiPreferences] = await Promise.all([
+    fetchMemoryOptions(),
+    fetchUiPreferences(),
+  ])
+
+  return {
+    ...settingsData,
+    emptyState: {
+      autoHideEmptyCollections: uiPreferences.autoHideEmptyCollections,
+      showOnboardingTips: uiPreferences.showOnboardingTips,
+    },
+    memoryOptions,
+    preferences: {
+      defaultMemoryView: uiPreferences.defaultMemoryView,
+      defaultTimeRange: uiPreferences.defaultTimeRange,
+      theme: uiPreferences.theme,
+    },
+  }
 }
 
 export function useSettingsData() {

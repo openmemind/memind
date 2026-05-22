@@ -24,6 +24,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { PaginatedTable } from "@/components/PaginatedTable"
 import {
   ChartContainer,
   ChartTooltip,
@@ -41,11 +42,8 @@ import {
   ProgressValue,
 } from "@/components/ui/progress"
 import {
-  Table,
-  TableBody,
   TableCell,
   TableHead,
-  TableHeader,
   TableRow,
 } from "@/components/ui/table"
 import {
@@ -54,7 +52,6 @@ import {
   PageSurface,
   Panel,
   StatusBadge,
-  TableSurface,
   type Tone,
 } from "@/features/shared/ui"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -251,51 +248,54 @@ function RecentTraces({ traces }: { traces: RecentTrace[] }) {
           </Button>
         </div>
       </div>
-      <TableSurface>
-        <div className="max-h-[420px] overflow-auto">
-          <Table className="min-w-[1120px]">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Trace ID</TableHead>
-                <TableHead>Method</TableHead>
-                <TableHead className="min-w-[240px]">Endpoint</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Duration</TableHead>
-                <TableHead>User</TableHead>
-                <TableHead>Timestamp</TableHead>
-                <TableHead className="text-right">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {traces.map((trace) => (
-                <TableRow key={trace.traceId}>
-                  <TableCell>
-                    <code>{trace.traceId}</code>
-                  </TableCell>
-                  <TableCell>{trace.method}</TableCell>
-                  <TableCell>
-                    <code>{trace.endpoint}</code>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge
-                      label={trace.status}
-                      tone={traceStatusTone(trace.status)}
-                    />
-                  </TableCell>
-                  <TableCell>{trace.duration}</TableCell>
-                  <TableCell>{trace.user}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {trace.timestamp}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="outline">View</Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </TableSurface>
+      <PaginatedTable
+        columnCount={8}
+        columns={
+          <TableRow>
+            <TableHead>Trace ID</TableHead>
+            <TableHead>Method</TableHead>
+            <TableHead className="min-w-[240px]">Endpoint</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Duration</TableHead>
+            <TableHead>User</TableHead>
+            <TableHead>Timestamp</TableHead>
+            <TableHead className="text-right">Action</TableHead>
+          </TableRow>
+        }
+        emptyState={{
+          description: "Recent API calls will appear after traffic is recorded.",
+          title: "No recent traces",
+        }}
+        pagination={{ summary: `Showing ${traces.length} recent traces` }}
+        tableClassName="min-w-[1120px]"
+        tableViewportClassName="max-h-[420px] overflow-auto"
+      >
+        {traces.map((trace) => (
+          <TableRow key={trace.traceId}>
+            <TableCell>
+              <code>{trace.traceId}</code>
+            </TableCell>
+            <TableCell>{trace.method}</TableCell>
+            <TableCell>
+              <code>{trace.endpoint}</code>
+            </TableCell>
+            <TableCell>
+              <StatusBadge
+                label={trace.status}
+                tone={traceStatusTone(trace.status)}
+              />
+            </TableCell>
+            <TableCell>{trace.duration}</TableCell>
+            <TableCell>{trace.user}</TableCell>
+            <TableCell className="text-muted-foreground">
+              {trace.timestamp}
+            </TableCell>
+            <TableCell className="text-right">
+              <Button variant="outline">View</Button>
+            </TableCell>
+          </TableRow>
+        ))}
+      </PaginatedTable>
     </section>
   )
 }
@@ -303,61 +303,50 @@ function RecentTraces({ traces }: { traces: RecentTrace[] }) {
 export function Analytics() {
   const analyticsQuery = useAnalyticsData()
 
-  if (analyticsQuery.isLoading) {
-    return (
-      <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">
-        Loading analytics...
-      </div>
-    )
-  }
-
-  if (analyticsQuery.isError || !analyticsQuery.data) {
-    return (
-      <div className="flex min-h-svh items-center justify-center text-sm text-destructive">
-        Failed to load analytics.
-      </div>
-    )
-  }
-
   const data = analyticsQuery.data
 
   return (
-    <PageSurface>
-      <PageHeader
-        action={<TimeRangeToggle />}
-        description="Observe runtime health, latency, failures, and memory activity."
-        title="Analytics"
-      />
+    <PageSurface className="h-full overflow-hidden">
+      {analyticsQuery.isLoading ? null : analyticsQuery.isError ||
+        !data ? null : (
+        <div>
+          <PageHeader
+            action={<TimeRangeToggle />}
+            description="Observe runtime health, latency, failures, and memory activity."
+            title="Analytics"
+          />
 
-      <section className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-        {data.metrics.map((metric, index) => {
-          const Icon =
-            metric.tone === "success"
-              ? CheckCircle2
-              : metric.tone === "danger"
-                ? AlertTriangle
-                : metricIcon(index)
+          <section className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+            {data.metrics.map((metric, index) => {
+              const Icon =
+                metric.tone === "success"
+                  ? CheckCircle2
+                  : metric.tone === "danger"
+                    ? AlertTriangle
+                    : metricIcon(index)
 
-          return (
-            <MetricCard
-              key={metric.label}
-              detail={metric.detail}
-              icon={Icon}
-              label={metric.label}
-              tone={metricTone(metric.tone)}
-              trend={metric.trend}
-              value={metric.value}
-            />
-          )
-        })}
-      </section>
+              return (
+                <MetricCard
+                  key={metric.label}
+                  detail={metric.detail}
+                  icon={Icon}
+                  label={metric.label}
+                  tone={metricTone(metric.tone)}
+                  trend={metric.trend}
+                  value={metric.value}
+                />
+              )
+            })}
+          </section>
 
-      <section className="mb-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <RequestHealthChart points={data.requestHealth} />
-        <LatencyChart points={data.latency} />
-      </section>
+          <section className="mb-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <RequestHealthChart points={data.requestHealth} />
+            <LatencyChart points={data.latency} />
+          </section>
 
-      <RecentTraces traces={data.traces} />
+          <RecentTraces traces={data.traces} />
+        </div>
+      )}
     </PageSurface>
   )
 }

@@ -1,5 +1,30 @@
 import { useQuery } from "@tanstack/react-query"
 
+import { fetchJson } from "@/lib/api/client"
+import type { PageResult } from "@/lib/api/pagination"
+import type { AdminDashboardView } from "@/features/dashboard/dashboard-data"
+
+import {
+  fetchAdminGraphBatchesPage,
+  fetchAdminGraphEntitiesPage,
+  fetchAdminGraphSummary,
+  type AdminGraphBatchView,
+  type AdminGraphEntityView,
+  type AdminGraphSummaryView,
+} from "./graph-api"
+import {
+  fetchAdminInsightsPage,
+  type AdminInsightView,
+} from "./insights-api"
+import { fetchAdminItemsPage, type AdminItemView } from "./items-api"
+import { fetchAdminRawDataPage, type AdminRawDataView } from "./raw-data-api"
+import {
+  fetchAdminMemoryThreadsPage,
+  fetchAdminMemoryThreadStatus,
+  type AdminMemoryThreadStatusView,
+  type AdminMemoryThreadView,
+} from "./threads-api"
+
 export type MemoryDashboardMetric = {
   label: string
   value: string
@@ -272,6 +297,18 @@ export type MemoryDashboardData = {
   graph: MemoryGraphPageData
   threads: MemoryThreadsPageData
   insights: MemoryInsightsPageData
+}
+
+export type AdminMemoryDashboardApiData = {
+  dashboard: AdminDashboardView
+  graphBatches: PageResult<AdminGraphBatchView>
+  graphEntities: PageResult<AdminGraphEntityView>
+  graphSummary: AdminGraphSummaryView
+  insights: PageResult<AdminInsightView>
+  items: PageResult<AdminItemView>
+  rawData: PageResult<AdminRawDataView>
+  threadStatus: AdminMemoryThreadStatusView
+  threads: PageResult<AdminMemoryThreadView>
 }
 
 const dashboardByMemoryId: Record<string, MemoryDashboardData> = {
@@ -1073,8 +1110,669 @@ const fallbackDashboard: MemoryDashboardData = {
   },
 }
 
+function formatCount(value: number | undefined) {
+  return new Intl.NumberFormat("en-US").format(value ?? 0)
+}
+
+function formatDateTime(value: string | undefined) {
+  if (!value) {
+    return "-"
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleString("en-US", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+    year: "numeric",
+  })
+}
+
+function formatDate(value: string | undefined) {
+  if (!value) {
+    return "-"
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleDateString("en-US", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  })
+}
+
+function shortId(value: string | number | undefined) {
+  const text = String(value ?? "-")
+
+  return text.length > 8 ? `${text.slice(0, 6)}...` : text
+}
+
+function stringifyJson(value: unknown) {
+  return JSON.stringify(value ?? {}, null, 2)
+}
+
+function titleCase(value: string | undefined) {
+  if (!value) {
+    return "Unknown"
+  }
+
+  return value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`)
+    .join(" ")
+}
+
+function uppercase(value: string | undefined, fallback: string) {
+  return value?.toUpperCase() ?? fallback
+}
+
+function memoryScope(memoryId: string) {
+  const [userId, agentId] = memoryId.split(":", 2)
+
+  return {
+    agentId: agentId || undefined,
+    userId: userId || memoryId,
+  }
+}
+
+function percentage(count: number, total: number) {
+  if (total <= 0) {
+    return 0
+  }
+
+  return Math.round((count / total) * 100)
+}
+
+function mapDistribution(items: Array<{ count: number; name: string }>) {
+  const total = items.reduce((current, item) => current + item.count, 0)
+
+  return items.map((item) => ({
+    label: titleCase(item.name),
+    value: percentage(item.count, total),
+  }))
+}
+
+function mapCategoryItems(items: Array<{ count: number; name: string }>) {
+  return items.map((item) => ({
+    label: titleCase(item.name),
+    value: formatCount(item.count),
+  }))
+}
+
+function backlogTotal(backlog: AdminDashboardView["backlog"]) {
+  return (
+    backlog.conversationPending +
+    backlog.graphBatchRepairRequired +
+    backlog.insightUnbuilt +
+    backlog.insightUngrouped +
+    backlog.threadOutboxFailed +
+    backlog.threadOutboxPending
+  )
+}
+
+function latestActivityTime(apiData: AdminMemoryDashboardApiData) {
+  return (
+    apiData.threadStatus.updatedAt ??
+    apiData.threads.items[0]?.updatedAt ??
+    apiData.rawData.items[0]?.updatedAt ??
+    apiData.items.items[0]?.updatedAt ??
+    apiData.insights.items[0]?.updatedAt ??
+    "-"
+  )
+}
+
+function mapRawDataPage(rawData: PageResult<AdminRawDataView>): MemoryRawDataPageData {
+  const vectorizedCount = rawData.items.filter((item) => item.captionVectorId).length
+  const captionCount = rawData.items.filter((item) => item.caption).length
+
+  return {
+    pageLabel: `Page ${rawData.page.page} of ${rawData.page.totalPages}`,
+    paginationLabel: `Showing ${rawData.items.length} of ${formatCount(
+      rawData.page.totalItems
+    )} records`,
+    records: rawData.items.map((record) => ({
+      associatedItems: [],
+      caption: record.caption ?? "-",
+      createdAt: formatDateTime(record.createdAt),
+      id: record.rawDataId,
+      metadataJson: stringifyJson(record.metadata),
+      segmentJson: stringifyJson(record.segment),
+      shortId: shortId(record.rawDataId),
+      source: record.sourceClient ?? "-",
+      type: record.type ?? "unknown",
+      typeLabel: uppercase(record.type, "RAW"),
+      vectorStatus: record.captionVectorId ? "Vectorized" : "Missing",
+    })),
+    summary: [
+      { label: "Total Records", value: formatCount(rawData.page.totalItems) },
+      { label: "Loaded", value: formatCount(rawData.items.length) },
+      {
+        label: "With Caption",
+        value: formatCount(captionCount),
+      },
+      {
+        label: "Vectorized",
+        value: formatCount(vectorizedCount),
+      },
+      {
+        label: "Page",
+        value: `${rawData.page.page}/${rawData.page.totalPages}`,
+      },
+    ],
+  }
+}
+
+function mapItemScope(value: string | undefined): MemoryItemRecord["scope"] {
+  return value?.toUpperCase() === "AGENT" ? "AGENT" : "USER"
+}
+
+function mapItemType(value: string | undefined): MemoryItemRecord["type"] {
+  return value?.toUpperCase() === "FORESIGHT" ? "FORESIGHT" : "FACT"
+}
+
+function mapItemsPage(items: PageResult<AdminItemView>): MemoryItemsPageData {
+  const userScopeCount = items.items.filter(
+    (item) => item.scope?.toUpperCase() !== "AGENT"
+  ).length
+  const agentScopeCount = items.items.length - userScopeCount
+  const factCount = items.items.filter(
+    (item) => item.type?.toUpperCase() !== "FORESIGHT"
+  ).length
+  const foresightCount = items.items.length - factCount
+  const vectorizedCount = items.items.filter((item) => item.vectorId).length
+
+  return {
+    paginationLabel: `Showing ${items.items.length} of ${formatCount(
+      items.page.totalItems
+    )} items`,
+    records: items.items.map((item) => ({
+      category: item.category ?? "unknown",
+      content: item.content ?? "-",
+      contentHash: item.contentHash ?? "-",
+      id: String(item.itemId),
+      metadataJson: stringifyJson(item.metadata),
+      observedAt: formatDateTime(item.observedAt),
+      observedAtFull: formatDateTime(item.observedAt),
+      occurredAt: formatDateTime(item.occurredAt),
+      relatedThreads: [],
+      scope: mapItemScope(item.scope),
+      shortId: shortId(item.itemId),
+      sourceIntegration: item.sourceClient ?? "-",
+      sourceRawDataId: item.rawDataId ?? "-",
+      sourceRawDataShortId: shortId(item.rawDataId),
+      sourceType: item.rawDataType ?? "-",
+      threadCount: 0,
+      type: mapItemType(item.type),
+      vectorId: item.vectorId ?? "-",
+      vectorStatus: item.vectorId ? "Vectorized" : "Missing",
+    })),
+    summary: [
+      { label: "Total Items", value: formatCount(items.page.totalItems) },
+      { label: "USER Scope", value: formatCount(userScopeCount) },
+      { label: "AGENT Scope", value: formatCount(agentScopeCount) },
+      { label: "FACT Items", value: formatCount(factCount) },
+      { label: "FORESIGHT Items", value: formatCount(foresightCount) },
+      {
+        detail: `${percentage(vectorizedCount, items.items.length)}%`,
+        label: "Vectorized",
+        value: formatCount(vectorizedCount),
+      },
+    ],
+  }
+}
+
+function graphNodeType(entityType: string | undefined): MemoryGraphNode["type"] {
+  return entityType?.toUpperCase().includes("ORG") ? "Organization" : "Person"
+}
+
+function mapGraphPage(
+  summary: AdminGraphSummaryView,
+  entities: PageResult<AdminGraphEntityView>,
+  batches: PageResult<AdminGraphBatchView>
+): MemoryGraphPageData {
+  const nodes = entities.items.map((entity, index) => {
+    const type = graphNodeType(entity.entityType)
+    const column = index % 4
+    const row = Math.floor(index / 4)
+
+    return {
+      icon: type === "Organization" ? "organization" : "person",
+      id: String(entity.id),
+      label: entity.displayName ?? entity.entityKey ?? `Entity ${entity.id}`,
+      size: index === 0 ? "lg" : "md",
+      type,
+      x: `${18 + column * 20}%`,
+      y: `${22 + row * 18}%`,
+    } satisfies MemoryGraphNode
+  })
+  const selectedNode = nodes[0]
+  const selectedEntity = entities.items[0]
+
+  return {
+    diagnostics: batches.items.map((batch) => ({
+      errorMessage: batch.errorMessage ?? "-",
+      id: batch.extractionBatchId ?? String(batch.id),
+      lastAttempt: formatDateTime(batch.updatedAt ?? batch.createdAt),
+      state:
+        batch.state?.toLowerCase().includes("repair") ? "Repair Required" : "Completed",
+    })),
+    edges: [],
+    nodes,
+    selectedEntity: {
+      aliases: selectedNode ? [selectedNode.label] : [],
+      cooccurrences: [],
+      entityId: selectedNode?.id ?? "-",
+      label: selectedNode?.label ?? "No entity selected",
+      mentionCount: summary.mentionCount,
+      metadataJson: stringifyJson(selectedEntity?.metadata),
+      type: selectedNode?.type.toUpperCase() ?? "-",
+    },
+    summary: [
+      { label: "Entities", value: formatCount(summary.entityCount) },
+      { label: "Aliases", value: formatCount(summary.aliasCount) },
+      { label: "Mentions", value: formatCount(summary.mentionCount) },
+      { label: "Item Links", value: formatCount(summary.itemLinkCount) },
+      {
+        label: "Cooccurrences",
+        value: formatCount(summary.cooccurrenceCount),
+      },
+      {
+        label: "Batches Needing Repair",
+        tone: summary.graphBatchCountByState.some((item) =>
+          item.name.toLowerCase().includes("repair")
+        )
+          ? "danger"
+          : "default",
+        value: formatCount(
+          summary.graphBatchCountByState
+            .filter((item) => item.name.toLowerCase().includes("repair"))
+            .reduce((total, item) => total + item.count, 0)
+        ),
+      },
+    ],
+  }
+}
+
+function threadStatus(status: string | undefined): MemoryThreadStoryline["status"] {
+  const normalized = status?.toUpperCase()
+
+  if (normalized === "CLOSED") {
+    return "CLOSED"
+  }
+
+  if (normalized === "DORMANT") {
+    return "DORMANT"
+  }
+
+  return "ACTIVE"
+}
+
+function mapThreadNarrative(thread: AdminMemoryThreadView) {
+  const latestUpdate = thread.snapshotJson?.latestUpdate
+
+  return typeof latestUpdate === "string"
+    ? latestUpdate
+    : thread.headline ?? thread.displayLabel ?? thread.threadKey
+}
+
+function mapThreadsPage(
+  threads: PageResult<AdminMemoryThreadView>,
+  status: AdminMemoryThreadStatusView
+): MemoryThreadsPageData {
+  const activeCount = threads.items.filter(
+    (thread) => threadStatus(thread.lifecycleStatus) === "ACTIVE"
+  ).length
+  const dormantCount = threads.items.filter(
+    (thread) => threadStatus(thread.lifecycleStatus) === "DORMANT"
+  ).length
+  const closedCount = threads.items.filter(
+    (thread) => threadStatus(thread.lifecycleStatus) === "CLOSED"
+  ).length
+  const totalMembers = threads.items.reduce(
+    (total, thread) => total + (thread.memberCount ?? 0),
+    0
+  )
+
+  return {
+    projection: {
+      failed: status.failedCount,
+      pending: status.pendingCount,
+      projectionId: status.materializationPolicyVersion ?? "-",
+      status: uppercase(status.projectionState, "UNKNOWN"),
+      updatedAt: formatDate(status.updatedAt),
+    },
+    storylines: threads.items.map((thread) => {
+      const mappedStatus = threadStatus(thread.lifecycleStatus)
+      const narrative = mapThreadNarrative(thread)
+
+      return {
+        category: thread.threadType ?? "thread",
+        description: thread.headline ?? thread.displayLabel ?? thread.threadKey,
+        detail: {
+          category: thread.threadType ?? "thread",
+          key: thread.threadKey,
+          narrative,
+          status: mappedStatus,
+          timeline: [
+            {
+              content: narrative,
+              id: `${thread.threadKey}-snapshot`,
+              role: "PRIMARY",
+              source: "Thread snapshot",
+              timestamp: formatDateTime(thread.lastEventAt ?? thread.updatedAt),
+            },
+          ],
+          title: thread.displayLabel ?? thread.threadKey,
+        },
+        key: thread.threadKey,
+        lastEvent: formatDateTime(thread.lastEventAt ?? thread.updatedAt),
+        memberCount: thread.memberCount ?? 0,
+        status: mappedStatus,
+        title: thread.displayLabel ?? thread.threadKey,
+      }
+    }),
+    summary: [
+      { label: "Active Threads", value: formatCount(activeCount) },
+      { label: "Dormant", tone: "muted", value: formatCount(dormantCount) },
+      { label: "Closed", tone: "muted", value: formatCount(closedCount) },
+      { label: "Total Members", value: formatCount(totalMembers) },
+    ],
+  }
+}
+
+function insightNode(
+  insight: AdminInsightView,
+  kind: MemoryInsightNode["kind"]
+): MemoryInsightNode {
+  return {
+    category: insight.type ?? "Insight",
+    description: insight.content ?? insight.name ?? "-",
+    id: String(insight.insightId),
+    kind,
+    label: titleCase(insight.tier ?? kind),
+    title: insight.name ?? insight.groupName ?? `Insight ${insight.insightId}`,
+  }
+}
+
+function mapInsightsPage(insights: PageResult<AdminInsightView>): MemoryInsightsPageData {
+  const byId = new Map(
+    insights.items.map((insight) => [insight.insightId, insight])
+  )
+  const childIds = new Set(
+    insights.items.flatMap((insight) => insight.childInsightIds ?? [])
+  )
+  const rootInsights = insights.items.filter(
+    (insight) =>
+      insight.tier?.toUpperCase() === "ROOT" ||
+      (!insight.parentInsightId && !childIds.has(insight.insightId))
+  )
+
+  function leavesForInsight(insight: AdminInsightView) {
+    return (insight.childInsightIds ?? [])
+      .map((childInsightId) => byId.get(childInsightId))
+      .filter((child): child is AdminInsightView => Boolean(child))
+      .map((child) => insightNode(child, "leaf"))
+  }
+
+  const roots = rootInsights.map((rootInsight) => ({
+    ...insightNode(rootInsight, "root"),
+    branches: (rootInsight.childInsightIds ?? [])
+      .map((childInsightId) => byId.get(childInsightId))
+      .filter((child): child is AdminInsightView => Boolean(child))
+      .map((childInsight) => ({
+        ...insightNode(childInsight, "branch"),
+        leaves: leavesForInsight(childInsight),
+      })),
+  }))
+  const selectedInsight =
+    insights.items.find((insight) => insight.insightId === 442) ??
+    rootInsights[0] ??
+    insights.items[0]
+  const selectedPoints =
+    selectedInsight?.points
+      ?.map((point) => point.content)
+      .filter((point): point is string => Boolean(point)) ?? []
+
+  return {
+    branches: roots[0]?.branches ?? [],
+    hierarchy: [
+      { count: roots.length, items: roots.map((root) => root.title), label: "Roots" },
+      {
+        count: roots.reduce((total, root) => total + root.branches.length, 0),
+        label: "Branches",
+      },
+      { count: 0, label: "Leaves" },
+    ],
+    root:
+      roots[0] ??
+      {
+        category: "Insight",
+        description: "No insights returned by the API.",
+        id: "empty",
+        kind: "root",
+        label: "Root Insight",
+        title: "No insight selected",
+      },
+    roots,
+    selectedDetail: {
+      categories: selectedInsight?.categories ?? [],
+      description: selectedInsight?.content ?? "-",
+      id: String(selectedInsight?.insightId ?? "empty"),
+      kind: titleCase(selectedInsight?.tier ?? "Insight"),
+      metadata: [
+        { label: "TYPE", value: selectedInsight?.type ?? "-" },
+        { label: "SCOPE", value: selectedInsight?.scope ?? "-" },
+        { label: "TIER", value: selectedInsight?.tier ?? "-" },
+      ],
+      points: selectedPoints.length ? selectedPoints : [selectedInsight?.content ?? "-"],
+      title: selectedInsight?.name ?? "No insight selected",
+    },
+  }
+}
+
+export function mapAdminMemoryDashboardData(
+  memoryId: string,
+  apiData: AdminMemoryDashboardApiData
+): MemoryDashboardData {
+  const scope = memoryScope(memoryId)
+  const backlogCount = backlogTotal(apiData.dashboard.backlog)
+  const latestActivity = latestActivityTime(apiData)
+  const base = fallbackDashboard
+
+  return {
+    ...base,
+    activity: [
+      ...apiData.rawData.items.slice(0, 2).map((record) => ({
+        detail: record.caption ?? record.rawDataId,
+        time: formatDateTime(record.createdAt),
+        title: "Raw data ingested",
+        tone: "default" as const,
+      })),
+      ...apiData.items.items.slice(0, 2).map((item) => ({
+        detail: item.content ?? String(item.itemId),
+        time: formatDateTime(item.createdAt ?? item.observedAt),
+        title: "Memory item extracted",
+        tone: "default" as const,
+      })),
+      ...apiData.insights.items.slice(0, 1).map((insight) => ({
+        detail: insight.content ?? insight.name ?? String(insight.insightId),
+        time: formatDateTime(insight.updatedAt ?? insight.createdAt),
+        title: "Insight reasoned",
+        tone: "muted" as const,
+      })),
+    ],
+    agentId: scope.agentId ?? "All agents",
+    attention: [
+      {
+        count: apiData.dashboard.backlog.conversationPending,
+        label: "Pending conversations",
+      },
+      {
+        count: apiData.dashboard.backlog.insightUnbuilt,
+        label: "Unbuilt insights",
+      },
+      {
+        count: apiData.dashboard.backlog.graphBatchRepairRequired,
+        label: "Graph repair required",
+        tone:
+          apiData.dashboard.backlog.graphBatchRepairRequired > 0
+            ? "danger"
+            : "default",
+      },
+    ],
+    graph: mapGraphPage(
+      apiData.graphSummary,
+      apiData.graphEntities,
+      apiData.graphBatches
+    ),
+    id: memoryId,
+    identity: {
+      agent: scope.agentId ?? "All agents",
+      runtimeId: memoryId,
+    },
+    insights: mapInsightsPage(apiData.insights),
+    items: mapItemsPage(apiData.items),
+    itemsByCategory: mapCategoryItems(apiData.dashboard.breakdown.itemTypes),
+    lastActivity: formatDateTime(latestActivity),
+    metrics: [
+      {
+        detail: "records",
+        label: "Raw Data",
+        value: formatCount(apiData.dashboard.totals.rawData),
+      },
+      {
+        detail: "items",
+        label: "Memory Items",
+        value: formatCount(apiData.dashboard.totals.items),
+      },
+      {
+        detail: "patterns",
+        label: "Insights",
+        value: formatCount(apiData.dashboard.totals.insights),
+      },
+      {
+        detail: "contexts",
+        label: "Threads",
+        value: formatCount(apiData.dashboard.totals.memoryThreads),
+      },
+      {
+        detail: "attention",
+        label: "Alerts",
+        tone: backlogCount > 0 ? "danger" : "default",
+        value: formatCount(backlogCount),
+      },
+    ],
+    name: memoryId,
+    pipeline: [
+      {
+        detail: `${formatCount(apiData.dashboard.totals.rawData)} Ingested`,
+        label: "Raw Data",
+        status: "complete",
+      },
+      {
+        detail: `${formatCount(apiData.dashboard.totals.items)} Extracted`,
+        label: "Items",
+        status: "complete",
+      },
+      {
+        detail: `${formatCount(
+          apiData.dashboard.backlog.graphBatchRepairRequired
+        )} Repair`,
+        label: "Graph / Threads",
+        status:
+          apiData.dashboard.backlog.graphBatchRepairRequired > 0
+            ? "warning"
+            : "complete",
+      },
+      {
+        detail: `${formatCount(apiData.dashboard.backlog.insightUnbuilt)} Pending`,
+        label: "Insights",
+        status:
+          apiData.dashboard.backlog.insightUnbuilt > 0 ? "pending" : "complete",
+      },
+    ],
+    rawData: mapRawDataPage(apiData.rawData),
+    rawDataByType: mapDistribution(apiData.dashboard.breakdown.rawDataTypes),
+    status: apiData.threadStatus.rebuildInProgress ? "Rebuilding" : "Active",
+    threads: mapThreadsPage(apiData.threads, apiData.threadStatus),
+    userId: scope.userId,
+  }
+}
+
 async function fetchMemoryDashboard(memoryId: string) {
-  return dashboardByMemoryId[memoryId] ?? fallbackDashboard
+  const scope = memoryScope(memoryId)
+  const dashboardRequest = fetchJson<AdminDashboardView>("/admin/v1/dashboard", {
+    query: { days: 7, memoryId },
+  })
+
+  const [
+    dashboard,
+    rawData,
+    items,
+    graphSummary,
+    graphEntities,
+    graphBatches,
+    threads,
+    threadStatus,
+    insights,
+  ] = await Promise.all([
+    dashboardRequest,
+    fetchAdminRawDataPage({
+      agentId: scope.agentId,
+      page: 1,
+      pageSize: 20,
+      userId: scope.userId,
+    }),
+    fetchAdminItemsPage({
+      agentId: scope.agentId,
+      page: 1,
+      pageSize: 20,
+      userId: scope.userId,
+    }),
+    fetchAdminGraphSummary(memoryId),
+    fetchAdminGraphEntitiesPage({ memoryId, page: 1, pageSize: 20 }),
+    fetchAdminGraphBatchesPage({ memoryId, page: 1, pageSize: 20 }),
+    fetchAdminMemoryThreadsPage({
+      agentId: scope.agentId,
+      page: 1,
+      pageSize: 20,
+      userId: scope.userId,
+    }),
+    fetchAdminMemoryThreadStatus({
+      agentId: scope.agentId,
+      userId: scope.userId,
+    }),
+    fetchAdminInsightsPage({
+      agentId: scope.agentId,
+      page: 1,
+      pageSize: 20,
+      userId: scope.userId,
+    }),
+  ])
+
+  return mapAdminMemoryDashboardData(memoryId, {
+    dashboard,
+    graphBatches,
+    graphEntities,
+    graphSummary,
+    insights,
+    items,
+    rawData,
+    threadStatus,
+    threads,
+  })
 }
 
 export function useMemoryDashboard(memoryId: string) {

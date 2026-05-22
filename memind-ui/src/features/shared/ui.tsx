@@ -1,5 +1,5 @@
 import type * as React from "react"
-import type { LucideIcon } from "lucide-react"
+import { ClipboardList, Clock3, type LucideIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import {
@@ -10,21 +10,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 
 export type Tone = "default" | "success" | "warning" | "danger"
@@ -210,66 +195,37 @@ export function Panel({
   )
 }
 
-export function PagePagination({ label }: { label: string }) {
-  return (
-    <div className="flex flex-col gap-3 border-t border-border/70 bg-muted/25 px-4 py-3 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
-      <span>{label}</span>
-      <Pagination className="mx-0 w-auto justify-start md:justify-end">
-        <PaginationContent>
-          <PaginationItem>
-            <PaginationPrevious href="#" />
-          </PaginationItem>
-          <PaginationItem>
-            <PaginationNext href="#" />
-          </PaginationItem>
-        </PaginationContent>
-      </Pagination>
-    </div>
-  )
-}
-
-export function TableSurface({
-  children,
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
-  return (
-    <div
-      className={cn("overflow-hidden rounded-md border bg-card/95", className)}
-      {...props}
-    >
-      {children}
-    </div>
-  )
-}
-
-export function FilterSelect({
-  "aria-label": ariaLabel,
-  defaultValue,
-  items,
-  className,
-  size,
+export function PlanningOverlay({
+  "data-testid": dataTestId,
 }: {
-  "aria-label": string
-  defaultValue: string
-  items: Array<{ value: string; label: string }>
-  className?: string
-  size?: "sm" | "default"
+  "data-testid": string
 }) {
   return (
-    <Select defaultValue={defaultValue}>
-      <SelectTrigger aria-label={ariaLabel} className={className} size={size}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectGroup>
-          {items.map((item) => (
-            <SelectItem key={item.value} value={item.value}>
-              {item.label}
-            </SelectItem>
-          ))}
-        </SelectGroup>
-      </SelectContent>
-    </Select>
+    <div
+      aria-label="Planning"
+      className="absolute inset-0 z-20 flex items-center justify-center bg-background/70 p-4 backdrop-blur-md"
+      data-testid={dataTestId}
+    >
+      <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-lg border bg-card/95 px-6 py-7 text-center shadow-sm">
+        <div
+          aria-hidden="true"
+          className="relative flex size-12 items-center justify-center rounded-lg border bg-primary/10 text-primary"
+        >
+          <ClipboardList />
+          <span className="absolute -right-1 -bottom-1 flex size-5 items-center justify-center rounded-md border bg-card text-primary shadow-sm">
+            <Clock3 />
+          </span>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <p className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+            Roadmap in progress
+          </p>
+          <p className="text-2xl font-semibold tracking-tight">Planning</p>
+          <p className="text-sm text-muted-foreground">
+            This workspace is being shaped and will be available soon.
+          </p>
+        </div>
+      </div>
+    </div>
   )
 }

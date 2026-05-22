@@ -76,6 +76,18 @@ public class AdminMemoryThreadController {
         return new SuccessResult<>(queryService.listThreadItems(userId, agentId, threadKey));
     }
 
+    @GetMapping("/{threadKey}/timeline")
+    public SuccessResult<
+                    List<
+                            com.openmemind.ai.memory.server.domain.memorythread.view
+                                    .AdminMemoryThreadTimelineItemView>>
+            timeline(
+                    @PathVariable String threadKey,
+                    @RequestParam String userId,
+                    @RequestParam(required = false) String agentId) {
+        return new SuccessResult<>(queryService.timeline(userId, agentId, threadKey));
+    }
+
     @GetMapping("/status")
     public SuccessResult<AdminMemoryThreadStatusView> status(
             @RequestParam String userId, @RequestParam(required = false) String agentId) {

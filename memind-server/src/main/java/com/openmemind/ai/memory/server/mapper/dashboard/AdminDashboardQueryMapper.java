@@ -37,6 +37,7 @@ import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryRawDataMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadIntakeOutboxMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadProjectionMapper;
 import com.openmemind.ai.memory.server.domain.dashboard.view.AdminDashboardView;
+import com.openmemind.ai.memory.server.domain.dashboard.view.AdminRecentMemoryView;
 import com.openmemind.ai.memory.server.support.AdminMemoryScope;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -51,6 +52,8 @@ public interface AdminDashboardQueryMapper {
 
     AdminDashboardView dashboard(
             String memoryId, int days, boolean graphEnabled, boolean retrievalGraphAssistEnabled);
+
+    List<AdminRecentMemoryView> recentMemories(int limit);
 }
 
 @Component
@@ -107,6 +110,53 @@ final class MybatisAdminDashboardQueryMapper implements AdminDashboardQueryMappe
                 activity(scope, days),
                 breakdown(scope),
                 healthSignals(scope, graphEnabled, retrievalGraphAssistEnabled));
+    }
+
+    @Override
+    public List<AdminRecentMemoryView> recentMemories(int limit) {
+        return jdbcTemplate.query(
+                """
+                SELECT content_rows.memory_id,
+                       content_rows.user_id,
+                       content_rows.agent_id,
+                       MIN(content_rows.created_at) AS created_at,
+                       COUNT(*) AS requests,
+                       CASE
+                           WHEN COALESCE(MAX(alert_rows.warning_count), 0) > 0
+                               THEN 'warning'
+                           ELSE 'healthy'
+                       END AS alert,
+                       MAX(content_rows.updated_at) AS updated_at
+                FROM (
+                    SELECT memory_id, user_id, agent_id, created_at, updated_at,
+                           'memory_raw_data' AS source_table
+                    FROM memory_raw_data WHERE deleted = 0
+                    UNION ALL
+                    SELECT memory_id, user_id, agent_id, created_at, updated_at,
+                           'memory_item' AS source_table
+                    FROM memory_item WHERE deleted = 0
+                    UNION ALL
+                    SELECT memory_id, user_id, agent_id, created_at, updated_at,
+                           'memory_insight' AS source_table
+                    FROM memory_insight WHERE deleted = 0
+                ) content_rows
+                LEFT JOIN (
+                    SELECT memory_id, user_id, agent_id, COUNT(*) AS warning_count
+                    FROM memory_item_graph_batch
+                    WHERE deleted = 0 AND state = 'REPAIR_REQUIRED'
+                    GROUP BY memory_id, user_id, agent_id
+                ) alert_rows
+                    ON alert_rows.memory_id = content_rows.memory_id
+                   AND alert_rows.user_id = content_rows.user_id
+                   AND alert_rows.agent_id = content_rows.agent_id
+                GROUP BY content_rows.memory_id, content_rows.user_id, content_rows.agent_id
+                ORDER BY MIN(content_rows.created_at) DESC,
+                         MAX(content_rows.updated_at) DESC,
+                         content_rows.memory_id ASC
+                LIMIT ?
+                """,
+                MybatisAdminDashboardQueryMapper::toRecentMemory,
+                limit);
     }
 
     private AdminDashboardView.Totals totals(AdminMemoryScope scope) {
@@ -350,5 +400,17 @@ final class MybatisAdminDashboardQueryMapper implements AdminDashboardQueryMappe
             throws SQLException {
         return new AdminDashboardView.StateCount(
                 resultSet.getString("state"), resultSet.getLong("count"));
+    }
+
+    private static AdminRecentMemoryView toRecentMemory(ResultSet resultSet, int rowNum)
+            throws SQLException {
+        return new AdminRecentMemoryView(
+                resultSet.getString("memory_id"),
+                resultSet.getString("user_id"),
+                resultSet.getString("agent_id"),
+                resultSet.getString("created_at"),
+                resultSet.getLong("requests"),
+                resultSet.getString("alert"),
+                resultSet.getString("updated_at"));
     }
 }

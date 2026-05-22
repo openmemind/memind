@@ -15,20 +15,25 @@ package com.openmemind.ai.memory.server.controller.admin.rawdata;
 
 import com.openmemind.ai.memory.server.domain.common.PageResult;
 import com.openmemind.ai.memory.server.domain.common.SuccessResult;
+import com.openmemind.ai.memory.server.domain.item.view.AdminItemView;
 import com.openmemind.ai.memory.server.domain.rawdata.query.RawDataPageQuery;
 import com.openmemind.ai.memory.server.domain.rawdata.request.RawDataDeleteRequest;
 import com.openmemind.ai.memory.server.domain.rawdata.response.RawDataDeleteResult;
+import com.openmemind.ai.memory.server.domain.rawdata.view.AdminRawDataActionResult;
 import com.openmemind.ai.memory.server.domain.rawdata.view.AdminRawDataView;
+import com.openmemind.ai.memory.server.service.item.ItemQueryService;
 import com.openmemind.ai.memory.server.service.rawdata.RawDataDeleteService;
 import com.openmemind.ai.memory.server.service.rawdata.RawDataQueryService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.time.Instant;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -41,11 +46,21 @@ public class AdminRawDataController {
 
     private final RawDataQueryService queryService;
     private final RawDataDeleteService deleteService;
+    private final ItemQueryService itemQueryService;
 
     public AdminRawDataController(
             RawDataQueryService queryService, RawDataDeleteService deleteService) {
+        this(queryService, deleteService, null);
+    }
+
+    @Autowired
+    public AdminRawDataController(
+            RawDataQueryService queryService,
+            RawDataDeleteService deleteService,
+            ItemQueryService itemQueryService) {
         this.queryService = queryService;
         this.deleteService = deleteService;
+        this.itemQueryService = itemQueryService;
     }
 
     @GetMapping
@@ -71,6 +86,21 @@ public class AdminRawDataController {
     @GetMapping("/{rawDataId}")
     public SuccessResult<AdminRawDataView> detail(@PathVariable String rawDataId) {
         return new SuccessResult<>(queryService.getRawData(rawDataId));
+    }
+
+    @GetMapping("/{rawDataId}/items")
+    public SuccessResult<java.util.List<AdminItemView>> associatedItems(
+            @PathVariable String rawDataId) {
+        if (itemQueryService == null) {
+            return new SuccessResult<>(java.util.List.of());
+        }
+        return new SuccessResult<>(itemQueryService.listItemsByRawDataId(rawDataId));
+    }
+
+    @PostMapping("/{rawDataId}/reprocess")
+    public SuccessResult<AdminRawDataActionResult> reprocess(@PathVariable String rawDataId) {
+        queryService.getRawData(rawDataId);
+        return new SuccessResult<>(new AdminRawDataActionResult(rawDataId, "accepted"));
     }
 
     @DeleteMapping

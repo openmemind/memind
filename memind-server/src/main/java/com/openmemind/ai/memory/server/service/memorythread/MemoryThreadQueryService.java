@@ -19,6 +19,7 @@ import com.openmemind.ai.memory.server.domain.memorythread.query.MemoryThreadPag
 import com.openmemind.ai.memory.server.domain.memorythread.view.AdminItemMemoryThreadView;
 import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadItemView;
 import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadStatusView;
+import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadTimelineItemView;
 import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadView;
 import com.openmemind.ai.memory.server.mapper.memorythread.AdminMemoryThreadQueryMapper;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeManager;
@@ -57,6 +58,18 @@ public class MemoryThreadQueryService {
                 queryMapper.findItemsByThreadKey(memoryId, threadKey);
         if (!items.isEmpty()) {
             return items;
+        }
+        getThread(userId, agentId, threadKey);
+        return List.of();
+    }
+
+    public List<AdminMemoryThreadTimelineItemView> timeline(
+            String userId, String agentId, String threadKey) {
+        String memoryId = toMemoryId(userId, agentId);
+        List<AdminMemoryThreadTimelineItemView> events =
+                queryMapper.findTimelineByThreadKey(memoryId, threadKey);
+        if (!events.isEmpty()) {
+            return events;
         }
         getThread(userId, agentId, threadKey);
         return List.of();

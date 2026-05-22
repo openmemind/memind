@@ -56,6 +56,12 @@ public class AdminItemGraphController {
         return new SuccessResult<>(queryService.summary(memoryId));
     }
 
+    @GetMapping("/explorer")
+    public SuccessResult<ItemGraphViews.ExplorerView> explorer(
+            @RequestParam(required = false) String memoryId) {
+        return new SuccessResult<>(queryService.explorer(memoryId));
+    }
+
     @GetMapping("/entities")
     public SuccessResult<PageResult<ItemGraphViews.EntityView>> entities(
             @RequestParam(name = "page", defaultValue = "1") @Min(1) int page,

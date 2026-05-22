@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 
+import { fetchMemoriesPage, type MemoriesPage } from "./memories-api"
+
 export type MemoryStatus = "active" | "idle" | "warning" | "error"
 
 export type MemorySummary = {
@@ -18,6 +20,7 @@ export type MemoryWorkspace = {
   requests: string
   items: string
   insights: string
+  rawData: string
   alerts: {
     critical: number
     warning: number
@@ -27,95 +30,98 @@ export type MemoryWorkspace = {
 }
 
 export type MemoriesData = {
+  pagination: {
+    currentPage: number
+    hasNext: boolean
+    hasPrevious: boolean
+    summary: string
+    totalPages: number
+  }
   summaries: MemorySummary[]
   workspaces: MemoryWorkspace[]
 }
 
-const memoriesData: MemoriesData = {
-  summaries: [
-    {
-      label: "Total Memories",
-      value: "2,840",
-      detail: "Across all collections",
-      tone: "default",
+function formatCount(value: number) {
+  return new Intl.NumberFormat("en-US").format(value)
+}
+
+function formatPaginationSummary(
+  page: MemoriesPage["page"],
+  itemCount: number
+) {
+  if (page.totalItems === 0 || itemCount === 0) {
+    return `Showing 0 of ${formatCount(page.totalItems)} results`
+  }
+
+  const firstItem = (page.page - 1) * page.pageSize + 1
+  const lastItem = firstItem + itemCount - 1
+
+  return `Showing ${formatCount(firstItem)} to ${formatCount(
+    lastItem
+  )} of ${formatCount(page.totalItems)} results`
+}
+
+export function mapMemoriesPage(page: MemoriesPage): MemoriesData {
+  return {
+    pagination: {
+      currentPage: page.page.page,
+      hasNext: page.page.hasNext,
+      hasPrevious: page.page.hasPrevious,
+      summary: formatPaginationSummary(page.page, page.items.length),
+      totalPages: page.page.totalPages,
     },
-    {
-      label: "Active Memories",
-      value: "1,402",
-      detail: "49.3% total utilization",
-      tone: "success",
-    },
-    {
-      label: "With Alerts",
-      value: "14",
-      detail: "3 critical alerts",
-      tone: "danger",
-    },
-    {
-      label: "New Memories",
-      value: "156",
-      detail: "Created in the last 24h",
-      tone: "warning",
-    },
-  ],
-  workspaces: [
-    {
-      id: "MEM-8429-XQ",
-      name: "Customer-Core-01",
-      userId: "u_alex_chen",
-      agentId: "Agent-L4-Prime",
-      status: "active",
-      requests: "1.2k",
-      items: "429",
-      insights: "12",
-      alerts: { critical: 0, warning: 0 },
-      lastActivity: "2m ago",
-      createdAt: "May 18, 2026",
-    },
-    {
-      id: "MEM-3310-ZZ",
-      name: "Support-Context-B",
-      userId: "u_sarah_j",
-      agentId: "Agent-Zeta",
-      status: "error",
-      requests: "892",
-      items: "15",
-      insights: "2",
-      alerts: { critical: 1, warning: 2 },
-      lastActivity: "1h ago",
-      createdAt: "May 17, 2026",
-    },
-    {
-      id: "MEM-1004-KL",
-      name: "Analysis-Cluster-9",
-      userId: "u_dev_team",
-      agentId: "DataProcessor",
-      status: "idle",
-      requests: "4.1k",
-      items: "2.1k",
-      insights: "84",
-      alerts: { critical: 0, warning: 0 },
-      lastActivity: "14h ago",
-      createdAt: "May 14, 2026",
-    },
-    {
-      id: "MEM-5928-RP",
-      name: "Research-Assistant-A",
-      userId: "u_research_lab",
-      agentId: "Retriever-Pro",
-      status: "warning",
-      requests: "2.7k",
-      items: "864",
-      insights: "31",
-      alerts: { critical: 0, warning: 4 },
-      lastActivity: "1d ago",
-      createdAt: "May 11, 2026",
-    },
-  ],
+    summaries: [
+      {
+        detail: "Across all collections",
+        label: "Total Memories",
+        tone: "default",
+        value: formatCount(page.page.totalItems),
+      },
+      {
+        detail: "Loaded from current page",
+        label: "Active Memories",
+        tone: "success",
+        value: formatCount(page.items.length),
+      },
+      {
+        detail: "Critical + warning",
+        label: "With Alerts",
+        tone: "danger",
+        value: formatCount(
+          page.items.reduce(
+            (total, item) => total + item.alerts.critical + item.alerts.warning,
+            0
+          )
+        ),
+      },
+      {
+        detail: `Page ${page.page.page} of ${page.page.totalPages}`,
+        label: "New Memories",
+        tone: "warning",
+        value: formatCount(page.items.length),
+      },
+    ],
+    workspaces: page.items.map((item) => ({
+      agentId: item.agentId,
+      alerts: item.alerts,
+      createdAt: item.createdAt,
+      id: item.id,
+      insights: formatCount(item.insights),
+      items: formatCount(item.items),
+      lastActivity: item.lastActivity,
+      name: item.name,
+      rawData: formatCount(item.rawData ?? item.requests ?? 0),
+      requests: formatCount(item.requests),
+      status: item.status as MemoryStatus,
+      userId: item.userId,
+    })),
+  }
 }
 
 async function fetchMemoriesData() {
-  return memoriesData
+  const page = await fetchMemoriesPage({ page: 1, pageSize: 25 })
+
+  return mapMemoriesPage(page)
 }
 
 export function useMemoriesData() {

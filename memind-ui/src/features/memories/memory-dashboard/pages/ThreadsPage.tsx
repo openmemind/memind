@@ -42,13 +42,11 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 
 import type {
   MemoryDashboardData,
-  MemoryThreadStatusSummary,
   MemoryThreadStoryline,
   MemoryThreadTimelineItem,
 } from "../memory-dashboard-data"
@@ -98,53 +96,6 @@ function ThreadsHeader({
         </Button>
       </div>
     </header>
-  )
-}
-
-function SummaryMetric({ item }: { item: MemoryThreadStatusSummary }) {
-  return (
-    <div className="min-w-28 px-3 text-center">
-      <div className="text-[0.625rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-        {item.label}
-      </div>
-      <div
-        className={cn(
-          "mt-0.5 text-xl font-semibold tabular-nums",
-          item.tone === "muted" && "text-muted-foreground"
-        )}
-      >
-        {item.value}
-      </div>
-    </div>
-  )
-}
-
-function ThreadsSummary({ data }: { data: MemoryDashboardData["threads"] }) {
-  return (
-    <section className="grid shrink-0 gap-4 border-b bg-muted/25 px-4 py-4 lg:grid-cols-[1fr_auto] lg:px-8">
-      <div className="flex min-w-0 flex-wrap items-center gap-y-3">
-        {data.summary.map((item, index) => (
-          <div key={item.label} className="flex items-center">
-            {index > 0 ? (
-              <Separator
-                className="mx-1 hidden h-9 sm:block"
-                orientation="vertical"
-              />
-            ) : null}
-            <SummaryMetric item={item} />
-          </div>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
-        <span className="font-mono">{data.projection.projectionId}</span>
-        <Separator className="hidden h-4 sm:block" orientation="vertical" />
-        <span>Updated {data.projection.updatedAt}</span>
-        <Separator className="hidden h-4 sm:block" orientation="vertical" />
-        <span>{data.projection.pending} pending</span>
-        <span>{data.projection.failed} failed</span>
-      </div>
-    </section>
   )
 }
 
@@ -217,7 +168,7 @@ function ThreadList({
 }) {
   return (
     <aside
-      className="thread-sidebar flex min-h-[520px] flex-col border-b bg-background lg:min-h-0 lg:w-80 lg:shrink-0 lg:border-r lg:border-b-0"
+      className="thread-sidebar flex min-h-130 flex-col border-b bg-background lg:min-h-0 lg:w-80 lg:shrink-0 lg:border-r lg:border-b-0"
       data-testid="thread-sidebar"
     >
       <div className="flex flex-col gap-3 border-b p-4">
@@ -423,7 +374,7 @@ function ThreadDetail({
   if (!thread) {
     return (
       <section
-        className="thread-detail flex min-h-[520px] flex-1 bg-background"
+        className="thread-detail flex min-h-130 flex-1 bg-background"
         data-testid="thread-detail"
       >
         <Empty className="min-h-full border-0">
@@ -573,7 +524,7 @@ export function ThreadsPage({ data }: { data: MemoryDashboardData }) {
       data-testid="thread-workbench"
     >
       <ThreadsHeader projection={data.threads.projection} />
-      <ThreadsSummary data={data.threads} />
+      {/*<ThreadsSummary data={data.threads} />*/}
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <ThreadList
           filter={filter}

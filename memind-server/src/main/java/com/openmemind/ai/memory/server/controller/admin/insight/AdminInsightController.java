@@ -68,6 +68,22 @@ public class AdminInsightController {
         return new SuccessResult<>(queryService.getInsight(insightId));
     }
 
+    @GetMapping("/tree")
+    public SuccessResult<com.openmemind.ai.memory.server.domain.insight.view.AdminInsightTreeView>
+            tree(
+                    @RequestParam(required = false) String userId,
+                    @RequestParam(required = false) String agentId) {
+        return new SuccessResult<>(queryService.tree(userId, agentId));
+    }
+
+    @org.springframework.web.bind.annotation.PostMapping("/{insightId}/regenerate")
+    public SuccessResult<
+                    com.openmemind.ai.memory.server.domain.insight.view
+                            .AdminInsightRegenerateResult>
+            regenerate(@PathVariable Long insightId) {
+        return new SuccessResult<>(queryService.regenerate(insightId));
+    }
+
     @DeleteMapping
     public SuccessResult<BatchDeleteResult> delete(
             @Valid @RequestBody InsightDeleteRequest request) {

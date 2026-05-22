@@ -22,8 +22,15 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { Progress } from "@/components/ui/progress"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
-import { FilterSelect } from "@/features/shared/ui"
 import { cn } from "@/lib/utils"
 
 import { JsonBlock } from "../components/JsonBlock"
@@ -205,17 +212,22 @@ function GraphToolbar({ onFocus }: { onFocus: () => void }) {
           <span className="text-[11px] font-bold tracking-[0.06em] text-muted-foreground uppercase">
             Type:
           </span>
-          <FilterSelect
-            aria-label="Graph entity type"
-            className="border-0 bg-transparent px-0 shadow-none"
-            defaultValue="all"
-            items={[
-              { value: "all", label: "All" },
-              { value: "person", label: "Person" },
-              { value: "organization", label: "Org" },
-            ]}
-            size="sm"
-          />
+          <Select defaultValue="all">
+            <SelectTrigger
+              aria-label="Graph entity type"
+              className="border-0 bg-transparent px-0 shadow-none"
+              size="sm"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="person">Person</SelectItem>
+                <SelectItem value="organization">Org</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex h-9 items-center gap-3 rounded-md border border-border bg-background/90 px-3 shadow-sm backdrop-blur-md">
           <span className="shrink-0 text-[11px] font-bold tracking-[0.06em] text-muted-foreground uppercase">
@@ -232,17 +244,22 @@ function GraphToolbar({ onFocus }: { onFocus: () => void }) {
       </div>
       <div className="pointer-events-auto flex items-center lg:justify-end">
         <div className="flex h-9 items-center rounded-md border border-border bg-background/90 px-3 shadow-sm backdrop-blur-md">
-          <FilterSelect
-            aria-label="Graph layout"
-            className="border-0 bg-transparent px-0 text-[11px] font-bold tracking-[0.06em] uppercase shadow-none"
-            defaultValue="force"
-            items={[
-              { value: "force", label: "Force Directed" },
-              { value: "circular", label: "Circular" },
-              { value: "grid", label: "Grid" },
-            ]}
-            size="sm"
-          />
+          <Select defaultValue="force">
+            <SelectTrigger
+              aria-label="Graph layout"
+              className="border-0 bg-transparent px-0 text-[11px] font-bold tracking-[0.06em] uppercase shadow-none"
+              size="sm"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="force">Force Directed</SelectItem>
+                <SelectItem value="circular">Circular</SelectItem>
+                <SelectItem value="grid">Grid</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </div>
       </div>
     </div>

@@ -489,6 +489,36 @@ class MemindServerIntegrationTest {
     }
 
     @Test
+    void adminDashboardRecentMemoriesReturnsPersistedRows() throws Exception {
+        insertRawData(
+                rawData(
+                        "rd-recent-old",
+                        "u1",
+                        "a1",
+                        "u1:a1",
+                        "cap-recent-old",
+                        Instant.parse("2026-04-29T09:00:00Z")));
+        insertRawData(
+                rawData(
+                        "rd-recent-new",
+                        "u2",
+                        "a2",
+                        "u2:a2",
+                        "cap-recent-new",
+                        Instant.parse("2026-05-01T09:00:00Z")));
+        insertGraphBatch(2450, "u2", "a2", "u2:a2", "batch-recent-new", "REPAIR_REQUIRED");
+
+        mockMvc.perform(get("/admin/v1/dashboard/recent-memories").queryParam("limit", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data[0].memoryId").value("u2:a2"))
+                .andExpect(jsonPath("$.data[0].userId").value("u2"))
+                .andExpect(jsonPath("$.data[0].agentId").value("a2"))
+                .andExpect(jsonPath("$.data[0].requests").value(1))
+                .andExpect(jsonPath("$.data[0].alert").value("warning"));
+    }
+
+    @Test
     void itemGraphCorrectionDeletesArePhysicalAndDoNotCascadeToItemLinks() throws Exception {
         insertGraphEntity(3001, "u1", "a1", "u1:a1", "person:alice", "Alice", "PERSON");
         insertGraphAlias(3002, "u1", "a1", "u1:a1", "person:alice", "PERSON", "alice");

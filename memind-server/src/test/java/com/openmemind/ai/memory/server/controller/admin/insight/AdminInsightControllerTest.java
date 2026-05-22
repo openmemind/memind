@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -26,6 +27,8 @@ import com.openmemind.ai.memory.server.configuration.RequestIdFilter;
 import com.openmemind.ai.memory.server.domain.common.BatchDeleteResult;
 import com.openmemind.ai.memory.server.domain.common.PageResponse;
 import com.openmemind.ai.memory.server.domain.insight.query.InsightPageQuery;
+import com.openmemind.ai.memory.server.domain.insight.view.AdminInsightRegenerateResult;
+import com.openmemind.ai.memory.server.domain.insight.view.AdminInsightTreeView;
 import com.openmemind.ai.memory.server.domain.insight.view.AdminInsightView;
 import com.openmemind.ai.memory.server.handler.ApiExceptionHandler;
 import com.openmemind.ai.memory.server.service.insight.InsightDeleteService;
@@ -74,6 +77,25 @@ class AdminInsightControllerTest {
 
         assertThat(queryService.recordedQuery.pageNo()).isEqualTo(2);
         assertThat(queryService.recordedQuery.pageSize()).isEqualTo(20);
+    }
+
+    @Test
+    void treeReturnsRootInsights() throws Exception {
+        mockMvc.perform(get("/admin/v1/insights/tree").param("userId", "u1").param("agentId", "a1"))
+                .andExpect(status().isOk())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data.roots[0].insightId").value(201));
+    }
+
+    @Test
+    void regenerateReturnsAcceptedResult() throws Exception {
+        mockMvc.perform(post("/admin/v1/insights/{insightId}/regenerate", 201L))
+                .andExpect(status().isOk())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data.insightId").value(201))
+                .andExpect(jsonPath("$.data.status").value("accepted"));
     }
 
     @Test
@@ -140,6 +162,16 @@ class AdminInsightControllerTest {
                 throw new java.util.NoSuchElementException("Insight not found: " + insightId);
             }
             return insightView();
+        }
+
+        @Override
+        public AdminInsightTreeView tree(String userId, String agentId) {
+            return new AdminInsightTreeView(List.of(insightView()));
+        }
+
+        @Override
+        public AdminInsightRegenerateResult regenerate(Long insightId) {
+            return new AdminInsightRegenerateResult(insightId, "accepted");
         }
     }
 

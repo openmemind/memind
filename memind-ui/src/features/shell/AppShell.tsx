@@ -1,7 +1,6 @@
 import {
   BarChart3,
   Brain,
-  GitBranch,
   KeyRound,
   LayoutDashboard,
   Settings,
@@ -9,7 +8,6 @@ import {
 
 import {
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -17,10 +15,11 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarSeparator,
 } from "@/components/ui/sidebar"
 import { SidebarShell } from "@/features/shell/SidebarShell"
+import { PlanningOverlay } from "@/features/shared/ui"
 import { cn } from "@/lib/utils"
+import * as React from "react"
 
 export type AppPage =
   | "dashboard"
@@ -66,8 +65,14 @@ export function AppShell({
   onPageChange,
   children,
 }: AppShellProps) {
+  const planningOverlay =
+    activePage === "analytics" || activePage === "api-keys" ? (
+      <PlanningOverlay data-testid={`${activePage}-planning-overlay`} />
+    ) : null
+
   return (
     <SidebarShell
+      contentOverlay={planningOverlay}
       contentKey={activePage}
       sidebar={
         <>
@@ -121,21 +126,6 @@ export function AppShell({
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
-
-          <SidebarFooter className="p-4">
-            <SidebarSeparator className="mb-2" />
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  aria-label="GitHub"
-                  className="h-9 cursor-pointer rounded-lg text-[13px]"
-                  type="button"
-                >
-                  <GitBranch />
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarFooter>
         </>
       }
     >

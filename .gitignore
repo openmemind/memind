@@ -8,7 +8,8 @@ target/
 *.iws
 *.iml
 *.ipr
-
+/.agents/skills
+/k8s
 ### Eclipse ###
 .apt_generated
 .classpath

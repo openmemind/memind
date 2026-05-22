@@ -15,9 +15,11 @@ package com.openmemind.ai.memory.server.controller.admin.dashboard;
 
 import com.openmemind.ai.memory.server.domain.common.SuccessResult;
 import com.openmemind.ai.memory.server.domain.dashboard.view.AdminDashboardView;
+import com.openmemind.ai.memory.server.domain.dashboard.view.AdminRecentMemoryView;
 import com.openmemind.ai.memory.server.service.dashboard.DashboardQueryService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import java.util.List;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -43,5 +45,14 @@ public class AdminDashboardController {
             throw new IllegalArgumentException("days must be between 1 and 30");
         }
         return new SuccessResult<>(queryService.getDashboard(memoryId, days));
+    }
+
+    @GetMapping("/recent-memories")
+    public SuccessResult<List<AdminRecentMemoryView>> recentMemories(
+            @RequestParam(defaultValue = "5") @Min(1) @Max(50) int limit) {
+        if (limit < 1 || limit > 50) {
+            throw new IllegalArgumentException("limit must be between 1 and 50");
+        }
+        return new SuccessResult<>(queryService.recentMemories(limit));
     }
 }

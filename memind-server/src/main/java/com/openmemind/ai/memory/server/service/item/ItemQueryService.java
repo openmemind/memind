@@ -17,6 +17,7 @@ import com.openmemind.ai.memory.server.domain.common.PageResponse;
 import com.openmemind.ai.memory.server.domain.item.query.ItemPageQuery;
 import com.openmemind.ai.memory.server.domain.item.view.AdminItemView;
 import com.openmemind.ai.memory.server.mapper.item.AdminItemQueryMapper;
+import java.util.List;
 import java.util.NoSuchElementException;
 import org.springframework.stereotype.Service;
 
@@ -37,5 +38,9 @@ public class ItemQueryService {
         return itemQueryMapper
                 .findByBizId(itemId)
                 .orElseThrow(() -> new NoSuchElementException("Item not found: " + itemId));
+    }
+
+    public List<AdminItemView> listItemsByRawDataId(String rawDataId) {
+        return itemQueryMapper.findByRawDataIds(List.of(rawDataId));
     }
 }

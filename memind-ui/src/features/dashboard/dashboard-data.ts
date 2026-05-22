@@ -1,5 +1,14 @@
 import { useQuery } from "@tanstack/react-query"
 
+import { fetchJson } from "@/lib/api/client"
+
+import {
+  fetchDashboardAlertsSummary,
+  fetchDashboardMemoriesSummary,
+  fetchDashboardRecentMemories,
+  type DashboardRecentMemory,
+} from "./dashboard-api"
+
 export type MetricTone = "default" | "success" | "warning" | "danger"
 
 export type DashboardMetric = {
@@ -12,9 +21,9 @@ export type DashboardMetric = {
 
 export type ActivityPoint = {
   label: string
-  total: number
-  success: number
-  failed: number
+  requests: number
+  extractRequests: number
+  insights: number
 }
 
 export type AlertSummaryItem = {
@@ -47,124 +56,255 @@ export type DashboardData = {
   recentActivity: MemoryActivity[]
 }
 
-const dashboardData: DashboardData = {
-  metrics: [
-    {
-      label: "Total Memories",
-      value: "1,284",
-      detail: "Tracked memory scopes",
-      trend: "+12%",
-      tone: "success",
-    },
-    {
-      label: "Total Requests",
-      value: "45.2k",
-      detail: "3.2k today",
-      trend: "+3.2k today",
-      tone: "default",
-    },
-    {
-      label: "Failed Requests",
-      value: "12",
-      detail: "Down 5%",
-      trend: "-5%",
-      tone: "success",
-    },
-    {
-      label: "Active Alerts",
-      value: "3",
-      detail: "Critical",
-      trend: "Critical",
-      tone: "danger",
-    },
-    {
-      label: "New Memories",
-      value: "48",
-      detail: "Last 24h",
-      trend: "Last 24h",
-      tone: "default",
-    },
-  ],
-  activity: [
-    { label: "12:00 AM", total: 420, success: 410, failed: 10 },
-    { label: "06:00 AM", total: 620, success: 610, failed: 12 },
-    { label: "12:00 PM", total: 540, success: 533, failed: 7 },
-    { label: "06:00 PM", total: 760, success: 748, failed: 12 },
-    { label: "11:59 PM", total: 920, success: 908, failed: 12 },
-  ],
-  alerts: [
-    { memoryId: "mem_f293_1a", time: "2m ago" },
-    { memoryId: "mem_a812_4d", time: "14m ago" },
-    { memoryId: "mem_c009_2b", time: "1h ago" },
-  ],
-  runtime: [
-    {
-      label: "Runtime",
-      value: "Available",
-      detail: "Memory runtime ready",
-      tone: "success",
-    },
-    {
-      label: "P95 Latency",
-      value: "242 ms",
-      detail: "Retrieval response time",
-      tone: "success",
-    },
-    {
-      label: "Outbox",
-      value: "18",
-      detail: "Thread events waiting",
-      tone: "warning",
-    },
-    {
-      label: "Error Rate",
-      value: "0.18%",
-      detail: "Last 24 hours",
-      tone: "default",
-    },
-  ],
-  recentActivity: [
-    {
-      memoryId: "mem_f293_1a",
-      userId: "alex.h@corp.ai",
-      agentId: "Customer Support v4",
-      createdAt: "2026-05-18",
-      requests: "1,402",
-      alert: "critical",
-      updatedAt: "2m ago",
-    },
-    {
-      memoryId: "mem_a812_4d",
-      userId: "sarah.j@tech.io",
-      agentId: "Personal Assistant",
-      createdAt: "2026-05-18",
-      requests: "842",
-      alert: "healthy",
-      updatedAt: "14m ago",
-    },
-    {
-      memoryId: "mem_c009_2b",
-      userId: "dev_ops@node.net",
-      agentId: "Log Analyzer",
-      createdAt: "2026-05-17",
-      requests: "12.5k",
-      alert: "healthy",
-      updatedAt: "1h ago",
-    },
-    {
-      memoryId: "mem_z441_9x",
-      userId: "finance@capital.com",
-      agentId: "Predictive Model B",
-      createdAt: "2026-05-17",
-      requests: "3,120",
-      alert: "info",
-      updatedAt: "3h ago",
-    },
-  ],
+export type DashboardAlertsSummary = Awaited<
+  ReturnType<typeof fetchDashboardAlertsSummary>
+>
+
+export type DashboardRecentMemories = Awaited<
+  ReturnType<typeof fetchDashboardRecentMemories>
+>
+
+export type DashboardMemoriesSummary = Awaited<
+  ReturnType<typeof fetchDashboardMemoriesSummary>
+>
+
+export type AdminDashboardView = {
+  totals: {
+    graphEntities: number
+    insights: number
+    itemLinks: number
+    items: number
+    memoryThreads: number
+    rawData: number
+  }
+  backlog: {
+    conversationPending: number
+    graphBatchRepairRequired: number
+    insightUnbuilt: number
+    insightUngrouped: number
+    threadOutboxFailed: number
+    threadOutboxPending: number
+  }
+  activity: {
+    days: number
+    insightsCreated: AdminDailyCount[]
+    itemsCreated: AdminDailyCount[]
+    rawDataCreated: AdminDailyCount[]
+  }
+  breakdown: {
+    graphLinkTypes: AdminNamedCount[]
+    insightTypes: AdminNamedCount[]
+    itemTypes: AdminNamedCount[]
+    rawDataTypes: AdminNamedCount[]
+    sourceClients: AdminNamedCount[]
+  }
+  healthSignals: {
+    graphEnabled: boolean
+    retrievalGraphAssistEnabled: boolean
+    threadProjectionStates: Array<{
+      count: number
+      state: string
+    }>
+  }
 }
 
-async function fetchDashboardData() {
-  return dashboardData
+export type AdminDailyCount = {
+  count: number
+  date: string
+}
+
+export type AdminNamedCount = {
+  count: number
+  name: string
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("en-US").format(value)
+}
+
+function formatDateLabel(date: string) {
+  const parsed = new Date(`${date}T00:00:00Z`)
+
+  if (Number.isNaN(parsed.getTime())) {
+    return date
+  }
+
+  return parsed.toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  })
+}
+
+function dailyCountMap(points: AdminDailyCount[]) {
+  return new Map(points.map((point) => [point.date, point.count]))
+}
+
+function mapActivity(activity: AdminDashboardView["activity"]) {
+  const rawDataByDate = dailyCountMap(activity.rawDataCreated)
+  const itemsByDate = dailyCountMap(activity.itemsCreated)
+  const insightsByDate = dailyCountMap(activity.insightsCreated)
+  const dates = Array.from(
+    new Set([
+      ...rawDataByDate.keys(),
+      ...itemsByDate.keys(),
+      ...insightsByDate.keys(),
+    ])
+  ).sort()
+
+  return dates.map((date) => {
+    const rawDataCount = rawDataByDate.get(date) ?? 0
+    const itemsCount = itemsByDate.get(date) ?? 0
+    const insightsCount = insightsByDate.get(date) ?? 0
+
+    return {
+      extractRequests: itemsCount,
+      insights: insightsCount,
+      label: formatDateLabel(date),
+      requests: rawDataCount,
+    }
+  })
+}
+
+function mapAlerts(alertsSummary: DashboardAlertsSummary): AlertSummaryItem[] {
+  return alertsSummary.items
+}
+
+function fallbackAlerts(view: AdminDashboardView): DashboardAlertsSummary {
+  const alerts: AlertSummaryItem[] = []
+
+  if (view.backlog.threadOutboxFailed > 0) {
+    alerts.push({
+      memoryId: "Thread outbox failed",
+      time: formatNumber(view.backlog.threadOutboxFailed),
+    })
+  }
+
+  if (view.backlog.graphBatchRepairRequired > 0) {
+    alerts.push({
+      memoryId: "Graph repair required",
+      time: formatNumber(view.backlog.graphBatchRepairRequired),
+    })
+  }
+
+  if (view.backlog.insightUnbuilt > 0) {
+    alerts.push({
+      memoryId: "Unbuilt insights",
+      time: formatNumber(view.backlog.insightUnbuilt),
+    })
+  }
+
+  return {
+    critical: view.backlog.threadOutboxFailed,
+    items: alerts,
+    warning:
+      view.backlog.graphBatchRepairRequired +
+      view.backlog.insightUnbuilt +
+      view.backlog.threadOutboxPending,
+  }
+}
+
+function mapRecentMemories(rows: DashboardRecentMemory[]): MemoryActivity[] {
+  return rows.map((row) => ({
+    agentId: row.agentId,
+    alert:
+      row.alert === "critical" || row.alert === "warning"
+        ? "critical"
+        : "healthy",
+    createdAt: row.createdAt,
+    memoryId: row.memoryId,
+    requests: formatNumber(row.requests),
+    updatedAt: row.updatedAt,
+    userId: row.userId,
+  }))
+}
+
+export function mapAdminDashboardView(
+  view: AdminDashboardView,
+  alertsSummary: DashboardAlertsSummary = fallbackAlerts(view),
+  recentMemories: DashboardRecentMemories = [],
+  memoriesSummary?: DashboardMemoriesSummary
+): DashboardData {
+  const activity = mapActivity(view.activity)
+  const memoriesCount = memoriesSummary?.page.totalItems ?? 0
+
+  return {
+    metrics: [
+      {
+        detail: "Memory workspaces",
+        label: "memories",
+        tone: "default",
+        trend: "Current",
+        value: formatNumber(memoriesCount),
+      },
+      {
+        detail: "Extracted requests",
+        label: "req count extract",
+        tone: "default",
+        trend: "Current",
+        value: formatNumber(view.totals.items),
+      },
+      {
+        detail: "Ingested requests",
+        label: "req count",
+        tone: "default",
+        trend: "Current",
+        value: formatNumber(view.totals.rawData),
+      },
+    ],
+    activity,
+    alerts: mapAlerts(alertsSummary),
+    recentActivity: mapRecentMemories(recentMemories),
+    runtime: [
+      {
+        detail: "Item graph pipeline",
+        label: "Graph",
+        tone: view.healthSignals.graphEnabled ? "success" : "warning",
+        value: view.healthSignals.graphEnabled ? "Enabled" : "Disabled",
+      },
+      {
+        detail: "Retrieval graph assist",
+        label: "Graph Assist",
+        tone: view.healthSignals.retrievalGraphAssistEnabled
+          ? "success"
+          : "warning",
+        value: view.healthSignals.retrievalGraphAssistEnabled
+          ? "Enabled"
+          : "Disabled",
+      },
+      {
+        detail: "Thread events waiting",
+        label: "Outbox",
+        tone: view.backlog.threadOutboxPending > 0 ? "warning" : "success",
+        value: formatNumber(view.backlog.threadOutboxPending),
+      },
+      {
+        detail: "Projection states",
+        label: "Threads",
+        tone: "default",
+        value: formatNumber(view.totals.memoryThreads),
+      },
+    ],
+  }
+}
+
+export async function fetchDashboardData() {
+  const [view, alertsSummary, recentMemories, memoriesSummary] =
+    await Promise.all([
+      fetchJson<AdminDashboardView>("/admin/v1/dashboard", {
+        query: { days: 7 },
+      }),
+      fetchDashboardAlertsSummary(),
+      fetchDashboardRecentMemories(5),
+      fetchDashboardMemoriesSummary(),
+    ])
+
+  return mapAdminDashboardView(
+    view,
+    alertsSummary,
+    recentMemories,
+    memoriesSummary
+  )
 }
 
 export function useDashboardData() {

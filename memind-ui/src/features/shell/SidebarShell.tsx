@@ -18,6 +18,7 @@ type SidebarShellProps = {
   children: React.ReactNode
   contentKey?: string
   contentClassName?: string
+  contentOverlay?: React.ReactNode
   contentSurfaceClassName?: string
 }
 
@@ -26,6 +27,7 @@ export function SidebarShell({
   children,
   contentKey,
   contentClassName,
+  contentOverlay,
   contentSurfaceClassName,
 }: SidebarShellProps) {
   return (
@@ -42,9 +44,11 @@ export function SidebarShell({
 
       <SidebarInset
         className={cn(
-          "h-svh min-h-0 overflow-y-auto bg-background",
+          "relative h-svh min-h-0 overflow-y-auto bg-background",
+          contentOverlay && "overflow-hidden",
           contentClassName
         )}
+        data-testid={contentOverlay ? "planning-content-inset" : undefined}
       >
         <AnimatedContent
           className={cn("min-h-full", contentSurfaceClassName)}
@@ -60,6 +64,7 @@ export function SidebarShell({
             {children}
           </div>
         </AnimatedContent>
+        {contentOverlay}
       </SidebarInset>
     </SidebarProvider>
   )
