@@ -13,12 +13,12 @@
  */
 package com.openmemind.ai.memory.core.store;
 
-import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.store.graph.GraphOperations;
 import com.openmemind.ai.memory.core.store.graph.GraphOperationsCapabilities;
 import com.openmemind.ai.memory.core.store.graph.InMemoryGraphOperations;
 import com.openmemind.ai.memory.core.store.graph.InMemoryItemGraphCommitOperations;
 import com.openmemind.ai.memory.core.store.graph.ItemGraphCommitOperations;
+import com.openmemind.ai.memory.core.store.insight.DefaultInsightTypeReconciler;
 import com.openmemind.ai.memory.core.store.insight.InMemoryInsightOperations;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.InMemoryItemOperations;
@@ -56,7 +56,7 @@ public class InMemoryMemoryStore implements MemoryStore {
     private final ResourceOperations resourceOperations = new InMemoryResourceOperations();
 
     public InMemoryMemoryStore() {
-        insightOperations.upsertInsightTypes(DefaultInsightTypes.all());
+        DefaultInsightTypeReconciler.reconcile(insightOperations);
     }
 
     @Override

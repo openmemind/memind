@@ -795,6 +795,27 @@ class SqliteMemoryStoreTest {
     }
 
     @Test
+    void constructorReconcilesMissingBuiltInInsightTypesForExistingStore() {
+        assertThat(store.getInsightType("tools")).isPresent();
+
+        executeUpdate("DELETE FROM memory_insight_type WHERE name = ?", "tools");
+
+        SqliteMemoryStore reopened = new SqliteMemoryStore(dataSource);
+
+        assertThat(reopened.getInsightType("tools")).isPresent();
+    }
+
+    @Test
+    void constructorDoesNotOverwriteExistingCustomizedBuiltInInsightType() {
+        store.upsertInsightTypes(List.of(DefaultInsightTypes.tools().withTargetTokens(1234)));
+
+        SqliteMemoryStore reopened = new SqliteMemoryStore(dataSource);
+
+        assertThat(reopened.getInsightType("tools")).isPresent();
+        assertThat(reopened.getInsightType("tools").orElseThrow().targetTokens()).isEqualTo(1234);
+    }
+
+    @Test
     void insightsCanBeQueriedByTreeSelectorsAndSoftDeleted() {
         MemoryInsight leaf =
                 insight(

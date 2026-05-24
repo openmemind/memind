@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.mysql;
 
-import com.openmemind.ai.memory.core.data.DefaultInsightTypes;
 import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
@@ -37,6 +36,7 @@ import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.graph.GraphOperations;
 import com.openmemind.ai.memory.core.store.graph.GraphOperationsCapabilities;
 import com.openmemind.ai.memory.core.store.graph.ItemGraphCommitOperations;
+import com.openmemind.ai.memory.core.store.insight.DefaultInsightTypeReconciler;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperationsCapabilities;
@@ -51,7 +51,6 @@ import com.openmemind.ai.memory.core.store.thread.ThreadProjectionStore;
 import com.openmemind.ai.memory.plugin.jdbc.internal.graph.JdbcGraphOperationsCapabilities;
 import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiFactory;
 import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaBootstrap;
-import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaInitResult;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JdbcPluginException;
 import com.openmemind.ai.memory.plugin.jdbc.internal.support.JsonCodec;
 import java.sql.Connection;
@@ -123,11 +122,8 @@ public class MysqlMemoryStore
         this.jdbi = JdbiFactory.create(this.dataSource);
         this.jsonHelper = new JsonCodec(Objects.requireNonNull(objectMapper, "objectMapper"));
         this.resourceStore = resourceStore;
-        StoreSchemaInitResult initResult =
-                StoreSchemaBootstrap.ensureMysql(this.dataSource, createIfNotExist);
-        if (initResult.createdInsightTypeTable()) {
-            upsertInsightTypes(DefaultInsightTypes.all());
-        }
+        StoreSchemaBootstrap.ensureMysql(this.dataSource, createIfNotExist);
+        DefaultInsightTypeReconciler.reconcile(this);
         this.graphOperations = new MysqlGraphOperations(this.dataSource, createIfNotExist);
         this.itemGraphCommitOperations = new MysqlItemGraphCommitOperations(this.dataSource);
         this.threadStore = new MysqlThreadStore(this.dataSource, createIfNotExist);
