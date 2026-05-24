@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.core.data;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,8 +27,14 @@ class DefaultInsightTypesTest {
     void allShouldExposeNewAgentBranchInsightTypes() {
         assertThat(DefaultInsightTypes.all())
                 .extracting(MemoryInsightType::name)
-                .contains("directives", "playbooks", "resolutions")
+                .contains("directives", "playbooks", "resolutions", "tools")
                 .doesNotContain("proc" + "edural");
+    }
+
+    @Test
+    @DisplayName("all() should expose tools as an agent branch insight type")
+    void allShouldExposeToolsAgentBranchInsightType() {
+        assertThat(DefaultInsightTypes.all()).extracting(MemoryInsightType::name).contains("tools");
     }
 
     @Test
@@ -36,6 +43,15 @@ class DefaultInsightTypesTest {
         assertThat(DefaultInsightTypes.directives().categories()).containsExactly("directive");
         assertThat(DefaultInsightTypes.playbooks().categories()).containsExactly("playbook");
         assertThat(DefaultInsightTypes.resolutions().categories()).containsExactly("resolution");
+    }
+
+    @Test
+    @DisplayName("tools should map to tool category and AGENT scope")
+    void toolsShouldMapToToolCategoryAndAgentScope() {
+        assertThat(DefaultInsightTypes.tools().categories()).containsExactly("tool");
+        assertThat(DefaultInsightTypes.tools().scope()).isEqualTo(MemoryScope.AGENT);
+        assertThat(DefaultInsightTypes.tools().insightAnalysisMode())
+                .isEqualTo(InsightAnalysisMode.BRANCH);
     }
 
     @Test

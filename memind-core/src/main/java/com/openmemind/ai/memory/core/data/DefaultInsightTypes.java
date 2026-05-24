@@ -183,6 +183,23 @@ public final class DefaultInsightTypes {
                 MemoryScope.AGENT);
     }
 
+    public static MemoryInsightType tools() {
+        return new MemoryInsightType(
+                28L,
+                "tools",
+                "Tool and command usage patterns. Group by stable tool name, command family,"
+                        + " invocation pattern, validation command, or repeated failure mode.",
+                null,
+                List.of("tool"),
+                DEFAULT_TARGET_TOKENS,
+                null,
+                null,
+                null,
+                InsightAnalysisMode.BRANCH,
+                null,
+                MemoryScope.AGENT);
+    }
+
     // ── ROOT ─────────────────────────────────────────────────────────────────
 
     public static MemoryInsightType profile() {
@@ -233,6 +250,7 @@ public final class DefaultInsightTypes {
                 directives(),
                 playbooks(),
                 resolutions(),
+                tools(),
                 profile(),
                 interaction());
     }
