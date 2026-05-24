@@ -17,9 +17,7 @@ import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionStrategy;
-import com.openmemind.ai.memory.core.extraction.item.graph.EntityAliasClass;
-import com.openmemind.ai.memory.core.extraction.item.graph.EntityAliasObservation;
-import com.openmemind.ai.memory.core.extraction.item.support.ExtractedGraphHints;
+import com.openmemind.ai.memory.core.extraction.item.support.ExtractedGraphHintConverter;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedTemporal;
 import com.openmemind.ai.memory.core.extraction.item.support.ForesightExtractionResponse;
@@ -39,7 +37,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -300,8 +297,7 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
                 mergeMetadata(segment, item, temporal),
                 MemoryItemType.FACT,
                 item.category(),
-                new ExtractedGraphHints(
-                        toEntityHints(item.entities()), toCausalHints(item.causalRelations())));
+                ExtractedGraphHintConverter.from(item));
     }
 
     private Mono<List<ExtractedMemoryEntry>> extractForesight(
@@ -422,72 +418,6 @@ public class LlmItemExtractionStrategy implements ItemExtractionStrategy {
 
     static float clamp(float value) {
         return Math.max(0.0f, Math.min(1.0f, value));
-    }
-
-    private static Float clampNullable(Float value) {
-        return value == null ? null : clamp(value);
-    }
-
-    private static List<ExtractedGraphHints.ExtractedEntityHint> toEntityHints(
-            List<MemoryItemExtractionResponse.ExtractedEntity> entities) {
-        if (entities == null || entities.isEmpty()) {
-            return List.of();
-        }
-        return entities.stream()
-                .filter(
-                        entity ->
-                                entity != null && entity.name() != null && !entity.name().isBlank())
-                .map(
-                        entity ->
-                                new ExtractedGraphHints.ExtractedEntityHint(
-                                        entity.name(),
-                                        entity.entityType(),
-                                        clampNullable(entity.salience()),
-                                        toAliasObservations(entity.aliasObservations())))
-                .toList();
-    }
-
-    private static List<EntityAliasObservation> toAliasObservations(
-            List<MemoryItemExtractionResponse.ExtractedAliasObservation> observations) {
-        if (observations == null || observations.isEmpty()) {
-            return List.of();
-        }
-        return observations.stream()
-                .filter(Objects::nonNull)
-                .map(
-                        observation ->
-                                EntityAliasClass.fromWireValue(observation.aliasClass())
-                                        .map(
-                                                aliasClass ->
-                                                        new EntityAliasObservation(
-                                                                observation.aliasSurface(),
-                                                                aliasClass,
-                                                                observation.evidenceSource(),
-                                                                clampNullable(
-                                                                        observation.confidence()))))
-                .flatMap(Optional::stream)
-                .toList();
-    }
-
-    private static List<ExtractedGraphHints.ExtractedCausalRelationHint> toCausalHints(
-            List<MemoryItemExtractionResponse.ExtractedCausalRelation> causalRelations) {
-        if (causalRelations == null || causalRelations.isEmpty()) {
-            return List.of();
-        }
-        return causalRelations.stream()
-                .filter(
-                        relation ->
-                                relation != null
-                                        && relation.causeIndex() != null
-                                        && relation.effectIndex() != null)
-                .map(
-                        relation ->
-                                new ExtractedGraphHints.ExtractedCausalRelationHint(
-                                        relation.causeIndex(),
-                                        relation.effectIndex(),
-                                        relation.relationType(),
-                                        clampNullable(relation.strength())))
-                .toList();
     }
 
     static Instant resolveReferenceTime(ParsedSegment segment) {
