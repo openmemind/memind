@@ -21,6 +21,12 @@ import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
+import com.openmemind.ai.memory.plugin.rawdata.agent.AgentRawContentTypeRegistrar;
+import com.openmemind.ai.memory.plugin.rawdata.agent.content.AgentTimelineContent;
+import com.openmemind.ai.memory.plugin.rawdata.agent.model.AgentEvent;
+import com.openmemind.ai.memory.plugin.rawdata.agent.model.AgentEventKind;
+import com.openmemind.ai.memory.plugin.rawdata.agent.model.AgentEventStatus;
+import com.openmemind.ai.memory.plugin.rawdata.agent.model.AgentProject;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.ToolCallRawContentTypeRegistrar;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.content.ToolCallContent;
 import com.openmemind.ai.memory.plugin.rawdata.toolcall.model.ToolCallRecord;
@@ -108,6 +114,67 @@ class JsonCodecTest {
                 .singleElement()
                 .extracting(ToolCallRecord::toolName, ToolCallRecord::status)
                 .containsExactly("search", "SUCCESS");
+    }
+
+    @Test
+    void codecRoundTripsAgentTimelineWhenPluginSubtypeIsExplicitlyRegistered() {
+        ObjectMapper mapper = JsonCodec.createDefaultObjectMapper();
+        mapper = RawContentJackson.registerCoreSubtypes(mapper);
+        mapper =
+                RawContentJackson.registerPluginSubtypes(
+                        mapper, List.of(new AgentRawContentTypeRegistrar()));
+        JsonCodec codec = new JsonCodec(mapper);
+        RawContent payload = sampleAgentTimelineContent();
+
+        String json = codec.toJson(payload);
+        RawContent restored = codec.fromJson(json, RawContent.class);
+
+        assertThat(restored).isInstanceOf(AgentTimelineContent.class);
+        assertThat(((AgentTimelineContent) restored).events())
+                .extracting(AgentEvent::command)
+                .contains("mvn test");
+    }
+
+    private static AgentTimelineContent sampleAgentTimelineContent() {
+        return new AgentTimelineContent(
+                "claude-code",
+                "1.0",
+                "session-1",
+                "timeline-1",
+                new AgentProject("memind", "/repo/memind", null, Map.of()),
+                List.of(
+                        new AgentEvent(
+                                "e1",
+                                1,
+                                AgentEventKind.USER_PROMPT,
+                                Instant.parse("2026-05-24T10:00:00Z"),
+                                "Fix failing tests",
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                Map.of()),
+                        new AgentEvent(
+                                "e2",
+                                2,
+                                AgentEventKind.COMMAND,
+                                Instant.parse("2026-05-24T10:01:00Z"),
+                                null,
+                                "Bash",
+                                null,
+                                "build passed",
+                                AgentEventStatus.SUCCESS,
+                                1200L,
+                                null,
+                                null,
+                                "mvn test",
+                                0,
+                                Map.of())));
     }
 
     record SamplePayload(String name, Instant createdAt) {}
