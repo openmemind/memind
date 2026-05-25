@@ -22,21 +22,12 @@ from scripts.lib.state import SessionStateStore
 
 
 class StateTest(unittest.TestCase):
-    def test_marks_and_loads_submitted_fingerprints(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            store = SessionStateStore(Path(tmp))
-            with store.locked("session-1") as state:
-                state.mark_submitted(["a", "b"])
-            with store.locked("session-1") as state:
-                self.assertTrue(state.is_submitted("a"))
-                self.assertFalse(state.is_submitted("c"))
-
     def test_cleanup_removes_old_state(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             store = SessionStateStore(root)
             with store.locked("old") as state:
-                state.mark_submitted(["x"])
+                state.append_agent_event({"eventId": "e1", "seq": 1})
             old_file = root / "old.json"
             old_time = time.time() - 30 * 86400
             os.utime(old_file, (old_time, old_time))

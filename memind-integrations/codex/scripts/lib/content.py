@@ -12,7 +12,6 @@
 # limitations under the License.
 #
 
-import hashlib
 import json
 import re
 from pathlib import Path
@@ -91,55 +90,9 @@ def _text_blocks(content):
     return []
 
 
-def _stable_id(entry):
-    payload = entry.get("payload") if isinstance(entry.get("payload"), dict) else {}
-    return entry.get("uuid") or entry.get("id") or payload.get("id")
-
-
 def _timestamp(entry):
     payload = entry.get("payload") if isinstance(entry.get("payload"), dict) else {}
     return entry.get("timestamp") or entry.get("created_at") or payload.get("timestamp") or payload.get("created_at")
-
-
-def fingerprint_message(entry, role, text, line_index):
-    stable_id = _stable_id(entry)
-    if stable_id:
-        source = ("id", stable_id, role)
-    else:
-        source = ("fallback", role, text, _timestamp(entry), line_index)
-    serialized = json.dumps(source, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-    return hashlib.sha1(serialized.encode("utf-8")).hexdigest()
-
-
-def extract_messages(path, roles):
-    allowed = {role.lower() for role in roles}
-    messages = []
-    for line_index, entry in _parse_jsonl(path):
-        payload = _entry_payload(entry)
-        if not payload:
-            continue
-        role_text = str(payload.get("role", "")).lower()
-        if role_text not in allowed or role_text not in {"user", "assistant"}:
-            continue
-        if role_text == "assistant" and payload.get("phase") not in {None, "final_answer"}:
-            continue
-        texts = _text_blocks(payload.get("content"))
-        if not texts:
-            continue
-        role = "USER" if role_text == "user" else "ASSISTANT"
-        timestamp = payload.get("timestamp") or payload.get("created_at") or _timestamp(entry)
-        user_name = payload.get("user_name") or payload.get("userName")
-        for text in texts:
-            messages.append(
-                {
-                    "fingerprint": fingerprint_message(entry, role, text, line_index),
-                    "role": role,
-                    "content": [{"type": "text", "text": text}],
-                    "timestamp": timestamp,
-                    "userName": user_name,
-                }
-            )
-    return messages
 
 
 def _tail_lines(path, max_bytes=65536):

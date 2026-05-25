@@ -17,7 +17,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.lib.content import extract_messages, fingerprint_message, read_recent_context, strip_memind_blocks
+from scripts.lib.content import read_recent_context, strip_memind_blocks
 
 
 class ContentTest(unittest.TestCase):
@@ -33,7 +33,7 @@ class ContentTest(unittest.TestCase):
         text = "before <memind_memories>secret</memind_memories> after"
         self.assertEqual(strip_memind_blocks(text), "before  after")
 
-    def test_extract_messages_skips_codex_control_context_blocks(self):
+    def test_read_recent_context_skips_codex_control_context_blocks(self):
         path = self.write_jsonl(
             [
                 {
@@ -48,13 +48,12 @@ class ContentTest(unittest.TestCase):
             ]
         )
         try:
-            messages = extract_messages(path, roles=["user", "assistant"])
+            context = read_recent_context(path, turns=2)
         finally:
             path.unlink()
-        self.assertEqual(len(messages), 1)
-        self.assertEqual(messages[0]["content"][0]["text"], "real prompt")
+        self.assertEqual(context, "user: real prompt")
 
-    def test_extracts_codex_response_item_messages(self):
+    def test_read_recent_context_reads_codex_response_item_messages(self):
         path = self.write_jsonl(
             [
                 {
@@ -82,13 +81,10 @@ class ContentTest(unittest.TestCase):
             ]
         )
         try:
-            messages = extract_messages(path, roles=["user", "assistant"])
+            context = read_recent_context(path, turns=2)
         finally:
             path.unlink()
-        self.assertEqual([m["role"] for m in messages], ["USER", "ASSISTANT"])
-        self.assertEqual(messages[0]["content"][0]["text"], "hello")
-        self.assertEqual(messages[1]["content"][0]["text"], "answer\n\nmore")
-        self.assertIn("fingerprint", messages[0])
+        self.assertEqual(context, "user: hello\nassistant: answer\n\nmore")
 
     def test_skips_non_final_assistant_and_tool_calls(self):
         path = self.write_jsonl(
@@ -109,22 +105,10 @@ class ContentTest(unittest.TestCase):
             ]
         )
         try:
-            messages = extract_messages(path, roles=["user", "assistant"])
+            context = read_recent_context(path, turns=2)
         finally:
             path.unlink()
-        self.assertEqual(len(messages), 1)
-        self.assertEqual(messages[0]["content"][0]["text"], "visible")
-
-    def test_fingerprint_prefers_stable_id(self):
-        first = fingerprint_message({"payload": {"id": "m1"}, "type": "response_item"}, "USER", "same", 1)
-        second = fingerprint_message({"payload": {"id": "m1"}, "type": "response_item"}, "USER", "same", 99)
-        self.assertEqual(first, second)
-
-    def test_fingerprint_uses_line_index_to_keep_repeated_messages_distinct(self):
-        entry = {"type": "response_item", "payload": {"type": "message"}}
-        first = fingerprint_message(entry, "USER", "ok", 1)
-        second = fingerprint_message(entry, "USER", "ok", 2)
-        self.assertNotEqual(first, second)
+        self.assertEqual(context, "user: visible")
 
     def test_read_recent_context_reads_tail(self):
         entries = [{"role": "user", "content": f"message-{i}"} for i in range(20)]

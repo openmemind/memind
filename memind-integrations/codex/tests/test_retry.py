@@ -34,7 +34,7 @@ class RetryTest(unittest.TestCase):
     def test_release_returns_claim_to_json(self):
         with tempfile.TemporaryDirectory() as tmp:
             spool = RetrySpool(Path(tmp))
-            spool.enqueue({"kind": "ingestion-batch", "operations": []})
+            spool.enqueue({"kind": "extract", "rawContent": {"type": "agent_timeline"}})
             claimed = spool.claim_next()
             spool.release(claimed)
             self.assertEqual(len(list(Path(tmp).glob("*.json"))), 1)

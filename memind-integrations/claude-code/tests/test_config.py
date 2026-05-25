@@ -42,10 +42,11 @@ class ConfigTest(unittest.TestCase):
 
     def test_defaults_match_spec(self):
         self.assertEqual(DEFAULT_SETTINGS["retrieveContextTurns"], 0)
-        self.assertEqual(DEFAULT_SETTINGS["ingestionMode"], "extract-sync")
         self.assertEqual(DEFAULT_SETTINGS["sourceClient"], "claude-code")
         self.assertTrue(DEFAULT_SETTINGS["autoIngestAgentTimeline"])
-        self.assertEqual(DEFAULT_SETTINGS["ingestionMaxMessagesPerHook"], 20)
+        self.assertNotIn("autoIngest", DEFAULT_SETTINGS)
+        self.assertNotIn("ingestionRoles", DEFAULT_SETTINGS)
+        self.assertNotIn("ingestionMaxMessagesPerHook", DEFAULT_SETTINGS)
         self.assertEqual(DEFAULT_SETTINGS["stateMaxAgeDays"], 14)
 
     def test_environment_overrides(self):
@@ -56,7 +57,6 @@ class ConfigTest(unittest.TestCase):
                 "MEMIND_API_URL": "http://memind.example",
                 "MEMIND_AUTO_RETRIEVE": "false",
                 "MEMIND_AUTO_INGEST_AGENT_TIMELINE": "false",
-                "MEMIND_INGESTION_ROLES": "user,assistant",
                 "MEMIND_STATE_MAX_AGE_DAYS": "30",
             }
             with patch.dict(os.environ, env, clear=False):
@@ -64,7 +64,7 @@ class ConfigTest(unittest.TestCase):
             self.assertEqual(config["memindApiUrl"], "http://memind.example")
             self.assertFalse(config["autoRetrieve"])
             self.assertFalse(config["autoIngestAgentTimeline"])
-            self.assertEqual(config["ingestionRoles"], ["user", "assistant"])
+            self.assertNotIn("ingestionRoles", config)
             self.assertEqual(config["stateMaxAgeDays"], 30)
             self.assertEqual(config["retrieveMaxEntries"], 3)
 

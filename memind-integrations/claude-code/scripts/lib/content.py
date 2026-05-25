@@ -12,7 +12,6 @@
 # limitations under the License.
 #
 
-import hashlib
 import json
 import re
 from pathlib import Path
@@ -56,46 +55,6 @@ def _text_blocks(content):
         merged = "\n\n".join(texts).strip()
         return [] if _is_noise_text(merged) else [merged]
     return []
-
-
-def _fingerprint(entry, role, text):
-    source = json.dumps(
-        {
-            "uuid": entry.get("uuid"),
-            "timestamp": entry.get("timestamp"),
-            "type": entry.get("type"),
-            "role": role,
-            "text": text,
-        },
-        sort_keys=True,
-        ensure_ascii=False,
-    )
-    return hashlib.sha1(source.encode("utf-8")).hexdigest()
-
-
-def extract_messages(path, roles):
-    allowed = {role.lower() for role in roles}
-    messages = []
-    for entry in _parse_jsonl(path):
-        entry_type = str(entry.get("type", "")).lower()
-        if entry_type not in allowed or entry_type not in {"user", "assistant"}:
-            continue
-        content = (entry.get("message") or {}).get("content")
-        texts = _text_blocks(content)
-        if not texts:
-            continue
-        role = "USER" if entry_type == "user" else "ASSISTANT"
-        for text in texts:
-            messages.append(
-                {
-                    "fingerprint": _fingerprint(entry, role, text),
-                    "role": role,
-                    "content": [{"type": "text", "text": text}],
-                    "timestamp": entry.get("timestamp"),
-                    "userName": entry.get("user_name"),
-                }
-            )
-    return messages
 
 
 def _tail_lines(path, max_bytes=65536):

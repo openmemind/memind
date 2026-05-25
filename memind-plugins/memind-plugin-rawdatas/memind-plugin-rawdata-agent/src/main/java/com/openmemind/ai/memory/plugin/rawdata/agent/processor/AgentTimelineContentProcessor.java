@@ -21,6 +21,7 @@ import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
 import com.openmemind.ai.memory.plugin.rawdata.agent.caption.AgentCaptionGenerator;
 import com.openmemind.ai.memory.plugin.rawdata.agent.chunk.AgentTimelineChunker;
 import com.openmemind.ai.memory.plugin.rawdata.agent.content.AgentTimelineContent;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -79,7 +80,7 @@ public final class AgentTimelineContentProcessor
 
     @Override
     public Set<MemoryCategory> allowedCategories() {
-        return MemoryCategory.agentCategories();
+        return EnumSet.allOf(MemoryCategory.class);
     }
 
     @Override

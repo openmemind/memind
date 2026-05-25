@@ -1,7 +1,7 @@
 # Memind Claude Code Integration
 
 Memind adds persistent project memory to Claude Code. The plugin retrieves relevant Memind context before each
-user prompt and submits Claude Code conversation messages through Memind's reliable extraction endpoint during
+user prompt and submits Claude Code coding-agent timelines through Memind's reliable extraction endpoint during
 session lifecycle hooks.
 
 Use this plugin when you want Claude Code to remember project facts, preferences, implementation decisions, and
@@ -19,12 +19,9 @@ The integration is intentionally small:
 
 - **Retrieval**: `UserPromptSubmit` calls `MemindClient.memory.retrieve(...)` and injects relevant memories into
   Claude Code as `<memind_memories>...</memind_memories>` additional context.
-- **Ingestion**: `Stop`, `PreCompact`, and `SessionEnd` read the Claude Code transcript, filter
-  user/assistant messages, and submit a caller-owned conversation payload through
-  `AsyncMemindClient.memory.extract(...)`.
-- **Agent timelines**: `PreToolUse` and `PostToolUse` buffer normalized tool events locally. The next
-  ingestion hook submits them as `rawContent.type = "agent_timeline"` so Memind can extract tool notes,
-  resolved problems, playbooks, and directives.
+- **Ingestion**: `PreToolUse` and `PostToolUse` buffer normalized tool events locally. `Stop`, `PreCompact`, and
+  `SessionEnd` flush buffered events as `rawContent.type = "agent_timeline"` through
+  `AsyncMemindClient.memory.extract(...)`, so Memind can extract user and agent memories from the same agent turn.
 - **Retry**: failed ingestion payloads are spooled under `~/.memind/claude-code/retry/` and replayed on later
   `SessionStart` hooks.
 - **Source tagging**: all requests use `sourceClient = "claude-code"` by default, so Memind can distinguish
@@ -106,9 +103,9 @@ The installed hooks are:
 | `UserPromptSubmit` | `scripts/retrieve.py` | 12s | Retrieve relevant Memind context for the current user prompt. |
 | `PreToolUse` | `scripts/pre_tool_use.py` | 5s | Buffer a redacted tool-start event in local session state. |
 | `PostToolUse` | `scripts/post_tool_use.py` | 5s | Buffer a redacted tool-result event in local session state. |
-| `PreCompact` | `scripts/pre_compact.py` | 30s | Submit recent transcript messages through reliable extraction before context compaction. |
-| `Stop` | `scripts/ingest.py` | 15s | Submit new transcript messages through reliable extraction after a turn. |
-| `SessionEnd` | `scripts/session_end.py` | 10s | Submit remaining transcript messages through reliable extraction at session end. |
+| `PreCompact` | `scripts/pre_compact.py` | 30s | Flush buffered `agent_timeline` events before context compaction. |
+| `Stop` | `scripts/ingest.py` | 15s | Flush buffered `agent_timeline` events after a turn. |
+| `SessionEnd` | `scripts/session_end.py` | 10s | Flush remaining buffered `agent_timeline` events at session end. |
 
 `Stop`, `PreToolUse`, and `PostToolUse` are configured as async so regular turn completion stays fast.
 
@@ -127,9 +124,6 @@ User configuration is optional. Save overrides as `~/.memind/claude-code.json`:
   "agentIdMode": "project",
   "sourceClient": "claude-code",
   "autoIngestAgentTimeline": true,
-  "ingestionMode": "extract-sync",
-  "preCompactCommit": true,
-  "commitOnSessionEnd": true,
   "retrieveContextTurns": 0
 }
 ```
@@ -152,18 +146,11 @@ Settings are loaded in this order:
 | `agentIdMode` | `project` | `project` appends a stable project suffix; any other value uses `agentId` as-is. |
 | `sourceClient` | `claude-code` | Source marker stored with Memind data. |
 | `autoRetrieve` | `true` | Enables prompt-time memory retrieval. |
-| `autoIngest` | `true` | Enables transcript ingestion during lifecycle hooks. |
-| `autoIngestAgentTimeline` | `true` | Enables `PreToolUse`/`PostToolUse` event flush as `agent_timeline` raw data. |
+| `autoIngestAgentTimeline` | `true` | Enables `PreToolUse`/`PostToolUse` event buffering and `agent_timeline` rawdata flush. |
 | `retrieveStrategy` | `SIMPLE` | Memind retrieval strategy. |
 | `retrieveMaxEntries` | `8` | Maximum formatted memory entries injected into Claude Code. |
 | `retrieveMaxChars` | `6000` | Maximum injected context characters. |
 | `retrieveContextTurns` | `0` | Number of recent transcript turns to include in the retrieval query. |
-| `ingestionMode` | `extract-sync` | Default reliable ingestion mode. |
-| `ingestionRoles` | `["user", "assistant"]` | Transcript roles eligible for ingestion. |
-| `ingestionMaxMessagesPerHook` | `20` | Maximum new messages sent during one regular ingestion hook. |
-| `preCompactCommit` | `true` | Compatibility flag for server-buffer ingestion mode; ignored by the default reliable mode. |
-| `preCompactMaxMessages` | `20` | Maximum messages submitted during one `PreCompact` hook. |
-| `commitOnSessionEnd` | `true` | Compatibility flag for server-buffer ingestion mode; ignored by the default reliable mode. |
 | `ingestRetrySpool` | `true` | Enables file-backed retry for failed extraction payloads. |
 | `debug` | `false` | Writes debug logs to `~/.memind/claude-code.log`. |
 
@@ -179,17 +166,13 @@ export MEMIND_AGENT_ID=claude-code
 export MEMIND_AGENT_ID_MODE=project
 export MEMIND_SOURCE_CLIENT=claude-code
 export MEMIND_AUTO_INGEST_AGENT_TIMELINE=true
-export MEMIND_INGESTION_MODE=extract-sync
-export MEMIND_PRE_COMPACT_COMMIT=true
-export MEMIND_COMMIT_ON_SESSION_END=true
 export MEMIND_RETRIEVE_CONTEXT_TURNS=0
 export MEMIND_DEBUG=true
 ```
 
-Additional environment variables include `MEMIND_AUTO_RETRIEVE`, `MEMIND_AUTO_INGEST`,
-`MEMIND_RETRIEVE_STRATEGY`, `MEMIND_INGESTION_MODE`, `MEMIND_INGESTION_ROLES`,
-`MEMIND_INGESTION_MAX_MESSAGES_PER_HOOK`, `MEMIND_PRE_COMPACT_MAX_MESSAGES`,
-`MEMIND_STATE_MAX_AGE_DAYS`, `MEMIND_INGEST_RETRY_SPOOL`, `MEMIND_INGEST_RETRY_MAX_FILES`, and
+Additional environment variables include `MEMIND_AUTO_RETRIEVE`, `MEMIND_RETRIEVE_STRATEGY`,
+`MEMIND_RETRIEVE_MAX_ENTRIES`, `MEMIND_RETRIEVE_MAX_CHARS`, `MEMIND_STATE_MAX_AGE_DAYS`,
+`MEMIND_INGEST_RETRY_SPOOL`, `MEMIND_INGEST_RETRY_MAX_FILES`, and
 `MEMIND_INGEST_RETRY_MAX_AGE_DAYS`.
 
 ## Identity Model
@@ -245,24 +228,9 @@ Agent memory items are grouped separately when returned by Memind:
 
 ## Ingestion Behavior
 
-Ingestion reads Claude Code's transcript when `autoIngest = true`.
-
-The ingestion flow:
-
-1. Reads the Claude Code JSONL transcript.
-2. Extracts user and assistant message text.
-3. Strips previously injected `<memind_memories>` blocks to avoid feedback loops.
-4. Skips tool/event payloads, unsupported roles, and Claude Code interruption placeholders.
-5. Computes stable fingerprints and sends only messages that have not already been submitted.
-6. Builds one caller-owned conversation raw-content payload and submits it through
-   `AsyncMemindClient.memory.extract(...)`.
-
-The local retry spool stores the full extraction payload plus the covered message fingerprints. Fingerprints are
-marked submitted only after Memind returns `SUCCESS`; `PARTIAL_SUCCESS` and failures keep the payload available
-for later replay.
-
-Tool and command events are buffered under `~/.memind/claude-code/state/` and flushed with the same reliable
-extraction path. A typical timeline payload looks like:
+Ingestion is timeline-only for Claude Code. The plugin does not submit transcript conversation rawdata. It buffers
+tool and command events under `~/.memind/claude-code/state/` and flushes them through
+`AsyncMemindClient.memory.extract(...)` as agent timeline rawdata. A typical timeline payload looks like:
 
 ```json
 {
@@ -295,8 +263,8 @@ extraction path. A typical timeline payload looks like:
 Secrets are redacted before events are written to local state. File content capture is disabled by default; the
 hook stores normalized tool metadata, commands, paths, statuses, and compact outputs.
 
-Commit flags apply only to explicit server-buffer mode. In the default reliable mode, hooks do not issue an
-additional `/commit` call after successful `/extract/sync`.
+On `SUCCESS`, the covered events are removed from local state. `PARTIAL_SUCCESS` and failures keep the events
+available and spool the full timeline payload for later `SessionStart` replay.
 
 ## Server RawData Agent Settings
 
@@ -463,27 +431,19 @@ curl -fsSL http://127.0.0.1:8366/open/v1/health
 - Confirm existing memories are stored under the same `userId` and `agentId`.
 - Try setting `retrieveContextTurns` to `1` or `2` if the current prompt is very short.
 
-### Messages are not ingested
+### Agent timeline events are not ingested
 
-- Confirm `autoIngest` is `true`.
-- Confirm Claude Code provides `transcript_path` in hook payloads.
+- Confirm `autoIngestAgentTimeline` is `true`.
+- Confirm Claude Code is emitting `PreToolUse` and `PostToolUse` hooks.
 - Confirm `~/.memind/claude-code/state/` is writable.
 - Enable `MEMIND_DEBUG=true` and inspect `~/.memind/claude-code.log`.
 
 ### New memories are not immediately retrieved
 
-The default reliable mode submits transcript batches through `AsyncMemindClient.memory.extract(...)`, so a
-`SUCCESS` response means extraction finished for that batch. If retrieval still does not surface the expected
+The default reliable mode submits agent timelines through `AsyncMemindClient.memory.extract(...)`, so a `SUCCESS`
+response means extraction finished for that timeline payload. If retrieval still does not surface the expected
 memory, confirm the same `userId` and `agentId` are used for ingestion and retrieval, then inspect
 `~/.memind/claude-code.log` with `MEMIND_DEBUG=true`.
-
-### Duplicate messages appear
-
-The integration uses per-session fingerprints stored under `~/.memind/claude-code/state/`. If duplicates appear:
-
-- Confirm the state directory is writable.
-- Check whether Claude Code transcript identifiers changed across sessions.
-- Remove stale local state only if you accept that old transcript messages may be re-submitted.
 
 ## Limitations
 

@@ -30,18 +30,8 @@ def _safe_session_id(session_id):
 class SessionState:
     def __init__(self, data):
         self.data = data
-        self.data.setdefault("submitted", [])
         self.data.setdefault("agentEvents", [])
         self.data.setdefault("nextAgentSeq", 1)
-
-    def is_submitted(self, fingerprint):
-        return fingerprint in set(self.data.get("submitted", []))
-
-    def mark_submitted(self, fingerprints):
-        submitted = set(self.data.get("submitted", []))
-        submitted.update(fingerprints)
-        self.data["submitted"] = sorted(submitted)
-        self.data["updatedAt"] = time.time()
 
     def append_agent_event(self, event):
         events = list(self.data.get("agentEvents", []))

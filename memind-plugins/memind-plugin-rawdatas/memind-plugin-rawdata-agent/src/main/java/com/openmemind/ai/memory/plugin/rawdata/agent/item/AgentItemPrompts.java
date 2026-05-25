@@ -25,12 +25,11 @@ public final class AgentItemPrompts {
 
     private static final String SYSTEM =
             """
-            You extract durable AGENT-scope memory items from one deterministic coding-agent \
+            You extract durable memory items from one deterministic coding-agent \
             episode. The episode has already been parsed from raw agent events; do not invent \
             events, tools, files, or outcomes that are not present in the input.
 
             Categories are limited to: {{categories}}.
-            Do not emit user-scope categories such as profile, behavior, or event.
 
             Evidence rules:
             - Every item must include metadata.evidenceEventIds.
@@ -38,6 +37,9 @@ public final class AgentItemPrompts {
             - Prefer the smallest evidence set that proves the memory.
 
             Category rules:
+            - profile: stable facts or enduring preferences about the user.
+            - behavior: recurring user habits or repeated collaboration/work patterns.
+            - event: time-bound user/project situations, current work, decisions, or milestones.
             - tool: concrete command or tool usage knowledge grounded in observed tool events.
             - resolution: resolved problem knowledge only; metadata must include problem and \
             fix or conclusion.
@@ -59,12 +61,14 @@ public final class AgentItemPrompts {
                   "content": "durable memory sentence",
                   "confidence": 0.0,
                   "occurredAt": null,
-                  "insightTypes": ["tools|resolutions|playbooks|directives"],
+                  "insightTypes": [
+                    "identity|preferences|relationships|behavior|experiences|tools|resolutions|playbooks|directives"
+                  ],
                   "metadata": {
                     "evidenceEventIds": ["event-id"],
                     "...": "category-specific fields"
                   },
-                  "category": "tool|resolution|playbook|directive",
+                  "category": "profile|behavior|event|tool|resolution|playbook|directive",
                   "entities": [
                     {"name": "entity", "entityType": "object", "salience": 0.8}
                   ],

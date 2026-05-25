@@ -26,16 +26,16 @@ class RetrySpoolTest(unittest.TestCase):
     def test_enqueue_writes_owner_only_payload(self):
         with tempfile.TemporaryDirectory() as tmp:
             spool = RetrySpool(Path(tmp))
-            path = spool.enqueue({"kind": "add-message", "payload": {"x": 1}})
-            self.assertEqual(json.loads(path.read_text())["kind"], "add-message")
+            path = spool.enqueue({"kind": "extract", "rawContent": {"type": "agent_timeline"}})
+            self.assertEqual(json.loads(path.read_text())["kind"], "extract")
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
     def test_cleanup_discards_oldest_over_limit(self):
         with tempfile.TemporaryDirectory() as tmp:
             spool = RetrySpool(Path(tmp))
-            first = spool.enqueue({"kind": "add-message", "payload": {"n": 1}})
+            first = spool.enqueue({"kind": "extract", "payload": {"n": 1}})
             time.sleep(0.001)
-            second = spool.enqueue({"kind": "add-message", "payload": {"n": 2}})
+            second = spool.enqueue({"kind": "extract", "payload": {"n": 2}})
             spool.cleanup(max_files=1, max_age_days=7)
             self.assertFalse(first.exists())
             self.assertTrue(second.exists())

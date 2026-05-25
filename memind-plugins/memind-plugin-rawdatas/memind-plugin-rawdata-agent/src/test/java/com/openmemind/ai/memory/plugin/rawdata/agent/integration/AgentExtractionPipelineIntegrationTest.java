@@ -181,7 +181,7 @@ class AgentExtractionPipelineIntegrationTest {
     }
 
     @Test
-    void agentPipelineStoresAgentCategoriesOnly() {
+    void agentPipelineAllowsUserAndAgentCategoriesFromTimeline() {
         var client =
                 new ScriptedStructuredChatClient(
                         response(
@@ -198,11 +198,17 @@ class AgentExtractionPipelineIntegrationTest {
 
         assertThat(items(fixture)).isNotEmpty();
         assertThat(items(fixture))
-                .allSatisfy(item -> assertThat(item.scope()).isEqualTo(MemoryScope.AGENT));
+                .anySatisfy(
+                        item -> {
+                            assertThat(item.category()).isEqualTo(MemoryCategory.PROFILE);
+                            assertThat(item.scope()).isEqualTo(MemoryScope.USER);
+                            assertThat(item.metadata().get("insightTypes"))
+                                    .asList()
+                                    .containsExactly("preferences");
+                        });
         assertThat(items(fixture))
                 .extracting(MemoryItem::category)
-                .doesNotContain(
-                        MemoryCategory.PROFILE, MemoryCategory.BEHAVIOR, MemoryCategory.EVENT);
+                .contains(MemoryCategory.TOOL, MemoryCategory.RESOLUTION, MemoryCategory.PROFILE);
     }
 
     @Test

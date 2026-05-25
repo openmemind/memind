@@ -28,6 +28,7 @@ import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.plugin.rawdata.agent.config.AgentExtractionOptions;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -120,9 +121,12 @@ public class AgentItemExtractionStrategy implements ItemExtractionStrategy {
 
         Set<MemoryCategory> allowed =
                 config == null || config.allowedCategories() == null
-                        ? MemoryCategory.agentCategories()
+                        ? EnumSet.allOf(MemoryCategory.class)
                         : config.allowedCategories();
         var categories = new ArrayList<String>();
+        addIfEnabled(categories, allowed, MemoryCategory.PROFILE, true);
+        addIfEnabled(categories, allowed, MemoryCategory.BEHAVIOR, true);
+        addIfEnabled(categories, allowed, MemoryCategory.EVENT, true);
         addIfEnabled(categories, allowed, MemoryCategory.TOOL, options.extractTool());
         addIfEnabled(categories, allowed, MemoryCategory.RESOLUTION, options.extractResolution());
         addIfEnabled(
@@ -189,7 +193,7 @@ public class AgentItemExtractionStrategy implements ItemExtractionStrategy {
                 observedAt(segment),
                 segment.rawDataId(),
                 null,
-                List.of(expectedInsightType(item.category())),
+                insightTypes(item),
                 metadata(segment, item),
                 MemoryItemType.FACT,
                 normalize(item.category()),
@@ -207,8 +211,10 @@ public class AgentItemExtractionStrategy implements ItemExtractionStrategy {
         if (!categories.contains(category)) {
             return false;
         }
-        String expectedInsightType = expectedInsightType(category);
-        if (item.insightTypes() == null || !item.insightTypes().contains(expectedInsightType)) {
+        List<String> expectedInsightTypes = expectedInsightTypes(category);
+        if (expectedInsightTypes.isEmpty()
+                || item.insightTypes() == null
+                || item.insightTypes().stream().noneMatch(expectedInsightTypes::contains)) {
             return false;
         }
         List<String> evidenceEventIds = evidenceEventIds(item.metadata());
@@ -269,13 +275,21 @@ public class AgentItemExtractionStrategy implements ItemExtractionStrategy {
         return metadata == null ? List.of() : stringList(metadata.get("evidenceEventIds"));
     }
 
-    private static String expectedInsightType(String category) {
+    private static List<String> insightTypes(MemoryItemExtractionResponse.ExtractedItem item) {
+        List<String> expected = expectedInsightTypes(item.category());
+        return item.insightTypes().stream().filter(expected::contains).distinct().toList();
+    }
+
+    private static List<String> expectedInsightTypes(String category) {
         return switch (normalize(category)) {
-            case "tool" -> "tools";
-            case "resolution" -> "resolutions";
-            case "playbook" -> "playbooks";
-            case "directive" -> "directives";
-            default -> "";
+            case "profile" -> List.of("identity", "preferences", "relationships");
+            case "behavior" -> List.of("behavior");
+            case "event" -> List.of("experiences");
+            case "tool" -> List.of("tools");
+            case "resolution" -> List.of("resolutions");
+            case "playbook" -> List.of("playbooks");
+            case "directive" -> List.of("directives");
+            default -> List.of();
         };
     }
 

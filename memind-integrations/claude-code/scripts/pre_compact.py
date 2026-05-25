@@ -28,12 +28,7 @@ def main():
     try:
         hook_input = json.loads(sys.stdin.read() or "{}")
         config = load_config()
-        ingest_messages(
-            config,
-            hook_input,
-            commit=bool(config.get("preCompactCommit", True)),
-            max_messages=int(config.get("preCompactMaxMessages", 20)),
-        )
+        ingest_messages(config, hook_input)
     except Exception as exc:
         try:
             debug_log(load_config(), "pre_compact_failed", {"error": str(exc)})

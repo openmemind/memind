@@ -30,6 +30,11 @@ from lib.retry import RetrySpool
 from lib.state import SessionStateStore
 
 
+def _is_agent_timeline_extract(payload):
+    raw_content = payload.get("rawContent") if isinstance(payload, dict) else None
+    return payload.get("kind") == "extract" and raw_content and raw_content.get("type") == "agent_timeline"
+
+
 def _tcp_check(url, timeout=1):
     parsed = urlparse(url)
     host = parsed.hostname or "127.0.0.1"
@@ -53,7 +58,7 @@ async def _run_session_start_async(config):
             if claimed:
                 payload = spool.load_claimed(claimed)
                 replay_client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=10, max_retries=0)
-                if payload.get("kind") == "extract":
+                if _is_agent_timeline_extract(payload):
                     response = await replay_client.extract(
                         payload["userId"],
                         payload["agentId"],
@@ -63,23 +68,9 @@ async def _run_session_start_async(config):
                     status = getattr(response, "status", None)
                     if status != "SUCCESS":
                         raise RuntimeError(f"extract replay did not fully succeed: {status}")
-                    if payload.get("sessionId") and payload.get("fingerprints"):
-                        with SessionStateStore(state_root()).locked(payload["sessionId"]) as state:
-                            state.mark_submitted(payload["fingerprints"])
                     if payload.get("sessionId") and payload.get("eventIds"):
                         with SessionStateStore(state_root()).locked(payload["sessionId"]) as state:
                             state.clear_agent_events(payload["eventIds"])
-                    spool.complete(claimed)
-                elif payload.get("kind") == "add-message":
-                    await replay_client.add_message(
-                        payload["userId"],
-                        payload["agentId"],
-                        payload["message"],
-                        payload.get("sourceClient"),
-                    )
-                    if payload.get("sessionId") and payload.get("fingerprint"):
-                        with SessionStateStore(state_root()).locked(payload["sessionId"]) as state:
-                            state.mark_submitted([payload["fingerprint"]])
                     spool.complete(claimed)
                 elif payload.get("kind") == "commit":
                     await replay_client.commit(payload["userId"], payload["agentId"], payload.get("sourceClient"))

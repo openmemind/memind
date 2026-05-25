@@ -35,7 +35,7 @@ class AgentTimelineContentProcessorTest {
         assertThat(processor.contentClass()).isEqualTo(AgentTimelineContent.class);
         assertThat(processor.contentType()).isEqualTo(AgentTimelineContent.TYPE);
         assertThat(processor.allowedCategories())
-                .containsExactlyInAnyOrderElementsOf(MemoryCategory.agentCategories());
+                .containsExactlyInAnyOrder(MemoryCategory.values());
         assertThat(processor.usesSourceIdentity()).isTrue();
         assertThat(processor.supportsInsight()).isTrue();
         assertThat(processor.itemExtractionStrategy())

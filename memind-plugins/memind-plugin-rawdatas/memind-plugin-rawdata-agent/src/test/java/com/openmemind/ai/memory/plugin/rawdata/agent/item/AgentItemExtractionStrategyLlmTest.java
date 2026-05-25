@@ -173,6 +173,47 @@ class AgentItemExtractionStrategyLlmTest {
     }
 
     @Test
+    void shouldAllowUserScopeMemoryCategoriesFromAgentTimeline() {
+        var client =
+                new StubStructuredChatClient(
+                        response(
+                                new MemoryItemExtractionResponse.ExtractedItem(
+                                        "User is currently refining Memind rawdata-agent"
+                                                + " extraction.",
+                                        0.88f,
+                                        null,
+                                        List.of("experiences"),
+                                        Map.of("evidenceEventIds", List.of("e1")),
+                                        "event")));
+        AgentItemExtractionStrategy strategy = strategy(client);
+
+        List<ExtractedMemoryEntry> entries =
+                strategy.extract(
+                                List.of(successfulEpisode()),
+                                DefaultInsightTypes.all(),
+                                allScopeConfig())
+                        .block();
+
+        assertThat(client.calls()).isEqualTo(1);
+        assertThat(client.lastMessages())
+                .anySatisfy(
+                        message ->
+                                assertThat(message.content())
+                                        .contains("event")
+                                        .contains("profile: stable facts")
+                                        .contains("event: time-bound user/project situations"));
+        assertThat(entries)
+                .anySatisfy(
+                        entry -> {
+                            assertThat(entry.category()).isEqualTo("event");
+                            assertThat(entry.insightTypes()).containsExactly("experiences");
+                            assertThat(entry.metadata().get("evidenceEventIds"))
+                                    .asList()
+                                    .containsExactly("e1");
+                        });
+    }
+
+    @Test
     void shouldSkipLlmWhenEpisodeDoesNotMeetMinimumEventThreshold() {
         var client =
                 new StubStructuredChatClient(
@@ -290,6 +331,15 @@ class AgentItemExtractionStrategyLlmTest {
                 MemoryScope.AGENT,
                 AgentTimelineContent.TYPE,
                 MemoryCategory.agentCategories(),
+                false,
+                "en");
+    }
+
+    private static ItemExtractionConfig allScopeConfig() {
+        return new ItemExtractionConfig(
+                MemoryScope.USER,
+                AgentTimelineContent.TYPE,
+                java.util.EnumSet.allOf(MemoryCategory.class),
                 false,
                 "en");
     }

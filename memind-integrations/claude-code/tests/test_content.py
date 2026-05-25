@@ -17,7 +17,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.lib.content import extract_messages, read_recent_context, strip_memind_blocks
+from scripts.lib.content import read_recent_context, strip_memind_blocks
 
 
 class ContentTest(unittest.TestCase):
@@ -25,7 +25,7 @@ class ContentTest(unittest.TestCase):
         text = "before <memind_memories>secret</memind_memories> after"
         self.assertEqual(strip_memind_blocks(text), "before  after")
 
-    def test_extract_messages_skips_tools_and_unknown_lines(self):
+    def test_read_recent_context_skips_tools_and_unknown_lines(self):
         lines = [
             {"type": "user", "timestamp": "2026-04-28T00:00:00Z", "message": {"content": "hello"}},
             {
@@ -49,15 +49,14 @@ class ContentTest(unittest.TestCase):
                 handle.write(json.dumps(entry) + "\n")
             path = Path(handle.name)
         try:
-            messages = extract_messages(path, roles=["user", "assistant"])
+            context = read_recent_context(path, turns=2)
         finally:
             path.unlink()
-        self.assertEqual([m["role"] for m in messages], ["USER", "ASSISTANT"])
-        self.assertEqual(messages[0]["content"][0]["text"], "hello")
-        self.assertEqual(messages[1]["content"][0]["text"], "answer\n\nmore")
+        self.assertIn("user: hello", context)
+        self.assertIn("assistant: answer\n\nmore", context)
+        self.assertNotIn("file", context)
 
-
-    def test_extract_messages_skips_claude_code_interrupt_placeholders(self):
+    def test_read_recent_context_skips_claude_code_interrupt_placeholders(self):
         lines = [
             {"type": "user", "message": {"content": "[Request interrupted by user]"}},
             {"type": "assistant", "message": {"content": "[Request interrupted by user]"}},
@@ -68,10 +67,10 @@ class ContentTest(unittest.TestCase):
                 handle.write(json.dumps(entry) + "\n")
             path = Path(handle.name)
         try:
-            messages = extract_messages(path, roles=["user", "assistant"])
+            context = read_recent_context(path, turns=2)
         finally:
             path.unlink()
-        self.assertEqual([m["content"][0]["text"] for m in messages], ["real instruction"])
+        self.assertEqual(context, "user: real instruction")
 
     def test_read_recent_context_reads_tail(self):
         with tempfile.NamedTemporaryFile("w", delete=False) as handle:

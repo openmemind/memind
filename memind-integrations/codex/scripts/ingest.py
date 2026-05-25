@@ -25,7 +25,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib.client import MemindClient
 from lib.agent_timeline import build_timeline_payload
 from lib.config import load_config
-from lib.content import extract_messages
 from lib.identity import resolve_identity
 from lib.logging_utils import debug_log
 from lib.retry import RetrySpool
@@ -44,33 +43,6 @@ def retry_root():
     if override:
         return Path(override)
     return Path.home() / ".memind" / "codex" / "retry"
-
-
-def _message_payload(raw_message):
-    return {key: value for key, value in raw_message.items() if key != "fingerprint"}
-
-
-def _extract_payload(messages):
-    return {
-        "type": "conversation",
-        "messages": [_message_payload(message) for message in messages],
-    }
-
-
-def _spool_extract(retry_spool, identity, source_client, session_key, messages):
-    if retry_spool is None or not messages:
-        return
-    retry_spool.enqueue(
-        {
-            "kind": "extract",
-            "userId": identity["userId"],
-            "agentId": identity["agentId"],
-            "sourceClient": source_client,
-            "sessionKey": session_key,
-            "fingerprints": [message["fingerprint"] for message in messages],
-            "rawContent": _extract_payload(messages),
-        }
-    )
 
 
 def _spool_agent_timeline(retry_spool, identity, source_client, session_key, events, raw_content):
@@ -92,39 +64,15 @@ def _spool_agent_timeline(retry_spool, identity, source_client, session_key, eve
 async def ingest_messages_async(config, hook_input):
     identity = resolve_identity(config, hook_input)
     client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=10, max_retries=0)
-    transcript_path = hook_input.get("transcript_path")
-    messages = []
-    if config.get("autoIngest", True) and transcript_path and Path(transcript_path).exists():
-        messages = extract_messages(transcript_path, config.get("ingestionRoles", ["user", "assistant"]))
 
-    limit = int(config.get("ingestionMaxMessagesPerHook", 20))
     retry_spool = RetrySpool(retry_root()) if config.get("ingestRetrySpool", True) else None
     store = SessionStateStore(state_root())
     session_key = state_key(hook_input)
     source_client = config.get("sourceClient")
+    agent_events_submitted = 0
 
     with store.locked(session_key) as state:
-        selected = [message for message in messages if not state.is_submitted(message["fingerprint"])][:limit]
         agent_events = state.agent_events() if config.get("autoIngestAgentTimeline", True) else []
-
-    submitted = []
-    if selected:
-        try:
-            response = await client.extract(
-                identity["userId"],
-                identity["agentId"],
-                _extract_payload(selected),
-                source_client,
-            )
-        except Exception:
-            _spool_extract(retry_spool, identity, source_client, session_key, selected)
-        else:
-            status = getattr(response, "status", None)
-            if status == "SUCCESS":
-                submitted = [message["fingerprint"] for message in selected]
-                store.mark_submitted(session_key, submitted)
-            else:
-                _spool_extract(retry_spool, identity, source_client, session_key, selected)
 
     if agent_events:
         timeline_payload = build_timeline_payload(
@@ -153,6 +101,7 @@ async def ingest_messages_async(config, hook_input):
         else:
             status = getattr(response, "status", None)
             if status == "SUCCESS":
+                agent_events_submitted = len(agent_events)
                 store.clear_agent_events(
                     session_key,
                     [event["eventId"] for event in agent_events if event.get("eventId")],
@@ -167,7 +116,7 @@ async def ingest_messages_async(config, hook_input):
                     timeline_payload,
                 )
 
-    return {"submitted": len(submitted), "committed": False}
+    return {"agentEventsSubmitted": agent_events_submitted, "committed": False}
 
 
 def ingest_messages(config, hook_input):

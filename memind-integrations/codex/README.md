@@ -1,7 +1,7 @@
 # Memind Codex Integration
 
 Memind adds persistent project memory to Codex CLI. The integration retrieves relevant Memind context before
-each user prompt and submits Codex conversation messages through Memind's reliable extraction endpoint after
+each user prompt and submits Codex coding-agent timelines through Memind's reliable extraction endpoint after
 each turn.
 
 Use this integration when you want Codex to remember project facts, preferences, and previous decisions across
@@ -18,12 +18,10 @@ The integration is intentionally small:
 
 - **Retrieval**: `UserPromptSubmit` calls `MemindClient.memory.retrieve(...)` and injects relevant memories into
   the Codex prompt as `<memind_memories>...</memind_memories>`.
-- **Ingestion**: `Stop` reads the Codex transcript, filters user/assistant messages, and submits a caller-owned
-  conversation payload through `AsyncMemindClient.memory.extract(...)`.
-- **Agent timelines**: `PreToolUse` and `PostToolUse` buffer normalized tool events locally. The next `Stop`
-  hook submits them as `rawContent.type = "agent_timeline"` so Memind can extract tool notes, resolved problems,
-  playbooks, and directives.
-- **Retry**: failed ingestion batches are spooled under `~/.memind/codex/retry/` and replayed on the next
+- **Ingestion**: `PreToolUse` and `PostToolUse` buffer normalized tool events locally. The next `Stop` hook
+  submits them as `rawContent.type = "agent_timeline"` so Memind can extract user and agent memories from the
+  same agent turn.
+- **Retry**: failed timeline extraction payloads are spooled under `~/.memind/codex/retry/` and replayed on the next
   `SessionStart`.
 - **Source tagging**: all requests use `sourceClient = "codex"` by default, so Memind can distinguish Codex
   memory from Claude Code, OpenClaw, API calls, or future clients.
@@ -121,11 +119,11 @@ The installed hooks are:
 
 | Codex event | Script | Timeout | Purpose |
 | --- | --- | ---: | --- |
-| `SessionStart` | `scripts/session_start.py` | 5s | Replay at most one failed ingestion batch and clean old state. |
+| `SessionStart` | `scripts/session_start.py` | 5s | Replay at most one failed timeline payload and clean old state. |
 | `UserPromptSubmit` | `scripts/retrieve.py` | 12s | Retrieve relevant Memind context for the current user prompt. |
 | `PreToolUse` | `scripts/pre_tool_use.py` | 5s | Buffer a redacted tool-start event in local session state. |
 | `PostToolUse` | `scripts/post_tool_use.py` | 5s | Buffer a redacted tool-result event in local session state. |
-| `Stop` | `scripts/ingest.py` | 15s | Submit new Codex transcript messages through reliable extraction. |
+| `Stop` | `scripts/ingest.py` | 15s | Flush buffered `agent_timeline` events after a turn. |
 
 ## Configuration
 
@@ -142,8 +140,6 @@ User configuration is optional. Save overrides as `~/.memind/codex.json`:
   "agentIdMode": "project",
   "sourceClient": "codex",
   "autoIngestAgentTimeline": true,
-  "ingestionMode": "extract-sync",
-  "commitOnStop": false,
   "retrieveContextTurns": 0
 }
 ```
@@ -165,16 +161,11 @@ Settings are loaded in this order:
 | `agentIdMode` | `project` | `project` appends a stable project suffix; any other value uses `agentId` as-is. |
 | `sourceClient` | `codex` | Source marker stored with Memind data. |
 | `autoRetrieve` | `true` | Enables prompt-time memory retrieval. |
-| `autoIngest` | `true` | Enables transcript ingestion after Codex turns. |
-| `autoIngestAgentTimeline` | `true` | Enables `PreToolUse`/`PostToolUse` event flush as `agent_timeline` raw data. |
-| `commitOnStop` | `false` | Compatibility flag for server-buffer ingestion mode; ignored by the default reliable mode. |
+| `autoIngestAgentTimeline` | `true` | Enables `PreToolUse`/`PostToolUse` event buffering and `agent_timeline` rawdata flush. |
 | `retrieveStrategy` | `SIMPLE` | Memind retrieval strategy. |
 | `retrieveMaxEntries` | `8` | Maximum formatted memory entries injected into Codex. |
 | `retrieveMaxChars` | `6000` | Maximum injected context characters. |
 | `retrieveContextTurns` | `0` | Number of recent transcript turns to include in the retrieval query. |
-| `ingestionMode` | `extract-sync` | Default reliable ingestion mode. |
-| `ingestionRoles` | `["user", "assistant"]` | Transcript roles eligible for ingestion. |
-| `ingestionMaxMessagesPerHook` | `20` | Maximum new messages sent during one Stop hook. |
 | `ingestRetrySpool` | `true` | Enables file-backed retry for failed ingestion. |
 | `debug` | `false` | Writes debug logs to `~/.memind/codex.log`. |
 
@@ -190,14 +181,13 @@ export MEMIND_AGENT_ID=codex
 export MEMIND_AGENT_ID_MODE=project
 export MEMIND_SOURCE_CLIENT=codex
 export MEMIND_AUTO_INGEST_AGENT_TIMELINE=true
-export MEMIND_COMMIT_ON_STOP=false
 export MEMIND_RETRIEVE_CONTEXT_TURNS=0
 export MEMIND_DEBUG=true
 ```
 
-Additional environment variables include `MEMIND_AUTO_RETRIEVE`, `MEMIND_AUTO_INGEST`,
+Additional environment variables include `MEMIND_AUTO_RETRIEVE`,
 `MEMIND_RETRIEVE_STRATEGY`, `MEMIND_RETRIEVE_MAX_ENTRIES`, `MEMIND_RETRIEVE_MAX_CHARS`,
-`MEMIND_INGESTION_ROLES`, `MEMIND_INGESTION_MAX_MESSAGES_PER_HOOK`, `MEMIND_STATE_MAX_AGE_DAYS`,
+`MEMIND_STATE_MAX_AGE_DAYS`,
 `MEMIND_INGEST_RETRY_SPOOL`, `MEMIND_INGEST_RETRY_MAX_FILES`, and `MEMIND_INGEST_RETRY_MAX_AGE_DAYS`.
 
 ## Identity Model
@@ -253,24 +243,9 @@ Agent memory items are grouped separately when returned by Memind:
 
 ## Ingestion Behavior
 
-Ingestion runs after each Codex turn when `autoIngest = true`.
-
-The Stop hook:
-
-1. Reads the Codex transcript.
-2. Extracts final user and assistant message text.
-3. Strips previously injected `<memind_memories>` blocks to avoid feedback loops.
-4. Skips tool/event payloads and Codex control context blocks.
-5. Computes stable fingerprints and sends only messages that have not already been submitted.
-6. Builds one caller-owned conversation raw-content payload and submits it through
-   `AsyncMemindClient.memory.extract(...)`.
-
-The local retry spool stores the full extraction payload plus the covered message fingerprints. Fingerprints are
-marked submitted only after Memind returns `SUCCESS`; `PARTIAL_SUCCESS` and failures keep the payload available
-for later replay.
-
-Tool and command events are buffered under `~/.memind/codex/state/` and flushed with the same reliable extraction
-path. A typical timeline payload looks like:
+Ingestion is timeline-only for Codex. The plugin does not submit transcript conversation rawdata. It buffers tool
+and command events under `~/.memind/codex/state/` and flushes them through
+`AsyncMemindClient.memory.extract(...)` as agent timeline rawdata. A typical timeline payload looks like:
 
 ```json
 {
@@ -303,8 +278,8 @@ path. A typical timeline payload looks like:
 Secrets are redacted before events are written to local state. File content capture is disabled by default; the
 hook stores normalized tool metadata, commands, paths, statuses, and compact outputs.
 
-Commit flags apply only to explicit server-buffer mode. In the default reliable mode, hooks do not issue an
-additional `/commit` call after successful `/extract/sync`.
+On `SUCCESS`, the covered events are removed from local state. `PARTIAL_SUCCESS` and failures keep the events
+available and spool the full timeline payload for later `SessionStart` replay.
 
 ## Server RawData Agent Settings
 
@@ -421,26 +396,18 @@ curl -fsSL http://127.0.0.1:8366/open/v1/health
 - Confirm existing memories are stored under the same `userId` and `agentId`.
 - Try setting `retrieveContextTurns` to `1` or `2` if the current prompt is very short.
 
-### Messages are not ingested
+### Agent timeline events are not ingested
 
-- Confirm `autoIngest` is `true`.
-- Confirm Codex provides `transcript_path` in hook payloads.
+- Confirm `autoIngestAgentTimeline` is `true`.
+- Confirm Codex is emitting `PreToolUse` and `PostToolUse` hooks.
 - Confirm `~/.memind/codex/state/` is writable.
 - Enable `MEMIND_DEBUG=true` and inspect `~/.memind/codex.log`.
 
 ### Stop hook times out
 
 - Confirm Memind server responds quickly.
-- Reduce `ingestionMaxMessagesPerHook`.
-- Keep the default `extract-sync` mode and reduce batch size before increasing hook timeout.
-
-### Duplicate messages appear
-
-The integration uses per-session fingerprints stored under `~/.memind/codex/state/`. If duplicates appear:
-
-- Confirm the state directory is writable.
-- Check whether Codex transcript identifiers changed across sessions.
-- Remove stale local state only if you accept that old transcript messages may be re-submitted.
+- Reduce tool output volume before it reaches the hook if your Codex setup allows it.
+- Inspect `~/.memind/codex/retry/` for repeatedly failing timeline payloads.
 
 ## Limitations
 
@@ -453,5 +420,3 @@ The integration uses per-session fingerprints stored under `~/.memind/codex/stat
   want one canonical coding-agent path should enable `rawdata-agent` for full agent timelines and keep
   `rawdata-toolcall` for pure legacy tool-call logs.
 - Retrieval quality depends on existing extracted Memind items and insights.
-- `commitOnStop` applies only to compatibility server-buffer ingestion mode and is ignored by the default
-  reliable extraction mode.

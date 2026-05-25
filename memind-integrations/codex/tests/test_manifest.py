@@ -47,11 +47,12 @@ class ManifestTest(unittest.TestCase):
         settings = json.loads((ROOT / "settings.json").read_text())
         self.assertEqual(settings["agentId"], "codex")
         self.assertEqual(settings["sourceClient"], "codex")
-        self.assertFalse(settings["commitOnStop"])
         self.assertTrue(settings["autoIngestAgentTimeline"])
         self.assertEqual(settings["retrieveContextTurns"], 0)
-        self.assertEqual(settings["ingestionMode"], "extract-sync")
-        self.assertEqual(settings["ingestionMaxMessagesPerHook"], 20)
+        self.assertNotIn("commitOnStop", settings)
+        self.assertNotIn("autoIngest", settings)
+        self.assertNotIn("ingestionRoles", settings)
+        self.assertNotIn("ingestionMaxMessagesPerHook", settings)
         self.assertEqual(settings["stateMaxAgeDays"], 14)
 
 

@@ -28,7 +28,7 @@ def main():
     try:
         hook_input = json.loads(sys.stdin.read() or "{}")
         config = load_config()
-        ingest_messages(config, hook_input, commit=bool(config.get("commitOnSessionEnd", True)))
+        ingest_messages(config, hook_input)
     except Exception as exc:
         try:
             debug_log(load_config(), "session_end_failed", {"error": str(exc)})

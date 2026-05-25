@@ -39,56 +39,26 @@ def _tcp_check(url, timeout=1):
         return True
 
 
-async def _replay_ingestion_batch(client, payload):
-    session_key = payload.get("sessionKey")
-    fingerprints = payload.get("fingerprints") or []
-    operations = payload.get("operations") or []
-    store = SessionStateStore(state_root())
-    appended = 0
-    for index, operation in enumerate(operations):
-        if operation.get("kind") != "add-message":
-            continue
-        fingerprint = fingerprints[index] if index < len(fingerprints) else None
-        if fingerprint and session_key:
-            with store.locked(session_key) as state:
-                if state.is_submitted(fingerprint):
-                    continue
-        await client.add_message(
-            operation["userId"],
-            operation["agentId"],
-            operation["message"],
-            operation.get("sourceClient"),
-        )
-        appended += 1
-        if fingerprint and session_key:
-            store.mark_submitted(session_key, [fingerprint])
-    if appended and payload.get("commitOnSuccess"):
-        await client.commit(payload["userId"], payload["agentId"], payload.get("sourceClient"))
-    return appended
-
-
 async def _replay_payload(client, payload):
     kind = payload.get("kind")
     if kind == "extract":
+        raw_content = payload.get("rawContent") or {}
+        if raw_content.get("type") != "agent_timeline":
+            return 0
         response = await client.extract(
             payload["userId"],
             payload["agentId"],
-            payload["rawContent"],
+            raw_content,
             payload.get("sourceClient"),
         )
         status = getattr(response, "status", None)
         if status != "SUCCESS":
             raise RuntimeError(f"extract replay did not fully succeed: {status}")
         session_key = payload.get("sessionKey")
-        fingerprints = payload.get("fingerprints") or []
-        if session_key and fingerprints:
-            SessionStateStore(state_root()).mark_submitted(session_key, fingerprints)
         event_ids = payload.get("eventIds") or []
         if session_key and event_ids:
             SessionStateStore(state_root()).clear_agent_events(session_key, event_ids)
-        return len(fingerprints)
-    if kind == "ingestion-batch":
-        return await _replay_ingestion_batch(client, payload)
+        return 0
     if kind == "commit":
         await client.commit(payload["userId"], payload["agentId"], payload.get("sourceClient"))
         return 0

@@ -36,9 +36,6 @@ def state_key(hook_input):
     session_id = hook_input.get("session_id")
     if session_id:
         return _safe_name(session_id)
-    transcript_path = hook_input.get("transcript_path")
-    if transcript_path:
-        return f"transcript-{_hash(str(Path(transcript_path).expanduser().resolve()))}"
     cwd = hook_input.get("cwd")
     if cwd:
         return f"cwd-{_hash(str(Path(cwd).expanduser().resolve()))}"
@@ -89,18 +86,8 @@ class _FileLock:
 class SessionState:
     def __init__(self, data):
         self.data = data
-        self.data.setdefault("submitted", [])
         self.data.setdefault("agentEvents", [])
         self.data.setdefault("nextAgentSeq", 1)
-
-    def is_submitted(self, fingerprint):
-        return fingerprint in set(self.data.get("submitted", []))
-
-    def mark_submitted(self, fingerprints):
-        submitted = set(self.data.get("submitted", []))
-        submitted.update(fingerprints)
-        self.data["submitted"] = sorted(submitted)
-        self.data["updatedAt"] = time.time()
 
     def append_agent_event(self, event):
         events = list(self.data.get("agentEvents", []))
@@ -166,10 +153,6 @@ class SessionStateStore:
             state = SessionState(self._read(path))
             yield state
             self._write(path, state.data)
-
-    def mark_submitted(self, session_key, fingerprints):
-        with self.locked(session_key) as state:
-            state.mark_submitted(fingerprints)
 
     def clear_agent_events(self, session_key, event_ids):
         with self.locked(session_key) as state:
