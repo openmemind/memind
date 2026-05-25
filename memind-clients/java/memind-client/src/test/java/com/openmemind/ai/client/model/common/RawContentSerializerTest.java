@@ -54,4 +54,19 @@ class RawContentSerializerTest {
         assertThat(json).contains("\"fileName\":\"test.pdf\"");
         assertThat(json).contains("\"mimeType\":\"application/pdf\"");
     }
+
+    @Test
+    void mapRawContent_serializesAgentTimelinePropertiesFlat() throws Exception {
+        MapRawContent content =
+                MapRawContent.of(
+                        "agent_timeline",
+                        Map.of("sessionId", "s", "timelineId", "t", "events", List.of()));
+
+        String json = mapper.writeValueAsString(content);
+
+        assertThat(json).contains("\"type\":\"agent_timeline\"");
+        assertThat(json).contains("\"sessionId\":\"s\"");
+        assertThat(json).contains("\"timelineId\":\"t\"");
+        assertThat(json).contains("\"events\":[]");
+    }
 }

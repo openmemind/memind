@@ -14,7 +14,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from memind.types.common import Strategy
 from memind.types.memory import (
@@ -54,6 +54,22 @@ class MemoryResource:
         result = self._client._post("/memory/sync/extract", payload, ExtractMemoryResponse)
         assert result is not None
         return result
+
+    def extract_agent_timeline(
+        self,
+        *,
+        user_id: str,
+        agent_id: str,
+        timeline: dict[str, Any],
+        source_client: str | None = None,
+    ) -> ExtractMemoryResponse:
+        raw_content = {"type": "agent_timeline", **timeline}
+        return self.extract(
+            user_id=user_id,
+            agent_id=agent_id,
+            raw_content=raw_content,
+            source_client=source_client,
+        )
 
     def add_message(
         self,

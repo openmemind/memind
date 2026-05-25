@@ -88,6 +88,42 @@ async def test_async_memory_methods_send_payloads(httpx_mock) -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_extract_agent_timeline_sends_map_raw_content(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/open/v1/memory/sync/extract",
+        json={
+            "data": {
+                "status": "SUCCESS",
+                "rawDataIds": ["rd-1"],
+                "itemIds": [],
+                "insightIds": [],
+                "insightPending": False,
+            },
+        },
+    )
+
+    client = AsyncMemindClient(base_url="https://api.example.test")
+    await client.memory.extract_agent_timeline(
+        user_id="u1",
+        agent_id="a1",
+        timeline={
+            "sourceClient": "claude-code",
+            "sessionId": "s",
+            "timelineId": "t",
+            "events": [],
+        },
+        source_client="claude-code",
+    )
+    await client.close()
+
+    content = httpx_mock.get_request().content
+    assert b'"rawContent":{"type":"agent_timeline"' in content
+    assert b'"sessionId":"s"' in content
+    assert b'"sourceClient":"claude-code"' in content
+
+
+@pytest.mark.asyncio
 async def test_async_retrieve_returns_response(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",

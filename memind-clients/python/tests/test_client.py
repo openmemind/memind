@@ -89,6 +89,41 @@ def test_extract_sends_raw_content(httpx_mock) -> None:
     client.close()
 
 
+def test_extract_agent_timeline_sends_map_raw_content(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/open/v1/memory/sync/extract",
+        json={
+            "data": {
+                "status": "SUCCESS",
+                "rawDataIds": ["rd-1"],
+                "itemIds": [],
+                "insightIds": [],
+                "insightPending": False,
+            },
+        },
+    )
+
+    client = MemindClient(base_url="https://api.example.test")
+    client.memory.extract_agent_timeline(
+        user_id="u1",
+        agent_id="a1",
+        timeline={
+            "sourceClient": "claude-code",
+            "sessionId": "s",
+            "timelineId": "t",
+            "events": [],
+        },
+        source_client="claude-code",
+    )
+
+    content = httpx_mock.get_request().content
+    assert b'"rawContent":{"type":"agent_timeline"' in content
+    assert b'"sessionId":"s"' in content
+    assert b'"sourceClient":"claude-code"' in content
+    client.close()
+
+
 def test_commit_sends_payload(httpx_mock) -> None:
     httpx_mock.add_response(
         method="POST",

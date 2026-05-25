@@ -14,6 +14,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemindClient } from '../src/client.js'
+import type { AgentTimelineContent, RawContentValue } from '../src/types/message.js'
 
 type TestProcess = {
   env?: Record<string, string | undefined>
@@ -188,6 +189,43 @@ describe('MemindClient', () => {
           }),
         }),
       )
+    })
+
+    it('preserves agent timeline raw content in extract requests', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({
+          data: { status: 'SUCCESS', rawDataIds: ['rd-1'], itemIds: [], insightIds: [] },
+        }),
+      })
+      const client = new MemindClient({
+        baseUrl: 'http://localhost:8366',
+        fetch: mockFetch,
+      })
+      const raw: RawContentValue = {
+        type: 'agent_timeline',
+        sourceClient: 'claude-code',
+        sessionId: 's',
+        timelineId: 't',
+        events: [],
+      } satisfies AgentTimelineContent
+
+      await client.memory.extract({
+        userId: 'u1',
+        agentId: 'a1',
+        rawContent: raw,
+        sourceClient: 'claude-code',
+      })
+
+      const body = JSON.parse(String(mockFetch.mock.calls[0]?.[1]?.body))
+      expect(body.rawContent).toEqual({
+        type: 'agent_timeline',
+        sourceClient: 'claude-code',
+        sessionId: 's',
+        timelineId: 't',
+        events: [],
+      })
     })
   })
 })

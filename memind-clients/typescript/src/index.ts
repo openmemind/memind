@@ -20,6 +20,8 @@ export type { ApiError, ApiResult, RequestOptions } from './types/common.js'
 export type { HealthResponse } from './types/health.js'
 export { Message, RawContent } from './types/message.js'
 export type {
+  AgentTimelineContent,
+  AgentTimelineEvent,
   ContentBlock,
   ConversationContent,
   JsonObjectRawContent,
