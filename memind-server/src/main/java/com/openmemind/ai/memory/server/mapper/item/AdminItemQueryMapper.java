@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.server.mapper.item;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryItemDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryItemMapper;
 import com.openmemind.ai.memory.server.domain.common.PageResponse;
@@ -22,6 +23,7 @@ import com.openmemind.ai.memory.server.domain.item.query.ItemPageQuery;
 import com.openmemind.ai.memory.server.domain.item.view.AdminItemView;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -60,7 +62,7 @@ final class MybatisAdminItemQueryMapper implements AdminItemQueryMapper {
             wrapper.eq(MemoryItemDO::getScope, query.scope());
         }
         if (StringUtils.hasText(query.category())) {
-            wrapper.eq(MemoryItemDO::getCategory, query.category());
+            wrapper.in(MemoryItemDO::getCategory, categoryFilterValues(query.category()));
         }
         if (StringUtils.hasText(query.type())) {
             wrapper.eq(MemoryItemDO::getType, query.type());
@@ -116,7 +118,7 @@ final class MybatisAdminItemQueryMapper implements AdminItemQueryMapper {
                 dataObject.getMemoryId(),
                 dataObject.getContent(),
                 dataObject.getScope(),
-                dataObject.getCategory(),
+                normalizeCategory(dataObject.getCategory()),
                 dataObject.getVectorId(),
                 dataObject.getRawDataId(),
                 dataObject.getContentHash(),
@@ -128,5 +130,30 @@ final class MybatisAdminItemQueryMapper implements AdminItemQueryMapper {
                 dataObject.getSourceClient(),
                 dataObject.getCreatedAt(),
                 dataObject.getUpdatedAt());
+    }
+
+    private static List<String> categoryFilterValues(String category) {
+        if (!StringUtils.hasText(category)) {
+            return List.of();
+        }
+        return parseCategory(category)
+                .map(value -> List.of(value.name(), value.categoryName()))
+                .orElseGet(() -> List.of(category));
+    }
+
+    private static String normalizeCategory(String category) {
+        return parseCategory(category).map(MemoryCategory::categoryName).orElse(category);
+    }
+
+    private static Optional<MemoryCategory> parseCategory(String category) {
+        if (!StringUtils.hasText(category)) {
+            return Optional.empty();
+        }
+        String trimmed = category.trim();
+        try {
+            return Optional.of(MemoryCategory.valueOf(trimmed.toUpperCase(Locale.ROOT)));
+        } catch (IllegalArgumentException e) {
+            return MemoryCategory.byName(trimmed.toLowerCase(Locale.ROOT));
+        }
     }
 }
