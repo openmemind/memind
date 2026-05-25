@@ -111,6 +111,7 @@ def test_extract_agent_timeline_sends_map_raw_content(httpx_mock) -> None:
         timeline={
             "sourceClient": "claude-code",
             "sessionId": "s",
+            "agentTurnId": "s-agent-turn-1-1",
             "timelineId": "t",
             "events": [],
         },

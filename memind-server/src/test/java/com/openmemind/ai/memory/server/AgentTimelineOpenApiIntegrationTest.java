@@ -281,6 +281,7 @@ class AgentTimelineOpenApiIntegrationTest {
             "type": "agent_timeline",
             "sourceClient": "claude-code",
             "sessionId": "s",
+            "agentTurnId": "s-agent-turn-1-5",
             "timelineId": "t",
             "project": {
               "name": "payments-api",
@@ -288,14 +289,14 @@ class AgentTimelineOpenApiIntegrationTest {
             },
             "events": [
               {
-                "id": "e1",
+                "eventId": "e1",
                 "seq": 1,
                 "kind": "user_prompt",
                 "text": "Fix payment tests",
                 "occurredAt": "2026-05-24T10:00:00Z"
               },
               {
-                "id": "e2",
+                "eventId": "e2",
                 "seq": 2,
                 "kind": "command",
                 "toolName": "Bash",
@@ -306,7 +307,7 @@ class AgentTimelineOpenApiIntegrationTest {
                 "occurredAt": "2026-05-24T10:01:00Z"
               },
               {
-                "id": "e3",
+                "eventId": "e3",
                 "seq": 3,
                 "kind": "file_edit",
                 "path": "src/payment/calc.ts",
@@ -314,7 +315,7 @@ class AgentTimelineOpenApiIntegrationTest {
                 "occurredAt": "2026-05-24T10:02:00Z"
               },
               {
-                "id": "e4",
+                "eventId": "e4",
                 "seq": 4,
                 "kind": "command",
                 "toolName": "Bash",
@@ -323,7 +324,7 @@ class AgentTimelineOpenApiIntegrationTest {
                 "occurredAt": "2026-05-24T10:03:00Z"
               },
               {
-                "id": "e5",
+                "eventId": "e5",
                 "seq": 5,
                 "kind": "stop",
                 "occurredAt": "2026-05-24T10:04:00Z"

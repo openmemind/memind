@@ -41,6 +41,7 @@ public final class AgentTimelineContent extends RawContent {
     private final String sourceClient;
     private final String sourceVersion;
     private final String sessionId;
+    private final String agentTurnId;
     private final String timelineId;
     private final AgentProject project;
     private final List<AgentEvent> events;
@@ -50,10 +51,19 @@ public final class AgentTimelineContent extends RawContent {
             String sourceClient,
             String sourceVersion,
             String sessionId,
+            String agentTurnId,
             String timelineId,
             AgentProject project,
             List<AgentEvent> events) {
-        this(sourceClient, sourceVersion, sessionId, timelineId, project, events, Map.of());
+        this(
+                sourceClient,
+                sourceVersion,
+                sessionId,
+                agentTurnId,
+                timelineId,
+                project,
+                events,
+                Map.of());
     }
 
     @JsonCreator
@@ -61,6 +71,7 @@ public final class AgentTimelineContent extends RawContent {
             @JsonProperty("sourceClient") String sourceClient,
             @JsonProperty("sourceVersion") String sourceVersion,
             @JsonProperty("sessionId") String sessionId,
+            @JsonProperty("agentTurnId") String agentTurnId,
             @JsonProperty("timelineId") String timelineId,
             @JsonProperty("project") AgentProject project,
             @JsonProperty("events") List<AgentEvent> events,
@@ -68,6 +79,7 @@ public final class AgentTimelineContent extends RawContent {
         this.sourceClient = sourceClient;
         this.sourceVersion = sourceVersion;
         this.sessionId = sessionId;
+        this.agentTurnId = agentTurnId;
         this.timelineId = timelineId;
         this.project = project;
         this.events = sortedEvents(events);
@@ -85,6 +97,7 @@ public final class AgentTimelineContent extends RawContent {
         lines.add("Agent Timeline");
         append(lines, "Source", sourceClientWithVersion());
         append(lines, "Session", sessionId);
+        append(lines, "Agent Turn", agentTurnId);
         append(lines, "Timeline", timelineId);
         if (project != null) {
             append(lines, "Project", project.toDisplayString());
@@ -99,7 +112,7 @@ public final class AgentTimelineContent extends RawContent {
 
     @Override
     public String getContentId() {
-        String eventIds = events.stream().map(AgentEvent::id).collect(Collectors.joining(","));
+        String eventIds = events.stream().map(AgentEvent::eventId).collect(Collectors.joining(","));
         String eventHash =
                 HashUtils.sampledSha256(
                         events.stream().map(this::canonicalEvent).collect(Collectors.joining("|")));
@@ -108,6 +121,7 @@ public final class AgentTimelineContent extends RawContent {
                         "|",
                         normalized(sourceClient),
                         normalized(sessionId),
+                        normalized(agentTurnId),
                         normalized(timelineId),
                         eventIds,
                         normalized(eventHash)));
@@ -121,7 +135,14 @@ public final class AgentTimelineContent extends RawContent {
     @Override
     public RawContent withMetadata(Map<String, Object> metadata) {
         return new AgentTimelineContent(
-                sourceClient, sourceVersion, sessionId, timelineId, project, events, metadata);
+                sourceClient,
+                sourceVersion,
+                sessionId,
+                agentTurnId,
+                timelineId,
+                project,
+                events,
+                metadata);
     }
 
     @JsonProperty("sourceClient")
@@ -137,6 +158,11 @@ public final class AgentTimelineContent extends RawContent {
     @JsonProperty("sessionId")
     public String sessionId() {
         return sessionId;
+    }
+
+    @JsonProperty("agentTurnId")
+    public String agentTurnId() {
+        return agentTurnId;
     }
 
     @JsonProperty("timelineId")
@@ -190,7 +216,8 @@ public final class AgentTimelineContent extends RawContent {
                                         AgentEvent::occurredAt,
                                         Comparator.nullsLast(Instant::compareTo))
                                 .thenComparing(
-                                        AgentEvent::id, Comparator.nullsLast(String::compareTo)))
+                                        AgentEvent::eventId,
+                                        Comparator.nullsLast(String::compareTo)))
                 .toList();
     }
 
@@ -208,8 +235,8 @@ public final class AgentTimelineContent extends RawContent {
         if (event.kind() != null) {
             parts.add(event.kind().wireValue());
         }
-        if (event.id() != null && !event.id().isBlank()) {
-            parts.add(event.id());
+        if (event.eventId() != null && !event.eventId().isBlank()) {
+            parts.add(event.eventId());
         }
         if (event.status() != null) {
             parts.add("[" + event.status().wireValue() + "]");
@@ -238,7 +265,7 @@ public final class AgentTimelineContent extends RawContent {
     private String canonicalEvent(AgentEvent event) {
         return String.join(
                 "\u001f",
-                normalized(event.id()),
+                normalized(event.eventId()),
                 normalized(event.seq()),
                 event.kind() == null ? "" : event.kind().wireValue(),
                 normalized(event.occurredAt()),

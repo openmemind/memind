@@ -117,7 +117,8 @@ public final class AgentEpisodeAssembler {
             String phase,
             Map<String, Object> extraMetadata) {
         List<AgentEvent> events = sorted(rawEvents);
-        List<String> eventIds = events.stream().map(AgentEvent::id).filter(this::hasText).toList();
+        List<String> eventIds =
+                events.stream().map(AgentEvent::eventId).filter(this::hasText).toList();
         List<AgentCommand> commandEvents = commandEvents(events);
         List<AgentFileReference> fileReferences = fileReferences(events);
         List<AgentToolCall> toolCalls = toolCalls(events);
@@ -217,7 +218,7 @@ public final class AgentEpisodeAssembler {
                                         event.output(),
                                         event.exitCode(),
                                         event.seq(),
-                                        event.id()))
+                                        event.eventId()))
                 .toList();
     }
 
@@ -227,7 +228,10 @@ public final class AgentEpisodeAssembler {
                 .map(
                         event ->
                                 new AgentFileReference(
-                                        event.path(), event.operation(), event.seq(), event.id()))
+                                        event.path(),
+                                        event.operation(),
+                                        event.seq(),
+                                        event.eventId()))
                 .toList();
     }
 
@@ -237,7 +241,10 @@ public final class AgentEpisodeAssembler {
                 .map(
                         event ->
                                 new AgentToolCall(
-                                        event.toolName(), event.status(), event.seq(), event.id()))
+                                        event.toolName(),
+                                        event.status(),
+                                        event.seq(),
+                                        event.eventId()))
                 .toList();
     }
 
@@ -401,7 +408,8 @@ public final class AgentEpisodeAssembler {
                                         AgentEvent::occurredAt,
                                         Comparator.nullsLast(Instant::compareTo))
                                 .thenComparing(
-                                        AgentEvent::id, Comparator.nullsLast(String::compareTo)))
+                                        AgentEvent::eventId,
+                                        Comparator.nullsLast(String::compareTo)))
                 .toList();
     }
 

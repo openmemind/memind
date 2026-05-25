@@ -77,16 +77,28 @@ class AgentTimelineContentTest {
 
         AgentTimelineContent content =
                 new AgentTimelineContent(
-                        "claude-code", "1.0", "session-123", "timeline-123", project, events);
+                        "claude-code",
+                        "1.0",
+                        "session-123",
+                        "session-123-agent-turn-1-2",
+                        "timeline-123",
+                        project,
+                        events);
         AgentTimelineContent duplicate =
                 new AgentTimelineContent(
-                        "claude-code", "1.0", "session-123", "timeline-123", project, events);
+                        "claude-code",
+                        "1.0",
+                        "session-123",
+                        "session-123-agent-turn-1-2",
+                        "timeline-123",
+                        project,
+                        events);
 
         assertThat(content.contentType()).isEqualTo("AGENT_TIMELINE");
         assertThat(content.toContentString())
                 .contains("Goal:", "Fix payment tests", "npm test payment");
         assertThat(content.getContentId()).isEqualTo(duplicate.getContentId());
-        assertThat(content.events()).extracting(AgentEvent::id).containsExactly("e1", "e2");
+        assertThat(content.events()).extracting(AgentEvent::eventId).containsExactly("e1", "e2");
     }
 
     @Test
@@ -96,6 +108,7 @@ class AgentTimelineContentTest {
                         "codex",
                         "1.0",
                         "session-1",
+                        "session-1-agent-turn-1-1",
                         "timeline-1",
                         new AgentProject("memind", "/repo/memind", null, Map.of()),
                         List.of(
@@ -120,11 +133,41 @@ class AgentTimelineContentTest {
         RawContent decoded = OBJECT_MAPPER.readValue(json, RawContent.class);
 
         assertThat(json).contains("\"type\":\"agent_timeline\"");
+        assertThat(json).contains("\"eventId\":\"e1\"");
+        assertThat(json).doesNotContain("\"id\":\"e1\"");
         assertThat(decoded).isInstanceOf(AgentTimelineContent.class);
         assertThat(((AgentTimelineContent) decoded).events())
                 .singleElement()
                 .extracting(AgentEvent::text)
                 .isEqualTo("Review rawdata-agent design");
         assertThat(decoded.toContentString()).contains("Goal: Review rawdata-agent design");
+    }
+
+    @Test
+    void jacksonShouldPreserveAgentTurnAndEventIdFields() throws Exception {
+        String json =
+                """
+                {
+                  "type": "agent_timeline",
+                  "sourceClient": "claude-code",
+                  "sessionId": "session-1",
+                  "agentTurnId": "turn-1",
+                  "timelineId": "timeline-1",
+                  "events": [
+                    {
+                      "eventId": "event-new",
+                      "seq": 1,
+                      "kind": "user_prompt",
+                      "text": "Fix test"
+                    }
+                  ]
+                }
+                """;
+
+        RawContent decoded = OBJECT_MAPPER.readValue(json, RawContent.class);
+
+        AgentTimelineContent timeline = (AgentTimelineContent) decoded;
+        assertThat(timeline.agentTurnId()).isEqualTo("turn-1");
+        assertThat(timeline.events()).extracting(AgentEvent::eventId).containsExactly("event-new");
     }
 }

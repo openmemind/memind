@@ -337,7 +337,7 @@ class HookTest(unittest.TestCase):
             state_dir = Path(tmp) / "state"
             with SessionStateStore(state_dir).locked("s1") as state:
                 state.append_agent_event(
-                    {"id": "e1", "seq": 1, "kind": "command", "command": "npm test"}
+                    {"eventId": "e1", "seq": 1, "kind": "command", "command": "npm test"}
                 )
             with mock.patch.object(ingest, "state_root", return_value=state_dir):
                 with mock.patch.object(ingest, "retry_root", return_value=Path(tmp) / "retry"):
@@ -356,7 +356,7 @@ class HookTest(unittest.TestCase):
             raw_content = client.extract.await_args.args[2]
             self.assertEqual(raw_content["type"], "agent_timeline")
             self.assertEqual(raw_content["sessionId"], "s1")
-            self.assertEqual(raw_content["events"][0]["id"], "e1")
+            self.assertEqual(raw_content["events"][0]["eventId"], "e1")
             with SessionStateStore(state_dir).locked("s1") as state:
                 self.assertEqual(state.agent_events(), [])
 
@@ -381,7 +381,7 @@ class HookTest(unittest.TestCase):
             retry_dir = Path(tmp) / "retry"
             with SessionStateStore(state_dir).locked("s1") as state:
                 state.append_agent_event(
-                    {"id": "e1", "seq": 1, "kind": "command", "command": "npm test"}
+                    {"eventId": "e1", "seq": 1, "kind": "command", "command": "npm test"}
                 )
             with mock.patch.object(ingest, "state_root", return_value=state_dir):
                 with mock.patch.object(ingest, "retry_root", return_value=retry_dir):
@@ -401,7 +401,7 @@ class HookTest(unittest.TestCase):
             self.assertEqual(payload["kind"], "extract")
             self.assertEqual(payload["eventIds"], ["e1"])
             self.assertEqual(payload["rawContent"]["type"], "agent_timeline")
-            self.assertEqual(payload["rawContent"]["events"][0]["id"], "e1")
+            self.assertEqual(payload["rawContent"]["events"][0]["eventId"], "e1")
             with SessionStateStore(state_dir).locked("s1") as state:
                 self.assertEqual(len(state.agent_events()), 1)
 
@@ -513,8 +513,8 @@ class HookTest(unittest.TestCase):
             retry_dir = Path(tmp) / "retry"
             state_dir = Path(tmp) / "state"
             with SessionStateStore(state_dir).locked("s1") as state:
-                state.append_agent_event({"id": "e1", "seq": 1, "kind": "command"})
-                state.append_agent_event({"id": "e2", "seq": 2, "kind": "tool_result"})
+                state.append_agent_event({"eventId": "e1", "seq": 1, "kind": "command"})
+                state.append_agent_event({"eventId": "e2", "seq": 2, "kind": "tool_result"})
             RetrySpool(retry_dir).enqueue(
                 {
                     "kind": "extract",
@@ -528,7 +528,7 @@ class HookTest(unittest.TestCase):
                         "sourceClient": "claude-code",
                         "sessionId": "s1",
                         "timelineId": "s1-agent",
-                        "events": [{"id": "e1", "seq": 1, "kind": "command"}],
+                        "events": [{"eventId": "e1", "seq": 1, "kind": "command"}],
                     },
                 }
             )
@@ -551,7 +551,10 @@ class HookTest(unittest.TestCase):
                             client.commit = mock.AsyncMock(return_value=None)
                             session_start.main()
             with SessionStateStore(state_dir).locked("s1") as state:
-                self.assertEqual(state.agent_events(), [{"id": "e2", "seq": 2, "kind": "tool_result"}])
+                self.assertEqual(
+                    state.agent_events(),
+                    [{"eventId": "e2", "seq": 2, "kind": "tool_result"}],
+                )
             self.assertEqual(list(retry_dir.glob("*.json")), [])
             client.extract.assert_awaited_once()
 

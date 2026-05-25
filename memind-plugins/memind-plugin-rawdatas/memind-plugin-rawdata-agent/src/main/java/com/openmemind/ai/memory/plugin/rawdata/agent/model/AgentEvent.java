@@ -20,7 +20,7 @@ import java.util.Map;
  * One normalized event from an agent session timeline.
  */
 public record AgentEvent(
-        String id,
+        String eventId,
         Integer seq,
         AgentEventKind kind,
         Instant occurredAt,

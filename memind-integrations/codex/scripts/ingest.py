@@ -83,7 +83,7 @@ def _spool_agent_timeline(retry_spool, identity, source_client, session_key, eve
             "agentId": identity["agentId"],
             "sourceClient": source_client,
             "sessionKey": session_key,
-            "eventIds": [event["id"] for event in events if event.get("id")],
+            "eventIds": [event["eventId"] for event in events if event.get("eventId")],
             "rawContent": raw_content,
         }
     )
@@ -154,7 +154,8 @@ async def ingest_messages_async(config, hook_input):
             status = getattr(response, "status", None)
             if status == "SUCCESS":
                 store.clear_agent_events(
-                    session_key, [event["id"] for event in agent_events if event.get("id")]
+                    session_key,
+                    [event["eventId"] for event in agent_events if event.get("eventId")],
                 )
             else:
                 _spool_agent_timeline(

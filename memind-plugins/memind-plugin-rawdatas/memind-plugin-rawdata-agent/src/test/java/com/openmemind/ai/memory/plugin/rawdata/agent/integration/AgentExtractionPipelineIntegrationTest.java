@@ -298,6 +298,7 @@ class AgentExtractionPipelineIntegrationTest {
                 "codex",
                 "1.0",
                 "session-123",
+                "session-123-agent-turn-1-5",
                 "timeline-123",
                 new AgentProject("payments-api", "/Users/alice/work/payments-api", null, Map.of()),
                 events);

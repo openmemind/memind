@@ -21,11 +21,12 @@ try (MemindClient client = MemindClient.builder().baseUrl("http://localhost:8366
                     Map.of(
                             "sourceClient", "claude-code",
                             "sessionId", "session-123",
+                            "agentTurnId", "session-123-agent-turn-1-1",
                             "timelineId", "session-123-agent-1-2",
                             "events",
                             List.of(
                                     Map.of(
-                                            "id", "event-id",
+                                            "eventId", "event-id",
                                             "seq", 1,
                                             "kind", "command",
                                             "toolName", "Bash",

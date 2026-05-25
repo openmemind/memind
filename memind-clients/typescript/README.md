@@ -85,10 +85,11 @@ const timeline: AgentTimelineContent = {
   type: 'agent_timeline',
   sourceClient: 'claude-code',
   sessionId: 'session-123',
+  agentTurnId: 'session-123-agent-turn-1-1',
   timelineId: 'session-123-agent-1-2',
   events: [
     {
-      id: 'event-id',
+      eventId: 'event-id',
       seq: 1,
       kind: 'command',
       toolName: 'Bash',

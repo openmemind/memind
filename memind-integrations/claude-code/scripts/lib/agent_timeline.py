@@ -99,7 +99,7 @@ def normalize_hook_event(hook_input, seq):
     redaction_kinds = []
 
     event = {
-        "id": event_id(source_client, session_id, seq, hook_input),
+        "eventId": event_id(source_client, session_id, seq, hook_input),
         "seq": seq,
         "kind": _event_kind(tool_name),
         "occurredAt": hook_input.get("timestamp"),
@@ -155,15 +155,18 @@ def build_timeline_payload(config, identity, session_id, events, hook_input):
     cwd = hook_input.get("cwd")
     first_seq = events[0].get("seq") if events else 0
     last_seq = events[-1].get("seq") if events else 0
+    agent_turn_id = f"{session_id}-agent-turn-{first_seq}-{last_seq}"
     payload = {
         "type": "agent_timeline",
         "sourceClient": source_client,
         "sessionId": session_id,
+        "agentTurnId": agent_turn_id,
         "timelineId": f"{session_id}-agent-{first_seq}-{last_seq}",
         "events": list(events),
         "metadata": {
             "userId": identity.get("userId"),
             "agentId": identity.get("agentId"),
+            "eventIds": [event["eventId"] for event in events if event.get("eventId")],
         },
     }
     if cwd:

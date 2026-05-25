@@ -82,7 +82,7 @@ def _spool_agent_timeline(retry_spool, identity, source_client, session_id, even
             "agentId": identity["agentId"],
             "sourceClient": source_client,
             "sessionId": session_id,
-            "eventIds": [event["id"] for event in events if event.get("id")],
+            "eventIds": [event["eventId"] for event in events if event.get("eventId")],
             "rawContent": raw_content,
         }
     )
@@ -150,7 +150,9 @@ async def ingest_messages_async(config, hook_input, commit=False, max_messages=N
             else:
                 status = getattr(response, "status", None)
                 if status == "SUCCESS":
-                    state.clear_agent_events([event["id"] for event in agent_events if event.get("id")])
+                    state.clear_agent_events(
+                        [event["eventId"] for event in agent_events if event.get("eventId")]
+                    )
                 else:
                     _spool_agent_timeline(
                         retry_spool,

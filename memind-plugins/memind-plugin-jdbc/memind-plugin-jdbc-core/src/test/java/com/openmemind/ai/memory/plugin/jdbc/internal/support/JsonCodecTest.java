@@ -140,6 +140,7 @@ class JsonCodecTest {
                 "claude-code",
                 "1.0",
                 "session-1",
+                "session-1-agent-turn-1-2",
                 "timeline-1",
                 new AgentProject("memind", "/repo/memind", null, Map.of()),
                 List.of(

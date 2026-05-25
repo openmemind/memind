@@ -77,7 +77,7 @@ export type JsonObjectRawContent = {
 }
 
 export type AgentTimelineEvent = {
-  id?: string
+  eventId?: string
   seq?: number
   kind?: string
   occurredAt?: string
@@ -99,6 +99,7 @@ export type AgentTimelineContent = {
   sourceClient?: string
   sourceVersion?: string
   sessionId: string
+  agentTurnId: string
   timelineId: string
   events: AgentTimelineEvent[]
   project?: Record<string, JsonValue>

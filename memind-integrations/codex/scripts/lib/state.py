@@ -104,8 +104,8 @@ class SessionState:
 
     def append_agent_event(self, event):
         events = list(self.data.get("agentEvents", []))
-        event_id = event.get("id")
-        if event_id and any(existing.get("id") == event_id for existing in events):
+        event_id = event.get("eventId")
+        if event_id and any(existing.get("eventId") == event_id for existing in events):
             return
         events.append(event)
         if len(events) > MAX_AGENT_EVENTS:
@@ -122,7 +122,9 @@ class SessionState:
         if not event_ids:
             return
         self.data["agentEvents"] = [
-            event for event in self.data.get("agentEvents", []) if event.get("id") not in event_ids
+            event
+            for event in self.data.get("agentEvents", [])
+            if event.get("eventId") not in event_ids
         ]
         self.data["updatedAt"] = time.time()
 

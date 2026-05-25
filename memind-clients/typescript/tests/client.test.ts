@@ -207,6 +207,7 @@ describe('MemindClient', () => {
         type: 'agent_timeline',
         sourceClient: 'claude-code',
         sessionId: 's',
+        agentTurnId: 's-agent-turn-1-1',
         timelineId: 't',
         events: [],
       } satisfies AgentTimelineContent
@@ -223,6 +224,7 @@ describe('MemindClient', () => {
         type: 'agent_timeline',
         sourceClient: 'claude-code',
         sessionId: 's',
+        agentTurnId: 's-agent-turn-1-1',
         timelineId: 't',
         events: [],
       })

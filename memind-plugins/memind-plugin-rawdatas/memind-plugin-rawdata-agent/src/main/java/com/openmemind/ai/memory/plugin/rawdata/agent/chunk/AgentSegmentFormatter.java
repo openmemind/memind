@@ -58,7 +58,8 @@ public final class AgentSegmentFormatter {
             actions.forEach(action -> lines.add("- " + action));
         }
         lines.add("Evidence:");
-        episode.events().forEach(event -> lines.add("- " + event.id() + ": " + evidence(event)));
+        episode.events()
+                .forEach(event -> lines.add("- " + event.eventId() + ": " + evidence(event)));
         return String.join("\n", lines);
     }
 
@@ -67,6 +68,7 @@ public final class AgentSegmentFormatter {
         metadata.put("segmentType", "agent_episode");
         metadata.put("sourceClient", timeline.sourceClient());
         metadata.put("sessionId", timeline.sessionId());
+        metadata.put("agentTurnId", timeline.agentTurnId());
         metadata.put("timelineId", timeline.timelineId());
         metadata.put("episodeId", episode.id());
         metadata.put("phase", episode.phase());

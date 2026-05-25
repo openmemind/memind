@@ -216,7 +216,7 @@ class AgentEpisodeAssemblerTest {
                         "npm test payment",
                         0);
         return new AgentEvent(
-                base.id(),
+                base.eventId(),
                 base.seq(),
                 base.kind(),
                 base.occurredAt(),

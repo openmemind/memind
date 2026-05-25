@@ -62,6 +62,7 @@ public final class AgentTimelineChunker {
                         content.sourceClient(),
                         content.sourceVersion(),
                         content.sessionId(),
+                        content.agentTurnId(),
                         content.timelineId(),
                         content.project(),
                         content.events().stream().map(redactor::redact).toList(),

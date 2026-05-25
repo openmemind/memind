@@ -281,11 +281,12 @@ path. A typical timeline payload looks like:
     "type": "agent_timeline",
     "sourceClient": "codex",
     "sessionId": "session-123",
+    "agentTurnId": "session-123-agent-turn-1-1",
     "timelineId": "session-123-agent-1-2",
     "project": {"name": "payment-service", "rootPath": "/repo/payment-service"},
     "events": [
       {
-        "id": "event-id",
+        "eventId": "event-id",
         "seq": 1,
         "kind": "command",
         "toolName": "Bash",

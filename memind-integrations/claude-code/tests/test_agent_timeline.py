@@ -33,6 +33,8 @@ class AgentTimelineTest(unittest.TestCase):
         )
 
         self.assertEqual(event["kind"], "command")
+        self.assertIn("eventId", event)
+        self.assertNotIn("id", event)
         self.assertEqual(event["seq"], 1)
         self.assertEqual(event["command"], "npm test payment")
         self.assertEqual(event["status"], "failed")
@@ -85,7 +87,9 @@ class AgentTimelineTest(unittest.TestCase):
         self.assertEqual(payload["type"], "agent_timeline")
         self.assertEqual(payload["sourceClient"], "claude-code")
         self.assertEqual(payload["sessionId"], "s")
+        self.assertEqual(payload["agentTurnId"], "s-agent-turn-1-1")
         self.assertEqual(payload["timelineId"], "s-agent-1-1")
+        self.assertIn("eventId", payload["events"][0])
         self.assertEqual(payload["events"][0]["seq"], 1)
         self.assertEqual(payload["project"]["name"], "project")
         self.assertEqual(payload["project"]["rootPath"], "/tmp/project")

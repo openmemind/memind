@@ -260,15 +260,18 @@ class MemindServerApplicationTest {
                                             "type": "agent_timeline",
                                             "sourceClient": "claude-code",
                                             "sessionId": "session-1",
+                                            "agentTurnId": "session-1-agent-turn-1-2",
                                             "timelineId": "timeline-1",
                                             "events": [
                                               {
+                                                "eventId": "e1",
                                                 "seq": 1,
                                                 "kind": "USER_PROMPT",
                                                 "occurredAt": "2026-04-12T00:00:00Z",
                                                 "text": "Fix failing tests"
                                               },
                                               {
+                                                "eventId": "e2",
                                                 "seq": 2,
                                                 "kind": "COMMAND",
                                                 "occurredAt": "2026-04-12T00:01:00Z",

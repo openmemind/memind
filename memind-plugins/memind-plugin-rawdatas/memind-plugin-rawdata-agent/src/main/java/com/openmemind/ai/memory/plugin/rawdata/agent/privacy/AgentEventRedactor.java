@@ -72,7 +72,7 @@ public final class AgentEventRedactor {
 
         Map<String, Object> metadata = mergeMetadata(event.metadata(), state);
         return new AgentEvent(
-                event.id(),
+                event.eventId(),
                 event.seq(),
                 event.kind(),
                 event.occurredAt(),
