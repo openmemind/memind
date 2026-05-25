@@ -66,6 +66,9 @@ async def _run_session_start_async(config):
                     if payload.get("sessionId") and payload.get("fingerprints"):
                         with SessionStateStore(state_root()).locked(payload["sessionId"]) as state:
                             state.mark_submitted(payload["fingerprints"])
+                    if payload.get("sessionId") and payload.get("eventIds"):
+                        with SessionStateStore(state_root()).locked(payload["sessionId"]) as state:
+                            state.clear_agent_events(payload["eventIds"])
                     spool.complete(claimed)
                 elif payload.get("kind") == "add-message":
                     await replay_client.add_message(

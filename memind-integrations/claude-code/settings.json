@@ -7,6 +7,7 @@
   "sourceClient": "claude-code",
   "autoRetrieve": true,
   "autoIngest": true,
+  "autoIngestAgentTimeline": true,
   "retrieveStrategy": "SIMPLE",
   "retrieveMaxEntries": 8,
   "retrieveMaxChars": 6000,

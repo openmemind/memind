@@ -44,6 +44,31 @@ class StateTest(unittest.TestCase):
             self.assertEqual(removed, 1)
             self.assertFalse(old_file.exists())
 
+    def test_agent_events_are_deduplicated_and_clear_by_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = SessionStateStore(Path(tmp))
+            with store.locked("session-1") as state:
+                self.assertEqual(state.next_agent_seq(), 1)
+                self.assertEqual(state.next_agent_seq(), 2)
+                state.append_agent_event({"id": "e1", "seq": 1})
+                state.append_agent_event({"id": "e1", "seq": 1})
+                state.append_agent_event({"id": "e2", "seq": 2})
+                state.clear_agent_events(["e1"])
+            with store.locked("session-1") as state:
+                self.assertEqual(state.agent_events(), [{"id": "e2", "seq": 2}])
+
+    def test_agent_event_buffer_has_soft_cap(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = SessionStateStore(Path(tmp))
+            with store.locked("session-1") as state:
+                for index in range(501):
+                    state.append_agent_event({"id": f"e{index}", "seq": index})
+            with store.locked("session-1") as state:
+                events = state.agent_events()
+                self.assertEqual(len(events), 500)
+                self.assertEqual(events[0]["id"], "e1")
+                self.assertTrue(state.data["agentEventsTruncated"])
+
 
 if __name__ == "__main__":
     unittest.main()

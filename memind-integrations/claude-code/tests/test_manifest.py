@@ -27,7 +27,15 @@ class ManifestTest(unittest.TestCase):
 
     def test_hooks_json_shape(self):
         hooks = json.loads((ROOT / "hooks" / "hooks.json").read_text())["hooks"]
-        for event in ["SessionStart", "UserPromptSubmit", "PreCompact", "Stop", "SessionEnd"]:
+        for event in [
+            "SessionStart",
+            "UserPromptSubmit",
+            "PreToolUse",
+            "PostToolUse",
+            "PreCompact",
+            "Stop",
+            "SessionEnd",
+        ]:
             self.assertIn(event, hooks)
             event_hooks = hooks[event]
             self.assertIsInstance(event_hooks, list)
@@ -35,11 +43,14 @@ class ManifestTest(unittest.TestCase):
             self.assertIn("hooks", event_hooks[0])
         stop_command = hooks["Stop"][0]["hooks"][0]
         self.assertTrue(stop_command["async"])
+        self.assertTrue(hooks["PreToolUse"][0]["hooks"][0]["async"])
+        self.assertTrue(hooks["PostToolUse"][0]["hooks"][0]["async"])
 
     def test_default_settings(self):
         settings = json.loads((ROOT / "settings.json").read_text())
         self.assertEqual(settings["retrieveContextTurns"], 0)
         self.assertEqual(settings["ingestionMode"], "extract-sync")
+        self.assertTrue(settings["autoIngestAgentTimeline"])
         self.assertEqual(settings["ingestionMaxMessagesPerHook"], 20)
         self.assertEqual(settings["stateMaxAgeDays"], 14)
 

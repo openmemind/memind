@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from lib.client import MemindClient
+from lib.agent_timeline import build_timeline_payload
 from lib.config import load_config
 from lib.content import extract_messages
 from lib.identity import resolve_identity
@@ -31,10 +32,16 @@ from lib.state import SessionStateStore
 
 
 def state_root():
+    override = os.environ.get("MEMIND_CLAUDE_STATE_ROOT")
+    if override:
+        return Path(override)
     return Path.home() / ".memind" / "claude-code" / "state"
 
 
 def retry_root():
+    override = os.environ.get("MEMIND_CLAUDE_RETRY_ROOT")
+    if override:
+        return Path(override)
     return Path.home() / ".memind" / "claude-code" / "retry"
 
 
@@ -61,6 +68,22 @@ def _spool_extract(retry_spool, identity, source_client, session_id, messages):
             "sessionId": session_id,
             "fingerprints": [message["fingerprint"] for message in messages],
             "rawContent": _extract_payload(messages),
+        }
+    )
+
+
+def _spool_agent_timeline(retry_spool, identity, source_client, session_id, events, raw_content):
+    if retry_spool is None or not events:
+        return
+    retry_spool.enqueue(
+        {
+            "kind": "extract",
+            "userId": identity["userId"],
+            "agentId": identity["agentId"],
+            "sourceClient": source_client,
+            "sessionId": session_id,
+            "eventIds": [event["id"] for event in events if event.get("id")],
+            "rawContent": raw_content,
         }
     )
 
@@ -99,6 +122,44 @@ async def ingest_messages_async(config, hook_input, commit=False, max_messages=N
                 else:
                     _spool_extract(retry_spool, identity, source_client, session_id, selected)
         state.mark_submitted(submitted)
+        agent_events = state.agent_events() if config.get("autoIngestAgentTimeline", True) else []
+        if agent_events:
+            timeline_payload = build_timeline_payload(
+                config,
+                identity,
+                session_id,
+                agent_events,
+                hook_input,
+            )
+            try:
+                response = await client.extract(
+                    identity["userId"],
+                    identity["agentId"],
+                    timeline_payload,
+                    source_client,
+                )
+            except Exception:
+                _spool_agent_timeline(
+                    retry_spool,
+                    identity,
+                    source_client,
+                    session_id,
+                    agent_events,
+                    timeline_payload,
+                )
+            else:
+                status = getattr(response, "status", None)
+                if status == "SUCCESS":
+                    state.clear_agent_events([event["id"] for event in agent_events if event.get("id")])
+                else:
+                    _spool_agent_timeline(
+                        retry_spool,
+                        identity,
+                        source_client,
+                        session_id,
+                        agent_events,
+                        timeline_payload,
+                    )
     committed = False
     return {"submitted": len(submitted), "committed": committed}
 
