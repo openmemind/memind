@@ -76,10 +76,36 @@ Message.assistant('Hi there', { timestamp: '2026-01-01T00:00:00Z' })
 ## Raw Content
 
 ```ts
-import { Message, RawContent } from '@openmemind/memind'
+import { Message, RawContent, type AgentTimelineContent } from '@openmemind/memind'
 
 RawContent.conversation([Message.user('hi'), Message.assistant('hello')])
 RawContent.map('document', { title: 'Notes', body: 'Content here' })
+
+const timeline: AgentTimelineContent = {
+  type: 'agent_timeline',
+  sourceClient: 'claude-code',
+  sessionId: 'session-123',
+  timelineId: 'session-123-agent-1-2',
+  events: [
+    {
+      id: 'event-id',
+      seq: 1,
+      kind: 'command',
+      toolName: 'Bash',
+      command: 'npm test payment',
+      status: 'failed',
+      exitCode: 1,
+      output: '{"stdout": "rounding mismatch"}',
+    },
+  ],
+}
+
+await client.memory.extract({
+  userId: 'local__alice',
+  agentId: 'claude-code__project_hash',
+  sourceClient: 'claude-code',
+  rawContent: timeline,
+})
 ```
 
 ## Error Handling

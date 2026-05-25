@@ -12,7 +12,7 @@ The integration is intentionally small:
 - Uses the official Memind Python client.
 - No Codex marketplace dependency.
 - No overwrite of existing Codex hooks or config.
-- No tool-call ingestion in v0.1.
+- Captures coding-agent tool and command activity as Memind `agent_timeline` raw data.
 
 ## What It Does
 
@@ -20,6 +20,9 @@ The integration is intentionally small:
   the Codex prompt as `<memind_memories>...</memind_memories>`.
 - **Ingestion**: `Stop` reads the Codex transcript, filters user/assistant messages, and submits a caller-owned
   conversation payload through `AsyncMemindClient.memory.extract(...)`.
+- **Agent timelines**: `PreToolUse` and `PostToolUse` buffer normalized tool events locally. The next `Stop`
+  hook submits them as `rawContent.type = "agent_timeline"` so Memind can extract tool notes, resolved problems,
+  playbooks, and directives.
 - **Retry**: failed ingestion batches are spooled under `~/.memind/codex/retry/` and replayed on the next
   `SessionStart`.
 - **Source tagging**: all requests use `sourceClient = "codex"` by default, so Memind can distinguish Codex
@@ -120,10 +123,9 @@ The installed hooks are:
 | --- | --- | ---: | --- |
 | `SessionStart` | `scripts/session_start.py` | 5s | Replay at most one failed ingestion batch and clean old state. |
 | `UserPromptSubmit` | `scripts/retrieve.py` | 12s | Retrieve relevant Memind context for the current user prompt. |
+| `PreToolUse` | `scripts/pre_tool_use.py` | 5s | Buffer a redacted tool-start event in local session state. |
+| `PostToolUse` | `scripts/post_tool_use.py` | 5s | Buffer a redacted tool-result event in local session state. |
 | `Stop` | `scripts/ingest.py` | 15s | Submit new Codex transcript messages through reliable extraction. |
-
-`PreToolUse`, `PostToolUse`, and `PermissionRequest` are intentionally unused in v0.1. Tool-call memory can be
-added later after the data model and privacy behavior are explicitly designed.
 
 ## Configuration
 
@@ -139,6 +141,7 @@ User configuration is optional. Save overrides as `~/.memind/codex.json`:
   "agentId": "codex",
   "agentIdMode": "project",
   "sourceClient": "codex",
+  "autoIngestAgentTimeline": true,
   "ingestionMode": "extract-sync",
   "commitOnStop": false,
   "retrieveContextTurns": 0
@@ -163,6 +166,7 @@ Settings are loaded in this order:
 | `sourceClient` | `codex` | Source marker stored with Memind data. |
 | `autoRetrieve` | `true` | Enables prompt-time memory retrieval. |
 | `autoIngest` | `true` | Enables transcript ingestion after Codex turns. |
+| `autoIngestAgentTimeline` | `true` | Enables `PreToolUse`/`PostToolUse` event flush as `agent_timeline` raw data. |
 | `commitOnStop` | `false` | Compatibility flag for server-buffer ingestion mode; ignored by the default reliable mode. |
 | `retrieveStrategy` | `SIMPLE` | Memind retrieval strategy. |
 | `retrieveMaxEntries` | `8` | Maximum formatted memory entries injected into Codex. |
@@ -185,6 +189,7 @@ export MEMIND_USER_ID=local__alice
 export MEMIND_AGENT_ID=codex
 export MEMIND_AGENT_ID_MODE=project
 export MEMIND_SOURCE_CLIENT=codex
+export MEMIND_AUTO_INGEST_AGENT_TIMELINE=true
 export MEMIND_COMMIT_ON_STOP=false
 export MEMIND_RETRIEVE_CONTEXT_TURNS=0
 export MEMIND_DEBUG=true
@@ -237,6 +242,15 @@ insights are omitted by default unless no higher-level insights are available.
 `retrieveContextTurns` defaults to `0`, so retrieval uses only the current prompt and does not read large
 transcripts. Set it to `1` or `2` if your prompts are often short, such as "fix this" or "continue".
 
+Agent memory items are grouped separately when returned by Memind:
+
+```text
+## Agent Playbooks
+## Resolved Problems
+## Tool Notes
+## Directives
+```
+
 ## Ingestion Behavior
 
 Ingestion runs after each Codex turn when `autoIngest = true`.
@@ -255,8 +269,51 @@ The local retry spool stores the full extraction payload plus the covered messag
 marked submitted only after Memind returns `SUCCESS`; `PARTIAL_SUCCESS` and failures keep the payload available
 for later replay.
 
+Tool and command events are buffered under `~/.memind/codex/state/` and flushed with the same reliable extraction
+path. A typical timeline payload looks like:
+
+```json
+{
+  "userId": "local__alice",
+  "agentId": "codex__project_hash",
+  "sourceClient": "codex",
+  "rawContent": {
+    "type": "agent_timeline",
+    "sourceClient": "codex",
+    "sessionId": "session-123",
+    "timelineId": "session-123-agent-1-2",
+    "project": {"name": "payment-service", "rootPath": "/repo/payment-service"},
+    "events": [
+      {
+        "id": "event-id",
+        "seq": 1,
+        "kind": "command",
+        "toolName": "Bash",
+        "command": "npm test payment",
+        "status": "failed",
+        "exitCode": 1,
+        "output": "{\"stdout\": \"rounding mismatch\"}"
+      }
+    ]
+  }
+}
+```
+
+Secrets are redacted before events are written to local state. File content capture is disabled by default; the
+hook stores normalized tool metadata, commands, paths, statuses, and compact outputs.
+
 Commit flags apply only to explicit server-buffer mode. In the default reliable mode, hooks do not issue an
 additional `/commit` call after successful `/extract/sync`.
+
+## Server RawData Agent Settings
+
+Enable the Memind server-side rawdata-agent plugin when deploying the coding-agent memory path:
+
+```properties
+memind.rawdata.agent.enabled=true
+memind.rawdata.agent.privacy.redact-secrets=true
+memind.rawdata.agent.extraction.extract-on-every-tool=false
+```
 
 ## Verify Installation
 
@@ -386,7 +443,14 @@ The integration uses per-session fingerprints stored under `~/.memind/codex/stat
 
 ## Limitations
 
-- v0.1 supports conversation memory only; tool calls are not ingested.
+- Exact duplicate complete timeline windows are idempotent.
+- Arbitrary overlapping partial windows are adapter responsibility in v1.
+- File content capture is disabled by default.
+- `rawdata-toolcall` remains supported.
+- If `rawdata-toolcall` and `rawdata-agent` ingest the same tool activity, v1 may create semantically overlapping
+  TOOL items. This is acceptable compatibility behavior; do not add cross-plugin suppression in v1. Users who
+  want one canonical coding-agent path should enable `rawdata-agent` for full agent timelines and keep
+  `rawdata-toolcall` for pure legacy tool-call logs.
 - Retrieval quality depends on existing extracted Memind items and insights.
 - `commitOnStop` applies only to compatibility server-buffer ingestion mode and is ignored by the default
   reliable extraction mode.

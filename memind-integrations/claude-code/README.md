@@ -13,7 +13,7 @@ The integration is intentionally small:
 - Uses the official Memind Python client.
 - No local daemon management.
 - No MCP dependency.
-- No tool-call ingestion in v0.1.
+- Captures coding-agent tool and command activity as Memind `agent_timeline` raw data.
 
 ## What It Does
 
@@ -22,6 +22,9 @@ The integration is intentionally small:
 - **Ingestion**: `Stop`, `PreCompact`, and `SessionEnd` read the Claude Code transcript, filter
   user/assistant messages, and submit a caller-owned conversation payload through
   `AsyncMemindClient.memory.extract(...)`.
+- **Agent timelines**: `PreToolUse` and `PostToolUse` buffer normalized tool events locally. The next
+  ingestion hook submits them as `rawContent.type = "agent_timeline"` so Memind can extract tool notes,
+  resolved problems, playbooks, and directives.
 - **Retry**: failed ingestion payloads are spooled under `~/.memind/claude-code/retry/` and replayed on later
   `SessionStart` hooks.
 - **Source tagging**: all requests use `sourceClient = "claude-code"` by default, so Memind can distinguish
@@ -101,12 +104,13 @@ The installed hooks are:
 | --- | --- | ---: | --- |
 | `SessionStart` | `scripts/session_start.py` | 5s | Health check, replay at most one failed retry payload, and clean old state. |
 | `UserPromptSubmit` | `scripts/retrieve.py` | 12s | Retrieve relevant Memind context for the current user prompt. |
+| `PreToolUse` | `scripts/pre_tool_use.py` | 5s | Buffer a redacted tool-start event in local session state. |
+| `PostToolUse` | `scripts/post_tool_use.py` | 5s | Buffer a redacted tool-result event in local session state. |
 | `PreCompact` | `scripts/pre_compact.py` | 30s | Submit recent transcript messages through reliable extraction before context compaction. |
 | `Stop` | `scripts/ingest.py` | 15s | Submit new transcript messages through reliable extraction after a turn. |
 | `SessionEnd` | `scripts/session_end.py` | 10s | Submit remaining transcript messages through reliable extraction at session end. |
 
-`Stop` is configured as async so regular turn completion stays fast. `PreToolUse` and `PostToolUse` are
-intentionally unused in v0.1 because tool-call memory needs an explicit privacy and data-model design.
+`Stop`, `PreToolUse`, and `PostToolUse` are configured as async so regular turn completion stays fast.
 
 ## Configuration
 
@@ -122,6 +126,7 @@ User configuration is optional. Save overrides as `~/.memind/claude-code.json`:
   "agentId": "claude-code",
   "agentIdMode": "project",
   "sourceClient": "claude-code",
+  "autoIngestAgentTimeline": true,
   "ingestionMode": "extract-sync",
   "preCompactCommit": true,
   "commitOnSessionEnd": true,
@@ -148,6 +153,7 @@ Settings are loaded in this order:
 | `sourceClient` | `claude-code` | Source marker stored with Memind data. |
 | `autoRetrieve` | `true` | Enables prompt-time memory retrieval. |
 | `autoIngest` | `true` | Enables transcript ingestion during lifecycle hooks. |
+| `autoIngestAgentTimeline` | `true` | Enables `PreToolUse`/`PostToolUse` event flush as `agent_timeline` raw data. |
 | `retrieveStrategy` | `SIMPLE` | Memind retrieval strategy. |
 | `retrieveMaxEntries` | `8` | Maximum formatted memory entries injected into Claude Code. |
 | `retrieveMaxChars` | `6000` | Maximum injected context characters. |
@@ -172,6 +178,7 @@ export MEMIND_USER_ID=local__alice
 export MEMIND_AGENT_ID=claude-code
 export MEMIND_AGENT_ID_MODE=project
 export MEMIND_SOURCE_CLIENT=claude-code
+export MEMIND_AUTO_INGEST_AGENT_TIMELINE=true
 export MEMIND_INGESTION_MODE=extract-sync
 export MEMIND_PRE_COMPACT_COMMIT=true
 export MEMIND_COMMIT_ON_SESSION_END=true
@@ -227,6 +234,15 @@ insights are omitted by default unless no higher-level insights are available.
 `retrieveContextTurns` defaults to `0`, so retrieval uses only the current prompt and does not read large
 transcripts. Set it to `1` or `2` if your prompts are often short, such as "fix this" or "continue".
 
+Agent memory items are grouped separately when returned by Memind:
+
+```text
+## Agent Playbooks
+## Resolved Problems
+## Tool Notes
+## Directives
+```
+
 ## Ingestion Behavior
 
 Ingestion reads Claude Code's transcript when `autoIngest = true`.
@@ -245,8 +261,51 @@ The local retry spool stores the full extraction payload plus the covered messag
 marked submitted only after Memind returns `SUCCESS`; `PARTIAL_SUCCESS` and failures keep the payload available
 for later replay.
 
+Tool and command events are buffered under `~/.memind/claude-code/state/` and flushed with the same reliable
+extraction path. A typical timeline payload looks like:
+
+```json
+{
+  "userId": "local__alice",
+  "agentId": "claude-code__project_hash",
+  "sourceClient": "claude-code",
+  "rawContent": {
+    "type": "agent_timeline",
+    "sourceClient": "claude-code",
+    "sessionId": "session-123",
+    "timelineId": "session-123-agent-1-2",
+    "project": {"name": "payment-service", "rootPath": "/repo/payment-service"},
+    "events": [
+      {
+        "id": "event-id",
+        "seq": 1,
+        "kind": "command",
+        "toolName": "Bash",
+        "command": "npm test payment",
+        "status": "failed",
+        "exitCode": 1,
+        "output": "{\"stdout\": \"rounding mismatch\"}"
+      }
+    ]
+  }
+}
+```
+
+Secrets are redacted before events are written to local state. File content capture is disabled by default; the
+hook stores normalized tool metadata, commands, paths, statuses, and compact outputs.
+
 Commit flags apply only to explicit server-buffer mode. In the default reliable mode, hooks do not issue an
 additional `/commit` call after successful `/extract/sync`.
+
+## Server RawData Agent Settings
+
+Enable the Memind server-side rawdata-agent plugin when deploying the coding-agent memory path:
+
+```properties
+memind.rawdata.agent.enabled=true
+memind.rawdata.agent.privacy.redact-secrets=true
+memind.rawdata.agent.extraction.extract-on-every-tool=false
+```
 
 ## Verify Installation
 
@@ -427,6 +486,13 @@ The integration uses per-session fingerprints stored under `~/.memind/claude-cod
 
 ## Limitations
 
-- v0.1 supports conversation memory only; tool calls are not ingested.
+- Exact duplicate complete timeline windows are idempotent.
+- Arbitrary overlapping partial windows are adapter responsibility in v1.
+- File content capture is disabled by default.
+- `rawdata-toolcall` remains supported.
+- If `rawdata-toolcall` and `rawdata-agent` ingest the same tool activity, v1 may create semantically overlapping
+  TOOL items. This is acceptable compatibility behavior; do not add cross-plugin suppression in v1. Users who
+  want one canonical coding-agent path should enable `rawdata-agent` for full agent timelines and keep
+  `rawdata-toolcall` for pure legacy tool-call logs.
 - Retrieval quality depends on existing extracted Memind items and insights.
 - The plugin does not start or configure the Memind server.

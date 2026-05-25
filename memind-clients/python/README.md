@@ -37,6 +37,37 @@ with MemindClient(base_url="http://localhost:8080") as client:
 `status == "SUCCESS"` as safe to clear caller-owned retry payloads; `PARTIAL_SUCCESS` is surfaced so applications
 can keep or re-enqueue the original payload.
 
+## Agent Timeline Raw Content
+
+Coding-agent integrations can submit tool and command activity as `agent_timeline` raw data:
+
+```python
+response = client.memory.extract_agent_timeline(
+    user_id="local__alice",
+    agent_id="claude-code__project_hash",
+    source_client="claude-code",
+    timeline={
+        "sourceClient": "claude-code",
+        "sessionId": "session-123",
+        "timelineId": "session-123-agent-1-2",
+        "events": [
+            {
+                "id": "event-id",
+                "seq": 1,
+                "kind": "command",
+                "toolName": "Bash",
+                "command": "npm test payment",
+                "status": "failed",
+                "exitCode": 1,
+                "output": '{"stdout": "rounding mismatch"}',
+            }
+        ],
+    },
+)
+```
+
+The helper sends `rawContent.type = "agent_timeline"` through the same synchronous extraction endpoint.
+
 ## Asynchronous Usage
 
 ```python
@@ -50,6 +81,9 @@ async with AsyncMemindClient(base_url="http://localhost:8080") as client:
         strategy=Strategy.DEEP,
     )
 ```
+
+The async resource also provides `await client.memory.extract_agent_timeline(...)` with the same arguments as the
+synchronous helper.
 
 ## Configuration
 
