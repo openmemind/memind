@@ -83,6 +83,9 @@ async def _replay_payload(client, payload):
         fingerprints = payload.get("fingerprints") or []
         if session_key and fingerprints:
             SessionStateStore(state_root()).mark_submitted(session_key, fingerprints)
+        event_ids = payload.get("eventIds") or []
+        if session_key and event_ids:
+            SessionStateStore(state_root()).clear_agent_events(session_key, event_ids)
         return len(fingerprints)
     if kind == "ingestion-batch":
         return await _replay_ingestion_batch(client, payload)

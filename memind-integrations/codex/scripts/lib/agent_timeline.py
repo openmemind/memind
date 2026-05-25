@@ -90,7 +90,7 @@ def event_id(source_client, session_id, seq, hook_input):
 
 
 def normalize_hook_event(hook_input, seq):
-    source_client = hook_input.get("source_client") or "claude-code"
+    source_client = hook_input.get("source_client") or "codex"
     session_id = hook_input.get("session_id") or "unknown-session"
     tool_name = hook_input.get("tool_name")
     tool_input = hook_input.get("tool_input") or {}
@@ -130,9 +130,7 @@ def normalize_hook_event(hook_input, seq):
         event["output"] = _json_text(redacted_output)
         redaction_kinds.extend(kinds)
 
-    metadata = {
-        "hookEventName": hook_input.get("hook_event_name"),
-    }
+    metadata = {"hookEventName": hook_input.get("hook_event_name")}
     if redaction_kinds:
         metadata["redacted"] = True
         metadata["redactionKinds"] = sorted(set(redaction_kinds))
@@ -151,7 +149,7 @@ def append_event(state, event):
 
 
 def build_timeline_payload(config, identity, session_id, events, hook_input):
-    source_client = config.get("sourceClient") or "claude-code"
+    source_client = config.get("sourceClient") or "codex"
     cwd = hook_input.get("cwd")
     first_seq = events[0].get("seq") if events else 0
     last_seq = events[-1].get("seq") if events else 0

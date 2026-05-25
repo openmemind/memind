@@ -21,6 +21,7 @@ import time
 from pathlib import Path
 
 SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9_.-]+")
+MAX_AGENT_EVENTS = 500
 
 
 def _hash(value):
@@ -89,6 +90,8 @@ class SessionState:
     def __init__(self, data):
         self.data = data
         self.data.setdefault("submitted", [])
+        self.data.setdefault("agentEvents", [])
+        self.data.setdefault("nextAgentSeq", 1)
 
     def is_submitted(self, fingerprint):
         return fingerprint in set(self.data.get("submitted", []))
@@ -98,6 +101,36 @@ class SessionState:
         submitted.update(fingerprints)
         self.data["submitted"] = sorted(submitted)
         self.data["updatedAt"] = time.time()
+
+    def append_agent_event(self, event):
+        events = list(self.data.get("agentEvents", []))
+        event_id = event.get("id")
+        if event_id and any(existing.get("id") == event_id for existing in events):
+            return
+        events.append(event)
+        if len(events) > MAX_AGENT_EVENTS:
+            events = events[-MAX_AGENT_EVENTS:]
+            self.data["agentEventsTruncated"] = True
+        self.data["agentEvents"] = events
+        self.data["updatedAt"] = time.time()
+
+    def agent_events(self):
+        return list(self.data.get("agentEvents", []))
+
+    def clear_agent_events(self, event_ids):
+        event_ids = set(event_ids or [])
+        if not event_ids:
+            return
+        self.data["agentEvents"] = [
+            event for event in self.data.get("agentEvents", []) if event.get("id") not in event_ids
+        ]
+        self.data["updatedAt"] = time.time()
+
+    def next_agent_seq(self):
+        seq = int(self.data.get("nextAgentSeq", 1))
+        self.data["nextAgentSeq"] = seq + 1
+        self.data["updatedAt"] = time.time()
+        return seq
 
 
 class SessionStateStore:
@@ -135,6 +168,10 @@ class SessionStateStore:
     def mark_submitted(self, session_key, fingerprints):
         with self.locked(session_key) as state:
             state.mark_submitted(fingerprints)
+
+    def clear_agent_events(self, session_key, event_ids):
+        with self.locked(session_key) as state:
+            state.clear_agent_events(event_ids)
 
     def cleanup(self, max_age_days):
         cutoff = time.time() - max_age_days * 86400

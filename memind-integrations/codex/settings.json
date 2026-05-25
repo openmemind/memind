@@ -7,6 +7,7 @@
   "sourceClient": "codex",
   "autoRetrieve": true,
   "autoIngest": true,
+  "autoIngestAgentTimeline": true,
   "commitOnStop": false,
   "retrieveStrategy": "SIMPLE",
   "retrieveMaxEntries": 8,

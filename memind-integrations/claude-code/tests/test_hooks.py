@@ -113,7 +113,7 @@ class HookTest(unittest.TestCase):
             state_file = next(state_dir.glob("*.json"))
             event = json.loads(state_file.read_text())["agentEvents"][0]
             self.assertEqual(event["kind"], "command")
-            self.assertEqual(event["status"], "started")
+            self.assertEqual(event["status"], "running")
 
     def test_post_tool_use_fails_open(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -469,7 +469,7 @@ class HookTest(unittest.TestCase):
             state_dir = Path(tmp) / "state"
             with SessionStateStore(state_dir).locked("s1") as state:
                 state.append_agent_event({"id": "e1", "seq": 1, "kind": "command"})
-                state.append_agent_event({"id": "e2", "seq": 2, "kind": "tool"})
+                state.append_agent_event({"id": "e2", "seq": 2, "kind": "tool_result"})
             RetrySpool(retry_dir).enqueue(
                 {
                     "kind": "extract",
@@ -506,7 +506,7 @@ class HookTest(unittest.TestCase):
                             client.commit = mock.AsyncMock(return_value=None)
                             session_start.main()
             with SessionStateStore(state_dir).locked("s1") as state:
-                self.assertEqual(state.agent_events(), [{"id": "e2", "seq": 2, "kind": "tool"}])
+                self.assertEqual(state.agent_events(), [{"id": "e2", "seq": 2, "kind": "tool_result"}])
             self.assertEqual(list(retry_dir.glob("*.json")), [])
             client.extract.assert_awaited_once()
 

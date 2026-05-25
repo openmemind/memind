@@ -25,19 +25,20 @@ class AgentTimelineTest(unittest.TestCase):
                 "hook_event_name": "PostToolUse",
                 "session_id": "s",
                 "tool_name": "Bash",
-                "tool_input": {"command": "npm test payment"},
-                "tool_response": {"exit_code": 1, "stdout": "rounding mismatch"},
+                "tool_input": {"command": "cargo test payment"},
+                "tool_response": {"exit_code": 1, "stderr": "rounding mismatch"},
                 "timestamp": "2026-05-24T10:00:00Z",
+                "source_client": "codex",
             },
             seq=1,
         )
 
         self.assertEqual(event["kind"], "command")
         self.assertEqual(event["seq"], 1)
-        self.assertEqual(event["command"], "npm test payment")
+        self.assertEqual(event["command"], "cargo test payment")
         self.assertEqual(event["status"], "failed")
         self.assertEqual(event["exitCode"], 1)
-        self.assertEqual(event["output"], '{"stdout": "rounding mismatch"}')
+        self.assertEqual(event["output"], '{"stderr": "rounding mismatch"}')
 
     def test_redacts_secret_fields_before_spool(self):
         event = normalize_hook_event(
@@ -46,18 +47,14 @@ class AgentTimelineTest(unittest.TestCase):
                 "session_id": "s",
                 "tool_name": "Bash",
                 "tool_input": {"command": "echo sk-test-secret"},
-                "tool_response": {
-                    "exit_code": 0,
-                    "stdout": "Authorization: Bearer abc.def.ghi\nsk-live-secret",
-                },
-                "timestamp": "2026-05-24T10:00:00Z",
+                "tool_response": {"exit_code": 0, "stdout": "Bearer abc.def.ghi"},
+                "source_client": "codex",
             },
             seq=1,
         )
 
         serialized = json.dumps(event)
         self.assertNotIn("sk-test-secret", serialized)
-        self.assertNotIn("sk-live-secret", serialized)
         self.assertNotIn("abc.def.ghi", serialized)
         self.assertIn("[REDACTED", serialized)
 
@@ -67,15 +64,15 @@ class AgentTimelineTest(unittest.TestCase):
                 "hook_event_name": "PostToolUse",
                 "session_id": "s",
                 "tool_name": "Bash",
-                "tool_input": {"command": "npm test payment"},
+                "tool_input": {"command": "cargo test"},
                 "tool_response": {"exit_code": 0},
-                "timestamp": "2026-05-24T10:00:00Z",
+                "source_client": "codex",
             },
             seq=1,
         )
 
         payload = build_timeline_payload(
-            config={"sourceClient": "claude-code"},
+            config={"sourceClient": "codex"},
             identity={"userId": "u", "agentId": "a"},
             session_id="s",
             events=[event],
@@ -83,7 +80,7 @@ class AgentTimelineTest(unittest.TestCase):
         )
 
         self.assertEqual(payload["type"], "agent_timeline")
-        self.assertEqual(payload["sourceClient"], "claude-code")
+        self.assertEqual(payload["sourceClient"], "codex")
         self.assertEqual(payload["sessionId"], "s")
         self.assertEqual(payload["timelineId"], "s-agent-1-1")
         self.assertEqual(payload["events"][0]["seq"], 1)

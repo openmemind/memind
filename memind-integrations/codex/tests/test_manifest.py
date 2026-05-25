@@ -31,8 +31,10 @@ class ManifestTest(unittest.TestCase):
 
     def test_hooks_json_shape(self):
         hooks = json.loads((ROOT / "hooks" / "hooks.json").read_text())["hooks"]
-        self.assertEqual(set(hooks), {"SessionStart", "UserPromptSubmit", "Stop"})
-        for event in ["SessionStart", "UserPromptSubmit", "Stop"]:
+        self.assertEqual(
+            set(hooks), {"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"}
+        )
+        for event in ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]:
             self.assertIsInstance(hooks[event], list)
             self.assertNotIn("matcher", hooks[event][0])
             self.assertIn("hooks", hooks[event][0])
@@ -46,6 +48,7 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(settings["agentId"], "codex")
         self.assertEqual(settings["sourceClient"], "codex")
         self.assertFalse(settings["commitOnStop"])
+        self.assertTrue(settings["autoIngestAgentTimeline"])
         self.assertEqual(settings["retrieveContextTurns"], 0)
         self.assertEqual(settings["ingestionMode"], "extract-sync")
         self.assertEqual(settings["ingestionMaxMessagesPerHook"], 20)
