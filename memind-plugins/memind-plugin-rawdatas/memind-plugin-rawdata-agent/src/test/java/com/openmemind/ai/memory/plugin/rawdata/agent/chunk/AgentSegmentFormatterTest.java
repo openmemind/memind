@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.plugin.rawdata.agent.chunk;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.plugin.rawdata.agent.model.AgentEpisode;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class AgentSegmentFormatterTest {
@@ -63,6 +64,47 @@ class AgentSegmentFormatterTest {
         assertThat(formatted.metadata().get("eventIds"))
                 .asList()
                 .containsExactly("e1", "e2", "e3", "e4", "e5");
+        assertThat(formatted.metadata().get("commandEvents"))
+                .asList()
+                .containsExactly(
+                        Map.of(
+                                "eventId",
+                                "e2",
+                                "seq",
+                                2,
+                                "command",
+                                "npm test payment",
+                                "status",
+                                "failed",
+                                "output",
+                                "rounding mismatch",
+                                "exitCode",
+                                1),
+                        Map.of(
+                                "eventId",
+                                "e4",
+                                "seq",
+                                4,
+                                "command",
+                                "npm test payment",
+                                "status",
+                                "success",
+                                "output",
+                                "passed",
+                                "exitCode",
+                                0));
+        assertThat(formatted.metadata().get("fileEvents"))
+                .asList()
+                .containsExactly(
+                        Map.of(
+                                "eventId",
+                                "e3",
+                                "seq",
+                                3,
+                                "path",
+                                "src/payment/calc.ts",
+                                "operation",
+                                "edit"));
         assertThat(formatted.metadata()).doesNotContainKey("projectRootRaw");
         assertThat(formatted.metadata()).containsKey("projectRootHash");
     }

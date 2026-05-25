@@ -19,6 +19,7 @@ import com.openmemind.ai.memory.plugin.rawdata.agent.model.AgentCommand;
 import com.openmemind.ai.memory.plugin.rawdata.agent.model.AgentEpisode;
 import com.openmemind.ai.memory.plugin.rawdata.agent.model.AgentEvent;
 import com.openmemind.ai.memory.plugin.rawdata.agent.model.AgentEventStatus;
+import com.openmemind.ai.memory.plugin.rawdata.agent.model.AgentFileReference;
 import com.openmemind.ai.memory.plugin.rawdata.agent.model.AgentProject;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -89,6 +90,8 @@ public final class AgentSegmentFormatter {
         metadata.put("toolNames", episode.toolNames());
         metadata.put("failureSignals", episode.failureSignals());
         metadata.put("eventIds", episode.eventIds());
+        metadata.put("commandEvents", commandEventMetadata(episode.commandEvents()));
+        metadata.put("fileEvents", fileEventMetadata(episode.fileReferences()));
         if (episode.startTime() != null) {
             metadata.put("windowStart", episode.startTime());
         }
@@ -97,6 +100,54 @@ public final class AgentSegmentFormatter {
         }
         metadata.putAll(episode.metadata());
         return Map.copyOf(metadata);
+    }
+
+    private static List<Map<String, Object>> commandEventMetadata(List<AgentCommand> commands) {
+        if (commands == null || commands.isEmpty()) {
+            return List.of();
+        }
+        return commands.stream().map(AgentSegmentFormatter::commandEventMetadata).toList();
+    }
+
+    private static Map<String, Object> commandEventMetadata(AgentCommand command) {
+        var metadata = new LinkedHashMap<String, Object>();
+        putIfHasText(metadata, "eventId", command.eventId());
+        putIfNotNull(metadata, "seq", command.seq());
+        putIfHasText(metadata, "command", command.command());
+        if (command.status() != null) {
+            metadata.put("status", command.status().wireValue());
+        }
+        putIfHasText(metadata, "output", command.output());
+        putIfNotNull(metadata, "exitCode", command.exitCode());
+        return Map.copyOf(metadata);
+    }
+
+    private static List<Map<String, Object>> fileEventMetadata(List<AgentFileReference> files) {
+        if (files == null || files.isEmpty()) {
+            return List.of();
+        }
+        return files.stream().map(AgentSegmentFormatter::fileEventMetadata).toList();
+    }
+
+    private static Map<String, Object> fileEventMetadata(AgentFileReference file) {
+        var metadata = new LinkedHashMap<String, Object>();
+        putIfHasText(metadata, "eventId", file.eventId());
+        putIfNotNull(metadata, "seq", file.seq());
+        putIfHasText(metadata, "path", file.path());
+        putIfHasText(metadata, "operation", file.operation());
+        return Map.copyOf(metadata);
+    }
+
+    private static void putIfHasText(Map<String, Object> metadata, String key, String value) {
+        if (hasText(value)) {
+            metadata.put(key, value);
+        }
+    }
+
+    private static void putIfNotNull(Map<String, Object> metadata, String key, Object value) {
+        if (value != null) {
+            metadata.put(key, value);
+        }
     }
 
     private static String formatCommand(AgentCommand command) {
