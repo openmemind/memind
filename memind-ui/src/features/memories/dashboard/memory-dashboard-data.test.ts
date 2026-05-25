@@ -93,7 +93,7 @@ describe("mapAdminMemoryDashboardData", () => {
         mentionCount: 5,
       },
       insights: {
-        items: [
+        roots: [
           {
             categories: ["product"],
             content: "User is evaluating API reliability.",
@@ -106,7 +106,6 @@ describe("mapAdminMemoryDashboardData", () => {
             type: "profile",
           },
         ],
-        page: pageMeta(1),
       },
       items: {
         items: [
@@ -182,6 +181,7 @@ describe("mapAdminMemoryDashboardData", () => {
     })
     expect(data.graph.nodes[0]).toMatchObject({
       icon: "organization",
+      entityType: "ORGANIZATION",
       id: "42",
       label: "OpenAI",
       type: "Organization",
@@ -193,10 +193,84 @@ describe("mapAdminMemoryDashboardData", () => {
       key: "topic:api",
       status: "ACTIVE",
     })
-    expect(data.insights.selectedDetail).toMatchObject({
+    expect(data.insights.root).toBeNull()
+    expect(data.insights.selectedDetail).toBeNull()
+    expect(data.insights.roots?.[0]).toMatchObject({
+      childInsightIds: [],
       id: "9",
-      points: ["429 errors are recurring"],
+      title: "Reliability concern",
     })
+  })
+
+  it("does not create a placeholder insight node when the API returns no insights", () => {
+    const apiData: AdminMemoryDashboardApiData = {
+      dashboard: {
+        activity: {
+          days: 7,
+          insightsCreated: [],
+          itemsCreated: [],
+          rawDataCreated: [],
+        },
+        backlog: {
+          conversationPending: 0,
+          graphBatchRepairRequired: 0,
+          insightUnbuilt: 0,
+          insightUngrouped: 0,
+          threadOutboxFailed: 0,
+          threadOutboxPending: 0,
+        },
+        breakdown: {
+          graphLinkTypes: [],
+          insightTypes: [],
+          itemTypes: [],
+          rawDataTypes: [],
+          sourceClients: [],
+        },
+        healthSignals: {
+          graphEnabled: true,
+          retrievalGraphAssistEnabled: true,
+          threadProjectionStates: [],
+        },
+        totals: {
+          graphEntities: 0,
+          insights: 0,
+          itemLinks: 0,
+          items: 0,
+          memoryThreads: 0,
+          rawData: 0,
+        },
+      },
+      graphBatches: { items: [], page: pageMeta(0) },
+      graphEntities: { items: [], page: pageMeta(0) },
+      graphSummary: {
+        aliasCount: 0,
+        cooccurrenceCount: 0,
+        entityCount: 0,
+        entityCountByType: [],
+        graphBatchCountByState: [],
+        itemLinkCount: 0,
+        itemLinkCountByType: [],
+        mentionCount: 0,
+      },
+      insights: { roots: [] },
+      items: { items: [], page: pageMeta(0) },
+      rawData: { items: [], page: pageMeta(0) },
+      threadStatus: {
+        failedCount: 0,
+        pendingCount: 0,
+        projectionState: "committed",
+        rebuildInProgress: false,
+      },
+      threads: { items: [], page: pageMeta(0) },
+    }
+
+    const data = mapAdminMemoryDashboardData("user_1:agent_1", apiData)
+
+    expect(data.insights.root).toBeNull()
+    expect(data.insights.roots).toEqual([])
+    expect(data.insights.branches).toEqual([])
+    expect(data.insights.selectedDetail).toBeNull()
+    expect(JSON.stringify(data.insights)).not.toContain("No insight selected")
   })
 })
 

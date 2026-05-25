@@ -299,6 +299,66 @@ const apiFixtures = vi.hoisted(() => {
     },
   ]
 
+  const conversationBuffers = [
+    {
+      agentId: "Agent-L4-Prime",
+      content: "Need to commit checkout flow conversation before extraction.",
+      createdAt: "2026-05-20T14:35:00Z",
+      extracted: false,
+      id: 9001,
+      memoryId: "MEM-8429-XQ",
+      role: "user",
+      sessionId: "session-checkout-42",
+      sourceClient: "chat-ui",
+      timestamp: "2026-05-20T14:35:00Z",
+      updatedAt: "2026-05-20T14:36:00Z",
+      userId: "u_alex_chen",
+      userName: "Alex Chen",
+    },
+    {
+      agentId: "Agent-L4-Prime",
+      content: "Extracted renewal-plan conversation waiting for cleanup.",
+      createdAt: "2026-05-20T13:10:00Z",
+      extracted: true,
+      id: 9002,
+      memoryId: "MEM-8429-XQ",
+      role: "assistant",
+      sessionId: "session-renewal-18",
+      sourceClient: "agent-runtime",
+      timestamp: "2026-05-20T13:10:00Z",
+      updatedAt: "2026-05-20T13:18:00Z",
+      userId: "u_alex_chen",
+      userName: "Alex Chen",
+    },
+  ]
+
+  const insightBuffers = [
+    {
+      agentId: "Agent-L4-Prime",
+      built: false,
+      createdAt: "2026-05-20T14:40:00Z",
+      groupName: null,
+      id: 7001,
+      insightTypeName: "preference",
+      itemId: 293712,
+      memoryId: "MEM-8429-XQ",
+      updatedAt: "2026-05-20T14:41:00Z",
+      userId: "u_alex_chen",
+    },
+    {
+      agentId: "Agent-L4-Prime",
+      built: true,
+      createdAt: "2026-05-20T12:25:00Z",
+      groupName: "retention",
+      id: 7002,
+      insightTypeName: "behavior",
+      itemId: 512611,
+      memoryId: "MEM-8429-XQ",
+      updatedAt: "2026-05-20T12:50:00Z",
+      userId: "u_alex_chen",
+    },
+  ]
+
   return {
     alertsSummary: {
       critical: 0,
@@ -345,7 +405,12 @@ const apiFixtures = vi.hoisted(() => {
       itemLinkCountByType: [{ count: 8103, name: "semantic" }],
       mentionCount: 142,
     },
+    conversationBuffers: page(conversationBuffers, 2),
     insights: page(insights, 3),
+    insightsTree: {
+      roots: insights,
+    },
+    insightBuffers: page(insightBuffers, 2),
     items: page(items, 3412),
     memoryOptions: {
       config: {
@@ -503,7 +568,15 @@ function routeFixture(url: string) {
     return apiFixtures.rawData
   }
 
+  if (path === "/admin/v1/memories/MEM-8429-XQ/raw-data") {
+    return apiFixtures.rawData
+  }
+
   if (path === "/admin/v1/items") {
+    return apiFixtures.items
+  }
+
+  if (path === "/admin/v1/memories/MEM-8429-XQ/items") {
     return apiFixtures.items
   }
 
@@ -527,8 +600,30 @@ function routeFixture(url: string) {
     return apiFixtures.threadStatus
   }
 
+  if (path === "/admin/v1/buffers/conversations") {
+    return apiFixtures.conversationBuffers
+  }
+
+  if (path === "/admin/v1/buffers/insights") {
+    return apiFixtures.insightBuffers
+  }
+
   if (path === "/admin/v1/insights") {
     return apiFixtures.insights
+  }
+
+  if (path === "/admin/v1/insights/tree") {
+    return apiFixtures.insightsTree
+  }
+
+  if (path === "/admin/v1/insights/list") {
+    const insightIds = parsed.searchParams
+      .getAll("insightIds")
+      .map((insightId) => Number(insightId))
+
+    return apiFixtures.insights.items.filter((insight) =>
+      insightIds.includes(insight.insightId)
+    )
   }
 
   if (path === "/admin/v1/config/memory-options") {
@@ -651,6 +746,153 @@ describe("Dashboard", () => {
     ).toBeInTheDocument()
     expect(window.location.pathname).toBe("/memories/MEM-8429-XQ")
   })
+
+  const workspaceEndpointPaths = [
+    "/admin/v1/dashboard",
+    "/admin/v1/memories/MEM-8429-XQ/raw-data",
+    "/admin/v1/memories/MEM-8429-XQ/items",
+    "/admin/v1/item-graph/summary",
+    "/admin/v1/item-graph/entities",
+    "/admin/v1/item-graph/batches",
+    "/admin/v1/memory-threads",
+    "/admin/v1/memory-threads/status",
+    "/admin/v1/insights",
+    "/admin/v1/insights/tree",
+    "/admin/v1/buffers/conversations",
+    "/admin/v1/buffers/insights",
+  ]
+
+  function requestCount(apiPath: string) {
+    return vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        ([input]) =>
+          new URL(String(input), "http://localhost").pathname === apiPath
+      ).length
+  }
+
+  it.each([
+    {
+      heading: "Memory Overview",
+      path: "/memories/MEM-8429-XQ",
+      refreshedPaths: ["/admin/v1/dashboard"],
+    },
+    {
+      heading: "Raw Data",
+      path: "/memories/MEM-8429-XQ/raw-data",
+      refreshedPaths: ["/admin/v1/memories/MEM-8429-XQ/raw-data"],
+    },
+    {
+      heading: "Memory Items",
+      path: "/memories/MEM-8429-XQ/items",
+      refreshedPaths: ["/admin/v1/memories/MEM-8429-XQ/items"],
+    },
+    {
+      heading: "Graph Explorer",
+      path: "/memories/MEM-8429-XQ/graph",
+      refreshedPaths: [
+        "/admin/v1/item-graph/summary",
+        "/admin/v1/item-graph/entities",
+        "/admin/v1/item-graph/batches",
+      ],
+    },
+    {
+      heading: "Memory Threads",
+      path: "/memories/MEM-8429-XQ/threads",
+      refreshedPaths: [
+        "/admin/v1/memory-threads",
+        "/admin/v1/memory-threads/status",
+      ],
+    },
+    {
+      heading: "Insight Tree",
+      path: "/memories/MEM-8429-XQ/insights",
+      refreshedPaths: ["/admin/v1/insights/tree"],
+    },
+    {
+      heading: "Memory Buffers",
+      path: "/memories/MEM-8429-XQ/buffers",
+      refreshedPaths: [
+        "/admin/v1/buffers/conversations",
+        "/admin/v1/buffers/insights",
+      ],
+    },
+  ])(
+    "refetches only the active workspace page from $path",
+    async ({ heading, path, refreshedPaths }) => {
+      const user = userEvent.setup()
+      window.history.pushState({}, "", path)
+      renderApp()
+
+      await screen.findByRole("heading", { name: heading })
+
+      const initialCounts = new Map(
+        workspaceEndpointPaths.map((apiPath) => [
+          apiPath,
+          requestCount(apiPath),
+        ])
+      )
+
+      await user.click(screen.getByRole("button", { name: "Refresh" }))
+
+      await waitFor(() => {
+        for (const apiPath of refreshedPaths) {
+          expect(requestCount(apiPath)).toBe(
+            (initialCounts.get(apiPath) ?? 0) + 1
+          )
+        }
+      })
+
+      for (const apiPath of workspaceEndpointPaths) {
+        if (!refreshedPaths.includes(apiPath)) {
+          expect(requestCount(apiPath)).toBe(initialCounts.get(apiPath))
+        }
+      }
+    }
+  )
+
+  it.each([
+    [
+      "/memories/MEM-8429-XQ/raw-data",
+      "Raw Data",
+      "/admin/v1/memories/MEM-8429-XQ/raw-data",
+    ],
+    [
+      "/memories/MEM-8429-XQ/items",
+      "Memory Items",
+      "/admin/v1/memories/MEM-8429-XQ/items",
+    ],
+    [
+      "/memories/MEM-8429-XQ/buffers",
+      "Memory Buffers",
+      "/admin/v1/buffers/conversations",
+    ],
+  ])(
+    "refetches page-scoped records from %s when Refresh is clicked",
+    async (path, heading, apiPath) => {
+      const user = userEvent.setup()
+      window.history.pushState({}, "", path)
+      renderApp()
+
+      await screen.findByRole("heading", { name: heading })
+
+      const pageRequestCount = () =>
+        vi
+          .mocked(fetch)
+          .mock.calls.filter(
+            ([input]) =>
+              new URL(String(input), "http://localhost").pathname === apiPath
+          ).length
+
+      expect(pageRequestCount()).toBe(1)
+
+      await user.click(screen.getByRole("button", { name: "Refresh" }))
+
+      await waitFor(() => {
+        expect(pageRequestCount()).toBe(2)
+      })
+    }
+  )
 
   it("renders the calm console shell polish", async () => {
     renderApp()
@@ -868,6 +1110,45 @@ describe("Dashboard", () => {
     expect(sidebarAfter).toBe(sidebarBefore)
   })
 
+  it("opens the matching workspace pages from Needs Attention items", async () => {
+    const user = userEvent.setup()
+    window.history.pushState({}, "", "/memories/MEM-8429-XQ")
+    renderApp()
+
+    await screen.findByRole("heading", { name: "Memory Overview" })
+
+    await user.click(
+      screen.getByRole("button", { name: /Pending conversations/ })
+    )
+
+    expect(
+      await screen.findByRole("heading", { name: "Memory Threads" })
+    ).toBeInTheDocument()
+    expect(window.location.pathname).toBe("/memories/MEM-8429-XQ/threads")
+
+    await user.click(screen.getByRole("button", { name: "Overview" }))
+    await screen.findByRole("heading", { name: "Memory Overview" })
+
+    await user.click(screen.getByRole("button", { name: /Unbuilt insights/ }))
+
+    expect(
+      await screen.findByRole("heading", { name: "Insight Tree" })
+    ).toBeInTheDocument()
+    expect(window.location.pathname).toBe("/memories/MEM-8429-XQ/insights")
+
+    await user.click(screen.getByRole("button", { name: "Overview" }))
+    await screen.findByRole("heading", { name: "Memory Overview" })
+
+    await user.click(
+      screen.getByRole("button", { name: /Graph repair required/ })
+    )
+
+    expect(
+      await screen.findByRole("heading", { name: "Graph Explorer" })
+    ).toBeInTheDocument()
+    expect(window.location.pathname).toBe("/memories/MEM-8429-XQ/graph")
+  })
+
   it("renders a direct Memory Raw Data route from the current URL", async () => {
     window.history.pushState({}, "", "/memories/MEM-8429-XQ/raw-data")
     renderApp()
@@ -987,7 +1268,7 @@ describe("Dashboard", () => {
     })
   })
 
-  it("closes Memory Itemdetails when focus moves outside the floating panel", async () => {
+  it("keeps Memory Itemdetails open until the close button is clicked", async () => {
     const user = userEvent.setup()
     window.history.pushState({}, "", "/memories/MEM-8429-XQ/items")
     renderApp()
@@ -1001,6 +1282,14 @@ describe("Dashboard", () => {
     expect(screen.getByTestId("item-details-panel")).toBeInTheDocument()
 
     await user.click(screen.getByRole("heading", { name: "Memory Items" }))
+
+    expect(screen.getByTestId("item-details-panel")).toBeInTheDocument()
+
+    await user.click(
+      within(screen.getByTestId("item-details-panel")).getByRole("button", {
+        name: "Close item details",
+      })
+    )
 
     await waitFor(() => {
       expect(screen.queryByTestId("item-details-panel")).not.toBeInTheDocument()
@@ -1082,7 +1371,6 @@ describe("Dashboard", () => {
         "Manage storyline continuity and item memberships across your memory graph."
       )
     ).toBeInTheDocument()
-    expect(screen.getByText("COMMITTED")).toBeInTheDocument()
     expect(screen.getByTestId("thread-workbench")).toBeInTheDocument()
     expect(screen.getByTestId("thread-sidebar")).toBeInTheDocument()
     expect(screen.getByTestId("thread-detail")).toBeInTheDocument()
@@ -1113,6 +1401,86 @@ describe("Dashboard", () => {
     expect(screen.getByRole("button", { name: "Graph" })).toBeInTheDocument()
     expect(screen.getByText("Home Renovation Logistics")).toBeInTheDocument()
     expect(screen.getByText("Load 15 earlier items")).toBeInTheDocument()
+  })
+
+  it("opens the Memory Buffers page from the workspace sidebar", async () => {
+    const user = userEvent.setup()
+    window.history.pushState({}, "", "/memories/MEM-8429-XQ")
+    renderApp()
+
+    await screen.findByRole("heading", { name: "Memory Overview" })
+
+    await user.click(screen.getByRole("button", { name: "Buffers" }))
+
+    expect(
+      await screen.findByRole("heading", { name: "Memory Buffers" })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        "Inspect pending conversation and insight buffers before they are committed into memory."
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByTestId("memory-buffers-filter")).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId("memory-buffers-filter")).getByRole("tab", {
+        name: "Conversation",
+      })
+    ).toHaveAttribute("data-state", "active")
+    expect(
+      within(screen.getByTestId("memory-buffers-filter")).queryByRole("tab", {
+        name: "All",
+      })
+    ).not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId("memory-buffers-filter")).getByRole("tab", {
+        name: "Insight",
+      })
+    ).toBeInTheDocument()
+
+    const table = screen.getByRole("table")
+
+    expect(within(table).getByText("Buffer")).toBeInTheDocument()
+    expect(within(table).getAllByText("Conversation").length).toBeGreaterThan(0)
+    expect(within(table).queryByText("Insight")).not.toBeInTheDocument()
+    expect(within(table).getByText("session-checkout-42")).toBeInTheDocument()
+    expect(
+      within(table).getByText(
+        "Need to commit checkout flow conversation before extraction."
+      )
+    ).toBeInTheDocument()
+    expect(within(table).queryByText("preference")).not.toBeInTheDocument()
+    expect(within(table).queryByText("293712")).not.toBeInTheDocument()
+    expect(
+      screen.getByText("Showing 2 of 2 conversation buffers")
+    ).toBeInTheDocument()
+    expect(window.location.pathname).toBe("/memories/MEM-8429-XQ/buffers")
+  })
+
+  it("renders a direct Memory Buffers route and switches buffer tables", async () => {
+    const user = userEvent.setup()
+    window.history.pushState({}, "", "/memories/MEM-8429-XQ/buffers")
+    renderApp()
+
+    expect(
+      await screen.findByRole("heading", { name: "Memory Buffers" })
+    ).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Insights" })).toBeInTheDocument()
+
+    await user.click(screen.getByRole("tab", { name: "Insight" }))
+
+    expect(screen.queryByText("session-checkout-42")).not.toBeInTheDocument()
+    expect(screen.getByText("preference")).toBeInTheDocument()
+    expect(screen.getByText("retention")).toBeInTheDocument()
+    expect(screen.getByText("Showing 2 of 2 insight buffers")).toBeInTheDocument()
+
+    await user.click(screen.getByRole("tab", { name: "Conversation" }))
+
+    expect(screen.getByText("session-checkout-42")).toBeInTheDocument()
+    expect(screen.getByText("session-renewal-18")).toBeInTheDocument()
+    expect(screen.queryByText("retention")).not.toBeInTheDocument()
+    expect(
+      screen.getByText("Showing 2 of 2 conversation buffers")
+    ).toBeInTheDocument()
   })
 
   it("switches the Thread detail when a storyline is selected", async () => {
@@ -1153,7 +1521,6 @@ describe("Dashboard", () => {
     const insightsBody = screen.getByTestId("memory-insights-body")
     const insightsExplorer = screen.getByTestId("memory-insights-explorer")
     const toolbar = screen.getByTestId("memory-insights-toolbar")
-    const canvasWorkspace = screen.getByTestId("memory-insights-canvas")
 
     expect(screen.getByTestId("memory-workspace-surface")).toHaveClass(
       "h-full",
@@ -1168,12 +1535,7 @@ describe("Dashboard", () => {
       "resizable-panel-group"
     )
     expect(insightsExplorer).toHaveClass("h-full", "w-72", "shrink-0")
-    expect(canvasWorkspace).toHaveClass("h-full", "w-full", "flex-1")
-    expect(canvasWorkspace.parentElement).toHaveClass(
-      "min-w-0",
-      "w-full",
-      "flex-1"
-    )
+    expect(screen.queryByTestId("memory-insights-canvas")).not.toBeInTheDocument()
     expect(
       insightsWorkspace.querySelectorAll('[data-slot="card"]')
     ).toHaveLength(0)
@@ -1202,18 +1564,33 @@ describe("Dashboard", () => {
       "w-72",
       "shrink-0"
     )
-    expect(
-      screen.getByTestId("memory-insights-canvas").parentElement
-    ).toHaveClass("min-w-0", "w-full", "flex-1")
     expect(screen.getByText("Hierarchy Explorer")).toBeInTheDocument()
     expect(screen.getByText("Roots")).toBeInTheDocument()
     expect(screen.getByText("Branches")).toBeInTheDocument()
     expect(screen.getByText("Leaves")).toBeInTheDocument()
-    expect(screen.getAllByText("Platform Scalability Thesis").length).toBe(2)
+    expect(screen.getAllByText("Platform Scalability Thesis").length).toBe(1)
     expect(
       screen.queryByText("Market Expansion Strategy")
     ).not.toBeInTheDocument()
     expect(screen.queryByText("User Retention Flow")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /Open root insight/ })
+    ).not.toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Select root Platform Scalability Thesis/,
+      })
+    )
+
+    const canvasWorkspace = await screen.findByTestId("memory-insights-canvas")
+
+    expect(canvasWorkspace).toHaveClass("h-full", "w-full", "flex-1")
+    expect(canvasWorkspace.parentElement).toHaveClass(
+      "min-w-0",
+      "w-full",
+      "flex-1"
+    )
     expect(
       screen.getByRole("button", { name: /Open root insight/ })
     ).toHaveAttribute("data-id", "1")
@@ -1264,6 +1641,16 @@ describe("Dashboard", () => {
       within(explorer).queryByText("V8 Engine JIT Delay")
     ).not.toBeInTheDocument()
 
+    await user.click(
+      screen.getByRole("button", {
+        name: /Select root Platform Scalability Thesis/,
+      })
+    )
+
+    expect(
+      within(explorer).getAllByText("Architecture Bottlenecks").length
+    ).toBeGreaterThan(0)
+
     await user.click(branchesToggle)
     expect(branchesToggle).toHaveAttribute("aria-expanded", "false")
     expect(
@@ -1273,7 +1660,7 @@ describe("Dashboard", () => {
     await user.click(leavesToggle)
     expect(leavesToggle).toHaveAttribute("aria-expanded", "false")
     expect(
-      within(explorer).queryByText("Architecture Bottlenecks")
+      within(explorer).queryByText("V8 Engine JIT Delay")
     ).not.toBeInTheDocument()
 
     await user.click(rootsToggle)
@@ -1293,8 +1680,14 @@ describe("Dashboard", () => {
     expect(screen.getByRole("button", { name: "Threads" })).toBeInTheDocument()
     expect(screen.queryByText("Node Details")).not.toBeInTheDocument()
 
-    fireEvent.click(
+    await fireEvent.click(
       screen.getByRole("button", {
+        name: /Select root Platform Scalability Thesis/,
+      })
+    )
+
+    fireEvent.click(
+      await screen.findByRole("button", {
         name: /Open branch insight Frontend Performance/,
       })
     )
@@ -1308,10 +1701,9 @@ describe("Dashboard", () => {
     expect(within(details).getByText("Insight Points")).toBeInTheDocument()
     expect(within(details).getByText("ID: 442")).toBeInTheDocument()
     expect(within(details).getAllByText("Frontend").length).toBeGreaterThan(0)
-    expect(within(details).getByText("USER")).toBeInTheDocument()
-    expect(within(details).getByText("BRANCH")).toBeInTheDocument()
-    expect(within(details).getByText("Optimization")).toBeInTheDocument()
-    expect(within(details).getByText("Critical")).toBeInTheDocument()
+    expect(within(details).getByText("Branch")).toBeInTheDocument()
+    expect(within(details).getByText("Operational")).toBeInTheDocument()
+    expect(within(details).getByText("branch")).toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: "Regenerate" })
     ).toBeInTheDocument()
@@ -1326,6 +1718,12 @@ describe("Dashboard", () => {
       await screen.findByRole("heading", { name: "Insight Tree" })
     ).toBeInTheDocument()
     expect(screen.getByText("Hierarchy Explorer")).toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Select root Platform Scalability Thesis/,
+      })
+    )
 
     await user.click(
       screen.getByRole("button", { name: "Collapse hierarchy explorer" })

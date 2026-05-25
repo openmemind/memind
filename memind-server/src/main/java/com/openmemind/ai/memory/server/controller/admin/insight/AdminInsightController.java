@@ -24,6 +24,7 @@ import com.openmemind.ai.memory.server.service.insight.InsightQueryService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import java.util.List;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -66,6 +67,11 @@ public class AdminInsightController {
     @GetMapping("/{insightId}")
     public SuccessResult<AdminInsightView> detail(@PathVariable Long insightId) {
         return new SuccessResult<>(queryService.getInsight(insightId));
+    }
+
+    @GetMapping("/list")
+    public SuccessResult<List<AdminInsightView>> details(@RequestParam List<Long> insightIds) {
+        return new SuccessResult<>(insightIds.stream().map(queryService::getInsight).toList());
     }
 
     @GetMapping("/tree")

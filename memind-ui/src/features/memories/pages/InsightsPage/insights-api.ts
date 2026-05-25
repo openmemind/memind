@@ -15,10 +15,6 @@
 import { fetchJson } from "@/lib/api/client"
 import type { PageResult } from "@/lib/api/pagination"
 
-export type MemoryInsightTree = {
-  roots: unknown[]
-}
-
 export type AdminInsightPoint = {
   content?: string
   pointId?: string
@@ -47,12 +43,31 @@ export type AdminInsightView = {
   version?: number
 }
 
+export type MemoryInsightTree = {
+  roots: AdminInsightView[]
+}
+
 export function fetchMemoryInsightTree(memoryId: string) {
   const [userId, agentId] = memoryId.split(":", 2)
 
   return fetchJson<MemoryInsightTree>("/admin/v1/insights/tree", {
     query: { agentId, userId },
   })
+}
+
+export function fetchInsightsList(insightIds: Array<number | string>) {
+  if (!insightIds.length) {
+    return Promise.resolve([])
+  }
+
+  const query = new URLSearchParams()
+  insightIds.forEach((insightId) => {
+    query.append("insightIds", String(insightId))
+  })
+
+  return fetchJson<AdminInsightView[]>(
+    `/admin/v1/insights/list?${query.toString()}`
+  )
 }
 
 export function fetchAdminInsightsPage(params: {

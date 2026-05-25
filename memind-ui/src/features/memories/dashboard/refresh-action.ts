@@ -12,10 +12,7 @@
 // limitations under the License.
 //
 
-export type MemoryWorkspacePage =
-  | "overview"
-  | "raw-data"
-  | "items"
-  | "graph"
-  | "threads"
-  | "insights"
+export type RefreshAction = {
+  isRefreshing: boolean
+  onRefresh: () => void
+}

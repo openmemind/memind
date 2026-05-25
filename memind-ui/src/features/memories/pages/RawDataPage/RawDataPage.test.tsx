@@ -12,19 +12,36 @@
 // limitations under the License.
 //
 
-import { render, screen, waitFor, within } from "@testing-library/react"
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it } from "vitest"
 
-import type { MemoryDashboardData } from "../memory-dashboard-data"
+import type { MemoryDashboardData } from "../../dashboard/memory-dashboard-data"
+import type { RefreshAction } from "../../dashboard/refresh-action"
 
 import { RawDataPage } from "./RawDataPage"
+
+const noopRefreshAction: RefreshAction = {
+  isRefreshing: false,
+  onRefresh: () => {},
+}
 
 describe("RawDataPage", () => {
   it("opens raw data details in an expandable right-side panel", async () => {
     const user = userEvent.setup()
 
-    render(<RawDataPage data={rawDataPageData} />)
+    render(
+      <RawDataPage
+        data={rawDataPageData}
+        refreshAction={noopRefreshAction}
+      />
+    )
 
     expect(screen.queryByTestId("record-details-panel")).not.toBeInTheDocument()
 
@@ -86,6 +103,47 @@ describe("RawDataPage", () => {
         screen.queryByTestId("record-details-panel")
       ).not.toBeInTheDocument()
     })
+  })
+
+  it("keeps raw data details open until the close button is clicked", async () => {
+    const user = userEvent.setup()
+
+    render(
+      <RawDataPage
+        data={rawDataPageData}
+        refreshAction={noopRefreshAction}
+      />
+    )
+
+    await user.click(screen.getByRole("button", { name: "View" }))
+
+    const details = screen.getByTestId("record-details-panel")
+
+    await waitFor(() => {
+      expect(details).toHaveAttribute("data-state", "open")
+    })
+
+    fireEvent.pointerDown(document.body)
+    fireEvent.keyDown(document, { key: "Escape" })
+    screen.getByRole("button", { name: "Refresh" }).focus()
+
+    await waitFor(() => {
+      expect(screen.getByTestId("record-details-panel")).toHaveAttribute(
+        "data-state",
+        "open"
+      )
+    })
+
+    await user.click(
+      within(screen.getByTestId("record-details-panel")).getByRole("button", {
+        name: "Close record details",
+      })
+    )
+
+    expect(screen.getByTestId("record-details-panel")).toHaveAttribute(
+      "data-state",
+      "closed"
+    )
   })
 })
 

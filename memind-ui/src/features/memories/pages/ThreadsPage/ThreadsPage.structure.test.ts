@@ -18,11 +18,11 @@ import { describe, expect, it } from "vitest"
 
 const threadsPagePath = resolve(
   process.cwd(),
-  "src/features/memories/memory-dashboard/pages/ThreadsPage.tsx"
+  "src/features/memories/pages/ThreadsPage/ThreadsPage.tsx"
 )
 const dashboardPath = resolve(
   process.cwd(),
-  "src/features/memories/memory-dashboard/MemoryDashboard.tsx"
+  "src/features/memories/dashboard/MemoryDashboard.tsx"
 )
 
 describe("ThreadsPage structure", () => {

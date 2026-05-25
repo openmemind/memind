@@ -21,9 +21,9 @@ const featureFilesWithTables = [
   "src/features/analytics/Analytics.tsx",
   "src/features/api-keys/ApiKeys.tsx",
   "src/features/memories/Memories.tsx",
-  "src/features/memories/memory-dashboard/pages/RawDataPage.tsx",
-  "src/features/memories/memory-dashboard/pages/ItemsPage.tsx",
-  "src/features/memories/memory-dashboard/pages/GraphPage.tsx",
+  "src/features/memories/pages/RawDataPage/RawDataPage.tsx",
+  "src/features/memories/pages/ItemsPage/ItemsPage.tsx",
+  "src/features/memories/pages/GraphPage/GraphPage.tsx",
 ]
 
 function containerStartBeforeTable(source: string, tableIndex: number) {

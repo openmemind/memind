@@ -15,6 +15,7 @@
 import {
   ArrowLeft,
   Bot,
+  Boxes,
   Copy,
   Database,
   GitFork,
@@ -37,8 +38,8 @@ import {
 } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
 
-import type { MemoryDashboardData } from "../memory-dashboard-data"
-import type { MemoryWorkspacePage } from "../types"
+import type { MemoryDashboardData } from "../dashboard/memory-dashboard-data"
+import type { MemoryWorkspacePage } from "../dashboard/types"
 
 const navItems = [
   { id: "overview", label: "Overview", icon: LayoutDashboard, enabled: true },
@@ -47,6 +48,7 @@ const navItems = [
   { id: "graph", label: "Graph", icon: GitFork, enabled: true },
   { id: "threads", label: "Threads", icon: MessageSquare, enabled: true },
   { id: "insights", label: "Insights", icon: Lightbulb, enabled: true },
+  { id: "buffers", label: "Buffers", icon: Boxes, enabled: true },
 ] satisfies Array<{
   id: string
   label: string

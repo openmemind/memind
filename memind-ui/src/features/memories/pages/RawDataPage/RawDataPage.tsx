@@ -32,19 +32,29 @@ import { TableCell, TableHead, TableRow } from "@/components/ui/table"
 import { PageHeader } from "@/features/shared/ui"
 import { cn } from "@/lib/utils"
 
-import { JsonBlock } from "../components/JsonBlock"
-import { VectorStatus } from "../components/VectorStatus"
+import { JsonBlock } from "../../components/JsonBlock"
+import { VectorStatus } from "../../components/VectorStatus"
 import type {
   MemoryDashboardData,
   MemoryRawDataRecord,
-} from "../memory-dashboard-data"
+} from "../../dashboard/memory-dashboard-data"
+import type { RefreshAction } from "../../dashboard/refresh-action"
 
-export function RawDataHeader() {
+export function RawDataHeader({
+  refreshAction,
+}: {
+  refreshAction: RefreshAction
+}) {
   return (
     <PageHeader
       action={
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline">
+          <Button
+            disabled={refreshAction.isRefreshing}
+            onClick={refreshAction.onRefresh}
+            type="button"
+            variant="outline"
+          >
             <RefreshCcw data-icon="inline-start" />
             Refresh
           </Button>
@@ -195,41 +205,6 @@ function RecordDetailsPanel({
     panelRef.current?.focus()
   }, [record.id])
 
-  useEffect(() => {
-    function handlePointerDown(event: PointerEvent) {
-      if (!panelRef.current?.contains(event.target as Node)) {
-        onClose()
-      }
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose()
-      }
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown)
-    document.addEventListener("keydown", handleKeyDown)
-
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown)
-      document.removeEventListener("keydown", handleKeyDown)
-    }
-  }, [onClose])
-
-  function handleBlur(event: React.FocusEvent<HTMLElement>) {
-    const nextTarget = event.relatedTarget
-
-    if (
-      nextTarget instanceof Node &&
-      event.currentTarget.contains(nextTarget)
-    ) {
-      return
-    }
-
-    onClose()
-  }
-
   function handleTransitionEnd(event: React.TransitionEvent<HTMLDivElement>) {
     if (event.target !== event.currentTarget || isVisible) {
       return
@@ -256,7 +231,6 @@ function RecordDetailsPanel({
         data-state={isVisible ? "open" : "closed"}
         data-testid="record-details-panel"
         tabIndex={-1}
-        onBlur={handleBlur}
         onTransitionEnd={handleTransitionEnd}
       >
         <div className="flex shrink-0 items-start justify-between gap-4 border-b bg-popover px-6 py-5">
@@ -355,7 +329,13 @@ function RecordDetailsPanel({
   )
 }
 
-export function RawDataPage({ data }: { data: MemoryDashboardData }) {
+export function RawDataPage({
+  data,
+  refreshAction,
+}: {
+  data: MemoryDashboardData
+  refreshAction: RefreshAction
+}) {
   const [selectedRecord, setSelectedRecord] =
     useState<MemoryRawDataRecord | null>(null)
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
@@ -398,7 +378,7 @@ export function RawDataPage({ data }: { data: MemoryDashboardData }) {
 
   return (
     <>
-      <RawDataHeader />
+      <RawDataHeader refreshAction={refreshAction} />
       {/*<RawDataSummary data={data} />*/}
       {/*<RawDataToolbar />*/}
       <RawDataTable data={data} onViewRecord={handleViewRecord} />

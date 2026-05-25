@@ -16,7 +16,6 @@ import {
   ChevronRight,
   Clock3,
   ExternalLink,
-  FileClock,
   ListTree,
   MoreHorizontal,
   RefreshCcw,
@@ -63,7 +62,8 @@ import type {
   MemoryDashboardData,
   MemoryThreadStoryline,
   MemoryThreadTimelineItem,
-} from "../memory-dashboard-data"
+} from "../../dashboard/memory-dashboard-data"
+import type { RefreshAction } from "../../dashboard/refresh-action"
 
 type ThreadFilter = "all" | "active" | "dormant"
 
@@ -80,9 +80,9 @@ function statusDotClassName(status: MemoryThreadStoryline["status"]) {
 }
 
 function ThreadsHeader({
-  projection,
+  refreshAction,
 }: {
-  projection: MemoryDashboardData["threads"]["projection"]
+  refreshAction: RefreshAction
 }) {
   return (
     <header className="flex shrink-0 flex-col gap-4 border-b bg-background px-4 py-4 md:flex-row md:items-end md:justify-between lg:px-8">
@@ -96,11 +96,12 @@ function ThreadsHeader({
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Badge className="h-7 gap-1.5 px-2.5" variant="outline">
-          <FileClock data-icon="inline-start" />
-          {projection.status}
-        </Badge>
-        <Button type="button" variant="outline">
+        <Button
+          disabled={refreshAction.isRefreshing}
+          onClick={refreshAction.onRefresh}
+          type="button"
+          variant="outline"
+        >
           <RefreshCcw data-icon="inline-start" />
           Refresh
         </Button>
@@ -506,7 +507,13 @@ function matchesThreadQuery(storyline: MemoryThreadStoryline, query: string) {
     .includes(normalizedQuery)
 }
 
-export function ThreadsPage({ data }: { data: MemoryDashboardData }) {
+export function ThreadsPage({
+  data,
+  refreshAction,
+}: {
+  data: MemoryDashboardData
+  refreshAction: RefreshAction
+}) {
   const [filter, setFilter] = useState<ThreadFilter>("all")
   const [query, setQuery] = useState("")
   const [selectedThreadKey, setSelectedThreadKey] = useState(
@@ -537,7 +544,7 @@ export function ThreadsPage({ data }: { data: MemoryDashboardData }) {
       className="thread-workbench flex h-full w-full min-w-0 flex-1 flex-col overflow-hidden bg-background"
       data-testid="thread-workbench"
     >
-      <ThreadsHeader projection={data.threads.projection} />
+      <ThreadsHeader refreshAction={refreshAction} />
       {/*<ThreadsSummary data={data.threads} />*/}
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <ThreadList

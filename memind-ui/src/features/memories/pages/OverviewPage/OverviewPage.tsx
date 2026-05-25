@@ -48,20 +48,33 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { PageHeader, type Tone } from "@/features/shared/ui"
 import { cn } from "@/lib/utils"
 
-import { MobileBackBar } from "../components/MobileBackBar"
+import { MobileBackBar } from "../../components/MobileBackBar"
 import type {
   MemoryActivityItem,
   MemoryDashboardData,
   MemoryPipelineStage,
-} from "../memory-dashboard-data"
+} from "../../dashboard/memory-dashboard-data"
+import type { RefreshAction } from "../../dashboard/refresh-action"
+import type { MemoryWorkspacePage } from "../../dashboard/types"
 
-function OverviewHeader({ data }: { data: MemoryDashboardData }) {
+function OverviewHeader({
+  data,
+  refreshAction,
+}: {
+  data: MemoryDashboardData
+  refreshAction: RefreshAction
+}) {
   return (
     <div data-testid="memory-overview-header">
       <PageHeader
         action={
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline">
+            <Button
+              disabled={refreshAction.isRefreshing}
+              onClick={refreshAction.onRefresh}
+              type="button"
+              variant="outline"
+            >
               <RefreshCcw data-icon="inline-start" />
               Refresh
             </Button>
@@ -238,11 +251,31 @@ function MemoryPipeline({ data }: { data: MemoryDashboardData }) {
   )
 }
 
-function AttentionPanel({ data }: { data: MemoryDashboardData }) {
+function attentionTargetPage(label: string): MemoryWorkspacePage {
+  if (label.includes("conversation")) {
+    return "threads"
+  }
+
+  if (label.includes("insight")) {
+    return "insights"
+  }
+
+  return "graph"
+}
+
+function AttentionPanel({
+  data,
+  onPageChange,
+}: {
+  data: MemoryDashboardData
+  onPageChange?: (page: MemoryWorkspacePage) => void
+}) {
   return (
     <CompactPanel contentClassName="px-0" title="Needs Attention">
       <div className="flex flex-col">
         {data.attention.map((item, index) => {
+          const targetPage = attentionTargetPage(item.label)
+
           return (
             <button
               key={item.label}
@@ -250,6 +283,7 @@ function AttentionPanel({ data }: { data: MemoryDashboardData }) {
                 "flex items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/50",
                 index > 0 && "border-t"
               )}
+              onClick={() => onPageChange?.(targetPage)}
               type="button"
             >
               <span className="flex min-w-0 items-center gap-3">
@@ -404,19 +438,23 @@ function QuickRetrieve() {
 export function OverviewPage({
   data,
   onBack,
+  onPageChange,
+  refreshAction,
 }: {
   data: MemoryDashboardData
   onBack: () => void
+  onPageChange?: (page: MemoryWorkspacePage) => void
+  refreshAction: RefreshAction
 }) {
   return (
     <>
       <MobileBackBar onBack={onBack} />
-      <OverviewHeader data={data} />
+      <OverviewHeader data={data} refreshAction={refreshAction} />
       <MetricGrid data={data} />
 
       <section className="mb-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
         <MemoryPipeline data={data} />
-        <AttentionPanel data={data} />
+        <AttentionPanel data={data} onPageChange={onPageChange} />
       </section>
 
       <section className="mb-4 grid grid-cols-1 gap-4 xl:grid-cols-2">

@@ -27,7 +27,7 @@ import { Analytics } from "@/features/analytics/Analytics"
 import { ApiKeys } from "@/features/api-keys/ApiKeys"
 import { Dashboard } from "@/features/dashboard/Dashboard"
 import { Memories } from "@/features/memories/Memories"
-import { MemoryDashboard } from "@/features/memories/memory-dashboard/MemoryDashboard"
+import { MemoryDashboard } from "@/features/memories/dashboard/MemoryDashboard"
 import { Settings } from "@/features/settings/Settings"
 import { AppShell, type AppPage } from "@/features/shell/AppShell"
 
@@ -108,7 +108,9 @@ function MemoryWorkspaceRouteComponent() {
           ? "threads"
           : pathname.endsWith("/insights")
             ? "insights"
-            : "overview"
+            : pathname.endsWith("/buffers")
+              ? "buffers"
+              : "overview"
 
   return (
     <MemoryDashboard
@@ -156,6 +158,13 @@ function MemoryWorkspaceRouteComponent() {
         if (page === "insights") {
           void navigate({
             to: "/memories/$memoryId/insights",
+            params: { memoryId },
+          })
+        }
+
+        if (page === "buffers") {
+          void navigate({
+            to: "/memories/$memoryId/buffers",
             params: { memoryId },
           })
         }
@@ -244,6 +253,11 @@ const memoryInsightsRoute = createRoute({
   path: "insights",
 })
 
+const memoryBuffersRoute = createRoute({
+  getParentRoute: () => memoryWorkspaceRoute,
+  path: "buffers",
+})
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   consoleLayoutRoute.addChildren([
@@ -260,6 +274,7 @@ const routeTree = rootRoute.addChildren([
     memoryGraphRoute,
     memoryThreadsRoute,
     memoryInsightsRoute,
+    memoryBuffersRoute,
   ]),
 ])
 

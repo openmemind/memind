@@ -20,12 +20,15 @@ import {
   fetchDashboardRecentMemories,
 } from "./dashboard/dashboard-api"
 import { fetchMemoriesPage } from "./memories/memories-api"
-import { fetchMemoryGraphExplorer } from "./memories/memory-dashboard/graph-api"
-import { fetchMemoryInsightTree } from "./memories/memory-dashboard/insights-api"
-import { fetchMemoryItemsPage } from "./memories/memory-dashboard/items-api"
-import { forceMemorySnapshot } from "./memories/memory-dashboard/overview-api"
-import { fetchMemoryRawDataPage } from "./memories/memory-dashboard/raw-data-api"
-import { fetchMemoryThreadTimeline } from "./memories/memory-dashboard/threads-api"
+import { fetchMemoryGraphExplorer } from "./memories/pages/GraphPage/graph-api"
+import {
+  fetchInsightsList,
+  fetchMemoryInsightTree,
+} from "./memories/pages/InsightsPage/insights-api"
+import { fetchMemoryItemsPage } from "./memories/pages/ItemsPage/items-api"
+import { forceMemorySnapshot } from "./memories/pages/OverviewPage/overview-api"
+import { fetchMemoryRawDataPage } from "./memories/pages/RawDataPage/raw-data-api"
+import { fetchMemoryThreadTimeline } from "./memories/pages/ThreadsPage/threads-api"
 import { fetchUiPreferences } from "./settings/settings-api"
 
 function jsonResponse(data: unknown) {
@@ -137,6 +140,11 @@ describe("page API calls", () => {
       call: () => fetchMemoryInsightTree("mem_1"),
       response: { roots: [] },
       url: "/admin/v1/insights/tree?userId=mem_1",
+    },
+    {
+      call: () => fetchInsightsList([118, 442]),
+      response: [],
+      url: "/admin/v1/insights/list?insightIds=118&insightIds=442",
     },
     {
       call: () => fetchUiPreferences(),

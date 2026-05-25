@@ -31,7 +31,8 @@ import {
   Circle,
   FileText,
   GitBranch,
-  Star,
+  Lightbulb,
+  RefreshCcw,
   X,
 } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
@@ -45,6 +46,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 
@@ -52,40 +60,48 @@ import type {
   MemoryDashboardData,
   MemoryInsightDetail,
   MemoryInsightNode,
-} from "../memory-dashboard-data"
+} from "../../dashboard/memory-dashboard-data"
+import type { RefreshAction } from "../../dashboard/refresh-action"
+import {
+  createInsightTreeLayout,
+  type InsightBranch,
+  type InsightRoot,
+  type InsightTreeEdge,
+  type InsightTreeNode,
+} from "./insight-layout"
+import { fetchInsightsList, type AdminInsightView } from "./insights-api"
 
-type InsightBranch = MemoryInsightNode & {
-  selected?: boolean
-  leaves: MemoryInsightNode[]
+function titleCase(value: string) {
+  return value
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ")
 }
 
-type InsightRoot = MemoryInsightNode & {
-  branches: InsightBranch[]
-}
-
-type InsightTreeNode = MemoryInsightNode & {
-  height: number
-  selected?: boolean
-  width: number
-  x: number
-  y: number
-}
-
-type InsightTreeEdge = {
-  from: string
-  to: string
-}
-
-export function InsightsToolbar() {
+export function InsightsToolbar({
+  refreshAction,
+}: {
+  refreshAction: RefreshAction
+}) {
   return (
     <header
-      className="z-40 flex min-h-14 shrink-0 items-center border-b bg-white px-4 lg:px-6"
+      className="z-40 flex min-h-14 shrink-0 items-center justify-between gap-4 border-b bg-white px-4 lg:px-6"
       data-testid="memory-insights-toolbar"
     >
       <div className="flex min-w-0 items-center gap-4">
         <h1 className="text-sm font-semibold text-primary">Insight Tree</h1>
         <Separator className="h-4 self-center" orientation="vertical" />
       </div>
+      <Button
+        disabled={refreshAction.isRefreshing}
+        onClick={refreshAction.onRefresh}
+        type="button"
+        variant="outline"
+      >
+        <RefreshCcw data-icon="inline-start" />
+        Refresh
+      </Button>
     </header>
   )
 }
@@ -93,6 +109,10 @@ export function InsightsToolbar() {
 function getInsightRoots(data: MemoryDashboardData): InsightRoot[] {
   if (data.insights.roots?.length) {
     return data.insights.roots
+  }
+
+  if (!data.insights.root) {
+    return []
   }
 
   const fallbackRoot: InsightRoot = {
@@ -147,6 +167,79 @@ function getInsightRoots(data: MemoryDashboardData): InsightRoot[] {
 
 function getRootLeaves(root: InsightRoot) {
   return root.branches.flatMap((branch) => branch.leaves)
+}
+
+function insightKindFromTier(tier?: string): MemoryInsightNode["kind"] {
+  const normalizedTier = tier?.toUpperCase()
+
+  if (normalizedTier === "ROOT") {
+    return "root"
+  }
+
+  if (normalizedTier === "BRANCH") {
+    return "branch"
+  }
+
+  return "leaf"
+}
+
+function insightNodeFromView(insight: AdminInsightView): MemoryInsightNode {
+  const kind = insightKindFromTier(insight.tier)
+
+  return {
+    category: insight.type ?? "Insight",
+    childInsightIds: insight.childInsightIds ?? [],
+    children: `${insight.childInsightIds?.length ?? 0} Children`,
+    description: insight.content ?? insight.name ?? "-",
+    id: String(insight.insightId),
+    kind,
+    label: titleCase(insight.tier ?? kind),
+    title: insight.name ?? insight.groupName ?? `Insight ${insight.insightId}`,
+  }
+}
+
+function withLoadedDescendants(
+  root: InsightRoot,
+  loadedNodes: Map<string, MemoryInsightNode>
+): InsightRoot {
+  if (!(root.childInsightIds?.length) && root.branches.length) {
+    return root
+  }
+
+  const branches = (root.childInsightIds ?? [])
+    .map((childInsightId) => loadedNodes.get(String(childInsightId)))
+    .filter((node): node is MemoryInsightNode => Boolean(node))
+    .map((branchNode): InsightBranch => ({
+      ...branchNode,
+      kind: "branch",
+      leaves: (branchNode.childInsightIds ?? [])
+        .map((childInsightId) => loadedNodes.get(String(childInsightId)))
+        .filter((node): node is MemoryInsightNode => Boolean(node))
+        .map((leafNode) => ({
+          ...leafNode,
+          kind: "leaf",
+        })),
+    }))
+
+  return {
+    ...root,
+    branches,
+  }
+}
+
+function createPreloadedNodes(roots: InsightRoot[]) {
+  return new Map(
+    roots.flatMap((root) => [
+      ...root.branches.map(
+        (branch) => [branch.id, branch] as [string, MemoryInsightNode]
+      ),
+      ...root.branches.flatMap((branch) =>
+        branch.leaves.map(
+          (leaf) => [leaf.id, leaf] as [string, MemoryInsightNode]
+        )
+      ),
+    ])
+  )
 }
 
 function InsightExplorerSection({
@@ -231,13 +324,13 @@ function InsightsExplorer({
   onRootSelect,
   roots,
 }: {
-  activeRoot: InsightRoot
-  activeRootId: string
+  activeRoot: InsightRoot | null
+  activeRootId: string | null
   onCollapsedChange: (collapsed: boolean) => void
   onRootSelect: (rootId: string) => void
   roots: InsightRoot[]
 }) {
-  const leaves = getRootLeaves(activeRoot)
+  const leaves = activeRoot ? getRootLeaves(activeRoot) : []
 
   return (
     <motion.aside
@@ -290,12 +383,12 @@ function InsightsExplorer({
           </InsightExplorerSection>
 
           <InsightExplorerSection
-            count={activeRoot.branches.length}
+            count={activeRoot?.branches.length ?? 0}
             label="Branches"
             testId="insight-explorer-branch-items"
           >
             <div className="ml-[13px] flex flex-col gap-0.5 border-l pl-3">
-              {activeRoot.branches.map((branch) => (
+              {activeRoot?.branches.map((branch) => (
                 <TreeButton
                   key={branch.id}
                   aria-label={`Select branch ${branch.title}`}
@@ -335,7 +428,7 @@ function buildInsightDetail(
   node: MemoryInsightNode,
   data: MemoryDashboardData
 ): MemoryInsightDetail {
-  if (node.id === data.insights.selectedDetail.id) {
+  if (node.id === data.insights.selectedDetail?.id) {
     return data.insights.selectedDetail
   }
 
@@ -362,83 +455,6 @@ function buildInsightDetail(
   }
 }
 
-function createInsightTreeLayout(
-  root: InsightRoot,
-  selectedNodeId: string | null
-): {
-  edges: InsightTreeEdge[]
-  height: number
-  nodes: InsightTreeNode[]
-  width: number
-} {
-  const branchGap = 360
-  const branchY = 320
-  const leafGap = 232
-  const rootWidth = 480
-  const rootHeight = 180
-  const branchWidth = 288
-  const branchHeight = 132
-  const leafWidth = 208
-  const leafHeight = 112
-  const canvasWidth = Math.max(980, root.branches.length * branchGap + 420)
-  const rootX = canvasWidth / 2 - rootWidth / 2
-  const branchStartX =
-    canvasWidth / 2 -
-    ((root.branches.length - 1) * branchGap) / 2 -
-    branchWidth / 2
-  const nodes: InsightTreeNode[] = [
-    {
-      ...root,
-      height: rootHeight,
-      selected: selectedNodeId === root.id,
-      width: rootWidth,
-      x: rootX,
-      y: 40,
-    },
-  ]
-  const edges: InsightTreeEdge[] = []
-
-  root.branches.forEach((branch, branchIndex) => {
-    const branchX = branchStartX + branchIndex * branchGap
-
-    nodes.push({
-      ...branch,
-      height: branchHeight,
-      selected: selectedNodeId === branch.id || branch.selected,
-      width: branchWidth,
-      x: branchX,
-      y: branchY,
-    })
-    edges.push({ from: root.id, to: branch.id })
-
-    const leafTotalWidth =
-      branch.leaves.length > 0
-        ? branch.leaves.length * leafWidth +
-          (branch.leaves.length - 1) * (leafGap - leafWidth)
-        : leafWidth
-    const leafStartX = branchX + branchWidth / 2 - leafTotalWidth / 2
-
-    branch.leaves.forEach((leaf, leafIndex) => {
-      nodes.push({
-        ...leaf,
-        height: leafHeight,
-        selected: selectedNodeId === leaf.id,
-        width: leafWidth,
-        x: leafStartX + leafIndex * leafGap,
-        y: 560,
-      })
-      edges.push({ from: branch.id, to: leaf.id })
-    })
-  })
-
-  return {
-    edges,
-    height: 760,
-    nodes,
-    width: canvasWidth,
-  }
-}
-
 type InsightFlowNodeData = MemoryInsightNode & {
   height: number
   selected?: boolean
@@ -446,7 +462,7 @@ type InsightFlowNodeData = MemoryInsightNode & {
 }
 
 type InsightFlowNodeType = FlowNode<InsightFlowNodeData, "insight">
-type InsightFlowEdgeType = FlowEdge<Record<string, never>, "smoothstep">
+type InsightFlowEdgeType = FlowEdge<Record<string, never>, "default">
 
 function InsightFlowNode({
   data,
@@ -455,18 +471,38 @@ function InsightFlowNode({
   const isRoot = data.kind === "root"
   const isLeaf = data.kind === "leaf"
   const highlighted = Boolean(selected || data.selected)
+  const kindLabel = isRoot ? "Root" : isLeaf ? "Leaf" : "Branch"
   const dotClassName =
     data.label === "Bug"
       ? "bg-destructive"
       : data.label === "Metric"
         ? "bg-primary"
         : "bg-muted-foreground"
+  const shellClassName = cn(
+    "flex h-full w-full min-w-0 overflow-hidden",
+    isRoot && "flex-col justify-center gap-0.5 px-1.5 py-1",
+    !isRoot && !isLeaf && "items-center gap-1 px-1 py-0.5",
+    isLeaf && "items-center gap-0.5 px-0.5 py-0.5"
+  )
+  const labelClassName = cn(
+    "shrink-0 rounded-sm font-bold leading-none uppercase",
+    isRoot
+      ? "max-w-[46px] bg-primary/10 px-1 py-0.5 text-[6px] text-primary"
+      : "max-w-[21px] bg-muted px-0.5 py-px text-[5px] text-muted-foreground",
+    highlighted && !isRoot && "bg-primary/10 text-primary"
+  )
+  const titleClassName = cn(
+    "min-w-0 flex-1 truncate font-semibold leading-none text-foreground",
+    isRoot && "text-[7px]",
+    !isRoot && !isLeaf && "text-[6px]",
+    isLeaf && "text-[5px]"
+  )
 
   return (
     <button
       aria-label={`Open ${data.kind} insight ${data.title}`}
       className={cn(
-        "group flex h-full w-full flex-col rounded-md border bg-white text-left shadow-sm transition-all hover:border-primary/60 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none",
+        "group flex h-full w-full overflow-hidden rounded-md border bg-white text-left shadow-sm transition-all hover:border-primary/60 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none",
         isRoot && "rounded-lg",
         highlighted && "border-primary shadow-lg ring-4 ring-muted"
       )}
@@ -479,77 +515,40 @@ function InsightFlowNode({
         position={Position.Top}
         type="target"
       />
-      {isRoot ? (
-        <>
-          <div className="flex items-start justify-between px-6 pt-6">
-            <Badge className="rounded" variant="default">
-              {data.label}
-            </Badge>
-            <span className="font-mono text-[10px] text-muted-foreground">
-              #{data.id}
-            </span>
-          </div>
-          <div className="px-6 pt-5">
-            <h3 className="text-xl leading-tight font-bold tracking-tight text-foreground">
-              {data.title}
-            </h3>
-            <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
-              {data.description}
-            </p>
-          </div>
-          <div className="mt-auto grid grid-cols-2 border-t px-6 py-4">
-            <div>
-              <p className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase">
-                Children
-              </p>
-              <p className="mt-1 text-[13px] font-semibold text-foreground">
-                {data.children}
-              </p>
-            </div>
-            <div>
-              <p className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase">
-                Reliability
-              </p>
-              <p className="mt-1 text-[13px] font-semibold text-foreground">
-                High (94%)
-              </p>
-            </div>
-          </div>
-        </>
-      ) : isLeaf ? (
-        <div className="flex h-full flex-col justify-center px-4">
-          <div className="flex items-center gap-2">
-            <span className={cn("size-1.5 rounded-full", dotClassName)} />
-            <span className="text-[9px] font-bold tracking-wider text-muted-foreground uppercase">
+      <div className={shellClassName} data-testid="memory-insight-node-shell">
+        {isRoot ? (
+          <div className="flex min-w-0 items-center gap-1">
+            <span className={cn(labelClassName, "truncate")}>
               {data.label}
             </span>
+            <span className="min-w-0 flex-1 truncate font-mono text-[5px] leading-none text-muted-foreground">
+              {data.children}
+            </span>
           </div>
-          <h3 className="mt-4 text-[12px] leading-tight font-semibold text-foreground">
-            {data.title}
-          </h3>
-          <p className="mt-3 line-clamp-2 text-[11px] leading-normal text-muted-foreground">
-            {data.description}
-          </p>
-        </div>
-      ) : (
-        <div className="flex h-full flex-col px-5 py-5">
-          <div className="flex items-center justify-between">
-            <Badge
-              className="rounded"
-              variant={highlighted ? "default" : "secondary"}
-            >
+        ) : (
+          <span className={cn("size-1 shrink-0 rounded-full", dotClassName)} />
+        )}
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+          {!isRoot && !isLeaf ? (
+            <span className={cn(labelClassName, "truncate")}>
               {data.label}
-            </Badge>
-            {highlighted ? <Star className="text-primary" /> : null}
-          </div>
-          <h3 className="mt-6 text-[15px] leading-tight font-bold text-foreground">
+            </span>
+          ) : null}
+          <span
+            className={titleClassName}
+            data-testid="memory-insight-node-title"
+          >
             {data.title}
-          </h3>
-          <p className="mt-3 text-[12px] leading-normal text-muted-foreground">
-            {data.description}
-          </p>
+          </span>
+          {highlighted ? (
+            <span
+              aria-hidden="true"
+              className="size-1 shrink-0 rounded-full bg-primary"
+            />
+          ) : null}
         </div>
-      )}
+        <span className="sr-only">{kindLabel}</span>
+      </div>
       <Handle
         className="opacity-0"
         isConnectable={false}
@@ -582,7 +581,7 @@ function buildInsightFlowElements(layout: {
         selected: node.selected,
         width: node.width,
       },
-      draggable: false,
+      draggable: true,
       selectable: true,
       style: {
         height: node.height,
@@ -591,7 +590,7 @@ function buildInsightFlowElements(layout: {
     })),
     edges: layout.edges.map((edge) => ({
       id: `${edge.from}-${edge.to}`,
-      type: "smoothstep",
+      type: "default",
       source: edge.from,
       target: edge.to,
       selectable: false,
@@ -663,7 +662,7 @@ function InsightsCanvas({
         nodeTypes={insightNodeTypes}
         nodes={flowElements.nodes}
         nodesConnectable={false}
-        nodesDraggable={false}
+        nodesDraggable
         panOnScroll
         proOptions={{ hideAttribution: true }}
         width={layout.width}
@@ -821,22 +820,85 @@ function InsightDetails({
   )
 }
 
-export function InsightsPage({ data }: { data: MemoryDashboardData }) {
-  const roots = useMemo(() => getInsightRoots(data), [data])
+function InsightsEmptyState() {
+  return (
+    <section
+      className="flex min-h-0 flex-1 bg-muted/20 p-6"
+      data-testid="memory-insights-empty"
+    >
+      <Empty className="rounded-none border-0 bg-transparent">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <Lightbulb />
+          </EmptyMedia>
+          <EmptyTitle>No insights yet</EmptyTitle>
+          <EmptyDescription>
+            Insight Tree will appear after this memory has generated insight
+            records.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    </section>
+  )
+}
+
+function InsightsPageBody({
+  data,
+  roots,
+}: {
+  data: MemoryDashboardData
+  roots: InsightRoot[]
+}) {
   const [requestedRootId, setRequestedRootId] = useState<string | null>(null)
   const [explorerCollapsed, setExplorerCollapsed] = useState(false)
+  const [loadedNodes, setLoadedNodes] = useState<Map<string, MemoryInsightNode>>(
+    () => createPreloadedNodes(roots)
+  )
   const [selectedDetail, setSelectedDetail] =
     useState<MemoryInsightDetail | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const activeRootId = roots.some((root) => root.id === requestedRootId)
     ? requestedRootId
-    : roots[0]?.id
-  const activeRoot = roots.find((root) => root.id === activeRootId) ?? roots[0]
+    : null
+  const selectedRoot =
+    roots.find((root) => root.id === activeRootId) ?? null
+  const activeRoot = selectedRoot
+    ? withLoadedDescendants(selectedRoot, loadedNodes)
+    : null
+
+  async function loadInsightDescendants(childInsightIds: number[]) {
+    if (!childInsightIds.length) {
+      return
+    }
+
+    const children = await fetchInsightsList(childInsightIds)
+    const childNodes = children.map(insightNodeFromView)
+
+    setLoadedNodes((currentNodes) => {
+      const nextNodes = new Map(currentNodes)
+
+      childNodes.forEach((node) => {
+        nextNodes.set(node.id, node)
+      })
+
+      return nextNodes
+    })
+
+    for (const childNode of childNodes) {
+      await loadInsightDescendants(childNode.childInsightIds ?? [])
+    }
+  }
 
   function handleRootSelect(rootId: string) {
+    const root = roots.find((candidate) => candidate.id === rootId)
+
     setRequestedRootId(rootId)
     setSelectedDetail(null)
     setSelectedNodeId(null)
+
+    if (root) {
+      void loadInsightDescendants(root.childInsightIds ?? [])
+    }
   }
 
   function handleSelectNode(node: MemoryInsightNode) {
@@ -845,48 +907,67 @@ export function InsightsPage({ data }: { data: MemoryDashboardData }) {
   }
 
   return (
+    <section
+      className="flex min-h-0 flex-1 overflow-hidden"
+      data-testid="memory-insights-body"
+    >
+      <AnimatePresence initial={false}>
+        {!explorerCollapsed ? (
+          <InsightsExplorer
+            key="insights-explorer"
+            activeRoot={activeRoot}
+            activeRootId={activeRoot?.id ?? null}
+            roots={roots}
+            onCollapsedChange={setExplorerCollapsed}
+            onRootSelect={handleRootSelect}
+          />
+        ) : null}
+      </AnimatePresence>
+      <div className="relative flex h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden">
+        {activeRoot ? (
+          <InsightsCanvas
+            explorerCollapsed={explorerCollapsed}
+            root={activeRoot}
+            selectedNodeId={selectedNodeId}
+            onExpandExplorer={() => setExplorerCollapsed(false)}
+            onSelectNode={handleSelectNode}
+          />
+        ) : null}
+        <AnimatePresence initial={false}>
+          {selectedDetail ? (
+            <InsightDetails
+              key={selectedDetail.id}
+              detail={selectedDetail}
+              onClose={() => setSelectedDetail(null)}
+            />
+          ) : null}
+        </AnimatePresence>
+      </div>
+    </section>
+  )
+}
+
+export function InsightsPage({
+  data,
+  refreshAction,
+}: {
+  data: MemoryDashboardData
+  refreshAction: RefreshAction
+}) {
+  const roots = useMemo(() => getInsightRoots(data), [data])
+  const rootsKey = useMemo(() => JSON.stringify(roots), [roots])
+  const hasInsights = roots.length > 0
+
+  return (
     <div
       className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white"
       data-testid="memory-insights-workspace"
     >
-      <InsightsToolbar />
-      <section
-        className="flex min-h-0 flex-1 overflow-hidden"
-        data-testid="memory-insights-body"
-      >
-        <AnimatePresence initial={false}>
-          {!explorerCollapsed && activeRoot ? (
-            <InsightsExplorer
-              key="insights-explorer"
-              activeRoot={activeRoot}
-              activeRootId={activeRoot.id}
-              roots={roots}
-              onCollapsedChange={setExplorerCollapsed}
-              onRootSelect={handleRootSelect}
-            />
-          ) : null}
-        </AnimatePresence>
-        <div className="relative flex h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden">
-          {activeRoot ? (
-            <InsightsCanvas
-              explorerCollapsed={explorerCollapsed}
-              root={activeRoot}
-              selectedNodeId={selectedNodeId}
-              onExpandExplorer={() => setExplorerCollapsed(false)}
-              onSelectNode={handleSelectNode}
-            />
-          ) : null}
-          <AnimatePresence initial={false}>
-            {selectedDetail ? (
-              <InsightDetails
-                key={selectedDetail.id}
-                detail={selectedDetail}
-                onClose={() => setSelectedDetail(null)}
-              />
-            ) : null}
-          </AnimatePresence>
-        </div>
-      </section>
+      <InsightsToolbar refreshAction={refreshAction} />
+      {!hasInsights ? <InsightsEmptyState /> : null}
+      {hasInsights ? (
+        <InsightsPageBody key={rootsKey} data={data} roots={roots} />
+      ) : null}
     </div>
   )
 }

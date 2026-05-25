@@ -14,7 +14,7 @@
 
 import { fetchJson } from "@/lib/api/client"
 import type { PageResult } from "@/lib/api/pagination"
-import type { AdminItemView } from "./items-api"
+import type { AdminItemView } from "../ItemsPage/items-api"
 
 export type MemoryRawDataPageParams = {
   agentId?: string
@@ -63,15 +63,22 @@ export function fetchMemoryRawDataPage(
   memoryId: string,
   params: MemoryRawDataPageParams = {}
 ) {
-  return fetchJson<PageResult<AdminRawDataView>>(
-    `/admin/v1/memories/${encodeURIComponent(memoryId)}/raw-data`,
-    { query: params }
-  ).then((page) => ({
+  return fetchMemoryRawDataRecordsPage(memoryId, params).then((page) => ({
     pageLabel: `Page ${page.page.page} of ${page.page.totalPages}`,
     paginationLabel: `Showing ${page.items.length} of ${page.page.totalItems} records`,
     records: page.items,
     summary: [],
   }))
+}
+
+export function fetchMemoryRawDataRecordsPage(
+  memoryId: string,
+  params: MemoryRawDataPageParams = {}
+) {
+  return fetchJson<PageResult<AdminRawDataView>>(
+    `/admin/v1/memories/${encodeURIComponent(memoryId)}/raw-data`,
+    { query: params }
+  )
 }
 
 export function fetchAdminRawDataPage(params: MemoryRawDataPageParams = {}) {

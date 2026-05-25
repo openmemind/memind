@@ -63,14 +63,21 @@ export function fetchMemoryItemsPage(
   memoryId: string,
   params: MemoryItemsPageParams = {}
 ) {
-  return fetchJson<PageResult<AdminItemView>>(
-    `/admin/v1/memories/${encodeURIComponent(memoryId)}/items`,
-    { query: params }
-  ).then((page) => ({
+  return fetchMemoryItemsRecordsPage(memoryId, params).then((page) => ({
     paginationLabel: `Showing ${page.items.length} of ${page.page.totalItems} items`,
     records: page.items,
     summary: [],
   }))
+}
+
+export function fetchMemoryItemsRecordsPage(
+  memoryId: string,
+  params: MemoryItemsPageParams = {}
+) {
+  return fetchJson<PageResult<AdminItemView>>(
+    `/admin/v1/memories/${encodeURIComponent(memoryId)}/items`,
+    { query: params }
+  )
 }
 
 export function fetchAdminItemsPage(params: MemoryItemsPageParams = {}) {

@@ -26,6 +26,19 @@ export type AdminGraphNamedCount = {
   name: string
 }
 
+export const GraphEntityType = {
+  Person: "PERSON",
+  Organization: "ORGANIZATION",
+  Place: "PLACE",
+  Object: "OBJECT",
+  Concept: "CONCEPT",
+  Other: "OTHER",
+  Special: "SPECIAL",
+} as const
+
+export type GraphEntityType =
+  (typeof GraphEntityType)[keyof typeof GraphEntityType]
+
 export type AdminGraphSummaryView = {
   aliasCount: number
   cooccurrenceCount: number

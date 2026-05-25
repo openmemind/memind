@@ -36,19 +36,30 @@ import {
 import { PageHeader } from "@/features/shared/ui"
 import { cn } from "@/lib/utils"
 
-import { DetailRow } from "../components/DetailRow"
-import { JsonBlock } from "../components/JsonBlock"
-import { VectorStatus } from "../components/VectorStatus"
+import { DetailRow } from "../../components/DetailRow"
+import { JsonBlock } from "../../components/JsonBlock"
+import { VectorStatus } from "../../components/VectorStatus"
 import type {
   MemoryDashboardData,
   MemoryItemRecord,
-} from "../memory-dashboard-data"
-export function ItemsHeader() {
+} from "../../dashboard/memory-dashboard-data"
+import type { RefreshAction } from "../../dashboard/refresh-action"
+
+export function ItemsHeader({
+  refreshAction,
+}: {
+  refreshAction: RefreshAction
+}) {
   return (
     <PageHeader
       action={
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline">
+          <Button
+            disabled={refreshAction.isRefreshing}
+            onClick={refreshAction.onRefresh}
+            type="button"
+            variant="outline"
+          >
             <RefreshCcw data-icon="inline-start" />
             Refresh
           </Button>
@@ -195,41 +206,6 @@ function MemoryItemDetailsPanel({
     panelRef.current?.focus()
   }, [item.id])
 
-  useEffect(() => {
-    function handlePointerDown(event: PointerEvent) {
-      if (!panelRef.current?.contains(event.target as Node)) {
-        onClose()
-      }
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose()
-      }
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown)
-    document.addEventListener("keydown", handleKeyDown)
-
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown)
-      document.removeEventListener("keydown", handleKeyDown)
-    }
-  }, [onClose])
-
-  function handleBlur(event: React.FocusEvent<HTMLElement>) {
-    const nextTarget = event.relatedTarget
-
-    if (
-      nextTarget instanceof Node &&
-      event.currentTarget.contains(nextTarget)
-    ) {
-      return
-    }
-
-    onClose()
-  }
-
   function handleTransitionEnd(event: React.TransitionEvent<HTMLDivElement>) {
     if (event.target !== event.currentTarget || isVisible) {
       return
@@ -256,7 +232,6 @@ function MemoryItemDetailsPanel({
         data-state={isVisible ? "open" : "closed"}
         data-testid="item-details-panel"
         tabIndex={-1}
-        onBlur={handleBlur}
         onTransitionEnd={handleTransitionEnd}
       >
         <div className="flex shrink-0 items-start justify-between gap-4 border-b bg-popover px-6 py-5">
@@ -412,7 +387,13 @@ function MemoryItemDetailsPanel({
   )
 }
 
-export function ItemsPage({ data }: { data: MemoryDashboardData }) {
+export function ItemsPage({
+  data,
+  refreshAction,
+}: {
+  data: MemoryDashboardData
+  refreshAction: RefreshAction
+}) {
   const [selectedItem, setSelectedItem] = useState<MemoryItemRecord | null>(
     null
   )
@@ -456,7 +437,7 @@ export function ItemsPage({ data }: { data: MemoryDashboardData }) {
 
   return (
     <>
-      <ItemsHeader />
+      <ItemsHeader refreshAction={refreshAction} />
       <ItemsTable data={data} onViewItem={handleViewItem} />
       {selectedItem ? (
         <MemoryItemDetailsPanel

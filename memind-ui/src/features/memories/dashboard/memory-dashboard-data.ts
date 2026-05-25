@@ -19,25 +19,38 @@ import type { PageResult } from "@/lib/api/pagination"
 import type { AdminDashboardView } from "@/features/dashboard/dashboard-data"
 
 import {
+  fetchAdminConversationBuffersPage,
+  fetchAdminInsightBuffersPage,
+  type AdminConversationBufferView,
+  type AdminInsightBufferView,
+} from "../pages/BuffersPage/buffers-api"
+import {
   fetchAdminGraphBatchesPage,
   fetchAdminGraphEntitiesPage,
   fetchAdminGraphSummary,
   type AdminGraphBatchView,
   type AdminGraphEntityView,
   type AdminGraphSummaryView,
-} from "./graph-api"
+} from "../pages/GraphPage/graph-api"
 import {
-  fetchAdminInsightsPage,
+  fetchMemoryInsightTree,
   type AdminInsightView,
-} from "./insights-api"
-import { fetchAdminItemsPage, type AdminItemView } from "./items-api"
-import { fetchAdminRawDataPage, type AdminRawDataView } from "./raw-data-api"
+  type MemoryInsightTree,
+} from "../pages/InsightsPage/insights-api"
+import {
+  fetchMemoryItemsRecordsPage,
+  type AdminItemView,
+} from "../pages/ItemsPage/items-api"
+import {
+  fetchMemoryRawDataRecordsPage,
+  type AdminRawDataView,
+} from "../pages/RawDataPage/raw-data-api"
 import {
   fetchAdminMemoryThreadsPage,
   fetchAdminMemoryThreadStatus,
   type AdminMemoryThreadStatusView,
   type AdminMemoryThreadView,
-} from "./threads-api"
+} from "../pages/ThreadsPage/threads-api"
 
 export type MemoryDashboardMetric = {
   label: string
@@ -155,6 +168,7 @@ export type MemoryGraphNode = {
   id: string
   label: string
   type: "Person" | "Organization"
+  entityType: string
   icon: "person" | "organization"
   x: string
   y: string
@@ -245,6 +259,7 @@ export type MemoryInsightHierarchyGroup = {
 }
 
 export type MemoryInsightNode = {
+  childInsightIds?: number[]
   id: string
   label: string
   title: string
@@ -269,7 +284,7 @@ export type MemoryInsightDetail = {
 
 export type MemoryInsightsPageData = {
   hierarchy: MemoryInsightHierarchyGroup[]
-  root: MemoryInsightNode
+  root: MemoryInsightNode | null
   branches: Array<
     MemoryInsightNode & {
       selected?: boolean
@@ -286,7 +301,47 @@ export type MemoryInsightsPageData = {
       >
     }
   >
-  selectedDetail: MemoryInsightDetail
+  selectedDetail: MemoryInsightDetail | null
+}
+
+export type MemoryConversationBufferRecord = {
+  agentId: string
+  buffer: "conversation_buffer"
+  content: string
+  createdAt: string
+  extracted: boolean
+  id: string
+  memoryId: string
+  role: string
+  sessionId: string
+  sourceClient: string
+  updatedAt: string
+  userId: string
+  userName: string
+}
+
+export type MemoryInsightBufferRecord = {
+  agentId: string
+  buffer: "insight_buffer"
+  built: boolean
+  createdAt: string
+  groupName: string
+  id: string
+  insightTypeName: string
+  itemId: string
+  memoryId: string
+  updatedAt: string
+  userId: string
+}
+
+export type MemoryBufferRecord =
+  | MemoryConversationBufferRecord
+  | MemoryInsightBufferRecord
+
+export type MemoryBuffersPageData = {
+  conversationCount: number
+  insightCount: number
+  records: MemoryBufferRecord[]
 }
 
 export type MemoryDashboardData = {
@@ -311,18 +366,25 @@ export type MemoryDashboardData = {
   graph: MemoryGraphPageData
   threads: MemoryThreadsPageData
   insights: MemoryInsightsPageData
+  buffers: MemoryBuffersPageData
 }
 
 export type AdminMemoryDashboardApiData = {
+  conversationBuffers?: PageResult<AdminConversationBufferView>
   dashboard: AdminDashboardView
   graphBatches: PageResult<AdminGraphBatchView>
   graphEntities: PageResult<AdminGraphEntityView>
   graphSummary: AdminGraphSummaryView
-  insights: PageResult<AdminInsightView>
+  insightBuffers?: PageResult<AdminInsightBufferView>
+  insights: MemoryInsightTree
   items: PageResult<AdminItemView>
   rawData: PageResult<AdminRawDataView>
   threadStatus: AdminMemoryThreadStatusView
   threads: PageResult<AdminMemoryThreadView>
+}
+
+export type MemoryDashboardOverviewData = {
+  dashboard: AdminDashboardView
 }
 
 const dashboardByMemoryId: Record<string, MemoryDashboardData> = {
@@ -775,6 +837,7 @@ const dashboardByMemoryId: Record<string, MemoryDashboardData> = {
       ],
       nodes: [
         {
+          entityType: "PERSON",
           id: "emusk_772",
           label: "Elon Musk",
           type: "Person",
@@ -784,6 +847,7 @@ const dashboardByMemoryId: Record<string, MemoryDashboardData> = {
           size: "md",
         },
         {
+          entityType: "ORGANIZATION",
           id: "spacex_219",
           label: "SpaceX",
           type: "Organization",
@@ -1111,6 +1175,68 @@ const dashboardByMemoryId: Record<string, MemoryDashboardData> = {
         categories: ["Optimization", "Frontend", "Critical"],
       },
     },
+    buffers: {
+      conversationCount: 2,
+      insightCount: 2,
+      records: [
+        {
+          agentId: "agent_alpha",
+          buffer: "conversation_buffer",
+          content: "Need to commit checkout flow conversation before extraction.",
+          createdAt: "May 20, 2026, 10:35 AM",
+          extracted: false,
+          id: "9001",
+          memoryId: "MEM-8429-XQ",
+          role: "user",
+          sessionId: "session-checkout-42",
+          sourceClient: "chat-ui",
+          updatedAt: "May 20, 2026, 10:36 AM",
+          userId: "user_441",
+          userName: "Alex Chen",
+        },
+        {
+          agentId: "agent_alpha",
+          buffer: "conversation_buffer",
+          content: "Extracted renewal-plan conversation waiting for cleanup.",
+          createdAt: "May 20, 2026, 09:10 AM",
+          extracted: true,
+          id: "9002",
+          memoryId: "MEM-8429-XQ",
+          role: "assistant",
+          sessionId: "session-renewal-18",
+          sourceClient: "agent-runtime",
+          updatedAt: "May 20, 2026, 09:18 AM",
+          userId: "user_441",
+          userName: "Alex Chen",
+        },
+        {
+          agentId: "agent_alpha",
+          buffer: "insight_buffer",
+          built: false,
+          createdAt: "May 20, 2026, 10:40 AM",
+          groupName: "-",
+          id: "7001",
+          insightTypeName: "preference",
+          itemId: "293712",
+          memoryId: "MEM-8429-XQ",
+          updatedAt: "May 20, 2026, 10:41 AM",
+          userId: "user_441",
+        },
+        {
+          agentId: "agent_alpha",
+          buffer: "insight_buffer",
+          built: true,
+          createdAt: "May 20, 2026, 08:25 AM",
+          groupName: "retention",
+          id: "7002",
+          insightTypeName: "behavior",
+          itemId: "512611",
+          memoryId: "MEM-8429-XQ",
+          updatedAt: "May 20, 2026, 08:50 AM",
+          userId: "user_441",
+        },
+      ],
+    },
   },
 }
 
@@ -1242,9 +1368,108 @@ function latestActivityTime(apiData: AdminMemoryDashboardApiData) {
     apiData.threads.items[0]?.updatedAt ??
     apiData.rawData.items[0]?.updatedAt ??
     apiData.items.items[0]?.updatedAt ??
-    apiData.insights.items[0]?.updatedAt ??
+    apiData.insights.roots[0]?.updatedAt ??
     "-"
   )
+}
+
+function mapOverviewData(
+  memoryId: string,
+  apiData: MemoryDashboardOverviewData
+): MemoryDashboardData {
+  const scope = memoryScope(memoryId)
+  const backlogCount = backlogTotal(apiData.dashboard.backlog)
+  const base = fallbackDashboard
+
+  return {
+    ...base,
+    agentId: scope.agentId ?? "All agents",
+    attention: [
+      {
+        count: apiData.dashboard.backlog.conversationPending,
+        label: "Pending conversations",
+      },
+      {
+        count: apiData.dashboard.backlog.insightUnbuilt,
+        label: "Unbuilt insights",
+      },
+      {
+        count: apiData.dashboard.backlog.graphBatchRepairRequired,
+        label: "Graph repair required",
+        tone:
+          apiData.dashboard.backlog.graphBatchRepairRequired > 0
+            ? "danger"
+            : "default",
+      },
+    ],
+    id: memoryId,
+    identity: {
+      agent: scope.agentId ?? "All agents",
+      runtimeId: memoryId,
+    },
+    itemsByCategory: mapCategoryItems(apiData.dashboard.breakdown.itemTypes),
+    lastActivity: fallbackDashboard.lastActivity,
+    metrics: [
+      {
+        detail: "records",
+        label: "Raw Data",
+        value: formatCount(apiData.dashboard.totals.rawData),
+      },
+      {
+        detail: "items",
+        label: "Memory Items",
+        value: formatCount(apiData.dashboard.totals.items),
+      },
+      {
+        detail: "patterns",
+        label: "Insights",
+        value: formatCount(apiData.dashboard.totals.insights),
+      },
+      {
+        detail: "contexts",
+        label: "Threads",
+        value: formatCount(apiData.dashboard.totals.memoryThreads),
+      },
+      {
+        detail: "attention",
+        label: "Alerts",
+        tone: backlogCount > 0 ? "danger" : "default",
+        value: formatCount(backlogCount),
+      },
+    ],
+    name: memoryId,
+    pipeline: [
+      {
+        detail: `${formatCount(apiData.dashboard.totals.rawData)} Ingested`,
+        label: "Raw Data",
+        status: "complete",
+      },
+      {
+        detail: `${formatCount(apiData.dashboard.totals.items)} Extracted`,
+        label: "Items",
+        status: "complete",
+      },
+      {
+        detail: `${formatCount(
+          apiData.dashboard.backlog.graphBatchRepairRequired
+        )} Repair`,
+        label: "Graph / Threads",
+        status:
+          apiData.dashboard.backlog.graphBatchRepairRequired > 0
+            ? "warning"
+            : "complete",
+      },
+      {
+        detail: `${formatCount(apiData.dashboard.backlog.insightUnbuilt)} Pending`,
+        label: "Insights",
+        status:
+          apiData.dashboard.backlog.insightUnbuilt > 0 ? "pending" : "complete",
+      },
+    ],
+    rawDataByType: mapDistribution(apiData.dashboard.breakdown.rawDataTypes),
+    status: "Active",
+    userId: scope.userId,
+  }
 }
 
 function mapRawDataPage(rawData: PageResult<AdminRawDataView>): MemoryRawDataPageData {
@@ -1362,6 +1587,7 @@ function mapGraphPage(
     const row = Math.floor(index / 4)
 
     return {
+      entityType: entity.entityType ?? type.toUpperCase(),
       icon: type === "Organization" ? "organization" : "person",
       id: String(entity.id),
       label: entity.displayName ?? entity.entityKey ?? `Entity ${entity.id}`,
@@ -1512,6 +1738,7 @@ function insightNode(
 ): MemoryInsightNode {
   return {
     category: insight.type ?? "Insight",
+    childInsightIds: insight.childInsightIds ?? [],
     description: insight.content ?? insight.name ?? "-",
     id: String(insight.insightId),
     kind,
@@ -1520,79 +1747,71 @@ function insightNode(
   }
 }
 
-function mapInsightsPage(insights: PageResult<AdminInsightView>): MemoryInsightsPageData {
-  const byId = new Map(
-    insights.items.map((insight) => [insight.insightId, insight])
-  )
-  const childIds = new Set(
-    insights.items.flatMap((insight) => insight.childInsightIds ?? [])
-  )
-  const rootInsights = insights.items.filter(
+function mapInsightsTree(insights: MemoryInsightTree): MemoryInsightsPageData {
+  const insightItems = insights.roots
+  const rootInsights = insightItems.filter(
     (insight) =>
-      insight.tier?.toUpperCase() === "ROOT" ||
-      (!insight.parentInsightId && !childIds.has(insight.insightId))
+      insight.tier?.toUpperCase() === "ROOT" || !insight.parentInsightId
   )
-
-  function leavesForInsight(insight: AdminInsightView) {
-    return (insight.childInsightIds ?? [])
-      .map((childInsightId) => byId.get(childInsightId))
-      .filter((child): child is AdminInsightView => Boolean(child))
-      .map((child) => insightNode(child, "leaf"))
-  }
 
   const roots = rootInsights.map((rootInsight) => ({
     ...insightNode(rootInsight, "root"),
-    branches: (rootInsight.childInsightIds ?? [])
-      .map((childInsightId) => byId.get(childInsightId))
-      .filter((child): child is AdminInsightView => Boolean(child))
-      .map((childInsight) => ({
-        ...insightNode(childInsight, "branch"),
-        leaves: leavesForInsight(childInsight),
-      })),
+    branches: [],
   }))
-  const selectedInsight =
-    insights.items.find((insight) => insight.insightId === 442) ??
-    rootInsights[0] ??
-    insights.items[0]
-  const selectedPoints =
-    selectedInsight?.points
-      ?.map((point) => point.content)
-      .filter((point): point is string => Boolean(point)) ?? []
 
   return {
-    branches: roots[0]?.branches ?? [],
+    branches: [],
     hierarchy: [
       { count: roots.length, items: roots.map((root) => root.title), label: "Roots" },
-      {
-        count: roots.reduce((total, root) => total + root.branches.length, 0),
-        label: "Branches",
-      },
+      { count: 0, label: "Branches" },
       { count: 0, label: "Leaves" },
     ],
-    root:
-      roots[0] ??
-      {
-        category: "Insight",
-        description: "No insights returned by the API.",
-        id: "empty",
-        kind: "root",
-        label: "Root Insight",
-        title: "No insight selected",
-      },
+    root: null,
     roots,
-    selectedDetail: {
-      categories: selectedInsight?.categories ?? [],
-      description: selectedInsight?.content ?? "-",
-      id: String(selectedInsight?.insightId ?? "empty"),
-      kind: titleCase(selectedInsight?.tier ?? "Insight"),
-      metadata: [
-        { label: "TYPE", value: selectedInsight?.type ?? "-" },
-        { label: "SCOPE", value: selectedInsight?.scope ?? "-" },
-        { label: "TIER", value: selectedInsight?.tier ?? "-" },
-      ],
-      points: selectedPoints.length ? selectedPoints : [selectedInsight?.content ?? "-"],
-      title: selectedInsight?.name ?? "No insight selected",
-    },
+    selectedDetail: null,
+  }
+}
+
+function mapBuffersPage(
+  conversationBuffers: PageResult<AdminConversationBufferView>,
+  insightBuffers: PageResult<AdminInsightBufferView>
+): MemoryBuffersPageData {
+  const conversationRecords: MemoryConversationBufferRecord[] =
+    conversationBuffers.items.map((record) => ({
+      agentId: record.agentId ?? "-",
+      buffer: "conversation_buffer",
+      content: record.content ?? "-",
+      createdAt: formatDateTime(record.createdAt),
+      extracted: Boolean(record.extracted),
+      id: String(record.id),
+      memoryId: record.memoryId ?? "-",
+      role: record.role ?? "-",
+      sessionId: record.sessionId ?? "-",
+      sourceClient: record.sourceClient ?? "-",
+      updatedAt: formatDateTime(record.updatedAt ?? record.timestamp),
+      userId: record.userId ?? "-",
+      userName: record.userName ?? "-",
+    }))
+  const insightRecords: MemoryInsightBufferRecord[] = insightBuffers.items.map(
+    (record) => ({
+      agentId: record.agentId ?? "-",
+      buffer: "insight_buffer",
+      built: Boolean(record.built),
+      createdAt: formatDateTime(record.createdAt),
+      groupName: record.groupName ?? "-",
+      id: String(record.id),
+      insightTypeName: record.insightTypeName ?? "-",
+      itemId: String(record.itemId ?? "-"),
+      memoryId: record.memoryId ?? "-",
+      updatedAt: formatDateTime(record.updatedAt),
+      userId: record.userId ?? "-",
+    })
+  )
+
+  return {
+    conversationCount: conversationBuffers.page.totalItems,
+    insightCount: insightBuffers.page.totalItems,
+    records: [...conversationRecords, ...insightRecords],
   }
 }
 
@@ -1620,7 +1839,7 @@ export function mapAdminMemoryDashboardData(
         title: "Memory item extracted",
         tone: "default" as const,
       })),
-      ...apiData.insights.items.slice(0, 1).map((insight) => ({
+      ...apiData.insights.roots.slice(0, 1).map((insight) => ({
         detail: insight.content ?? insight.name ?? String(insight.insightId),
         time: formatDateTime(insight.updatedAt ?? insight.createdAt),
         title: "Insight reasoned",
@@ -1646,6 +1865,10 @@ export function mapAdminMemoryDashboardData(
             : "default",
       },
     ],
+    buffers:
+      apiData.conversationBuffers && apiData.insightBuffers
+        ? mapBuffersPage(apiData.conversationBuffers, apiData.insightBuffers)
+        : base.buffers,
     graph: mapGraphPage(
       apiData.graphSummary,
       apiData.graphEntities,
@@ -1656,7 +1879,7 @@ export function mapAdminMemoryDashboardData(
       agent: scope.agentId ?? "All agents",
       runtimeId: memoryId,
     },
-    insights: mapInsightsPage(apiData.insights),
+    insights: mapInsightsTree(apiData.insights),
     items: mapItemsPage(apiData.items),
     itemsByCategory: mapCategoryItems(apiData.dashboard.breakdown.itemTypes),
     lastActivity: formatDateTime(latestActivity),
@@ -1725,39 +1948,49 @@ export function mapAdminMemoryDashboardData(
   }
 }
 
-async function fetchMemoryDashboard(memoryId: string) {
-  const scope = memoryScope(memoryId)
-  const dashboardRequest = fetchJson<AdminDashboardView>("/admin/v1/dashboard", {
+async function fetchMemoryDashboardOverview(memoryId: string) {
+  const dashboard = await fetchJson<AdminDashboardView>("/admin/v1/dashboard", {
     query: { days: 7, memoryId },
   })
 
-  const [
+  return mapOverviewData(memoryId, {
     dashboard,
-    rawData,
-    items,
-    graphSummary,
-    graphEntities,
-    graphBatches,
-    threads,
-    threadStatus,
-    insights,
-  ] = await Promise.all([
-    dashboardRequest,
-    fetchAdminRawDataPage({
-      agentId: scope.agentId,
-      page: 1,
-      pageSize: 20,
-      userId: scope.userId,
-    }),
-    fetchAdminItemsPage({
-      agentId: scope.agentId,
-      page: 1,
-      pageSize: 20,
-      userId: scope.userId,
-    }),
+  })
+}
+
+async function fetchMemoryRawData(memoryId: string) {
+  const scope = memoryScope(memoryId)
+  return fetchMemoryRawDataRecordsPage(memoryId, {
+    agentId: scope.agentId,
+    page: 1,
+    pageSize: 20,
+    userId: scope.userId,
+  }).then(mapRawDataPage)
+}
+
+async function fetchMemoryItems(memoryId: string) {
+  const scope = memoryScope(memoryId)
+  return fetchMemoryItemsRecordsPage(memoryId, {
+    agentId: scope.agentId,
+    page: 1,
+    pageSize: 20,
+    userId: scope.userId,
+  }).then(mapItemsPage)
+}
+
+async function fetchMemoryGraph(memoryId: string) {
+  const [graphSummary, graphEntities, graphBatches] = await Promise.all([
     fetchAdminGraphSummary(memoryId),
     fetchAdminGraphEntitiesPage({ memoryId, page: 1, pageSize: 20 }),
     fetchAdminGraphBatchesPage({ memoryId, page: 1, pageSize: 20 }),
+  ])
+
+  return mapGraphPage(graphSummary, graphEntities, graphBatches)
+}
+
+async function fetchMemoryThreads(memoryId: string) {
+  const scope = memoryScope(memoryId)
+  const [threads, threadStatus] = await Promise.all([
     fetchAdminMemoryThreadsPage({
       agentId: scope.agentId,
       page: 1,
@@ -1768,30 +2001,85 @@ async function fetchMemoryDashboard(memoryId: string) {
       agentId: scope.agentId,
       userId: scope.userId,
     }),
-    fetchAdminInsightsPage({
-      agentId: scope.agentId,
+  ])
+
+  return mapThreadsPage(threads, threadStatus)
+}
+
+async function fetchMemoryInsights(memoryId: string) {
+  return fetchMemoryInsightTree(memoryId).then(mapInsightsTree)
+}
+
+async function fetchMemoryBuffers(memoryId: string) {
+  const [conversationBuffers, insightBuffers] = await Promise.all([
+    fetchAdminConversationBuffersPage({
+      memoryId,
       page: 1,
       pageSize: 20,
-      userId: scope.userId,
+      state: "all",
+    }),
+    fetchAdminInsightBuffersPage({
+      memoryId,
+      page: 1,
+      pageSize: 20,
+      state: "all",
     }),
   ])
 
-  return mapAdminMemoryDashboardData(memoryId, {
-    dashboard,
-    graphBatches,
-    graphEntities,
-    graphSummary,
-    insights,
-    items,
-    rawData,
-    threadStatus,
-    threads,
-  })
+  return mapBuffersPage(conversationBuffers, insightBuffers)
 }
 
 export function useMemoryDashboard(memoryId: string) {
   return useQuery({
     queryKey: ["memories", "dashboard", memoryId],
-    queryFn: () => fetchMemoryDashboard(memoryId),
+    queryFn: () => fetchMemoryDashboardOverview(memoryId),
+  })
+}
+
+export function useMemoryRawData(memoryId: string, enabled = true) {
+  return useQuery({
+    enabled,
+    queryKey: ["memories", "dashboard", memoryId, "raw-data"],
+    queryFn: () => fetchMemoryRawData(memoryId),
+  })
+}
+
+export function useMemoryItems(memoryId: string, enabled = true) {
+  return useQuery({
+    enabled,
+    queryKey: ["memories", "dashboard", memoryId, "items"],
+    queryFn: () => fetchMemoryItems(memoryId),
+  })
+}
+
+export function useMemoryGraph(memoryId: string, enabled = true) {
+  return useQuery({
+    enabled,
+    queryKey: ["memories", "dashboard", memoryId, "graph"],
+    queryFn: () => fetchMemoryGraph(memoryId),
+  })
+}
+
+export function useMemoryThreads(memoryId: string, enabled = true) {
+  return useQuery({
+    enabled,
+    queryKey: ["memories", "dashboard", memoryId, "threads"],
+    queryFn: () => fetchMemoryThreads(memoryId),
+  })
+}
+
+export function useMemoryInsights(memoryId: string, enabled = true) {
+  return useQuery({
+    enabled,
+    queryKey: ["memories", "dashboard", memoryId, "insights"],
+    queryFn: () => fetchMemoryInsights(memoryId),
+  })
+}
+
+export function useMemoryBuffers(memoryId: string, enabled = true) {
+  return useQuery({
+    enabled,
+    queryKey: ["memories", "dashboard", memoryId, "buffers"],
+    queryFn: () => fetchMemoryBuffers(memoryId),
   })
 }

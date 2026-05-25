@@ -22,9 +22,9 @@ const featureFiles = [
   "src/features/analytics/Analytics.tsx",
   "src/features/settings/Settings.tsx",
   "src/features/shared/ui.tsx",
-  "src/features/memories/memory-dashboard/pages/GraphPage.tsx",
-  "src/features/memories/memory-dashboard/pages/ItemsPage.tsx",
-  "src/features/memories/memory-dashboard/pages/RawDataPage.tsx",
+  "src/features/memories/pages/GraphPage/GraphPage.tsx",
+  "src/features/memories/pages/ItemsPage/ItemsPage.tsx",
+  "src/features/memories/pages/RawDataPage/RawDataPage.tsx",
 ]
 
 describe("feature select usage", () => {
@@ -42,7 +42,7 @@ describe("feature select usage", () => {
     const filesWithSelects = [
       "src/features/memories/Memories.tsx",
       "src/features/settings/Settings.tsx",
-      "src/features/memories/memory-dashboard/pages/GraphPage.tsx",
+      "src/features/memories/pages/GraphPage/GraphPage.tsx",
     ]
 
     for (const file of filesWithSelects) {
