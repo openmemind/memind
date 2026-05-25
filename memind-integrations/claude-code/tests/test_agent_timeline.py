@@ -25,7 +25,7 @@ from scripts.lib.agent_timeline import (
 
 
 class AgentTimelineTest(unittest.TestCase):
-    def test_normalizes_post_tool_use_to_command_event(self):
+    def test_normalizes_post_tool_use_to_test_result_event(self):
         event = normalize_hook_event(
             {
                 "hook_event_name": "PostToolUse",
@@ -40,7 +40,7 @@ class AgentTimelineTest(unittest.TestCase):
             turn_seq=1,
         )
 
-        self.assertEqual(event["kind"], "command")
+        self.assertEqual(event["kind"], "test_result")
         self.assertIn("eventId", event)
         self.assertNotIn("id", event)
         self.assertEqual(event["seq"], 1)
@@ -48,8 +48,139 @@ class AgentTimelineTest(unittest.TestCase):
         self.assertEqual(event["status"], "failed")
         self.assertEqual(event["exitCode"], 1)
         self.assertEqual(event["output"], '{"stdout": "rounding mismatch"}')
+        self.assertEqual(event["metadata"]["validationType"], "test")
+        self.assertEqual(event["metadata"]["normalizationVersion"], 1)
         self.assertEqual(event["metadata"]["turnId"], "s-turn-1")
         self.assertEqual(event["metadata"]["turnSeq"], 1)
+
+    def test_normalizes_non_test_bash_to_command_event(self):
+        event = normalize_hook_event(
+            {
+                "hook_event_name": "PostToolUse",
+                "session_id": "s",
+                "tool_name": "Bash",
+                "tool_input": {"command": "git status --short"},
+                "tool_response": {"exit_code": 0, "stdout": ""},
+                "timestamp": "2026-05-24T10:00:00Z",
+            },
+            seq=1,
+        )
+
+        self.assertEqual(event["kind"], "command")
+        self.assertEqual(event["command"], "git status --short")
+        self.assertEqual(event["status"], "success")
+        self.assertEqual(event["metadata"]["normalizationVersion"], 1)
+
+    def test_normalizes_file_read_tool_with_path(self):
+        event = normalize_hook_event(
+            {
+                "hook_event_name": "PostToolUse",
+                "session_id": "s",
+                "tool_name": "Read",
+                "tool_input": {"file_path": "src/payment/calc.ts"},
+                "tool_response": {"content": "export function calc() {}"},
+                "timestamp": "2026-05-24T10:01:00Z",
+            },
+            seq=2,
+        )
+
+        self.assertEqual(event["kind"], "file_read")
+        self.assertEqual(event["path"], "src/payment/calc.ts")
+        self.assertEqual(event["operation"], "read")
+        self.assertEqual(event["status"], "success")
+        self.assertEqual(event["metadata"]["toolCategory"], "file")
+
+    def test_normalizes_file_edit_tool_with_path_and_operation(self):
+        event = normalize_hook_event(
+            {
+                "hook_event_name": "PostToolUse",
+                "session_id": "s",
+                "tool_name": "MultiEdit",
+                "tool_input": {"file_path": "src/payment/calc.ts", "edits": []},
+                "tool_response": {"result": "ok"},
+                "timestamp": "2026-05-24T10:02:00Z",
+            },
+            seq=3,
+        )
+
+        self.assertEqual(event["kind"], "file_edit")
+        self.assertEqual(event["path"], "src/payment/calc.ts")
+        self.assertEqual(event["operation"], "multi_edit")
+        self.assertEqual(event["status"], "success")
+        self.assertEqual(event["metadata"]["toolCategory"], "file")
+
+    def test_preserves_search_tool_as_tool_result_with_search_metadata(self):
+        event = normalize_hook_event(
+            {
+                "hook_event_name": "PostToolUse",
+                "session_id": "s",
+                "tool_name": "Grep",
+                "tool_input": {"pattern": "AgentEpisodeAssembler", "path": "memind-plugins"},
+                "tool_response": {"matches": ["AgentEpisodeAssembler.java"]},
+                "timestamp": "2026-05-24T10:03:00Z",
+            },
+            seq=4,
+        )
+
+        self.assertEqual(event["kind"], "tool_result")
+        self.assertEqual(event["path"], "memind-plugins")
+        self.assertEqual(event["operation"], "search")
+        self.assertEqual(event["metadata"]["toolCategory"], "search")
+        self.assertEqual(event["metadata"]["searchPattern"], "AgentEpisodeAssembler")
+
+    def test_normalizes_web_search_before_generic_search(self):
+        event = normalize_hook_event(
+            {
+                "hook_event_name": "PostToolUse",
+                "session_id": "s",
+                "tool_name": "WebSearch",
+                "tool_input": {"query": "OpenMemind rawdata-agent"},
+                "tool_response": {"results": []},
+                "timestamp": "2026-05-24T10:03:30Z",
+            },
+            seq=5,
+        )
+
+        self.assertEqual(event["kind"], "tool_result")
+        self.assertEqual(event["operation"], "web_search")
+        self.assertEqual(event["metadata"]["toolCategory"], "web_search")
+        self.assertEqual(event["metadata"]["query"], "OpenMemind rawdata-agent")
+
+    def test_unknown_tool_keeps_raw_payload_and_extracts_path_when_available(self):
+        event = normalize_hook_event(
+            {
+                "hook_event_name": "PostToolUse",
+                "session_id": "s",
+                "tool_name": "CustomAnalyzer",
+                "tool_input": {"target_file": "src/main/java/Foo.java", "mode": "deep"},
+                "tool_response": {"summary": "ok"},
+                "timestamp": "2026-05-24T10:04:00Z",
+            },
+            seq=5,
+        )
+
+        self.assertEqual(event["kind"], "tool_result")
+        self.assertEqual(event["path"], "src/main/java/Foo.java")
+        self.assertEqual(event["operation"], "unknown")
+        self.assertIn('"mode": "deep"', event["input"])
+        self.assertEqual(event["metadata"]["toolCategory"], "unknown")
+
+    def test_unknown_tool_keeps_non_object_raw_input_and_output(self):
+        event = normalize_hook_event(
+            {
+                "hook_event_name": "PostToolUse",
+                "session_id": "s",
+                "tool_name": "CustomTool",
+                "tool_input": "raw input text",
+                "tool_response": "raw output text",
+                "timestamp": "2026-05-24T10:05:00Z",
+            },
+            seq=6,
+        )
+
+        self.assertEqual(event["kind"], "tool_result")
+        self.assertEqual(event["input"], "raw input text")
+        self.assertEqual(event["output"], "raw output text")
 
     def test_normalizes_user_prompt_and_stop_events_with_turn_metadata(self):
         prompt_event = normalize_user_prompt_event(
@@ -128,7 +259,7 @@ class AgentTimelineTest(unittest.TestCase):
                 "hook_event_name": "PostToolUse",
                 "session_id": "s",
                 "tool_name": "Bash",
-                "tool_input": {"command": "npm test payment"},
+                "tool_input": {"command": "git status --short"},
                 "tool_response": {"exit_code": 0},
                 "timestamp": "2026-05-24T10:00:00Z",
             },

@@ -19,11 +19,69 @@ from pathlib import Path
 
 
 MAX_TEXT_CHARS = 4000
+NORMALIZATION_VERSION = 1
 
 SECRET_PATTERNS = [
     ("openai_key", re.compile(r"sk-[A-Za-z0-9_-]{8,}")),
     ("bearer_token", re.compile(r"Bearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE)),
     ("private_key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.DOTALL)),
+]
+
+PATH_KEYS = [
+    "file_path",
+    "filepath",
+    "filePath",
+    "path",
+    "file",
+    "target_file",
+    "targetFile",
+    "target_path",
+    "targetPath",
+    "notebook_path",
+    "notebookPath",
+]
+PATH_LIST_KEYS = ["files", "paths"]
+COMMAND_KEYS = ["command", "cmd", "shell_command"]
+SEARCH_PATTERN_KEYS = ["pattern", "query", "regex", "glob"]
+URL_KEYS = ["url", "uri", "href"]
+
+TEST_COMMAND_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in [
+        r"(^|[\s;&|])(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:test|vitest|jest)(?:\b|:)",
+        r"(^|[\s;&|])pytest\b",
+        r"(^|[\s;&|])python(?:3)?\s+-m\s+unittest\b",
+        r"(^|[\s;&|])go\s+test\b",
+        r"(^|[\s;&|])cargo\s+test\b",
+        r"(^|[\s;&|])mvn\b.*\b(?:test|verify)\b",
+        r"(^|[\s;&|])(?:gradle|gradlew|./gradlew)\b.*\btest\b",
+        r"(^|[\s;&|])(?:vitest|jest|mocha|ctest|rspec)\b",
+    ]
+]
+
+LINT_COMMAND_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in [
+        r"(^|[\s;&|])(?:eslint|ruff|pylint|flake8|checkstyle)\b",
+        r"\b(?:lint|spotless:check|license:check)\b",
+    ]
+]
+
+TYPECHECK_COMMAND_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in [
+        r"\b(?:typecheck|type-check|tsc\s+--noEmit|mypy|pyright)\b",
+    ]
+]
+
+BUILD_COMMAND_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in [
+        r"(^|[\s;&|])(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?build\b",
+        r"(^|[\s;&|])mvn\b.*\b(?:compile|package|install)\b",
+        r"(^|[\s;&|])cargo\s+(?:build|check)\b",
+        r"(^|[\s;&|])go\s+build\b",
+    ]
 ]
 
 
@@ -69,6 +127,186 @@ def _json_text(value):
     if value is None or isinstance(value, str):
         return value
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+
+def _tool_tokens(tool_name):
+    if not tool_name:
+        return []
+    separated = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", str(tool_name))
+    return [part for part in re.split(r"[^A-Za-z0-9]+", separated.lower()) if part]
+
+
+def _has_token(tokens, values):
+    return any(token in values for token in tokens)
+
+
+def _first_string(mapping, keys):
+    if not isinstance(mapping, dict):
+        return None
+    for key in keys:
+        value = mapping.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return None
+
+
+def _path_values(tool_input):
+    if not isinstance(tool_input, dict):
+        return []
+    values = []
+    for key in PATH_KEYS:
+        value = tool_input.get(key)
+        if isinstance(value, str) and value.strip():
+            values.append(value)
+    for key in PATH_LIST_KEYS:
+        value = tool_input.get(key)
+        if isinstance(value, list):
+            values.extend(item for item in value if isinstance(item, str) and item.strip())
+    deduped = []
+    seen = set()
+    for value in values:
+        normalized = value.strip()
+        if normalized not in seen:
+            seen.add(normalized)
+            deduped.append(normalized)
+    return deduped
+
+
+def _validation_type(command):
+    if not command:
+        return None
+    if any(pattern.search(command) for pattern in TEST_COMMAND_PATTERNS):
+        return "test"
+    if any(pattern.search(command) for pattern in LINT_COMMAND_PATTERNS):
+        return "lint"
+    if any(pattern.search(command) for pattern in TYPECHECK_COMMAND_PATTERNS):
+        return "typecheck"
+    if any(pattern.search(command) for pattern in BUILD_COMMAND_PATTERNS):
+        return "build"
+    return None
+
+
+def _tool_operation(tokens):
+    if "multi" in tokens and "edit" in tokens:
+        return "multi_edit"
+    for operation in ["read", "view", "open", "edit", "write", "patch", "replace", "update"]:
+        if operation in tokens:
+            return operation
+    return None
+
+
+def _tool_normalization(tool_name, tool_input):
+    tokens = _tool_tokens(tool_name)
+    metadata = {"normalizationVersion": NORMALIZATION_VERSION}
+    command = _first_string(tool_input, COMMAND_KEYS)
+    paths = _path_values(tool_input)
+
+    if _has_token(tokens, {"bash", "shell", "exec", "run", "command"}) or command:
+        validation_type = _validation_type(command)
+        if validation_type:
+            metadata["validationType"] = validation_type
+        metadata["toolCategory"] = "command"
+        return {
+            "kind": "test_result" if validation_type == "test" else "command",
+            "command": command,
+            "operation": "run",
+            "metadata": metadata,
+        }
+
+    if _has_token(tokens, {"read", "view", "open"}) and not _has_token(tokens, {"thread"}):
+        metadata["toolCategory"] = "file"
+        return {
+            "kind": "file_read",
+            "path": paths[0] if paths else None,
+            "operation": "read",
+            "metadata": _with_paths(metadata, paths),
+        }
+
+    if _has_token(tokens, {"edit", "write", "patch", "replace", "update"}):
+        metadata["toolCategory"] = "file"
+        return {
+            "kind": "file_edit",
+            "path": paths[0] if paths else None,
+            "operation": _tool_operation(tokens) or "edit",
+            "metadata": _with_paths(metadata, paths),
+        }
+
+    if _has_token(tokens, {"web", "fetch", "http"}):
+        metadata["toolCategory"] = "web_search" if "search" in tokens else "web_fetch"
+        url = _first_string(tool_input, URL_KEYS)
+        query = _first_string(tool_input, ["query"])
+        if url:
+            metadata["url"] = url
+        if query:
+            metadata["query"] = query
+        return {"kind": "tool_result", "operation": metadata["toolCategory"], "metadata": metadata}
+
+    if _has_token(tokens, {"grep", "glob", "search", "find", "rg"}):
+        metadata["toolCategory"] = "search"
+        pattern = _first_string(tool_input, SEARCH_PATTERN_KEYS)
+        if pattern:
+            metadata["searchPattern"] = pattern
+        return {
+            "kind": "tool_result",
+            "path": paths[0] if paths else None,
+            "operation": "search",
+            "metadata": _with_paths(metadata, paths),
+        }
+
+    if _has_token(tokens, {"ls", "list"}):
+        metadata["toolCategory"] = "list"
+        return {
+            "kind": "tool_result",
+            "path": paths[0] if paths else None,
+            "operation": "list",
+            "metadata": _with_paths(metadata, paths),
+        }
+
+    if _has_token(tokens, {"todo"}):
+        metadata["toolCategory"] = "todo"
+        return {"kind": "tool_result", "operation": "todo", "metadata": metadata}
+
+    if _has_token(tokens, {"task", "agent", "subagent"}):
+        metadata["toolCategory"] = "subagent"
+        return {"kind": "tool_result", "operation": "subagent", "metadata": metadata}
+
+    metadata["toolCategory"] = "unknown"
+    return {
+        "kind": "tool_result",
+        "path": paths[0] if paths else None,
+        "operation": "unknown",
+        "metadata": _with_paths(metadata, paths),
+    }
+
+
+def _with_paths(metadata, paths):
+    if len(paths) > 1:
+        metadata = dict(metadata)
+        metadata["paths"] = paths
+    return metadata
+
+
+def _redact_metadata(metadata):
+    redacted = {}
+    redaction_kinds = []
+    for key, value in metadata.items():
+        if isinstance(value, str):
+            item, kinds = redact_text(value)
+            redacted[key] = item
+            redaction_kinds.extend(kinds)
+        elif isinstance(value, list):
+            items = []
+            for item in value:
+                if isinstance(item, str):
+                    redacted_item, kinds = redact_text(item)
+                    items.append(redacted_item)
+                    redaction_kinds.extend(kinds)
+                else:
+                    items.append(item)
+            redacted[key] = items
+        else:
+            redacted[key] = value
+    return redacted, sorted(set(redaction_kinds))
 
 
 def event_id(source_client, session_id, seq, hook_input, kind=None, text=None):
@@ -153,24 +391,34 @@ def normalize_hook_event(hook_input, seq, turn_id=None, turn_seq=None):
     source_client = hook_input.get("source_client") or "codex"
     session_id = hook_input.get("session_id") or "unknown-session"
     tool_name = hook_input.get("tool_name")
-    tool_input = hook_input.get("tool_input") or {}
-    tool_response = hook_input.get("tool_response") or {}
-    exit_code = tool_response.get("exit_code")
+    raw_tool_input = hook_input.get("tool_input")
+    raw_tool_response = hook_input.get("tool_response")
+    tool_input = raw_tool_input if isinstance(raw_tool_input, dict) else {}
+    tool_response = raw_tool_response if isinstance(raw_tool_response, dict) else {}
+    exit_code = tool_response.get("exit_code") if isinstance(tool_response, dict) else None
     redaction_kinds = []
+    normalization = _tool_normalization(tool_name, tool_input)
+    event_kind = normalization["kind"]
 
     event = {
-        "eventId": event_id(source_client, session_id, seq, hook_input, _event_kind(tool_name)),
+        "eventId": event_id(source_client, session_id, seq, hook_input, event_kind),
         "seq": seq,
-        "kind": _event_kind(tool_name),
+        "kind": event_kind,
         "occurredAt": hook_input.get("timestamp"),
         "toolName": tool_name,
     }
-    if tool_name == "Bash" and isinstance(tool_input, dict):
-        command, kinds = redact_text(tool_input.get("command") or "")
+    if normalization.get("path"):
+        path, kinds = redact_text(normalization["path"])
+        event["path"] = path
+        redaction_kinds.extend(kinds)
+    if normalization.get("operation"):
+        event["operation"] = normalization["operation"]
+    if normalization.get("command") is not None:
+        command, kinds = redact_text(normalization.get("command") or "")
         event["command"] = command
         redaction_kinds.extend(kinds)
     else:
-        redacted_input, kinds = _redact_value(tool_input)
+        redacted_input, kinds = _redact_value(raw_tool_input if raw_tool_input is not None else {})
         event["input"] = _json_text(redacted_input)
         redaction_kinds.extend(kinds)
 
@@ -180,17 +428,23 @@ def normalize_hook_event(hook_input, seq, turn_id=None, turn_seq=None):
     else:
         event["status"] = "success" if hook_input.get("hook_event_name") == "PostToolUse" else "running"
 
-    output = {
-        key: value
-        for key, value in tool_response.items()
-        if key not in {"exit_code", "exitCode"} and value is not None
-    }
+    if isinstance(raw_tool_response, dict):
+        output = {
+            key: value
+            for key, value in raw_tool_response.items()
+            if key not in {"exit_code", "exitCode"} and value is not None
+        }
+    else:
+        output = raw_tool_response
     if output:
         redacted_output, kinds = _redact_value(output)
         event["output"] = _json_text(redacted_output)
         redaction_kinds.extend(kinds)
 
     metadata = {"hookEventName": hook_input.get("hook_event_name")}
+    normalization_metadata, kinds = _redact_metadata(normalization.get("metadata") or {})
+    metadata.update(normalization_metadata)
+    redaction_kinds.extend(kinds)
     if turn_id:
         metadata["turnId"] = turn_id
     if turn_seq is not None:
@@ -200,12 +454,6 @@ def normalize_hook_event(hook_input, seq, turn_id=None, turn_seq=None):
         metadata["redactionKinds"] = sorted(set(redaction_kinds))
     event["metadata"] = {key: value for key, value in metadata.items() if value is not None}
     return {key: value for key, value in event.items() if value is not None}
-
-
-def _event_kind(tool_name):
-    if tool_name == "Bash":
-        return "command"
-    return "tool_result"
 
 
 def append_event(state, event):

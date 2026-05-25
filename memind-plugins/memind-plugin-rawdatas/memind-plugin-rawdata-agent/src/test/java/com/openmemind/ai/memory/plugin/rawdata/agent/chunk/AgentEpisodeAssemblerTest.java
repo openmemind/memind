@@ -49,6 +49,108 @@ class AgentEpisodeAssemblerTest {
     }
 
     @Test
+    void shouldUseNormalizedFileAndTestEventsInEpisodeMetadata() {
+        List<AgentEvent> events =
+                List.of(
+                        AgentEpisodeTestSupport.event(
+                                "e1",
+                                1,
+                                AgentEventKind.USER_PROMPT,
+                                "2026-05-24T10:00:00Z",
+                                "Fix payment tests",
+                                null,
+                                null,
+                                AgentEventStatus.SUCCESS,
+                                null,
+                                null,
+                                null,
+                                null),
+                        AgentEpisodeTestSupport.event(
+                                "e2",
+                                2,
+                                AgentEventKind.FILE_READ,
+                                "2026-05-24T10:01:00Z",
+                                null,
+                                "Read",
+                                null,
+                                AgentEventStatus.SUCCESS,
+                                "src/payment/calc.ts",
+                                "read",
+                                null,
+                                null),
+                        AgentEpisodeTestSupport.event(
+                                "e3",
+                                3,
+                                AgentEventKind.FILE_EDIT,
+                                "2026-05-24T10:02:00Z",
+                                null,
+                                "MultiEdit",
+                                null,
+                                AgentEventStatus.SUCCESS,
+                                "src/payment/calc.ts",
+                                "multi_edit",
+                                null,
+                                null),
+                        AgentEpisodeTestSupport.event(
+                                "e4",
+                                4,
+                                AgentEventKind.TEST_RESULT,
+                                "2026-05-24T10:03:00Z",
+                                null,
+                                "Bash",
+                                "rounding mismatch",
+                                AgentEventStatus.FAILED,
+                                null,
+                                "run",
+                                "npm test payment",
+                                1),
+                        AgentEpisodeTestSupport.event(
+                                "e5",
+                                5,
+                                AgentEventKind.TEST_RESULT,
+                                "2026-05-24T10:04:00Z",
+                                null,
+                                "Bash",
+                                "passed",
+                                AgentEventStatus.SUCCESS,
+                                null,
+                                "run",
+                                "npm test payment",
+                                0),
+                        AgentEpisodeTestSupport.event(
+                                "e6",
+                                6,
+                                AgentEventKind.STOP,
+                                "2026-05-24T10:05:00Z",
+                                null,
+                                null,
+                                null,
+                                AgentEventStatus.SUCCESS,
+                                null,
+                                null,
+                                null,
+                                null));
+
+        List<AgentEpisode> episodes =
+                new AgentEpisodeAssembler()
+                        .assemble(AgentEpisodeTestSupport.paymentTimeline(events));
+
+        assertThat(episodes).hasSize(1);
+        AgentEpisode episode = episodes.getFirst();
+        assertThat(episode.outcome()).isEqualTo(AgentOutcome.SUCCESS);
+        assertThat(episode.files()).containsExactly("src/payment/calc.ts");
+        assertThat(episode.fileReferences())
+                .extracting("eventId", "path", "operation")
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("e2", "src/payment/calc.ts", "read"),
+                        org.assertj.core.groups.Tuple.tuple(
+                                "e3", "src/payment/calc.ts", "multi_edit"));
+        assertThat(episode.commands()).containsExactly("npm test payment");
+        assertThat(episode.commandEvents()).hasSize(2);
+        assertThat(episode.failureSignals()).contains("rounding mismatch");
+    }
+
+    @Test
     void shouldClosePreviousEpisodeWhenNewUserPromptAppears() {
         var events = new ArrayList<>(AgentEpisodeTestSupport.paymentEvents());
         events.add(

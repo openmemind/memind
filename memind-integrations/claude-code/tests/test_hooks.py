@@ -157,7 +157,7 @@ class HookTest(unittest.TestCase):
             self.assertEqual(output, {"continue": True})
             state_file = next(state_dir.glob("*.json"))
             event = json.loads(state_file.read_text())["agentEvents"][0]
-            self.assertEqual(event["kind"], "command")
+            self.assertEqual(event["kind"], "test_result")
             self.assertEqual(event["status"], "running")
 
     def test_post_tool_use_fails_open(self):
@@ -183,7 +183,7 @@ class HookTest(unittest.TestCase):
             self.assertEqual(output, {"continue": True})
             state_file = next(state_dir.glob("*.json"))
             event = json.loads(state_file.read_text())["agentEvents"][0]
-            self.assertEqual(event["kind"], "command")
+            self.assertEqual(event["kind"], "test_result")
             self.assertEqual(event["status"], "success")
 
     def test_retrieve_buffers_user_prompt_event_before_memory_lookup(self):
