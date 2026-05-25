@@ -186,6 +186,35 @@ class HookTest(unittest.TestCase):
             self.assertEqual(event["kind"], "command")
             self.assertEqual(event["status"], "success")
 
+    def test_retrieve_buffers_user_prompt_event_before_memory_lookup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp) / "state"
+            env = {
+                "CLAUDE_PLUGIN_ROOT": str(ROOT),
+                "PYTHONPATH": str(ROOT),
+                "MEMIND_CLAUDE_STATE_ROOT": str(state_dir),
+                "MEMIND_API_URL": "http://127.0.0.1:9",
+            }
+            output = self.run_hook(
+                "retrieve.py",
+                {
+                    "hook_event_name": "UserPromptSubmit",
+                    "cwd": tmp,
+                    "session_id": "s1",
+                    "prompt": "Fix payment tests",
+                    "timestamp": "2026-05-24T10:00:00Z",
+                },
+                env=env,
+            )
+            self.assertEqual(output, {"continue": True})
+            state_file = next(state_dir.glob("*.json"))
+            state = json.loads(state_file.read_text())
+            event = state["agentEvents"][0]
+            self.assertEqual(event["kind"], "user_prompt")
+            self.assertEqual(event["text"], "Fix payment tests")
+            self.assertEqual(event["metadata"]["turnSeq"], 1)
+            self.assertTrue(event["metadata"]["turnId"].startswith("s1-turn-"))
+
     def test_retrieve_fail_open_when_memind_unavailable(self):
         with tempfile.TemporaryDirectory() as tmp:
             env = {
@@ -274,9 +303,36 @@ class HookTest(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as tmp:
             state_dir = Path(tmp) / "state"
+            transcript = Path(tmp) / "transcript.jsonl"
+            transcript.write_text(
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "content": "Updated calc.ts and payment tests now pass."
+                        },
+                    }
+                )
+                + "\n"
+            )
             with SessionStateStore(state_dir).locked("s1") as state:
                 state.append_agent_event(
-                    {"eventId": "e1", "seq": 1, "kind": "command", "command": "npm test"}
+                    {
+                        "eventId": "e1",
+                        "seq": 1,
+                        "kind": "user_prompt",
+                        "text": "Fix payment tests",
+                        "metadata": {"turnId": "s1-turn-1", "turnSeq": 1},
+                    }
+                )
+                state.append_agent_event(
+                    {
+                        "eventId": "e2",
+                        "seq": 2,
+                        "kind": "command",
+                        "command": "npm test",
+                        "metadata": {"turnId": "s1-turn-1", "turnSeq": 1},
+                    }
                 )
             with mock.patch.object(ingest, "state_root", return_value=state_dir):
                 with mock.patch.object(ingest, "retry_root", return_value=Path(tmp) / "retry"):
@@ -286,16 +342,25 @@ class HookTest(unittest.TestCase):
                         result = ingest.ingest_messages(
                             config,
                             {
+                                "hook_event_name": "Stop",
                                 "session_id": "s1",
                                 "cwd": tmp,
+                                "transcript_path": str(transcript),
+                                "timestamp": "2026-05-24T10:04:00Z",
                             },
                         )
-            self.assertEqual(result["agentEventsSubmitted"], 1)
+            self.assertEqual(result["agentEventsSubmitted"], 4)
             client.extract.assert_awaited_once()
             raw_content = client.extract.await_args.args[2]
             self.assertEqual(raw_content["type"], "agent_timeline")
             self.assertEqual(raw_content["sessionId"], "s1")
             self.assertEqual(raw_content["events"][0]["eventId"], "e1")
+            self.assertEqual(
+                [event["kind"] for event in raw_content["events"]],
+                ["user_prompt", "command", "assistant_message", "stop"],
+            )
+            self.assertEqual(raw_content["agentTurnId"], "s1-turn-1")
+            self.assertEqual(raw_content["metadata"]["turnId"], "s1-turn-1")
             with SessionStateStore(state_dir).locked("s1") as state:
                 self.assertEqual(state.agent_events(), [])
 

@@ -199,6 +199,24 @@ class AgentEpisodeAssemblerTest {
         assertThat(episodes.get(1).eventIds()).containsExactly("e3");
     }
 
+    @Test
+    void shouldSplitEpisodesWhenTurnMetadataChanges() {
+        List<AgentEvent> events =
+                List.of(
+                        eventWithTurnMetadata(
+                                "e1", 1, AgentEventKind.USER_PROMPT, "Fix payment tests", "turn-a"),
+                        eventWithTurnMetadata("e2", 2, AgentEventKind.COMMAND, null, "turn-a"),
+                        eventWithTurnMetadata("e3", 3, AgentEventKind.COMMAND, null, "turn-b"));
+
+        List<AgentEpisode> episodes =
+                new AgentEpisodeAssembler()
+                        .assemble(AgentEpisodeTestSupport.paymentTimeline(events));
+
+        assertThat(episodes).hasSize(2);
+        assertThat(episodes.getFirst().eventIds()).containsExactly("e1", "e2");
+        assertThat(episodes.get(1).eventIds()).containsExactly("e3");
+    }
+
     private static AgentEvent eventWithMetadata(
             String id, int seq, AgentEventKind kind, String text, String taskId) {
         AgentEvent base =
@@ -231,5 +249,39 @@ class AgentEpisodeAssemblerTest {
                 base.command(),
                 base.exitCode(),
                 Map.of("taskId", taskId));
+    }
+
+    private static AgentEvent eventWithTurnMetadata(
+            String id, int seq, AgentEventKind kind, String text, String turnId) {
+        AgentEvent base =
+                AgentEpisodeTestSupport.event(
+                        id,
+                        seq,
+                        kind,
+                        "2026-05-24T10:1" + seq + ":00Z",
+                        text,
+                        "Bash",
+                        null,
+                        AgentEventStatus.SUCCESS,
+                        null,
+                        null,
+                        "npm test payment",
+                        0);
+        return new AgentEvent(
+                base.eventId(),
+                base.seq(),
+                base.kind(),
+                base.occurredAt(),
+                base.text(),
+                base.toolName(),
+                base.input(),
+                base.output(),
+                base.status(),
+                base.durationMs(),
+                base.path(),
+                base.operation(),
+                base.command(),
+                base.exitCode(),
+                Map.of("turnId", turnId));
     }
 }

@@ -86,3 +86,19 @@ def read_recent_context(path, turns):
             break
     entries.reverse()
     return "\n".join(f"{role}: {text}" for role, text in entries)
+
+
+def read_last_assistant_message(path):
+    if not path or not Path(path).exists():
+        return ""
+    for line in reversed(_tail_lines(path)):
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if str(entry.get("type", "")).lower() != "assistant":
+            continue
+        texts = _text_blocks((entry.get("message") or {}).get("content"))
+        if texts:
+            return texts[0]
+    return ""

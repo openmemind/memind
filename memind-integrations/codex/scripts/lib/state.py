@@ -88,6 +88,7 @@ class SessionState:
         self.data = data
         self.data.setdefault("agentEvents", [])
         self.data.setdefault("nextAgentSeq", 1)
+        self.data.setdefault("nextAgentTurnSeq", 1)
 
     def append_agent_event(self, event):
         events = list(self.data.get("agentEvents", []))
@@ -120,6 +121,35 @@ class SessionState:
         self.data["nextAgentSeq"] = seq + 1
         self.data["updatedAt"] = time.time()
         return seq
+
+    def current_agent_turn(self):
+        turn_id = self.data.get("currentAgentTurnId")
+        turn_seq = self.data.get("currentAgentTurnSeq")
+        if not turn_id or turn_seq is None:
+            return None, None
+        return turn_id, int(turn_seq)
+
+    def start_agent_turn(self, session_key):
+        turn_seq = int(self.data.get("nextAgentTurnSeq", 1))
+        self.data["nextAgentTurnSeq"] = turn_seq + 1
+        turn_id = f"{_safe_name(session_key)}-turn-{turn_seq}"
+        self.data["currentAgentTurnId"] = turn_id
+        self.data["currentAgentTurnSeq"] = turn_seq
+        self.data["updatedAt"] = time.time()
+        return turn_id, turn_seq
+
+    def ensure_agent_turn(self, session_key):
+        turn_id, turn_seq = self.current_agent_turn()
+        if turn_id:
+            return turn_id, turn_seq
+        return self.start_agent_turn(session_key)
+
+    def close_agent_turn(self, turn_id=None):
+        current_turn_id = self.data.get("currentAgentTurnId")
+        if turn_id is None or turn_id == current_turn_id:
+            self.data.pop("currentAgentTurnId", None)
+            self.data.pop("currentAgentTurnSeq", None)
+            self.data["updatedAt"] = time.time()
 
 
 class SessionStateStore:

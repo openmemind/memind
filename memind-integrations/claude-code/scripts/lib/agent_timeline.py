@@ -71,7 +71,7 @@ def _json_text(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
 
-def event_id(source_client, session_id, seq, hook_input):
+def event_id(source_client, session_id, seq, hook_input, kind=None, text=None):
     hook_name = hook_input.get("hook_event_name") or ""
     tool_name = hook_input.get("tool_name") or ""
     timestamp = hook_input.get("timestamp") or ""
@@ -83,13 +83,73 @@ def event_id(source_client, session_id, seq, hook_input):
             "hook": hook_name,
             "tool": tool_name,
             "timestamp": timestamp,
+            "kind": kind or "",
+            "textHash": hashlib.sha256((text or "").encode("utf-8")).hexdigest(),
         },
         sort_keys=True,
     )
     return hashlib.sha256(stable.encode("utf-8")).hexdigest()
 
 
-def normalize_hook_event(hook_input, seq):
+def _base_event(hook_input, seq, kind, turn_id=None, turn_seq=None, text=None):
+    source_client = hook_input.get("source_client") or "claude-code"
+    session_id = hook_input.get("session_id") or "unknown-session"
+    metadata = {"hookEventName": hook_input.get("hook_event_name")}
+    if turn_id:
+        metadata["turnId"] = turn_id
+    if turn_seq is not None:
+        metadata["turnSeq"] = turn_seq
+    return {
+        "eventId": event_id(source_client, session_id, seq, hook_input, kind, text),
+        "seq": seq,
+        "kind": kind,
+        "occurredAt": hook_input.get("timestamp"),
+        "metadata": {key: value for key, value in metadata.items() if value is not None},
+    }
+
+
+def normalize_user_prompt_event(hook_input, seq, turn_id=None, turn_seq=None):
+    text, redaction_kinds = redact_text(hook_input.get("prompt") or hook_input.get("user_prompt") or "")
+    event = _base_event(hook_input, seq, "user_prompt", turn_id, turn_seq, text)
+    event["text"] = text
+    event["status"] = "success"
+    if redaction_kinds:
+        metadata = dict(event["metadata"])
+        metadata["redacted"] = True
+        metadata["redactionKinds"] = sorted(set(redaction_kinds))
+        event["metadata"] = metadata
+    return {key: value for key, value in event.items() if value is not None and value != ""}
+
+
+def normalize_assistant_message_event(hook_input, seq, turn_id=None, turn_seq=None, text=None):
+    redacted, redaction_kinds = redact_text(text or "")
+    event = _base_event(hook_input, seq, "assistant_message", turn_id, turn_seq, redacted)
+    event["text"] = redacted
+    event["status"] = "success"
+    if redaction_kinds:
+        metadata = dict(event["metadata"])
+        metadata["redacted"] = True
+        metadata["redactionKinds"] = sorted(set(redaction_kinds))
+        event["metadata"] = metadata
+    return {key: value for key, value in event.items() if value is not None and value != ""}
+
+
+def normalize_stop_event(hook_input, seq, turn_id=None, turn_seq=None):
+    text = hook_input.get("reason") or hook_input.get("stop_reason") or ""
+    event = _base_event(hook_input, seq, "stop", turn_id, turn_seq, text)
+    if text:
+        redacted, redaction_kinds = redact_text(text)
+        event["text"] = redacted
+        if redaction_kinds:
+            metadata = dict(event["metadata"])
+            metadata["redacted"] = True
+            metadata["redactionKinds"] = sorted(set(redaction_kinds))
+            event["metadata"] = metadata
+    event["status"] = "success"
+    return {key: value for key, value in event.items() if value is not None and value != ""}
+
+
+def normalize_hook_event(hook_input, seq, turn_id=None, turn_seq=None):
     source_client = hook_input.get("source_client") or "claude-code"
     session_id = hook_input.get("session_id") or "unknown-session"
     tool_name = hook_input.get("tool_name")
@@ -99,7 +159,7 @@ def normalize_hook_event(hook_input, seq):
     redaction_kinds = []
 
     event = {
-        "eventId": event_id(source_client, session_id, seq, hook_input),
+        "eventId": event_id(source_client, session_id, seq, hook_input, _event_kind(tool_name)),
         "seq": seq,
         "kind": _event_kind(tool_name),
         "occurredAt": hook_input.get("timestamp"),
@@ -130,9 +190,11 @@ def normalize_hook_event(hook_input, seq):
         event["output"] = _json_text(redacted_output)
         redaction_kinds.extend(kinds)
 
-    metadata = {
-        "hookEventName": hook_input.get("hook_event_name"),
-    }
+    metadata = {"hookEventName": hook_input.get("hook_event_name")}
+    if turn_id:
+        metadata["turnId"] = turn_id
+    if turn_seq is not None:
+        metadata["turnSeq"] = turn_seq
     if redaction_kinds:
         metadata["redacted"] = True
         metadata["redactionKinds"] = sorted(set(redaction_kinds))
@@ -155,13 +217,15 @@ def build_timeline_payload(config, identity, session_id, events, hook_input):
     cwd = hook_input.get("cwd")
     first_seq = events[0].get("seq") if events else 0
     last_seq = events[-1].get("seq") if events else 0
-    agent_turn_id = f"{session_id}-agent-turn-{first_seq}-{last_seq}"
+    turn_id = _shared_metadata(events, "turnId")
+    turn_seq = _shared_metadata(events, "turnSeq")
+    agent_turn_id = turn_id or f"{session_id}-agent-turn-{first_seq}-{last_seq}"
     payload = {
         "type": "agent_timeline",
         "sourceClient": source_client,
         "sessionId": session_id,
         "agentTurnId": agent_turn_id,
-        "timelineId": f"{session_id}-agent-{first_seq}-{last_seq}",
+        "timelineId": f"{agent_turn_id}-timeline",
         "events": list(events),
         "metadata": {
             "userId": identity.get("userId"),
@@ -169,7 +233,23 @@ def build_timeline_payload(config, identity, session_id, events, hook_input):
             "eventIds": [event["eventId"] for event in events if event.get("eventId")],
         },
     }
+    if turn_id:
+        payload["metadata"]["turnId"] = turn_id
+    if turn_seq is not None:
+        payload["metadata"]["turnSeq"] = turn_seq
     if cwd:
         path = Path(cwd)
         payload["project"] = {"name": path.name, "rootPath": str(path)}
     return payload
+
+
+def _shared_metadata(events, key):
+    values = []
+    for event in events:
+        metadata = event.get("metadata") or {}
+        value = metadata.get(key)
+        if value is not None:
+            values.append(value)
+    if len(set(values)) == 1:
+        return values[0]
+    return None

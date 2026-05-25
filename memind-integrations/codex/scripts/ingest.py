@@ -23,8 +23,13 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from lib.client import MemindClient
-from lib.agent_timeline import build_timeline_payload
+from lib.agent_timeline import (
+    build_timeline_payload,
+    normalize_assistant_message_event,
+    normalize_stop_event,
+)
 from lib.config import load_config
+from lib.content import read_last_assistant_message
 from lib.identity import resolve_identity
 from lib.logging_utils import debug_log
 from lib.retry import RetrySpool
@@ -61,6 +66,29 @@ def _spool_agent_timeline(retry_spool, identity, source_client, session_key, eve
     )
 
 
+def _is_stop_hook(hook_input):
+    return (hook_input.get("hook_event_name") or "") == "Stop"
+
+
+def _append_stop_events(state, session_key, hook_input):
+    if not _is_stop_hook(hook_input):
+        return None
+    turn_id, turn_seq = state.ensure_agent_turn(session_key)
+    assistant_text = read_last_assistant_message(hook_input.get("transcript_path"))
+    if assistant_text:
+        seq = state.next_agent_seq()
+        state.append_agent_event(
+            normalize_assistant_message_event(
+                hook_input, seq, turn_id=turn_id, turn_seq=turn_seq, text=assistant_text
+            )
+        )
+    seq = state.next_agent_seq()
+    state.append_agent_event(
+        normalize_stop_event(hook_input, seq, turn_id=turn_id, turn_seq=turn_seq)
+    )
+    return turn_id
+
+
 async def ingest_messages_async(config, hook_input):
     identity = resolve_identity(config, hook_input)
     client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=10, max_retries=0)
@@ -70,9 +98,15 @@ async def ingest_messages_async(config, hook_input):
     session_key = state_key(hook_input)
     source_client = config.get("sourceClient")
     agent_events_submitted = 0
+    submitted_turn_id = None
 
     with store.locked(session_key) as state:
-        agent_events = state.agent_events() if config.get("autoIngestAgentTimeline", True) else []
+        if config.get("autoIngestAgentTimeline", True):
+            hook_input["source_client"] = source_client or "codex"
+            submitted_turn_id = _append_stop_events(state, session_key, hook_input)
+            agent_events = state.agent_events()
+        else:
+            agent_events = []
 
     if agent_events:
         timeline_payload = build_timeline_payload(
@@ -102,10 +136,11 @@ async def ingest_messages_async(config, hook_input):
             status = getattr(response, "status", None)
             if status == "SUCCESS":
                 agent_events_submitted = len(agent_events)
-                store.clear_agent_events(
-                    session_key,
-                    [event["eventId"] for event in agent_events if event.get("eventId")],
-                )
+                with store.locked(session_key) as state:
+                    state.clear_agent_events(
+                        [event["eventId"] for event in agent_events if event.get("eventId")]
+                    )
+                    state.close_agent_turn(submitted_turn_id)
             else:
                 _spool_agent_timeline(
                     retry_spool,

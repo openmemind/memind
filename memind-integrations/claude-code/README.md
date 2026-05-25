@@ -13,7 +13,8 @@ The integration is intentionally small:
 - Uses the official Memind Python client.
 - No local daemon management.
 - No MCP dependency.
-- Captures coding-agent tool and command activity as Memind `agent_timeline` raw data.
+- Captures each coding-agent turn as Memind `agent_timeline` raw data: user prompt, tool/command activity,
+  optional final assistant text, and stop boundary.
 
 ## What It Does
 
@@ -100,7 +101,7 @@ The installed hooks are:
 | Claude Code event | Script | Timeout | Purpose |
 | --- | --- | ---: | --- |
 | `SessionStart` | `scripts/session_start.py` | 5s | Health check, replay at most one failed retry payload, and clean old state. |
-| `UserPromptSubmit` | `scripts/retrieve.py` | 12s | Retrieve relevant Memind context for the current user prompt. |
+| `UserPromptSubmit` | `scripts/retrieve.py` | 12s | Buffer the user prompt event and retrieve relevant Memind context. |
 | `PreToolUse` | `scripts/pre_tool_use.py` | 5s | Buffer a redacted tool-start event in local session state. |
 | `PostToolUse` | `scripts/post_tool_use.py` | 5s | Buffer a redacted tool-result event in local session state. |
 | `PreCompact` | `scripts/pre_compact.py` | 30s | Flush buffered `agent_timeline` events before context compaction. |
@@ -146,7 +147,7 @@ Settings are loaded in this order:
 | `agentIdMode` | `project` | `project` appends a stable project suffix; any other value uses `agentId` as-is. |
 | `sourceClient` | `claude-code` | Source marker stored with Memind data. |
 | `autoRetrieve` | `true` | Enables prompt-time memory retrieval. |
-| `autoIngestAgentTimeline` | `true` | Enables `PreToolUse`/`PostToolUse` event buffering and `agent_timeline` rawdata flush. |
+| `autoIngestAgentTimeline` | `true` | Enables user prompt, tool/result, assistant message, and stop event buffering plus `agent_timeline` rawdata flush. |
 | `retrieveStrategy` | `SIMPLE` | Memind retrieval strategy. |
 | `retrieveMaxEntries` | `8` | Maximum formatted memory entries injected into Claude Code. |
 | `retrieveMaxChars` | `6000` | Maximum injected context characters. |
@@ -229,7 +230,8 @@ Agent memory items are grouped separately when returned by Memind:
 ## Ingestion Behavior
 
 Ingestion is timeline-only for Claude Code. The plugin does not submit transcript conversation rawdata. It buffers
-tool and command events under `~/.memind/claude-code/state/` and flushes them through
+one turn timeline under `~/.memind/claude-code/state/`: the submitted user prompt, tool and command events, the
+latest assistant message when available from the transcript, and a stop boundary. It flushes the turn through
 `AsyncMemindClient.memory.extract(...)` as agent timeline rawdata. A typical timeline payload looks like:
 
 ```json
@@ -241,19 +243,43 @@ tool and command events under `~/.memind/claude-code/state/` and flushes them th
     "type": "agent_timeline",
     "sourceClient": "claude-code",
     "sessionId": "session-123",
-    "agentTurnId": "session-123-agent-turn-1-1",
-    "timelineId": "session-123-agent-1-2",
+    "agentTurnId": "session-123-turn-1",
+    "timelineId": "session-123-turn-1-timeline",
     "project": {"name": "payment-service", "rootPath": "/repo/payment-service"},
     "events": [
       {
         "eventId": "event-id",
         "seq": 1,
+        "kind": "user_prompt",
+        "text": "Fix payment tests",
+        "status": "success",
+        "metadata": {"turnId": "session-123-turn-1", "turnSeq": 1}
+      },
+      {
+        "eventId": "event-id",
+        "seq": 2,
         "kind": "command",
         "toolName": "Bash",
         "command": "npm test payment",
         "status": "failed",
         "exitCode": 1,
-        "output": "{\"stdout\": \"rounding mismatch\"}"
+        "output": "{\"stdout\": \"rounding mismatch\"}",
+        "metadata": {"turnId": "session-123-turn-1", "turnSeq": 1}
+      },
+      {
+        "eventId": "event-id",
+        "seq": 3,
+        "kind": "assistant_message",
+        "text": "Updated calc.ts and payment tests now pass.",
+        "status": "success",
+        "metadata": {"turnId": "session-123-turn-1", "turnSeq": 1}
+      },
+      {
+        "eventId": "event-id",
+        "seq": 4,
+        "kind": "stop",
+        "status": "success",
+        "metadata": {"turnId": "session-123-turn-1", "turnSeq": 1}
       }
     ]
   }

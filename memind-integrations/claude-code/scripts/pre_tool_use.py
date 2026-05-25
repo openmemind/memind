@@ -33,8 +33,9 @@ def main():
         session_id = hook_input.get("session_id") or "unknown-session"
         hook_input["source_client"] = config.get("sourceClient") or "claude-code"
         with SessionStateStore(state_root()).locked(session_id) as state:
+            turn_id, turn_seq = state.ensure_agent_turn(session_id)
             seq = state.next_agent_seq()
-            event = normalize_hook_event(hook_input, seq)
+            event = normalize_hook_event(hook_input, seq, turn_id=turn_id, turn_seq=turn_seq)
             state.append_agent_event(event)
     except Exception as exc:
         try:

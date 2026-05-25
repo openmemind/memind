@@ -74,7 +74,7 @@ public final class AgentEpisodeAssembler {
         List<AgentEpisode> episodes = new ArrayList<>();
         List<AgentEvent> current = new ArrayList<>();
         AgentEvent previous = null;
-        String currentTaskKey = null;
+        String currentBoundaryKey = null;
 
         for (AgentEvent event : events) {
             boolean startsNewPrompt =
@@ -84,23 +84,23 @@ public final class AgentEpisodeAssembler {
                             && (startsNewPrompt
                                     || exceedsGap(previous, event)
                                     || exceedsEventLimit(current)
-                                    || taskKeyChanged(currentTaskKey, taskKey(event)));
+                                    || boundaryKeyChanged(currentBoundaryKey, boundaryKey(event)));
             if (crossesBoundary) {
                 episodes.add(buildEpisode(timeline, current, "full", Map.of()));
                 current = new ArrayList<>();
-                currentTaskKey = null;
+                currentBoundaryKey = null;
             }
 
             current.add(event);
-            if (currentTaskKey == null) {
-                currentTaskKey = taskKey(event);
+            if (currentBoundaryKey == null) {
+                currentBoundaryKey = boundaryKey(event);
             }
             previous = event;
 
             if (isTerminal(event)) {
                 episodes.add(buildEpisode(timeline, current, "full", Map.of()));
                 current = new ArrayList<>();
-                currentTaskKey = null;
+                currentBoundaryKey = null;
                 previous = null;
             }
         }
@@ -356,13 +356,18 @@ public final class AgentEpisodeAssembler {
         return current.size() >= options.maxEventsPerEpisode();
     }
 
-    private boolean taskKeyChanged(String currentTaskKey, String nextTaskKey) {
-        return hasText(currentTaskKey)
-                && hasText(nextTaskKey)
-                && !currentTaskKey.equals(nextTaskKey);
+    private boolean boundaryKeyChanged(String currentBoundaryKey, String nextBoundaryKey) {
+        return hasText(currentBoundaryKey)
+                && hasText(nextBoundaryKey)
+                && !currentBoundaryKey.equals(nextBoundaryKey);
     }
 
-    private String taskKey(AgentEvent event) {
+    private String boundaryKey(AgentEvent event) {
+        Object turnId = event.metadata().get("turnId");
+        Object turnSeq = event.metadata().get("turnSeq");
+        if (turnId != null || turnSeq != null) {
+            return normalized(turnId) + "|" + normalized(turnSeq);
+        }
         Object taskId = event.metadata().get("taskId");
         Object subtaskId = event.metadata().get("subtaskId");
         if (taskId == null && subtaskId == null) {

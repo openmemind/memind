@@ -20,10 +20,13 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from lib.client import MemindClient
+from lib.agent_timeline import normalize_user_prompt_event
 from lib.config import load_config
 from lib.content import read_recent_context
 from lib.identity import resolve_identity
 from lib.logging_utils import debug_log
+from lib.state import SessionStateStore
+from ingest import state_root
 
 
 AGENT_CATEGORY_SECTIONS = [
@@ -97,11 +100,21 @@ def main():
     try:
         hook_input = json.loads(sys.stdin.read() or "{}")
         config = load_config()
+        session_id = hook_input.get("session_id") or "unknown-session"
+        prompt = hook_input.get("prompt") or ""
+        hook_input["source_client"] = config.get("sourceClient") or "claude-code"
+        with SessionStateStore(state_root()).locked(session_id) as state:
+            turn_id, turn_seq = state.start_agent_turn(session_id)
+            seq = state.next_agent_seq()
+            state.append_agent_event(
+                normalize_user_prompt_event(
+                    hook_input, seq, turn_id=turn_id, turn_seq=turn_seq
+                )
+            )
         if not config.get("autoRetrieve", True):
             print(json.dumps({"continue": True}))
             return
         identity = resolve_identity(config, hook_input)
-        prompt = hook_input.get("prompt") or ""
         context_turns = int(config.get("retrieveContextTurns", 0))
         recent_context = read_recent_context(hook_input.get("transcript_path"), context_turns)
         query = prompt if not recent_context else f"{recent_context}\ncurrent: {prompt}"
