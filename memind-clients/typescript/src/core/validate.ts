@@ -168,6 +168,11 @@ function assertRetrievedItem(value: unknown, index: number): RetrievedItem {
   }
   const occurredAt = optionalString(obj.occurredAt, `items[${index}].occurredAt`)
   if (occurredAt !== undefined) item.occurredAt = occurredAt
+  const category = optionalString(obj.category, `items[${index}].category`)
+  if (category !== undefined) item.category = category
+  if (obj.metadata !== undefined && obj.metadata !== null) {
+    item.metadata = objectRecord(obj.metadata, `items[${index}].metadata`)
+  }
   return item
 }
 

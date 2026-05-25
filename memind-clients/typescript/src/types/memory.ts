@@ -64,6 +64,8 @@ export type RetrievedItem = {
   vectorScore: number
   finalScore: number
   occurredAt?: string
+  category?: string
+  metadata?: Record<string, unknown>
 }
 
 export type RetrievedInsight = {

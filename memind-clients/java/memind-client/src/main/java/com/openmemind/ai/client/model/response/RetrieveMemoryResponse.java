@@ -16,6 +16,7 @@ package com.openmemind.ai.client.model.response;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record RetrieveMemoryResponse(
@@ -30,7 +31,23 @@ public record RetrieveMemoryResponse(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record RetrievedItem(
-            String id, String text, float vectorScore, double finalScore, Instant occurredAt) {}
+            String id,
+            String text,
+            float vectorScore,
+            double finalScore,
+            Instant occurredAt,
+            String category,
+            Map<String, Object> metadata) {
+
+        public RetrievedItem(
+                String id, String text, float vectorScore, double finalScore, Instant occurredAt) {
+            this(id, text, vectorScore, finalScore, occurredAt, null, Map.of());
+        }
+
+        public RetrievedItem {
+            metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+        }
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record RetrievedInsight(String id, String text, String tier) {}

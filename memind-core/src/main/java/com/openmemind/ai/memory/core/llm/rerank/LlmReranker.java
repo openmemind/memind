@@ -128,13 +128,7 @@ public class LlmReranker implements Reranker {
                             var original = results.get(r.index);
                             int retrievalRank = r.index + 1;
                             double blended = legacyBlendScore(retrievalRank, r.relevanceScore);
-                            return new ScoredResult(
-                                    original.sourceType(),
-                                    original.sourceId(),
-                                    original.text(),
-                                    original.vectorScore(),
-                                    blended,
-                                    original.occurredAt());
+                            return original.withFinalScore(blended);
                         })
                 .sorted(Comparator.comparingDouble(ScoredResult::finalScore).reversed())
                 .toList();
@@ -272,13 +266,7 @@ public class LlmReranker implements Reranker {
                                 // Pure mode: reranker score is the final score
                                 finalScore = r.relevanceScore;
                             }
-                            return new ScoredResult(
-                                    original.sourceType(),
-                                    original.sourceId(),
-                                    original.text(),
-                                    original.vectorScore(),
-                                    finalScore,
-                                    original.occurredAt());
+                            return original.withFinalScore(finalScore);
                         })
                 .sorted(Comparator.comparingDouble(ScoredResult::finalScore).reversed())
                 .toList();

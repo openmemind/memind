@@ -124,9 +124,8 @@ final class ThreadAssistMemberRanker {
                 .limit(effectivePerThreadCap)
                 .map(
                         candidate ->
-                                new ScoredResult(
-                                        ScoredResult.SourceType.ITEM,
-                                        Long.toString(candidate.item().id()),
+                                ScoredResult.fromItem(
+                                        candidate.item(),
                                         candidate.item().content(),
                                         0.0f,
                                         candidate.membership().relevanceWeight(),

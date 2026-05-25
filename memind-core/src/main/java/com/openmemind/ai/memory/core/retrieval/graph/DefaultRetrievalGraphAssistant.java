@@ -218,13 +218,7 @@ public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssis
     }
 
     private ScoredResult rescore(ScoredResult result, double fusedScore) {
-        return new ScoredResult(
-                result.sourceType(),
-                result.sourceId(),
-                result.text(),
-                result.vectorScore(),
-                fusedScore,
-                result.occurredAt());
+        return result.withFinalScore(fusedScore);
     }
 
     private int countDisplacedDirectItems(

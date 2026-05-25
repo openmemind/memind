@@ -164,7 +164,9 @@ class OpenMemoryApplicationServiceTest {
                                         "loves coffee",
                                         0.82F,
                                         0.91,
-                                        Instant.parse("2026-03-30T10:00:00Z"))),
+                                        Instant.parse("2026-03-30T10:00:00Z"),
+                                        "tool",
+                                        Map.of("toolName", "Bash"))),
                         List.of(
                                 new RetrievalResult.InsightResult(
                                         "insight-1", "prefers concise answers", InsightTier.LEAF)),
@@ -185,6 +187,11 @@ class OpenMemoryApplicationServiceTest {
                                 "u1", "a1", "coffee", RetrievalConfig.Strategy.SIMPLE));
 
         assertThat(response.items()).singleElement().extracting("id").isEqualTo("item-1");
+        assertThat(response.items()).singleElement().extracting("category").isEqualTo("tool");
+        assertThat(response.items())
+                .singleElement()
+                .extracting("metadata")
+                .isEqualTo(Map.of("toolName", "Bash"));
         assertThat(response.insights()).singleElement().extracting("tier").isEqualTo("LEAF");
         assertThat(response.rawData()).singleElement().extracting("rawDataId").isEqualTo("rd-1");
         assertThat(runtimeManager.currentHandle().inFlightRequests()).hasValue(0);

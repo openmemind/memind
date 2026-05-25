@@ -72,6 +72,8 @@ class RetrievedItem(MemindModel):
     vector_score: float = 0.0
     final_score: float = 0.0
     occurred_at: str | None = None
+    category: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class RetrievedInsight(MemindModel):

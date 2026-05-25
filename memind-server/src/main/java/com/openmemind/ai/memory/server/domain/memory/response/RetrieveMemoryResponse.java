@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.server.domain.memory.response;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 public record RetrieveMemoryResponse(
         String status,
@@ -38,7 +39,23 @@ public record RetrieveMemoryResponse(
     }
 
     public record RetrievedItemView(
-            String id, String text, float vectorScore, double finalScore, Instant occurredAt) {}
+            String id,
+            String text,
+            float vectorScore,
+            double finalScore,
+            Instant occurredAt,
+            String category,
+            Map<String, Object> metadata) {
+
+        public RetrievedItemView(
+                String id, String text, float vectorScore, double finalScore, Instant occurredAt) {
+            this(id, text, vectorScore, finalScore, occurredAt, null, Map.of());
+        }
+
+        public RetrievedItemView {
+            metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+        }
+    }
 
     public record RetrievedInsightView(String id, String text, String tier) {}
 

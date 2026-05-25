@@ -100,14 +100,7 @@ public final class TimeDecay {
                 double decayFactor = factor(r.occurredAt(), context, scoring);
                 if (decayFactor < 1.0) {
                     anyChanged = true;
-                    updated.add(
-                            new ScoredResult(
-                                    r.sourceType(),
-                                    r.sourceId(),
-                                    r.text(),
-                                    r.vectorScore(),
-                                    r.finalScore() * decayFactor,
-                                    r.occurredAt()));
+                    updated.add(r.withFinalScore(r.finalScore() * decayFactor));
                     continue;
                 }
             }

@@ -111,13 +111,8 @@ public final class DefaultTemporalItemChannel implements TemporalItemChannel {
     private ScoredResult toScoredResult(
             TemporalConstraint constraint, TemporalItemLookupMatch match) {
         MemoryItem item = match.item();
-        return new ScoredResult(
-                ScoredResult.SourceType.ITEM,
-                String.valueOf(item.id()),
-                item.content(),
-                0f,
-                temporalProximity(constraint, match),
-                match.anchor());
+        return ScoredResult.fromItem(
+                item, item.content(), 0f, temporalProximity(constraint, match), match.anchor());
     }
 
     private double temporalProximity(TemporalConstraint constraint, TemporalItemLookupMatch match) {

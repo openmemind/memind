@@ -386,9 +386,8 @@ public final class GraphExpansionEngine {
         return sorted.stream()
                 .map(
                         candidate ->
-                                new ScoredResult(
-                                        ScoredResult.SourceType.ITEM,
-                                        String.valueOf(candidate.itemId()),
+                                ScoredResult.fromItem(
+                                        candidate.item(),
                                         candidate.content() == null ? "" : candidate.content(),
                                         0f,
                                         candidate.score() / divisor,
@@ -497,7 +496,7 @@ public final class GraphExpansionEngine {
                             * recencyAdjustment;
             double nonSemanticScore = bestNonSemanticBaseScore * recencyAdjustment;
             return new GraphCandidate(
-                    itemId,
+                    item,
                     Math.max(semanticScore, nonSemanticScore),
                     item.content(),
                     item.occurredAt());
@@ -522,7 +521,11 @@ public final class GraphExpansionEngine {
     }
 
     private record GraphCandidate(
-            long itemId, double score, String content, java.time.Instant occurredAt) {}
+            MemoryItem item, double score, String content, java.time.Instant occurredAt) {
+        private long itemId() {
+            return item.id();
+        }
+    }
 
     private enum RelationFamily {
         SEMANTIC,

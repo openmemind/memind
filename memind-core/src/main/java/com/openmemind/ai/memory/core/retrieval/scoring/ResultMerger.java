@@ -115,14 +115,7 @@ public final class ResultMerger {
                 .forEach(
                         entry -> {
                             ScoredResult best = bestResults.get(entry.getKey());
-                            merged.add(
-                                    new ScoredResult(
-                                            best.sourceType(),
-                                            best.sourceId(),
-                                            best.text(),
-                                            best.vectorScore(),
-                                            entry.getValue(),
-                                            best.occurredAt()));
+                            merged.add(best.withFinalScore(entry.getValue()));
                         });
 
         // Normalize RRF scores to [0, 1], so minScore filtering works properly
@@ -135,14 +128,7 @@ public final class ResultMerger {
         if (results.size() <= 1) {
             if (results.size() == 1) {
                 ScoredResult r = results.get(0);
-                return List.of(
-                        new ScoredResult(
-                                r.sourceType(),
-                                r.sourceId(),
-                                r.text(),
-                                r.vectorScore(),
-                                1.0,
-                                r.occurredAt()));
+                return List.of(r.withFinalScore(1.0));
             }
             return List.copyOf(results);
         }
@@ -152,17 +138,7 @@ public final class ResultMerger {
             return List.copyOf(results);
         }
 
-        return results.stream()
-                .map(
-                        r ->
-                                new ScoredResult(
-                                        r.sourceType(),
-                                        r.sourceId(),
-                                        r.text(),
-                                        r.vectorScore(),
-                                        r.finalScore() / maxScore,
-                                        r.occurredAt()))
-                .toList();
+        return results.stream().map(r -> r.withFinalScore(r.finalScore() / maxScore)).toList();
     }
 
     /** Top-rank bonus: rank 1 +0.05, rank 2-3 +0.02 (reference QMD) */
@@ -180,14 +156,7 @@ public final class ResultMerger {
             } else if (i <= 2) {
                 bonus = scoring.positionBonus().top3();
             }
-            boosted.add(
-                    new ScoredResult(
-                            r.sourceType(),
-                            r.sourceId(),
-                            r.text(),
-                            r.vectorScore(),
-                            r.finalScore() + bonus,
-                            r.occurredAt()));
+            boosted.add(r.withFinalScore(r.finalScore() + bonus));
         }
         return boosted;
     }
@@ -256,14 +225,7 @@ public final class ResultMerger {
                 .forEach(
                         entry -> {
                             ScoredResult best = bestResults.get(entry.getKey());
-                            merged.add(
-                                    new ScoredResult(
-                                            best.sourceType(),
-                                            best.sourceId(),
-                                            best.text(),
-                                            best.vectorScore(),
-                                            entry.getValue(),
-                                            best.occurredAt()));
+                            merged.add(best.withFinalScore(entry.getValue()));
                         });
 
         return normalize(merged);

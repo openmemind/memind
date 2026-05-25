@@ -336,6 +336,8 @@ public class OpenMemoryApplicationService {
                 item.text(),
                 item.vectorScore(),
                 item.finalScore(),
-                item.occurredAt());
+                item.occurredAt(),
+                item.category(),
+                item.metadata());
     }
 }

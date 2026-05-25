@@ -237,14 +237,7 @@ public final class RawDataAggregator {
                 String caption = rawData.map(MemoryRawData::caption).orElse(null);
                 String text = (caption != null && !caption.isBlank()) ? caption : best.text();
 
-                aggregated.add(
-                        new ScoredResult(
-                                best.sourceType(),
-                                best.sourceId(),
-                                text,
-                                best.vectorScore(),
-                                best.finalScore(),
-                                best.occurredAt()));
+                aggregated.add(best.withTextAndScores(text, best.vectorScore(), best.finalScore()));
             }
         }
 
@@ -254,10 +247,11 @@ public final class RawDataAggregator {
     }
 
     /**
-     * Batch fill timestamps for ITEM type results with occurredAt as null.
+     * Batch fill item attributes for ITEM type results with missing occurredAt, category, or
+     * metadata.
      *
-     * <p>ScoredResult created by BM25 channel does not carry occurredAt, this method fills it by
-     * batch querying MemoryStore.
+     * <p>ScoredResult created by BM25 channel does not carry MemoryItem fields, this method fills
+     * them by batch querying MemoryStore.
      *
      * @param results  List of results to be filled
      * @param memoryId Memory identifier
@@ -270,13 +264,14 @@ public final class RawDataAggregator {
             return results;
         }
 
-        // Collect ITEM sourceIds that need to be filled
         List<Long> missingIds =
                 results.stream()
                         .filter(
                                 r ->
                                         r.sourceType() == ScoredResult.SourceType.ITEM
-                                                && r.occurredAt() == null)
+                                                && (r.occurredAt() == null
+                                                        || r.category() == null
+                                                        || r.metadata().isEmpty()))
                         .map(
                                 r -> {
                                     try {
@@ -292,14 +287,11 @@ public final class RawDataAggregator {
             return results;
         }
 
-        Map<Long, Instant> idToOccurredAt =
+        Map<Long, MemoryItem> itemsById =
                 store.itemOperations().getItemsByIds(memoryId, missingIds).stream()
-                        .filter(mi -> mi.occurredAt() != null)
-                        .collect(
-                                Collectors.toMap(
-                                        MemoryItem::id, MemoryItem::occurredAt, (a, b) -> a));
+                        .collect(Collectors.toMap(MemoryItem::id, item -> item, (a, b) -> a));
 
-        if (idToOccurredAt.isEmpty()) {
+        if (itemsById.isEmpty()) {
             return results;
         }
 
@@ -307,11 +299,22 @@ public final class RawDataAggregator {
                 .map(
                         r -> {
                             if (r.sourceType() == ScoredResult.SourceType.ITEM
-                                    && r.occurredAt() == null) {
+                                    && (r.occurredAt() == null
+                                            || r.category() == null
+                                            || r.metadata().isEmpty())) {
                                 try {
-                                    Instant ts = idToOccurredAt.get(Long.parseLong(r.sourceId()));
-                                    if (ts != null) {
-                                        return r.withOccurredAt(ts);
+                                    MemoryItem item = itemsById.get(Long.parseLong(r.sourceId()));
+                                    if (item != null) {
+                                        Instant occurredAt =
+                                                r.occurredAt() != null
+                                                        ? r.occurredAt()
+                                                        : item.occurredAt();
+                                        return ScoredResult.fromItem(
+                                                item,
+                                                r.text(),
+                                                r.vectorScore(),
+                                                r.finalScore(),
+                                                occurredAt);
                                     }
                                 } catch (NumberFormatException ignored) {
                                 }
