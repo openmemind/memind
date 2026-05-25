@@ -98,6 +98,9 @@ class MemindServerApplicationTest {
         assertThat(applicationContext.containsBean("toolCallRawDataPlugin")).isTrue();
         assertThat(applicationContext.getBean("toolCallRawDataPlugin"))
                 .isInstanceOf(RawDataPlugin.class);
+        assertThat(applicationContext.containsBean("agentRawDataPlugin")).isTrue();
+        assertThat(applicationContext.getBean("agentRawDataPlugin"))
+                .isInstanceOf(RawDataPlugin.class);
 
         try (var lease = runtimeManager.acquire()) {
             assertThat(lease.handle().memory()).isNotNull();
@@ -124,7 +127,7 @@ class MemindServerApplicationTest {
 
     @Test
     void
-            extractApiAcceptsPluginOwnedImageAudioDocumentAndToolCallRawContentViaApplicationObjectMapper()
+            extractApiAcceptsPluginOwnedImageAudioDocumentToolCallAndAgentTimelineRawContentViaApplicationObjectMapper()
                     throws Exception {
         mockMvc.perform(
                         post("/open/v1/memory/async/extract")
@@ -237,6 +240,41 @@ class MemindServerApplicationTest {
                                                 "outputTokens": 1,
                                                 "contentHash": "abc",
                                                 "calledAt": "2026-04-12T00:00:00Z"
+                                              }
+                                            ]
+                                          }
+                                        }
+                                        """))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.status").value("accepted"));
+
+        mockMvc.perform(
+                        post("/open/v1/memory/async/extract")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1",
+                                          "rawContent": {
+                                            "type": "agent_timeline",
+                                            "sourceClient": "claude-code",
+                                            "sessionId": "session-1",
+                                            "timelineId": "timeline-1",
+                                            "events": [
+                                              {
+                                                "seq": 1,
+                                                "kind": "USER_PROMPT",
+                                                "occurredAt": "2026-04-12T00:00:00Z",
+                                                "text": "Fix failing tests"
+                                              },
+                                              {
+                                                "seq": 2,
+                                                "kind": "COMMAND",
+                                                "occurredAt": "2026-04-12T00:01:00Z",
+                                                "command": "mvn test",
+                                                "exitCode": 0,
+                                                "status": "SUCCESS"
                                               }
                                             ]
                                           }
