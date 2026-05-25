@@ -22,6 +22,7 @@ import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.plugin.rawdata.agent.config.AgentExtractionOptions;
 import java.util.List;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
@@ -35,6 +36,7 @@ public class AgentItemExtractionStrategy implements ItemExtractionStrategy {
     private final StructuredChatClient chatClient;
     private final PromptRegistry promptRegistry;
     private final AgentExtractionOptions options;
+    private final AgentMemoryItemFactory memoryItemFactory;
 
     public AgentItemExtractionStrategy() {
         this(null, PromptRegistry.EMPTY, AgentExtractionOptions.defaults());
@@ -44,9 +46,19 @@ public class AgentItemExtractionStrategy implements ItemExtractionStrategy {
             StructuredChatClient chatClient,
             PromptRegistry promptRegistry,
             AgentExtractionOptions options) {
+        this(chatClient, promptRegistry, options, new AgentMemoryItemFactory());
+    }
+
+    public AgentItemExtractionStrategy(
+            StructuredChatClient chatClient,
+            PromptRegistry promptRegistry,
+            AgentExtractionOptions options,
+            AgentMemoryItemFactory memoryItemFactory) {
         this.chatClient = chatClient;
         this.promptRegistry = promptRegistry == null ? PromptRegistry.EMPTY : promptRegistry;
         this.options = options == null ? AgentExtractionOptions.defaults() : options;
+        this.memoryItemFactory =
+                memoryItemFactory == null ? new AgentMemoryItemFactory() : memoryItemFactory;
     }
 
     @Override
@@ -54,7 +66,12 @@ public class AgentItemExtractionStrategy implements ItemExtractionStrategy {
             List<ParsedSegment> segments,
             List<MemoryInsightType> insightTypes,
             ItemExtractionConfig config) {
-        return Mono.just(List.of());
+        if (segments == null || segments.isEmpty()) {
+            return Mono.just(List.of());
+        }
+        return Flux.fromIterable(segments)
+                .flatMapIterable(memoryItemFactory::deterministicEntries)
+                .collectList();
     }
 
     public StructuredChatClient chatClient() {
@@ -67,5 +84,9 @@ public class AgentItemExtractionStrategy implements ItemExtractionStrategy {
 
     public AgentExtractionOptions options() {
         return options;
+    }
+
+    public AgentMemoryItemFactory memoryItemFactory() {
+        return memoryItemFactory;
     }
 }
