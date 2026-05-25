@@ -149,6 +149,14 @@ describe("RawDataPage", () => {
 
 const rawDataPageData = {
   rawData: {
+    page: {
+      hasNext: false,
+      hasPrevious: false,
+      page: 1,
+      pageSize: 20,
+      totalItems: 1,
+      totalPages: 1,
+    },
     paginationLabel: "Showing 1 of 1 records",
     records: [
       {

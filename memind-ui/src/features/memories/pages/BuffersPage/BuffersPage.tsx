@@ -138,9 +138,13 @@ function BuffersFilter({
 }
 
 function BuffersTable({
+  onPageChange,
+  page,
   records,
   summary,
 }: {
+  onPageChange?: (page: number) => void
+  page: MemoryDashboardData["buffers"]["conversationPage"]
   records: MemoryBufferRecord[]
   summary: string
 }) {
@@ -164,7 +168,14 @@ function BuffersTable({
         description: "Buffered conversations and insights show here.",
         title: "No buffer records",
       }}
-      pagination={{ summary }}
+      pagination={{
+        currentPage: page.page,
+        hasNext: page.hasNext,
+        hasPrevious: page.hasPrevious,
+        onPageChange,
+        summary,
+        totalPages: page.totalPages,
+      }}
       tableClassName="min-w-[1080px]"
     >
       {records.map((record) => {
@@ -220,9 +231,13 @@ function BuffersTable({
 
 export function BuffersPage({
   data,
+  onConversationPageChange,
+  onInsightPageChange,
   refreshAction,
 }: {
   data: MemoryDashboardData
+  onConversationPageChange?: (page: number) => void
+  onInsightPageChange?: (page: number) => void
   refreshAction: RefreshAction
 }) {
   const [filter, setFilter] = useState<BufferFilter>("conversation")
@@ -239,6 +254,12 @@ export function BuffersPage({
     insightCount: data.buffers.insightCount,
     visibleCount: visibleRecords.length,
   })
+  const activePage =
+    filter === "conversation"
+      ? data.buffers.conversationPage
+      : data.buffers.insightPage
+  const handlePageChange =
+    filter === "conversation" ? onConversationPageChange : onInsightPageChange
 
   return (
     <div data-testid="memory-buffers-page">
@@ -260,7 +281,12 @@ export function BuffersPage({
         description="Inspect pending conversation and insight buffers before they are committed into memory."
         title="Memory Buffers"
       />
-      <BuffersTable records={visibleRecords} summary={tableSummary} />
+      <BuffersTable
+        onPageChange={handlePageChange}
+        page={activePage}
+        records={visibleRecords}
+        summary={tableSummary}
+      />
     </div>
   )
 }

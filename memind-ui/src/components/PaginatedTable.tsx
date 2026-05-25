@@ -126,8 +126,15 @@ function PaginatedTableFooter({
   const totalPages = pagination.totalPages ?? 1
   const hasPrevious = pagination.hasPrevious ?? currentPage > 1
   const hasNext = pagination.hasNext ?? currentPage < totalPages
-  const canRenderPages = pagination.currentPage && pagination.totalPages
-  const pageItems = canRenderPages ? getPageItems(currentPage, totalPages) : []
+  const canRenderControls = Boolean(
+    pagination.onPageChange &&
+      pagination.currentPage &&
+      pagination.totalPages &&
+      totalPages > 1
+  )
+  const pageItems = canRenderControls
+    ? getPageItems(currentPage, totalPages)
+    : []
 
   function handlePageClick(
     event: React.MouseEvent<HTMLAnchorElement>,
@@ -146,45 +153,47 @@ function PaginatedTableFooter({
   return (
     <div className="flex flex-col gap-3 border-t border-border/70 bg-muted/25 px-2 py-1 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
       <span>{pagination.summary}</span>
-      <Pagination className="mx-0 w-auto justify-start md:justify-end">
-        <PaginationContent>
-          <PaginationItem>
-            <PaginationPrevious
-              aria-disabled={!hasPrevious}
-              className={cn(!hasPrevious && "pointer-events-none opacity-50")}
-              href="#"
-              onClick={(event) =>
-                handlePageClick(event, currentPage - 1, !hasPrevious)
-              }
-            />
-          </PaginationItem>
-          {pageItems.map((item, index) => (
-            <PaginationItem key={`${item}-${index}`}>
-              {item === "ellipsis" ? (
-                <PaginationEllipsis />
-              ) : (
-                <PaginationLink
-                  href="#"
-                  isActive={item === currentPage}
-                  onClick={(event) => handlePageClick(event, item)}
-                >
-                  {item}
-                </PaginationLink>
-              )}
+      {canRenderControls ? (
+        <Pagination className="mx-0 w-auto justify-start md:justify-end">
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                aria-disabled={!hasPrevious}
+                className={cn(!hasPrevious && "pointer-events-none opacity-50")}
+                href="#"
+                onClick={(event) =>
+                  handlePageClick(event, currentPage - 1, !hasPrevious)
+                }
+              />
             </PaginationItem>
-          ))}
-          <PaginationItem>
-            <PaginationNext
-              aria-disabled={!hasNext}
-              className={cn(!hasNext && "pointer-events-none opacity-50")}
-              href="#"
-              onClick={(event) =>
-                handlePageClick(event, currentPage + 1, !hasNext)
-              }
-            />
-          </PaginationItem>
-        </PaginationContent>
-      </Pagination>
+            {pageItems.map((item, index) => (
+              <PaginationItem key={`${item}-${index}`}>
+                {item === "ellipsis" ? (
+                  <PaginationEllipsis />
+                ) : (
+                  <PaginationLink
+                    href="#"
+                    isActive={item === currentPage}
+                    onClick={(event) => handlePageClick(event, item)}
+                  >
+                    {item}
+                  </PaginationLink>
+                )}
+              </PaginationItem>
+            ))}
+            <PaginationItem>
+              <PaginationNext
+                aria-disabled={!hasNext}
+                className={cn(!hasNext && "pointer-events-none opacity-50")}
+                href="#"
+                onClick={(event) =>
+                  handlePageClick(event, currentPage + 1, !hasNext)
+                }
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      ) : null}
     </div>
   )
 }

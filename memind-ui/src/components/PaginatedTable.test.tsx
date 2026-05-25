@@ -46,8 +46,9 @@ describe("PaginatedTable", () => {
     expect(screen.getByRole("table")).toBeInTheDocument()
     expect(screen.getByText("Memory A")).toBeInTheDocument()
     expect(screen.getByText("Showing 2 of 12 memories")).toBeInTheDocument()
-    expect(screen.getByRole("navigation", { name: "pagination" }))
-      .toBeInTheDocument()
+    expect(
+      screen.queryByRole("navigation", { name: "pagination" })
+    ).not.toBeInTheDocument()
   })
 
   it("renders shadcn empty content inside the table body when empty", () => {

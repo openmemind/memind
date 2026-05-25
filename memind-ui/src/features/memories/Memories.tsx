@@ -20,6 +20,7 @@ import {
   Clock3,
   Search,
 } from "lucide-react"
+import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { PaginatedTable } from "@/components/PaginatedTable"
@@ -193,6 +194,7 @@ function MemoryRow({
 function MemoryTable({
   pagination,
   rows,
+  onPageChange,
   onOpenMemory,
 }: {
   pagination: {
@@ -203,6 +205,7 @@ function MemoryTable({
     totalPages: number
   }
   rows: MemoryWorkspace[]
+  onPageChange: (page: number) => void
   onOpenMemory?: (memoryId: string) => void
 }) {
   return (
@@ -225,7 +228,7 @@ function MemoryTable({
           "Memory workspaces matching the current filters show here.",
         title: "No memories found",
       }}
-      pagination={pagination}
+      pagination={{ ...pagination, onPageChange }}
       tableClassName="min-w-220"
     >
       {rows.map((row) => (
@@ -240,7 +243,8 @@ export function Memories({
 }: {
   onOpenMemory?: (memoryId: string) => void
 }) {
-  const memoriesQuery = useMemoriesData()
+  const [page, setPage] = useState(1)
+  const memoriesQuery = useMemoriesData(page)
 
   if (memoriesQuery.isLoading) {
     return (
@@ -269,6 +273,7 @@ export function Memories({
 
       <FilterToolbar />
       <MemoryTable
+        onPageChange={setPage}
         onOpenMemory={onOpenMemory}
         pagination={data.pagination}
         rows={data.workspaces}

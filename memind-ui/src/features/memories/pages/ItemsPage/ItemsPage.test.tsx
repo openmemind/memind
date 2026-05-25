@@ -77,6 +77,14 @@ describe("ItemsPage", () => {
 
 const itemsPageData = {
   items: {
+    page: {
+      hasNext: false,
+      hasPrevious: false,
+      page: 1,
+      pageSize: 20,
+      totalItems: 1,
+      totalPages: 1,
+    },
     paginationLabel: "Showing 1 of 1 items",
     records: [
       {

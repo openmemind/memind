@@ -87,9 +87,11 @@ function MemoryItemId({ item }: { item: MemoryItemRecord }) {
 
 function ItemsTable({
   data,
+  onPageChange,
   onViewItem,
 }: {
   data: MemoryDashboardData
+  onPageChange?: (page: number) => void
   onViewItem: (item: MemoryItemRecord) => void
 }) {
   return (
@@ -117,7 +119,14 @@ function ItemsTable({
         description: "Extracted memory items matching the filters show here.",
         title: "No memory items",
       }}
-      pagination={{ summary: data.items.paginationLabel }}
+      pagination={{
+        currentPage: data.items.page.page,
+        hasNext: data.items.page.hasNext,
+        hasPrevious: data.items.page.hasPrevious,
+        onPageChange,
+        summary: data.items.paginationLabel,
+        totalPages: data.items.page.totalPages,
+      }}
       tableClassName="min-w-[1220px]"
     >
       {data.items.records.map((item) => (
@@ -389,9 +398,11 @@ function MemoryItemDetailsPanel({
 
 export function ItemsPage({
   data,
+  onPageChange,
   refreshAction,
 }: {
   data: MemoryDashboardData
+  onPageChange?: (page: number) => void
   refreshAction: RefreshAction
 }) {
   const [selectedItem, setSelectedItem] = useState<MemoryItemRecord | null>(
@@ -438,7 +449,11 @@ export function ItemsPage({
   return (
     <>
       <ItemsHeader refreshAction={refreshAction} />
-      <ItemsTable data={data} onViewItem={handleViewItem} />
+      <ItemsTable
+        data={data}
+        onPageChange={onPageChange}
+        onViewItem={handleViewItem}
+      />
       {selectedItem ? (
         <MemoryItemDetailsPanel
           isExpanded={isDetailsExpanded}

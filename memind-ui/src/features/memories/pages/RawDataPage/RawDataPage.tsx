@@ -95,9 +95,11 @@ function RawDataId({ record }: { record: MemoryRawDataRecord }) {
 
 function RawDataTable({
   data,
+  onPageChange,
   onViewRecord,
 }: {
   data: MemoryDashboardData
+  onPageChange?: (page: number) => void
   onViewRecord: (record: MemoryRawDataRecord) => void
 }) {
   return (
@@ -122,7 +124,14 @@ function RawDataTable({
         description: "Source records matching the current filters show here.",
         title: "No raw data records",
       }}
-      pagination={{ summary: data.rawData.paginationLabel }}
+      pagination={{
+        currentPage: data.rawData.page.page,
+        hasNext: data.rawData.page.hasNext,
+        hasPrevious: data.rawData.page.hasPrevious,
+        onPageChange,
+        summary: data.rawData.paginationLabel,
+        totalPages: data.rawData.page.totalPages,
+      }}
       tableClassName="min-w-[1080px]"
     >
       {data.rawData.records.map((record) => (
@@ -331,9 +340,11 @@ function RecordDetailsPanel({
 
 export function RawDataPage({
   data,
+  onPageChange,
   refreshAction,
 }: {
   data: MemoryDashboardData
+  onPageChange?: (page: number) => void
   refreshAction: RefreshAction
 }) {
   const [selectedRecord, setSelectedRecord] =
@@ -381,7 +392,11 @@ export function RawDataPage({
       <RawDataHeader refreshAction={refreshAction} />
       {/*<RawDataSummary data={data} />*/}
       {/*<RawDataToolbar />*/}
-      <RawDataTable data={data} onViewRecord={handleViewRecord} />
+      <RawDataTable
+        data={data}
+        onPageChange={onPageChange}
+        onViewRecord={handleViewRecord}
+      />
       {selectedRecord ? (
         <RecordDetailsPanel
           isExpanded={isDetailsExpanded}

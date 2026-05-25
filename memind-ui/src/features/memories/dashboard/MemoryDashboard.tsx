@@ -15,6 +15,7 @@
 import { SidebarShell } from "@/features/shell/SidebarShell"
 import { PageSurface } from "@/features/shared/ui"
 import { cn } from "@/lib/utils"
+import { useState } from "react"
 
 import { WorkspaceSidebar } from "../components/WorkspaceSidebar"
 import {
@@ -48,13 +49,30 @@ export function MemoryDashboard({
   onBack,
   onPageChange,
 }: MemoryDashboardProps) {
+  const [rawDataPage, setRawDataPage] = useState(1)
+  const [itemsPage, setItemsPage] = useState(1)
+  const [conversationBuffersPage, setConversationBuffersPage] = useState(1)
+  const [insightBuffersPage, setInsightBuffersPage] = useState(1)
   const dashboardQuery = useMemoryDashboard(memoryId)
-  const rawDataQuery = useMemoryRawData(memoryId, activePage === "raw-data")
-  const itemsQuery = useMemoryItems(memoryId, activePage === "items")
+  const rawDataQuery = useMemoryRawData(
+    memoryId,
+    rawDataPage,
+    activePage === "raw-data"
+  )
+  const itemsQuery = useMemoryItems(
+    memoryId,
+    itemsPage,
+    activePage === "items"
+  )
   const graphQuery = useMemoryGraph(memoryId, activePage === "graph")
   const threadsQuery = useMemoryThreads(memoryId, activePage === "threads")
   const insightsQuery = useMemoryInsights(memoryId, activePage === "insights")
-  const buffersQuery = useMemoryBuffers(memoryId, activePage === "buffers")
+  const buffersQuery = useMemoryBuffers(
+    memoryId,
+    conversationBuffersPage,
+    insightBuffersPage,
+    activePage === "buffers"
+  )
 
   const activePageQuery =
     activePage === "raw-data"
@@ -147,9 +165,17 @@ export function MemoryDashboard({
             Failed to load memory dashboard.
           </main>
         ) : activePage === "raw-data" ? (
-          <RawDataPage data={data} refreshAction={refreshAction} />
+          <RawDataPage
+            data={data}
+            onPageChange={setRawDataPage}
+            refreshAction={refreshAction}
+          />
         ) : activePage === "items" ? (
-          <ItemsPage data={data} refreshAction={refreshAction} />
+          <ItemsPage
+            data={data}
+            onPageChange={setItemsPage}
+            refreshAction={refreshAction}
+          />
         ) : activePage === "graph" ? (
           <GraphPage data={data} refreshAction={refreshAction} />
         ) : activePage === "threads" ? (
@@ -157,7 +183,12 @@ export function MemoryDashboard({
         ) : activePage === "insights" ? (
           <InsightsPage data={data} refreshAction={refreshAction} />
         ) : activePage === "buffers" ? (
-          <BuffersPage data={data} refreshAction={refreshAction} />
+          <BuffersPage
+            data={data}
+            onConversationPageChange={setConversationBuffersPage}
+            onInsightPageChange={setInsightBuffersPage}
+            refreshAction={refreshAction}
+          />
         ) : (
           <OverviewPage
             data={data}

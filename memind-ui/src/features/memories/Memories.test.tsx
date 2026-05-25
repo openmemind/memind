@@ -101,4 +101,45 @@ describe("Memories", () => {
 
     expect(onOpenMemory).toHaveBeenCalledWith("mem-raw-data")
   })
+
+  it("requests the next memories page from pagination controls", async () => {
+    const user = userEvent.setup()
+
+    useMemoriesDataMock.mockReturnValue({
+      data: {
+        pagination: {
+          currentPage: 1,
+          hasNext: true,
+          hasPrevious: false,
+          summary: "Showing 1 to 1 of 2 results",
+          totalPages: 2,
+        },
+        summaries: [],
+        workspaces: [
+          {
+            agentId: "agent-a",
+            alerts: { critical: 0, warning: 0 },
+            createdAt: "2026-05-21T08:00:00Z",
+            id: "mem-page-1",
+            insights: "7",
+            items: "42",
+            lastActivity: "2m ago",
+            name: "Page one memory",
+            rawData: "4,218",
+            requests: "99",
+            status: "active",
+            userId: "user-a",
+          },
+        ],
+      },
+      isError: false,
+      isLoading: false,
+    } as ReturnType<typeof useMemoriesData>)
+
+    render(<Memories />)
+
+    await user.click(screen.getByRole("button", { name: "Go to next page" }))
+
+    expect(useMemoriesDataMock).toHaveBeenLastCalledWith(2)
+  })
 })

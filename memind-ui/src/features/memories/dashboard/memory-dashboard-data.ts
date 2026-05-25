@@ -15,7 +15,7 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { fetchJson } from "@/lib/api/client"
-import type { PageResult } from "@/lib/api/pagination"
+import type { PageMeta, PageResult } from "@/lib/api/pagination"
 import type { AdminDashboardView } from "@/features/dashboard/dashboard-data"
 
 import {
@@ -117,6 +117,7 @@ export type MemoryRawDataPageData = {
   records: MemoryRawDataRecord[]
   paginationLabel: string
   pageLabel: string
+  page: PageMeta
 }
 
 export type MemoryItemSummary = {
@@ -155,6 +156,7 @@ export type MemoryItemsPageData = {
   summary: MemoryItemSummary[]
   records: MemoryItemRecord[]
   paginationLabel: string
+  page: PageMeta
 }
 
 export type MemoryGraphSummary = {
@@ -340,7 +342,9 @@ export type MemoryBufferRecord =
 
 export type MemoryBuffersPageData = {
   conversationCount: number
+  conversationPage: PageMeta
   insightCount: number
+  insightPage: PageMeta
   records: MemoryBufferRecord[]
 }
 
@@ -548,6 +552,14 @@ const dashboardByMemoryId: Record<string, MemoryDashboardData> = {
       ],
       paginationLabel: "Showing 1-15 of 4,218 records",
       pageLabel: "Page 1 of 282",
+      page: {
+        hasNext: true,
+        hasPrevious: false,
+        page: 1,
+        pageSize: 20,
+        totalItems: 4218,
+        totalPages: 211,
+      },
       records: [
         {
           id: "rd_7a2b9c1d-84e1-4f02-9844-01938ae2",
@@ -702,6 +714,14 @@ const dashboardByMemoryId: Record<string, MemoryDashboardData> = {
         },
       ],
       paginationLabel: "Showing 1-25 of 3,412 items",
+      page: {
+        hasNext: true,
+        hasPrevious: false,
+        page: 1,
+        pageSize: 20,
+        totalItems: 3412,
+        totalPages: 171,
+      },
       records: [
         {
           id: "mi_2b9c7a1d",
@@ -1177,7 +1197,23 @@ const dashboardByMemoryId: Record<string, MemoryDashboardData> = {
     },
     buffers: {
       conversationCount: 2,
+      conversationPage: {
+        hasNext: false,
+        hasPrevious: false,
+        page: 1,
+        pageSize: 20,
+        totalItems: 2,
+        totalPages: 1,
+      },
       insightCount: 2,
+      insightPage: {
+        hasNext: false,
+        hasPrevious: false,
+        page: 1,
+        pageSize: 20,
+        totalItems: 2,
+        totalPages: 1,
+      },
       records: [
         {
           agentId: "agent_alpha",
@@ -1477,6 +1513,7 @@ function mapRawDataPage(rawData: PageResult<AdminRawDataView>): MemoryRawDataPag
   const captionCount = rawData.items.filter((item) => item.caption).length
 
   return {
+    page: rawData.page,
     pageLabel: `Page ${rawData.page.page} of ${rawData.page.totalPages}`,
     paginationLabel: `Showing ${rawData.items.length} of ${formatCount(
       rawData.page.totalItems
@@ -1533,6 +1570,7 @@ function mapItemsPage(items: PageResult<AdminItemView>): MemoryItemsPageData {
   const vectorizedCount = items.items.filter((item) => item.vectorId).length
 
   return {
+    page: items.page,
     paginationLabel: `Showing ${items.items.length} of ${formatCount(
       items.page.totalItems
     )} items`,
@@ -1810,7 +1848,9 @@ function mapBuffersPage(
 
   return {
     conversationCount: conversationBuffers.page.totalItems,
+    conversationPage: conversationBuffers.page,
     insightCount: insightBuffers.page.totalItems,
+    insightPage: insightBuffers.page,
     records: [...conversationRecords, ...insightRecords],
   }
 }
@@ -1958,21 +1998,21 @@ async function fetchMemoryDashboardOverview(memoryId: string) {
   })
 }
 
-async function fetchMemoryRawData(memoryId: string) {
+async function fetchMemoryRawData(memoryId: string, page: number) {
   const scope = memoryScope(memoryId)
   return fetchMemoryRawDataRecordsPage(memoryId, {
     agentId: scope.agentId,
-    page: 1,
+    page,
     pageSize: 20,
     userId: scope.userId,
   }).then(mapRawDataPage)
 }
 
-async function fetchMemoryItems(memoryId: string) {
+async function fetchMemoryItems(memoryId: string, page: number) {
   const scope = memoryScope(memoryId)
   return fetchMemoryItemsRecordsPage(memoryId, {
     agentId: scope.agentId,
-    page: 1,
+    page,
     pageSize: 20,
     userId: scope.userId,
   }).then(mapItemsPage)
@@ -2010,17 +2050,21 @@ async function fetchMemoryInsights(memoryId: string) {
   return fetchMemoryInsightTree(memoryId).then(mapInsightsTree)
 }
 
-async function fetchMemoryBuffers(memoryId: string) {
+async function fetchMemoryBuffers(
+  memoryId: string,
+  conversationPage: number,
+  insightPage: number
+) {
   const [conversationBuffers, insightBuffers] = await Promise.all([
     fetchAdminConversationBuffersPage({
       memoryId,
-      page: 1,
+      page: conversationPage,
       pageSize: 20,
       state: "all",
     }),
     fetchAdminInsightBuffersPage({
       memoryId,
-      page: 1,
+      page: insightPage,
       pageSize: 20,
       state: "all",
     }),
@@ -2036,19 +2080,19 @@ export function useMemoryDashboard(memoryId: string) {
   })
 }
 
-export function useMemoryRawData(memoryId: string, enabled = true) {
+export function useMemoryRawData(memoryId: string, page = 1, enabled = true) {
   return useQuery({
     enabled,
-    queryKey: ["memories", "dashboard", memoryId, "raw-data"],
-    queryFn: () => fetchMemoryRawData(memoryId),
+    queryKey: ["memories", "dashboard", memoryId, "raw-data", page],
+    queryFn: () => fetchMemoryRawData(memoryId, page),
   })
 }
 
-export function useMemoryItems(memoryId: string, enabled = true) {
+export function useMemoryItems(memoryId: string, page = 1, enabled = true) {
   return useQuery({
     enabled,
-    queryKey: ["memories", "dashboard", memoryId, "items"],
-    queryFn: () => fetchMemoryItems(memoryId),
+    queryKey: ["memories", "dashboard", memoryId, "items", page],
+    queryFn: () => fetchMemoryItems(memoryId, page),
   })
 }
 
@@ -2076,10 +2120,22 @@ export function useMemoryInsights(memoryId: string, enabled = true) {
   })
 }
 
-export function useMemoryBuffers(memoryId: string, enabled = true) {
+export function useMemoryBuffers(
+  memoryId: string,
+  conversationPage = 1,
+  insightPage = 1,
+  enabled = true
+) {
   return useQuery({
     enabled,
-    queryKey: ["memories", "dashboard", memoryId, "buffers"],
-    queryFn: () => fetchMemoryBuffers(memoryId),
+    queryKey: [
+      "memories",
+      "dashboard",
+      memoryId,
+      "buffers",
+      conversationPage,
+      insightPage,
+    ],
+    queryFn: () => fetchMemoryBuffers(memoryId, conversationPage, insightPage),
   })
 }

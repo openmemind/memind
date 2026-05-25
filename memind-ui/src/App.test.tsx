@@ -24,13 +24,13 @@ import userEvent from "@testing-library/user-event"
 import { vi } from "vitest"
 
 const apiFixtures = vi.hoisted(() => {
-  function page<T>(items: T[], totalItems = items.length) {
+  function page<T>(items: T[], totalItems = items.length, pageNumber = 1) {
     return {
       items,
       page: {
-        hasNext: false,
-        hasPrevious: false,
-        page: 1,
+        hasNext: pageNumber < Math.max(1, Math.ceil(totalItems / 20)),
+        hasPrevious: pageNumber > 1,
+        page: pageNumber,
         pageSize: 20,
         totalItems,
         totalPages: Math.max(1, Math.ceil(totalItems / 20)),
@@ -405,12 +405,12 @@ const apiFixtures = vi.hoisted(() => {
       itemLinkCountByType: [{ count: 8103, name: "semantic" }],
       mentionCount: 142,
     },
-    conversationBuffers: page(conversationBuffers, 2),
+    conversationBuffers: page(conversationBuffers, 42),
     insights: page(insights, 3),
     insightsTree: {
       roots: insights,
     },
-    insightBuffers: page(insightBuffers, 2),
+    insightBuffers: page(insightBuffers, 42),
     items: page(items, 3412),
     memoryOptions: {
       config: {
@@ -544,6 +544,34 @@ function jsonResponse(data: unknown) {
   )
 }
 
+function pagedFixture<T>(
+  fixture: {
+    items: T[]
+    page: {
+      pageSize: number
+      totalItems: number
+    }
+  },
+  pageNumber: number
+) {
+  const totalPages = Math.max(
+    1,
+    Math.ceil(fixture.page.totalItems / fixture.page.pageSize)
+  )
+
+  return {
+    items: fixture.items,
+    page: {
+      hasNext: pageNumber < totalPages,
+      hasPrevious: pageNumber > 1,
+      page: pageNumber,
+      pageSize: fixture.page.pageSize,
+      totalItems: fixture.page.totalItems,
+      totalPages,
+    },
+  }
+}
+
 function routeFixture(url: string) {
   const parsed = new URL(url, "http://localhost")
   const path = parsed.pathname
@@ -565,19 +593,31 @@ function routeFixture(url: string) {
   }
 
   if (path === "/admin/v1/raw-data") {
-    return apiFixtures.rawData
+    return pagedFixture(
+      apiFixtures.rawData,
+      Number(parsed.searchParams.get("page") ?? 1)
+    )
   }
 
   if (path === "/admin/v1/memories/MEM-8429-XQ/raw-data") {
-    return apiFixtures.rawData
+    return pagedFixture(
+      apiFixtures.rawData,
+      Number(parsed.searchParams.get("page") ?? 1)
+    )
   }
 
   if (path === "/admin/v1/items") {
-    return apiFixtures.items
+    return pagedFixture(
+      apiFixtures.items,
+      Number(parsed.searchParams.get("page") ?? 1)
+    )
   }
 
   if (path === "/admin/v1/memories/MEM-8429-XQ/items") {
-    return apiFixtures.items
+    return pagedFixture(
+      apiFixtures.items,
+      Number(parsed.searchParams.get("page") ?? 1)
+    )
   }
 
   if (path === "/admin/v1/item-graph/summary") {
@@ -601,11 +641,17 @@ function routeFixture(url: string) {
   }
 
   if (path === "/admin/v1/buffers/conversations") {
-    return apiFixtures.conversationBuffers
+    return pagedFixture(
+      apiFixtures.conversationBuffers,
+      Number(parsed.searchParams.get("page") ?? 1)
+    )
   }
 
   if (path === "/admin/v1/buffers/insights") {
-    return apiFixtures.insightBuffers
+    return pagedFixture(
+      apiFixtures.insightBuffers,
+      Number(parsed.searchParams.get("page") ?? 1)
+    )
   }
 
   if (path === "/admin/v1/insights") {
@@ -890,6 +936,50 @@ describe("Dashboard", () => {
 
       await waitFor(() => {
         expect(pageRequestCount()).toBe(2)
+      })
+    }
+  )
+
+  it.each([
+    [
+      "/memories/MEM-8429-XQ/raw-data",
+      "Raw Data",
+      "/admin/v1/memories/MEM-8429-XQ/raw-data",
+    ],
+    [
+      "/memories/MEM-8429-XQ/items",
+      "Memory Items",
+      "/admin/v1/memories/MEM-8429-XQ/items",
+    ],
+    [
+      "/memories/MEM-8429-XQ/buffers",
+      "Memory Buffers",
+      "/admin/v1/buffers/conversations",
+    ],
+  ])(
+    "loads the next table page from %s when pagination is clicked",
+    async (path, heading, apiPath) => {
+      const user = userEvent.setup()
+      window.history.pushState({}, "", path)
+      renderApp()
+
+      await screen.findByRole("heading", { name: heading })
+
+      await user.click(screen.getByRole("button", { name: "Go to next page" }))
+
+      await waitFor(() => {
+        expect(
+          vi
+            .mocked(fetch)
+            .mock.calls.some(([input]) => {
+              const requestUrl = new URL(String(input), "http://localhost")
+
+              return (
+                requestUrl.pathname === apiPath &&
+                requestUrl.searchParams.get("page") === "2"
+              )
+            })
+        ).toBe(true)
       })
     }
   )
@@ -1451,7 +1541,7 @@ describe("Dashboard", () => {
     expect(within(table).queryByText("preference")).not.toBeInTheDocument()
     expect(within(table).queryByText("293712")).not.toBeInTheDocument()
     expect(
-      screen.getByText("Showing 2 of 2 conversation buffers")
+      screen.getByText("Showing 2 of 42 conversation buffers")
     ).toBeInTheDocument()
     expect(window.location.pathname).toBe("/memories/MEM-8429-XQ/buffers")
   })
@@ -1471,7 +1561,7 @@ describe("Dashboard", () => {
     expect(screen.queryByText("session-checkout-42")).not.toBeInTheDocument()
     expect(screen.getByText("preference")).toBeInTheDocument()
     expect(screen.getByText("retention")).toBeInTheDocument()
-    expect(screen.getByText("Showing 2 of 2 insight buffers")).toBeInTheDocument()
+    expect(screen.getByText("Showing 2 of 42 insight buffers")).toBeInTheDocument()
 
     await user.click(screen.getByRole("tab", { name: "Conversation" }))
 
@@ -1479,7 +1569,7 @@ describe("Dashboard", () => {
     expect(screen.getByText("session-renewal-18")).toBeInTheDocument()
     expect(screen.queryByText("retention")).not.toBeInTheDocument()
     expect(
-      screen.getByText("Showing 2 of 2 conversation buffers")
+      screen.getByText("Showing 2 of 42 conversation buffers")
     ).toBeInTheDocument()
   })
 

@@ -132,15 +132,15 @@ export function mapMemoriesPage(page: MemoriesPage): MemoriesData {
   }
 }
 
-async function fetchMemoriesData() {
-  const page = await fetchMemoriesPage({ page: 1, pageSize: 25 })
+async function fetchMemoriesData(pageNumber: number) {
+  const page = await fetchMemoriesPage({ page: pageNumber, pageSize: 25 })
 
   return mapMemoriesPage(page)
 }
 
-export function useMemoriesData() {
+export function useMemoriesData(page = 1) {
   return useQuery({
-    queryKey: ["memories", "list"],
-    queryFn: fetchMemoriesData,
+    queryKey: ["memories", "list", page],
+    queryFn: () => fetchMemoriesData(page),
   })
 }
