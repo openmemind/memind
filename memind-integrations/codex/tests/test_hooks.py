@@ -72,6 +72,51 @@ class HookTest(unittest.TestCase):
 
         self.assertIn("Memory retrieval encountered an error", context)
 
+    def test_format_context_groups_agent_memory_categories(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from retrieve import _format_context
+
+        data = {
+            "items": [
+                {
+                    "id": "1",
+                    "text": "Use npm test payment",
+                    "category": "tool",
+                    "metadata": {"toolName": "Bash"},
+                },
+                {
+                    "id": "2",
+                    "text": "Payment rounding mismatch was fixed",
+                    "category": "resolution",
+                    "metadata": {},
+                },
+                {
+                    "id": "3",
+                    "text": "When payment tests fail with rounding mismatch, inspect policy, edit calc.ts, then run npm test payment.",
+                    "category": "playbook",
+                    "metadata": {},
+                },
+                {
+                    "id": "4",
+                    "text": "Do not change public API",
+                    "category": "directive",
+                    "metadata": {},
+                },
+            ],
+            "insights": [],
+        }
+
+        context = _format_context(
+            data,
+            {"retrieveMaxEntries": 8, "retrieveMaxChars": 1000, "retrievePromptPreamble": ""},
+        )
+
+        self.assertIn("## Agent Playbooks", context)
+        self.assertIn("## Resolved Problems", context)
+        self.assertIn("## Tool Notes", context)
+        self.assertIn("## Directives", context)
+        self.assertNotIn("## Memory Items", context)
+
     def test_retrieve_fail_open_when_memind_unavailable(self):
         with tempfile.TemporaryDirectory() as tmp:
             env = {

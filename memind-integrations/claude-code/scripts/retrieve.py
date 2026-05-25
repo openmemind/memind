@@ -26,6 +26,14 @@ from lib.identity import resolve_identity
 from lib.logging_utils import debug_log
 
 
+AGENT_CATEGORY_SECTIONS = [
+    ("playbook", "## Agent Playbooks"),
+    ("resolution", "## Resolved Problems"),
+    ("tool", "## Tool Notes"),
+    ("directive", "## Directives"),
+]
+
+
 def _format_context(data, config):
     max_entries = int(config.get("retrieveMaxEntries", 8))
     max_chars = int(config.get("retrieveMaxChars", 6000))
@@ -48,11 +56,20 @@ def _format_context(data, config):
     if selected_insights:
         sections.append("## Insights")
         sections.extend(f"- [insight:{insight.get('id')}] {insight.get('text')}" for insight in selected_insights)
-    if selected_items:
+    grouped_agent_items = _group_agent_items(selected_items)
+    for category, header in AGENT_CATEGORY_SECTIONS:
+        category_items = grouped_agent_items.get(category, [])
+        if category_items:
+            if sections:
+                sections.append("")
+            sections.append(header)
+            sections.extend(f"- [item:{item.get('id')}] {item.get('text')}" for item in category_items)
+    general_items = [item for item in selected_items if _item_category(item) not in grouped_agent_items]
+    if general_items:
         if sections:
             sections.append("")
         sections.append("## Memory Items")
-        sections.extend(f"- [item:{item.get('id')}] {item.get('text')}" for item in selected_items)
+        sections.extend(f"- [item:{item.get('id')}] {item.get('text')}" for item in general_items)
     degraded_notice = ""
     if data.get("status") == "degraded":
         degraded_notice = "\n[Note: Memory retrieval encountered an error. Results may be incomplete.]\n"
@@ -60,6 +77,20 @@ def _format_context(data, config):
         return ""
     body = "\n".join(sections)[:max_chars]
     return f"<memind_memories>\n{config.get('retrievePromptPreamble') or ''}\n{body}{degraded_notice}\n</memind_memories>"
+
+
+def _item_category(item):
+    return str(item.get("category") or "").strip().lower()
+
+
+def _group_agent_items(items):
+    agent_categories = {category for category, _header in AGENT_CATEGORY_SECTIONS}
+    grouped = {}
+    for item in items:
+        category = _item_category(item)
+        if category in agent_categories:
+            grouped.setdefault(category, []).append(item)
+    return grouped
 
 
 def main():
