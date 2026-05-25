@@ -1,0 +1,104 @@
+{
+  "name": "payment-rounding-fix",
+  "description": "A payment rounding failure is fixed, retested, and stored as tool plus resolution memory.",
+  "request": {
+    "userId": "eval-agent-user-payment",
+    "agentId": "eval-coding-agent",
+    "sourceClient": "codex",
+    "rawContent": {
+      "type": "agent_timeline",
+      "sourceClient": "codex",
+      "sourceVersion": "eval-fixture",
+      "sessionId": "eval-payment-session",
+      "timelineId": "eval-payment-timeline",
+      "project": {
+        "name": "payments-api",
+        "rootPath": "/workspace/payments-api",
+        "git": {
+          "branch": "fix/payment-rounding",
+          "commit": "9b34fade12"
+        }
+      },
+      "events": [
+        {
+          "id": "payment-e1",
+          "seq": 1,
+          "kind": "user_prompt",
+          "text": "Fix the payment calculation rounding mismatch.",
+          "occurredAt": "2026-05-24T10:00:00Z"
+        },
+        {
+          "id": "payment-e2",
+          "seq": 2,
+          "kind": "command",
+          "toolName": "Shell",
+          "command": "npm test payment",
+          "status": "failed",
+          "exitCode": 1,
+          "output": "rounding mismatch on half-cent tax calculation",
+          "metadata": {
+            "failureSignal": "rounding mismatch on half-cent tax calculation"
+          },
+          "occurredAt": "2026-05-24T10:01:00Z"
+        },
+        {
+          "id": "payment-e3",
+          "seq": 3,
+          "kind": "file_read",
+          "path": "src/payment/calc.ts",
+          "operation": "read",
+          "occurredAt": "2026-05-24T10:02:00Z"
+        },
+        {
+          "id": "payment-e4",
+          "seq": 4,
+          "kind": "file_edit",
+          "path": "src/payment/calc.ts",
+          "operation": "modify",
+          "occurredAt": "2026-05-24T10:03:00Z"
+        },
+        {
+          "id": "payment-e5",
+          "seq": 5,
+          "kind": "file_edit",
+          "path": "test/payment/calc.test.ts",
+          "operation": "modify",
+          "occurredAt": "2026-05-24T10:05:00Z"
+        },
+        {
+          "id": "payment-e6",
+          "seq": 6,
+          "kind": "command",
+          "toolName": "Shell",
+          "command": "npm test payment",
+          "status": "success",
+          "exitCode": 0,
+          "output": "payment tests passed",
+          "occurredAt": "2026-05-24T10:07:00Z"
+        },
+        {
+          "id": "payment-e7",
+          "seq": 7,
+          "kind": "stop",
+          "status": "success",
+          "occurredAt": "2026-05-24T10:08:00Z"
+        }
+      ]
+    }
+  },
+  "expectations": {
+    "expectedCategories": ["tool", "resolution"],
+    "queries": [
+      {
+        "query": "How do I validate payment calculation changes?",
+        "mustContain": ["npm test payment"],
+        "expectedCategories": ["tool"]
+      },
+      {
+        "query": "What resolved the payment rounding mismatch?",
+        "mustContain": ["rounding mismatch on half-cent tax calculation"],
+        "expectedCategories": ["resolution"]
+      }
+    ]
+  }
+}

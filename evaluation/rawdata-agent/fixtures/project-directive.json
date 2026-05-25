@@ -1,0 +1,71 @@
+{
+  "name": "project-directive",
+  "description": "A project-scoped coding-agent instruction that should be recoverable as agent memory.",
+  "request": {
+    "userId": "eval-agent-user-directive",
+    "agentId": "eval-coding-agent",
+    "sourceClient": "claude-code",
+    "rawContent": {
+      "type": "agent_timeline",
+      "sourceClient": "claude-code",
+      "sourceVersion": "eval-fixture",
+      "sessionId": "eval-directive-session",
+      "timelineId": "eval-directive-timeline",
+      "project": {
+        "name": "ledger-service",
+        "rootPath": "/workspace/ledger-service",
+        "git": {
+          "branch": "main",
+          "commit": "7c77directive"
+        }
+      },
+      "events": [
+        {
+          "id": "directive-e1",
+          "seq": 1,
+          "kind": "user_prompt",
+          "text": "For this repository, always run go test ./... before reporting completion.",
+          "occurredAt": "2026-05-24T11:00:00Z"
+        },
+        {
+          "id": "directive-e2",
+          "seq": 2,
+          "kind": "file_edit",
+          "path": "README.md",
+          "operation": "modify",
+          "occurredAt": "2026-05-24T11:01:00Z"
+        },
+        {
+          "id": "directive-e3",
+          "seq": 3,
+          "kind": "command",
+          "toolName": "Bash",
+          "command": "go test ./...",
+          "status": "success",
+          "exitCode": 0,
+          "output": "ok ./...",
+          "occurredAt": "2026-05-24T11:03:00Z"
+        },
+        {
+          "id": "directive-e4",
+          "seq": 4,
+          "kind": "task_completed",
+          "status": "success",
+          "text": "Updated README and validated with go test ./...",
+          "occurredAt": "2026-05-24T11:04:00Z"
+        }
+      ]
+    }
+  },
+  "expectations": {
+    "expectedCategories": ["tool"],
+    "queries": [
+      {
+        "query": "What command should be run before reporting completion in ledger-service?",
+        "mustContain": ["go test ./..."],
+        "expectedCategories": ["tool"]
+      }
+    ],
+    "optionalCategories": ["directive"]
+  }
+}

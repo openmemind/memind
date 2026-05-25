@@ -1,0 +1,97 @@
+{
+  "name": "auth-jwt-fix",
+  "description": "A coding-agent episode where a JWT validation regression is fixed and validated.",
+  "request": {
+    "userId": "eval-agent-user-auth",
+    "agentId": "eval-coding-agent",
+    "sourceClient": "claude-code",
+    "rawContent": {
+      "type": "agent_timeline",
+      "sourceClient": "claude-code",
+      "sourceVersion": "eval-fixture",
+      "sessionId": "eval-auth-jwt-session",
+      "timelineId": "eval-auth-jwt-timeline",
+      "project": {
+        "name": "identity-service",
+        "rootPath": "/workspace/identity-service",
+        "git": {
+          "branch": "fix/jwt-clock-skew",
+          "commit": "8a12c0ffee"
+        }
+      },
+      "events": [
+        {
+          "id": "auth-e1",
+          "seq": 1,
+          "kind": "user_prompt",
+          "text": "Fix the expired JWT acceptance regression in the auth middleware.",
+          "occurredAt": "2026-05-24T09:00:00Z"
+        },
+        {
+          "id": "auth-e2",
+          "seq": 2,
+          "kind": "command",
+          "toolName": "Bash",
+          "command": "npm test auth-jwt",
+          "status": "failed",
+          "exitCode": 1,
+          "output": "TokenValidationError: expired JWT accepted beyond allowed clock skew",
+          "metadata": {
+            "failureSignal": "expired JWT accepted beyond allowed clock skew"
+          },
+          "occurredAt": "2026-05-24T09:01:00Z"
+        },
+        {
+          "id": "auth-e3",
+          "seq": 3,
+          "kind": "file_edit",
+          "path": "src/auth/jwt_validator.ts",
+          "operation": "modify",
+          "occurredAt": "2026-05-24T09:04:00Z"
+        },
+        {
+          "id": "auth-e4",
+          "seq": 4,
+          "kind": "file_edit",
+          "path": "test/auth/jwt_validator.test.ts",
+          "operation": "modify",
+          "occurredAt": "2026-05-24T09:06:00Z"
+        },
+        {
+          "id": "auth-e5",
+          "seq": 5,
+          "kind": "command",
+          "toolName": "Bash",
+          "command": "npm test auth-jwt",
+          "status": "success",
+          "exitCode": 0,
+          "output": "auth-jwt tests passed",
+          "occurredAt": "2026-05-24T09:08:00Z"
+        },
+        {
+          "id": "auth-e6",
+          "seq": 6,
+          "kind": "task_completed",
+          "status": "success",
+          "text": "JWT expiry validation now rejects tokens beyond the allowed clock skew.",
+          "occurredAt": "2026-05-24T09:09:00Z"
+        }
+      ]
+    }
+  },
+  "expectations": {
+    "expectedCategories": ["tool", "resolution"],
+    "queries": [
+      {
+        "query": "How should auth JWT fixes be validated?",
+        "mustContain": ["npm test auth-jwt"],
+        "expectedCategories": ["tool"]
+      },
+      {
+        "query": "What fixed expired JWT acceptance?",
+        "mustContain": ["expired JWT accepted beyond allowed clock skew"],
+        "expectedCategories": ["resolution"]
+      }
+    ]
+  }
+}
