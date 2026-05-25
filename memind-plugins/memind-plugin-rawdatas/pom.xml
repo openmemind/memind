@@ -34,5 +34,6 @@
         <module>memind-plugin-rawdata-image</module>
         <module>memind-plugin-rawdata-document</module>
         <module>memind-plugin-rawdata-toolcall</module>
+        <module>memind-plugin-rawdata-agent</module>
     </modules>
 </project>

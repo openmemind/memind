@@ -1,0 +1,130 @@
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.openmemind.ai.memory.plugin.rawdata.agent.content;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.openmemind.ai.memory.core.extraction.rawdata.RawContentJackson;
+import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import com.openmemind.ai.memory.plugin.rawdata.agent.AgentRawContentTypeRegistrar;
+import com.openmemind.ai.memory.plugin.rawdata.agent.model.AgentEvent;
+import com.openmemind.ai.memory.plugin.rawdata.agent.model.AgentEventKind;
+import com.openmemind.ai.memory.plugin.rawdata.agent.model.AgentEventStatus;
+import com.openmemind.ai.memory.plugin.rawdata.agent.model.AgentProject;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
+
+class AgentTimelineContentTest {
+
+    private static final ObjectMapper OBJECT_MAPPER = createObjectMapper();
+
+    private static ObjectMapper createObjectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        return RawContentJackson.registerAll(mapper, List.of(new AgentRawContentTypeRegistrar()));
+    }
+
+    @Test
+    void contentShouldExposeDeterministicIdentityAndReadableTimelineText() {
+        AgentProject project = new AgentProject("payment-service", "/repo/payment", null, Map.of());
+        List<AgentEvent> events =
+                List.of(
+                        new AgentEvent(
+                                "e2",
+                                2,
+                                AgentEventKind.COMMAND,
+                                Instant.parse("2026-05-24T10:01:00Z"),
+                                null,
+                                "Bash",
+                                null,
+                                "rounding mismatch",
+                                AgentEventStatus.FAILED,
+                                1200L,
+                                null,
+                                null,
+                                "npm test payment",
+                                1,
+                                Map.of()),
+                        new AgentEvent(
+                                "e1",
+                                1,
+                                AgentEventKind.USER_PROMPT,
+                                Instant.parse("2026-05-24T10:00:00Z"),
+                                "Fix payment tests",
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                Map.of()));
+
+        AgentTimelineContent content =
+                new AgentTimelineContent(
+                        "claude-code", "1.0", "session-123", "timeline-123", project, events);
+        AgentTimelineContent duplicate =
+                new AgentTimelineContent(
+                        "claude-code", "1.0", "session-123", "timeline-123", project, events);
+
+        assertThat(content.contentType()).isEqualTo("AGENT_TIMELINE");
+        assertThat(content.toContentString())
+                .contains("Goal:", "Fix payment tests", "npm test payment");
+        assertThat(content.getContentId()).isEqualTo(duplicate.getContentId());
+        assertThat(content.events()).extracting(AgentEvent::id).containsExactly("e1", "e2");
+    }
+
+    @Test
+    void jacksonRoundTripShouldPreserveSubtypeAndUserPromptText() throws Exception {
+        AgentTimelineContent content =
+                new AgentTimelineContent(
+                        "codex",
+                        "1.0",
+                        "session-1",
+                        "timeline-1",
+                        new AgentProject("memind", "/repo/memind", null, Map.of()),
+                        List.of(
+                                new AgentEvent(
+                                        "e1",
+                                        1,
+                                        AgentEventKind.USER_PROMPT,
+                                        Instant.parse("2026-05-24T10:00:00Z"),
+                                        "Review rawdata-agent design",
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        Map.of())));
+
+        String json = OBJECT_MAPPER.writeValueAsString(content);
+        RawContent decoded = OBJECT_MAPPER.readValue(json, RawContent.class);
+
+        assertThat(json).contains("\"type\":\"agent_timeline\"");
+        assertThat(decoded).isInstanceOf(AgentTimelineContent.class);
+        assertThat(((AgentTimelineContent) decoded).events())
+                .singleElement()
+                .extracting(AgentEvent::text)
+                .isEqualTo("Review rawdata-agent design");
+        assertThat(decoded.toContentString()).contains("Goal: Review rawdata-agent design");
+    }
+}
