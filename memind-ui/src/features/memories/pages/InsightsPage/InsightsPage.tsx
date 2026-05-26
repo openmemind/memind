@@ -111,25 +111,27 @@ function getInsightRoots(data: MemoryDashboardData): InsightRoot[] {
     return data.insights.roots
   }
 
-  if (!data.insights.root) {
+  const root = data.insights.root
+
+  if (!root) {
     return []
   }
 
   const fallbackRoot: InsightRoot = {
-    ...data.insights.root,
+    ...root,
     branches: data.insights.branches,
   }
   const hierarchyRoots = data.insights.hierarchy[0]?.items ?? []
   const extraRoots = hierarchyRoots
-    .filter((title) => title !== data.insights.root.title)
+    .filter((title) => title !== root.title)
     .map((title, index): InsightRoot => {
       const normalizedTitle = title.replace(/\.\.\.$/, "")
       const branch =
         data.insights.branches[index % data.insights.branches.length]
 
       return {
-        ...data.insights.root,
-        id: `${data.insights.root.id}-${index + 2}`,
+        ...root,
+        id: `${root.id}-${index + 2}`,
         title:
           normalizedTitle === title
             ? title
