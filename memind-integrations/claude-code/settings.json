@@ -3,7 +3,6 @@
   "memindApiToken": null,
   "userId": null,
   "agentId": "claude-code",
-  "agentIdMode": "project",
   "sourceClient": "claude-code",
   "autoRetrieve": true,
   "autoIngestAgentTimeline": true,

@@ -134,7 +134,8 @@ public class AgentItemExtractionStrategy implements ItemExtractionStrategy {
                 allowed,
                 MemoryCategory.PLAYBOOK,
                 options.extractPlaybook()
-                        && eventCount >= options.minEventsForPlaybook()
+                        && (eventCount >= options.minEventsForPlaybook()
+                                || hasHighSignalSubagentEvidence(segment.metadata()))
                         && (!options.requireSuccessForPlaybook()
                                 || successfulOutcome(segment.metadata().get("outcome"))));
         addIfEnabled(categories, allowed, MemoryCategory.DIRECTIVE, options.extractDirective());
@@ -154,6 +155,18 @@ public class AgentItemExtractionStrategy implements ItemExtractionStrategy {
     private static boolean successfulOutcome(Object outcome) {
         String value = string(outcome);
         return "success".equalsIgnoreCase(value) || "partial_success".equalsIgnoreCase(value);
+    }
+
+    private static boolean hasHighSignalSubagentEvidence(Map<String, Object> metadata) {
+        if (metadata == null) {
+            return false;
+        }
+        return stringList(metadata.get("eventKinds")).stream()
+                        .anyMatch(kind -> "subagent_stop".equalsIgnoreCase(kind))
+                || stringList(metadata.get("toolNames")).stream()
+                        .anyMatch(tool -> "task".equalsIgnoreCase(tool))
+                || stringList(metadata.get("eventIds")).stream()
+                        .anyMatch(eventId -> eventId.toLowerCase(Locale.ROOT).contains("subagent"));
     }
 
     private static List<ExtractedMemoryEntry> merge(

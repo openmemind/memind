@@ -314,6 +314,8 @@ public final class AgentEpisodeAssembler {
         }
         if (event.kind() == AgentEventKind.STOP
                 || event.kind() == AgentEventKind.SESSION_END
+                || event.kind() == AgentEventKind.COMPACT_BOUNDARY
+                || event.kind() == AgentEventKind.SYNTHETIC_BOUNDARY
                 || event.kind() == AgentEventKind.TASK_COMPLETED
                 || event.kind() == AgentEventKind.ASSISTANT_MESSAGE) {
             return "handoff";
@@ -379,6 +381,8 @@ public final class AgentEpisodeAssembler {
     private static boolean isTerminal(AgentEvent event) {
         return event.kind() == AgentEventKind.STOP
                 || event.kind() == AgentEventKind.SESSION_END
+                || event.kind() == AgentEventKind.COMPACT_BOUNDARY
+                || event.kind() == AgentEventKind.SYNTHETIC_BOUNDARY
                 || event.kind() == AgentEventKind.TASK_COMPLETED;
     }
 

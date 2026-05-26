@@ -170,4 +170,82 @@ class AgentTimelineContentTest {
         assertThat(timeline.agentTurnId()).isEqualTo("turn-1");
         assertThat(timeline.events()).extracting(AgentEvent::eventId).containsExactly("event-new");
     }
+
+    @Test
+    void eventKindShouldParseLifecycleWireValues() {
+        assertThat(AgentEventKind.fromWireValue("notification"))
+                .isEqualTo(AgentEventKind.NOTIFICATION);
+        assertThat(AgentEventKind.fromWireValue("subagent_stop"))
+                .isEqualTo(AgentEventKind.SUBAGENT_STOP);
+        assertThat(AgentEventKind.fromWireValue("compact_boundary"))
+                .isEqualTo(AgentEventKind.COMPACT_BOUNDARY);
+        assertThat(AgentEventKind.fromWireValue("synthetic_boundary"))
+                .isEqualTo(AgentEventKind.SYNTHETIC_BOUNDARY);
+    }
+
+    @Test
+    void contentStringShouldIncludeLifecycleEventEvidence() {
+        AgentTimelineContent content =
+                new AgentTimelineContent(
+                        "claude-code",
+                        "1.0",
+                        "session-1",
+                        "turn-1",
+                        "timeline-1",
+                        null,
+                        List.of(
+                                new AgentEvent(
+                                        "notice-1",
+                                        1,
+                                        AgentEventKind.NOTIFICATION,
+                                        Instant.parse("2026-05-24T10:00:00Z"),
+                                        "Permission required for Bash",
+                                        null,
+                                        null,
+                                        null,
+                                        AgentEventStatus.FAILED,
+                                        null,
+                                        null,
+                                        "blocked",
+                                        null,
+                                        null,
+                                        Map.of()),
+                                new AgentEvent(
+                                        "subagent-1",
+                                        2,
+                                        AgentEventKind.SUBAGENT_STOP,
+                                        Instant.parse("2026-05-24T10:01:00Z"),
+                                        "Explorer found parser edge cases",
+                                        "explorer",
+                                        null,
+                                        null,
+                                        AgentEventStatus.SUCCESS,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                        Map.of()),
+                                new AgentEvent(
+                                        "compact-1",
+                                        3,
+                                        AgentEventKind.COMPACT_BOUNDARY,
+                                        Instant.parse("2026-05-24T10:02:00Z"),
+                                        "compact",
+                                        null,
+                                        null,
+                                        null,
+                                        AgentEventStatus.SUCCESS,
+                                        null,
+                                        null,
+                                        "manual",
+                                        null,
+                                        null,
+                                        Map.of())));
+
+        assertThat(content.toContentString())
+                .contains("notification", "Permission required for Bash")
+                .contains("subagent_stop", "Explorer found parser edge cases", "tool=explorer")
+                .contains("compact_boundary", "operation=manual");
+    }
 }

@@ -319,6 +319,183 @@ class AgentEpisodeAssemblerTest {
         assertThat(episodes.get(1).eventIds()).containsExactly("e3");
     }
 
+    @Test
+    void shouldCloseEpisodesOnStopAndCompactBoundary() {
+        List<AgentEvent> events =
+                List.of(
+                        AgentEpisodeTestSupport.event(
+                                "e1",
+                                1,
+                                AgentEventKind.USER_PROMPT,
+                                "2026-05-24T10:00:00Z",
+                                "Review rawdata-agent",
+                                null,
+                                null,
+                                AgentEventStatus.SUCCESS,
+                                null,
+                                null,
+                                null,
+                                null),
+                        AgentEpisodeTestSupport.event(
+                                "e2",
+                                2,
+                                AgentEventKind.FILE_READ,
+                                "2026-05-24T10:01:00Z",
+                                null,
+                                "Read",
+                                null,
+                                AgentEventStatus.SUCCESS,
+                                "src/main/java/App.java",
+                                "read",
+                                null,
+                                null),
+                        AgentEpisodeTestSupport.event(
+                                "e3",
+                                3,
+                                AgentEventKind.SUBAGENT_STOP,
+                                "2026-05-24T10:02:00Z",
+                                "Explorer found parser edge cases",
+                                "explorer",
+                                null,
+                                AgentEventStatus.SUCCESS,
+                                null,
+                                null,
+                                null,
+                                null),
+                        AgentEpisodeTestSupport.event(
+                                "e4",
+                                4,
+                                AgentEventKind.STOP,
+                                "2026-05-24T10:03:00Z",
+                                "done",
+                                null,
+                                null,
+                                AgentEventStatus.SUCCESS,
+                                null,
+                                null,
+                                null,
+                                null),
+                        AgentEpisodeTestSupport.event(
+                                "e5",
+                                5,
+                                AgentEventKind.USER_PROMPT,
+                                "2026-05-24T10:04:00Z",
+                                "Continue after compaction",
+                                null,
+                                null,
+                                AgentEventStatus.SUCCESS,
+                                null,
+                                null,
+                                null,
+                                null),
+                        AgentEpisodeTestSupport.event(
+                                "e6",
+                                6,
+                                AgentEventKind.COMMAND,
+                                "2026-05-24T10:05:00Z",
+                                null,
+                                "Bash",
+                                null,
+                                AgentEventStatus.SUCCESS,
+                                null,
+                                "run",
+                                "mvn test",
+                                0),
+                        AgentEpisodeTestSupport.event(
+                                "e7",
+                                7,
+                                AgentEventKind.COMPACT_BOUNDARY,
+                                "2026-05-24T10:06:00Z",
+                                "compact",
+                                null,
+                                null,
+                                AgentEventStatus.SUCCESS,
+                                null,
+                                "compact",
+                                null,
+                                null));
+
+        List<AgentEpisode> episodes =
+                new AgentEpisodeAssembler()
+                        .assemble(AgentEpisodeTestSupport.paymentTimeline(events));
+
+        assertThat(episodes).hasSize(2);
+        assertThat(episodes.get(0).eventIds()).containsExactly("e1", "e2", "e3", "e4");
+        assertThat(episodes.get(1).eventIds()).containsExactly("e5", "e6", "e7");
+        assertThat(episodes.get(0).phase()).isEqualTo("full");
+        assertThat(episodes.get(1).phase()).isEqualTo("full");
+    }
+
+    @Test
+    void shouldClassifyLifecycleAndNotificationEventsConservatively() {
+        AgentChunkingOptions options = new AgentChunkingOptions(1, 2, 80, Duration.ofMinutes(30));
+        List<AgentEvent> events =
+                List.of(
+                        AgentEpisodeTestSupport.event(
+                                "e1",
+                                1,
+                                AgentEventKind.USER_PROMPT,
+                                "2026-05-24T10:00:00Z",
+                                "Investigate flaky tests",
+                                null,
+                                null,
+                                AgentEventStatus.SUCCESS,
+                                null,
+                                null,
+                                null,
+                                null),
+                        AgentEpisodeTestSupport.event(
+                                "e2",
+                                2,
+                                AgentEventKind.NOTIFICATION,
+                                "2026-05-24T10:01:00Z",
+                                "Permission required for Bash",
+                                null,
+                                null,
+                                AgentEventStatus.FAILED,
+                                null,
+                                "blocked",
+                                null,
+                                null),
+                        AgentEpisodeTestSupport.event(
+                                "e3",
+                                3,
+                                AgentEventKind.SUBAGENT_STOP,
+                                "2026-05-24T10:02:00Z",
+                                "Explorer checked parser ownership",
+                                "explorer",
+                                null,
+                                AgentEventStatus.SUCCESS,
+                                null,
+                                null,
+                                null,
+                                null),
+                        AgentEpisodeTestSupport.event(
+                                "e4",
+                                4,
+                                AgentEventKind.SYNTHETIC_BOUNDARY,
+                                "2026-05-24T10:03:00Z",
+                                "flush",
+                                null,
+                                null,
+                                AgentEventStatus.SUCCESS,
+                                null,
+                                "flush",
+                                null,
+                                null));
+
+        List<AgentEpisode> episodes =
+                new AgentEpisodeAssembler(options)
+                        .assemble(AgentEpisodeTestSupport.paymentTimeline(events));
+
+        assertThat(episodes)
+                .extracting(AgentEpisode::phase)
+                .containsExactly("investigation", "handoff");
+        assertThat(episodes.getFirst().eventIds()).containsExactly("e1", "e2", "e3");
+        assertThat(episodes.getFirst().failureSignals()).contains("Permission required for Bash");
+        assertThat(episodes.get(1).eventIds()).containsExactly("e4");
+    }
+
     private static AgentEvent eventWithMetadata(
             String id, int seq, AgentEventKind kind, String text, String taskId) {
         AgentEvent base =

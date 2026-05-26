@@ -186,6 +186,55 @@ class HookTest(unittest.TestCase):
             self.assertEqual(event["kind"], "test_result")
             self.assertEqual(event["status"], "success")
 
+    def test_notification_buffers_event(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp) / "state"
+            env = {
+                "CLAUDE_PLUGIN_ROOT": str(ROOT),
+                "PYTHONPATH": str(ROOT),
+                "MEMIND_CLAUDE_STATE_ROOT": str(state_dir),
+            }
+            output = self.run_hook(
+                "notification.py",
+                {
+                    "hook_event_name": "Notification",
+                    "cwd": tmp,
+                    "session_id": "s1",
+                    "message": "Permission required for Bash",
+                },
+                env=env,
+            )
+            self.assertEqual(output, {"continue": True})
+            state_file = next(state_dir.glob("*.json"))
+            event = json.loads(state_file.read_text())["agentEvents"][0]
+            self.assertEqual(event["kind"], "notification")
+            self.assertEqual(event["metadata"]["notificationKind"], "blocked")
+
+    def test_subagent_stop_buffers_event(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp) / "state"
+            env = {
+                "CLAUDE_PLUGIN_ROOT": str(ROOT),
+                "PYTHONPATH": str(ROOT),
+                "MEMIND_CLAUDE_STATE_ROOT": str(state_dir),
+            }
+            output = self.run_hook(
+                "subagent_stop.py",
+                {
+                    "hook_event_name": "SubagentStop",
+                    "cwd": tmp,
+                    "session_id": "s1",
+                    "subagent_type": "explorer",
+                    "message": "Found failing resolver test",
+                },
+                env=env,
+            )
+            self.assertEqual(output, {"continue": True})
+            state_file = next(state_dir.glob("*.json"))
+            event = json.loads(state_file.read_text())["agentEvents"][0]
+            self.assertEqual(event["kind"], "subagent_stop")
+            self.assertEqual(event["operation"], "explorer")
+
     def test_retrieve_buffers_user_prompt_event_before_memory_lookup(self):
         with tempfile.TemporaryDirectory() as tmp:
             state_dir = Path(tmp) / "state"
@@ -363,6 +412,97 @@ class HookTest(unittest.TestCase):
             self.assertEqual(raw_content["metadata"]["turnId"], "s1-turn-1")
             with SessionStateStore(state_dir).locked("s1") as state:
                 self.assertEqual(state.agent_events(), [])
+                self.assertTrue(state.is_empty())
+
+    def test_pre_compact_appends_compact_boundary_before_flush(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import ingest
+        from scripts.lib.state import SessionStateStore
+
+        config = {
+            "memindApiUrl": "http://127.0.0.1:8366",
+            "memindApiToken": None,
+            "autoIngestAgentTimeline": True,
+            "ingestRetrySpool": False,
+            "sourceClient": "claude-code",
+            "agentId": "claude-code",
+            "userId": "u",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp) / "state"
+            with SessionStateStore(state_dir).locked("s1") as state:
+                state.append_agent_event(
+                    {
+                        "eventId": "e1",
+                        "seq": 1,
+                        "kind": "user_prompt",
+                        "text": "Continue before compaction",
+                        "metadata": {"turnId": "s1-turn-1", "turnSeq": 1},
+                    }
+                )
+            with mock.patch.object(ingest, "state_root", return_value=state_dir):
+                with mock.patch.object(ingest, "retry_root", return_value=Path(tmp) / "retry"):
+                    with mock.patch.object(ingest, "MemindClient") as client_cls:
+                        client = client_cls.return_value
+                        client.extract = mock.AsyncMock(return_value=types.SimpleNamespace(status="SUCCESS"))
+                        result = ingest.ingest_messages(
+                            config,
+                            {
+                                "hook_event_name": "PreCompact",
+                                "session_id": "s1",
+                                "cwd": tmp,
+                                "timestamp": "2026-05-24T10:04:00Z",
+                            },
+                        )
+            self.assertEqual(result["agentEventsSubmitted"], 2)
+            client.extract.assert_awaited_once()
+            raw_content = client.extract.await_args.args[2]
+            self.assertEqual(raw_content["events"][-1]["kind"], "compact_boundary")
+
+    def test_session_end_appends_session_end_before_flush(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import ingest
+        from scripts.lib.state import SessionStateStore
+
+        config = {
+            "memindApiUrl": "http://127.0.0.1:8366",
+            "memindApiToken": None,
+            "autoIngestAgentTimeline": True,
+            "ingestRetrySpool": False,
+            "sourceClient": "claude-code",
+            "agentId": "claude-code",
+            "userId": "u",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp) / "state"
+            with SessionStateStore(state_dir).locked("s1") as state:
+                state.append_agent_event(
+                    {
+                        "eventId": "e1",
+                        "seq": 1,
+                        "kind": "command",
+                        "command": "npm test payment",
+                        "metadata": {"turnId": "s1-turn-1", "turnSeq": 1},
+                    }
+                )
+            with mock.patch.object(ingest, "state_root", return_value=state_dir):
+                with mock.patch.object(ingest, "retry_root", return_value=Path(tmp) / "retry"):
+                    with mock.patch.object(ingest, "MemindClient") as client_cls:
+                        client = client_cls.return_value
+                        client.extract = mock.AsyncMock(return_value=types.SimpleNamespace(status="SUCCESS"))
+                        result = ingest.ingest_messages(
+                            config,
+                            {
+                                "hook_event_name": "SessionEnd",
+                                "session_id": "s1",
+                                "cwd": tmp,
+                                "timestamp": "2026-05-24T10:05:00Z",
+                            },
+                        )
+            self.assertEqual(result["agentEventsSubmitted"], 2)
+            client.extract.assert_awaited_once()
+            raw_content = client.extract.await_args.args[2]
+            self.assertEqual(raw_content["events"][-1]["kind"], "session_end")
 
     def test_ingest_spools_agent_timeline_on_partial_success(self):
         sys.path.insert(0, str(ROOT / "scripts"))

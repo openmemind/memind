@@ -214,6 +214,86 @@ class AgentItemExtractionStrategyLlmTest {
     }
 
     @Test
+    void shouldAcceptSubagentBackedPlaybookWhenEvidenceBelongsToEpisode() {
+        var client =
+                new StubStructuredChatClient(
+                        response(
+                                new MemoryItemExtractionResponse.ExtractedItem(
+                                        "When payment test failures are unclear, ask an explorer"
+                                                + " subagent to inspect the failing resolver before"
+                                                + " editing calc.ts.",
+                                        0.86f,
+                                        null,
+                                        null,
+                                        List.of("playbooks"),
+                                        Map.of(
+                                                "trigger",
+                                                "payment test failures are unclear",
+                                                "steps",
+                                                List.of(
+                                                        "Ask explorer subagent to inspect resolver",
+                                                        "Use the finding before editing calc.ts"),
+                                                "expectedOutcome",
+                                                "edits are based on the diagnosed resolver issue",
+                                                "evidenceEventIds",
+                                                List.of("subagent-1")),
+                                        "playbook")));
+        AgentItemExtractionStrategy strategy = strategy(client);
+
+        List<ExtractedMemoryEntry> entries =
+                strategy.extract(
+                                List.of(subagentEpisode()),
+                                DefaultInsightTypes.all(),
+                                agentConfig())
+                        .block();
+
+        assertThat(entries)
+                .filteredOn(entry -> "playbook".equals(entry.category()))
+                .singleElement()
+                .satisfies(
+                        entry ->
+                                assertThat(entry.metadata().get("evidenceEventIds"))
+                                        .asList()
+                                        .containsExactly("subagent-1"));
+    }
+
+    @Test
+    void shouldRejectSubagentPlaybookWhenEvidenceIsOutsideEpisode() {
+        var client =
+                new StubStructuredChatClient(
+                        response(
+                                new MemoryItemExtractionResponse.ExtractedItem(
+                                        "When payment test failures are unclear, ask an explorer"
+                                                + " subagent first.",
+                                        0.86f,
+                                        null,
+                                        null,
+                                        List.of("playbooks"),
+                                        Map.of(
+                                                "trigger",
+                                                "payment test failures are unclear",
+                                                "steps",
+                                                List.of(
+                                                        "Ask explorer subagent",
+                                                        "Use the finding before editing"),
+                                                "expectedOutcome",
+                                                "edits are based on diagnosis",
+                                                "evidenceEventIds",
+                                                List.of("outside-event")),
+                                        "playbook")));
+        AgentItemExtractionStrategy strategy = strategy(client);
+
+        List<ExtractedMemoryEntry> entries =
+                strategy.extract(
+                                List.of(subagentEpisode()),
+                                DefaultInsightTypes.all(),
+                                agentConfig())
+                        .block();
+
+        assertThat(entries).noneMatch(entry -> "playbook".equals(entry.category()));
+    }
+
+    @Test
     void shouldSkipLlmWhenEpisodeDoesNotMeetMinimumEventThreshold() {
         var client =
                 new StubStructuredChatClient(
@@ -275,6 +355,22 @@ class AgentItemExtractionStrategyLlmTest {
                                                 "e4", 4, "npm test payment", "success", "passed"))),
                         Map.entry(
                                 "fileEvents", List.of(fileEvent("e3", 3, "src/payment/calc.ts")))));
+    }
+
+    private static ParsedSegment subagentEpisode() {
+        return segment(
+                Map.ofEntries(
+                        Map.entry("segmentType", "agent_episode"),
+                        Map.entry("episodeId", "episode-subagent"),
+                        Map.entry("sourceClient", "claude-code"),
+                        Map.entry("sessionId", "session-123"),
+                        Map.entry("timelineId", "timeline-123"),
+                        Map.entry("outcome", "success"),
+                        Map.entry("files", List.of("src/payment/calc.ts")),
+                        Map.entry("commands", List.of("npm test payment")),
+                        Map.entry("toolNames", List.of("Task")),
+                        Map.entry("failureSignals", List.of()),
+                        Map.entry("eventIds", List.of("prompt-1", "subagent-1", "stop-1"))));
     }
 
     private static ParsedSegment shortEpisode() {

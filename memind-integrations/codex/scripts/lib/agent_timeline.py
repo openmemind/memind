@@ -332,7 +332,11 @@ def event_id(source_client, session_id, seq, hook_input, kind=None, text=None):
 def _base_event(hook_input, seq, kind, turn_id=None, turn_seq=None, text=None):
     source_client = hook_input.get("source_client") or "codex"
     session_id = hook_input.get("session_id") or "unknown-session"
-    metadata = {"hookEventName": hook_input.get("hook_event_name")}
+    metadata = {
+        "hookEventName": hook_input.get("hook_event_name"),
+        "sessionId": session_id,
+        "sourceClient": source_client,
+    }
     if turn_id:
         metadata["turnId"] = turn_id
     if turn_seq is not None:
@@ -384,6 +388,20 @@ def normalize_stop_event(hook_input, seq, turn_id=None, turn_seq=None):
             metadata["redactionKinds"] = sorted(set(redaction_kinds))
             event["metadata"] = metadata
     event["status"] = "success"
+    return {key: value for key, value in event.items() if value is not None and value != ""}
+
+
+def normalize_compact_boundary_event(hook_input, seq, turn_id=None, turn_seq=None):
+    event = _base_event(hook_input, seq, "compact_boundary", turn_id, turn_seq, "compact")
+    event["status"] = "success"
+    event["operation"] = hook_input.get("trigger") or hook_input.get("compact_reason") or "compact"
+    return {key: value for key, value in event.items() if value is not None and value != ""}
+
+
+def normalize_session_end_event(hook_input, seq, turn_id=None, turn_seq=None):
+    event = _base_event(hook_input, seq, "session_end", turn_id, turn_seq, "session_end")
+    event["status"] = "success"
+    event["operation"] = hook_input.get("reason") or hook_input.get("session_end_reason") or "session_end"
     return {key: value for key, value in event.items() if value is not None and value != ""}
 
 
@@ -441,7 +459,11 @@ def normalize_hook_event(hook_input, seq, turn_id=None, turn_seq=None):
         event["output"] = _json_text(redacted_output)
         redaction_kinds.extend(kinds)
 
-    metadata = {"hookEventName": hook_input.get("hook_event_name")}
+    metadata = {
+        "hookEventName": hook_input.get("hook_event_name"),
+        "sessionId": session_id,
+        "sourceClient": source_client,
+    }
     normalization_metadata, kinds = _redact_metadata(normalization.get("metadata") or {})
     metadata.update(normalization_metadata)
     redaction_kinds.extend(kinds)
@@ -478,6 +500,8 @@ def build_timeline_payload(config, identity, session_id, events, hook_input):
         "metadata": {
             "userId": identity.get("userId"),
             "agentId": identity.get("agentId"),
+            "sessionId": session_id,
+            "sourceClient": source_client,
             "eventIds": [event["eventId"] for event in events if event.get("eventId")],
         },
     }

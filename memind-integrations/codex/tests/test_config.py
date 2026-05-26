@@ -26,6 +26,7 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config["agentId"], "codex")
         self.assertEqual(config["sourceClient"], "codex")
         self.assertEqual(config["retrieveContextTurns"], 0)
+        self.assertNotIn("agentIdMode", config)
         self.assertNotIn("commitOnStop", config)
 
     def test_user_config_and_env_override_settings(self):
@@ -44,6 +45,7 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config["agentId"], "custom")
         self.assertEqual(config["memindApiUrl"], "http://example.test")
         self.assertEqual(config["retrieveContextTurns"], 2)
+        self.assertNotIn("agentIdMode", config)
         self.assertNotIn("commitOnStop", config)
         self.assertNotIn("ingestionRoles", config)
 

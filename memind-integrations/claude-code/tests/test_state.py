@@ -48,6 +48,16 @@ class StateTest(unittest.TestCase):
             with store.locked("session-1") as state:
                 self.assertEqual(state.agent_events(), [{"eventId": "e2", "seq": 2}])
 
+    def test_state_reports_empty_after_all_events_are_cleared_and_turn_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = SessionStateStore(Path(tmp))
+            with store.locked("session-1") as state:
+                turn_id, _turn_seq = state.start_agent_turn("session-1")
+                state.append_agent_event({"eventId": "e1", "seq": 1})
+                state.clear_agent_events(["e1"])
+                state.close_agent_turn(turn_id)
+                self.assertTrue(state.is_empty())
+
     def test_agent_event_buffer_has_soft_cap(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = SessionStateStore(Path(tmp))
@@ -59,6 +69,24 @@ class StateTest(unittest.TestCase):
                 self.assertEqual(len(events), 500)
                 self.assertEqual(events[0]["eventId"], "e1")
                 self.assertTrue(state.data["agentEventsTruncated"])
+                self.assertEqual(state.data["agentEventsDropped"], 1)
+
+    def test_agent_event_buffer_soft_cap_preserves_newest_boundary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = SessionStateStore(Path(tmp))
+            with store.locked("session-1") as state:
+                state.append_agent_event({"eventId": "prompt", "seq": 1, "kind": "user_prompt"})
+                for index in range(600):
+                    state.append_agent_event(
+                        {"eventId": f"e{index}", "seq": index + 2, "kind": "tool_result"}
+                    )
+                state.append_agent_event({"eventId": "stop", "seq": 700, "kind": "stop"})
+            with store.locked("session-1") as state:
+                events = state.agent_events()
+                self.assertLessEqual(len(events), 500)
+                self.assertEqual(events[-1]["eventId"], "stop")
+                self.assertTrue(state.data["agentEventsTruncated"])
+                self.assertIn("agentEventsDropped", state.data)
 
 
 if __name__ == "__main__":

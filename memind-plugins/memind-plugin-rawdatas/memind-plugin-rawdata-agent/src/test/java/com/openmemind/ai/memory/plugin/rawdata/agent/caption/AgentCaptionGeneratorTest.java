@@ -43,4 +43,63 @@ class AgentCaptionGeneratorTest {
                         "Agent episode: Fix payment tests -> success "
                                 + "(src/payment/calc.ts; npm test payment)");
     }
+
+    @Test
+    void shouldIncludeKeyLifecycleAwareEpisodeSignals() {
+        String caption =
+                new AgentCaptionGenerator()
+                        .generate(
+                                "content",
+                                Map.of(
+                                        "goal",
+                                        "Fix payment tests",
+                                        "outcome",
+                                        "success",
+                                        "files",
+                                        List.of("src/payment/calc.ts"),
+                                        "commands",
+                                        List.of("npm test payment"),
+                                        "toolNames",
+                                        List.of("Task", "Bash"),
+                                        "failureSignals",
+                                        List.of("payment rounding mismatch"),
+                                        "eventKinds",
+                                        List.of(
+                                                "user_prompt",
+                                                "subagent_stop",
+                                                "file_edit",
+                                                "test_result",
+                                                "stop")))
+                        .block();
+
+        assertThat(caption)
+                .contains(
+                        "Fix payment tests",
+                        "success",
+                        "src/payment/calc.ts",
+                        "npm test payment",
+                        "subagent",
+                        "payment rounding mismatch");
+    }
+
+    @Test
+    void shouldMentionCompactBoundaryWhenEpisodeEndsAtCompaction() {
+        String caption =
+                new AgentCaptionGenerator()
+                        .generate(
+                                "content",
+                                Map.of(
+                                        "goal",
+                                        "Continue rawdata-agent implementation",
+                                        "outcome",
+                                        "success",
+                                        "commands",
+                                        List.of("mvn test"),
+                                        "eventKinds",
+                                        List.of("user_prompt", "command", "compact_boundary")))
+                        .block();
+
+        assertThat(caption)
+                .contains("Continue rawdata-agent implementation", "mvn test", "compact");
+    }
 }

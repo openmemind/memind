@@ -32,6 +32,8 @@ class ManifestTest(unittest.TestCase):
             "UserPromptSubmit",
             "PreToolUse",
             "PostToolUse",
+            "Notification",
+            "SubagentStop",
             "PreCompact",
             "Stop",
             "SessionEnd",
@@ -45,11 +47,16 @@ class ManifestTest(unittest.TestCase):
         self.assertTrue(stop_command["async"])
         self.assertTrue(hooks["PreToolUse"][0]["hooks"][0]["async"])
         self.assertTrue(hooks["PostToolUse"][0]["hooks"][0]["async"])
+        self.assertTrue(hooks["Notification"][0]["hooks"][0]["async"])
+        self.assertTrue(hooks["SubagentStop"][0]["hooks"][0]["async"])
+        self.assertEqual(hooks["Notification"][0]["hooks"][0]["timeout"], 5)
+        self.assertEqual(hooks["SubagentStop"][0]["hooks"][0]["timeout"], 5)
 
     def test_default_settings(self):
         settings = json.loads((ROOT / "settings.json").read_text())
         self.assertEqual(settings["retrieveContextTurns"], 0)
         self.assertTrue(settings["autoIngestAgentTimeline"])
+        self.assertNotIn("agentIdMode", settings)
         self.assertNotIn("autoIngest", settings)
         self.assertNotIn("ingestionRoles", settings)
         self.assertNotIn("ingestionMaxMessagesPerHook", settings)

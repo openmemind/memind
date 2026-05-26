@@ -3,7 +3,6 @@
   "memindApiToken": null,
   "userId": null,
   "agentId": "codex",
-  "agentIdMode": "project",
   "sourceClient": "codex",
   "autoRetrieve": true,
   "autoIngestAgentTimeline": true,

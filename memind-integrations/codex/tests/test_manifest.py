@@ -34,6 +34,10 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(
             set(hooks), {"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"}
         )
+        self.assertNotIn("PreCompact", hooks)
+        self.assertNotIn("SessionEnd", hooks)
+        self.assertNotIn("Notification", hooks)
+        self.assertNotIn("SubagentStop", hooks)
         for event in ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]:
             self.assertIsInstance(hooks[event], list)
             self.assertNotIn("matcher", hooks[event][0])
@@ -49,6 +53,7 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(settings["sourceClient"], "codex")
         self.assertTrue(settings["autoIngestAgentTimeline"])
         self.assertEqual(settings["retrieveContextTurns"], 0)
+        self.assertNotIn("agentIdMode", settings)
         self.assertNotIn("commitOnStop", settings)
         self.assertNotIn("autoIngest", settings)
         self.assertNotIn("ingestionRoles", settings)

@@ -97,8 +97,10 @@ class SessionState:
             return
         events.append(event)
         if len(events) > MAX_AGENT_EVENTS:
+            dropped = len(events) - MAX_AGENT_EVENTS
             events = events[-MAX_AGENT_EVENTS:]
             self.data["agentEventsTruncated"] = True
+            self.data["agentEventsDropped"] = int(self.data.get("agentEventsDropped", 0)) + dropped
         self.data["agentEvents"] = events
         self.data["updatedAt"] = time.time()
 
@@ -150,6 +152,13 @@ class SessionState:
             self.data.pop("currentAgentTurnId", None)
             self.data.pop("currentAgentTurnSeq", None)
             self.data["updatedAt"] = time.time()
+
+    def is_empty(self):
+        return (
+            not self.data.get("agentEvents")
+            and not self.data.get("currentAgentTurnId")
+            and not self.data.get("currentAgentTurnSeq")
+        )
 
 
 class SessionStateStore:

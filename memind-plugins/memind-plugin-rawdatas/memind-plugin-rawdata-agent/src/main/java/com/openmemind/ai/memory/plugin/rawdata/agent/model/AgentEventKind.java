@@ -23,16 +23,23 @@ import java.util.Locale;
 public enum AgentEventKind {
     USER_PROMPT,
     ASSISTANT_MESSAGE,
+    TOOL_START,
     TOOL_CALL,
     TOOL_RESULT,
+    TOOL_FAILURE,
     COMMAND,
     FILE_READ,
     FILE_EDIT,
     TEST_RESULT,
     PERMISSION_REQUEST,
+    SUBAGENT_START,
+    SUBAGENT_STOP,
+    NOTIFICATION,
     ERROR,
     STOP,
     SESSION_END,
+    COMPACT_BOUNDARY,
+    SYNTHETIC_BOUNDARY,
     TASK_COMPLETED;
 
     @JsonCreator

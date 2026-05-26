@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from ingest import state_root
+from lib.agent_timeline import normalize_subagent_stop_event
+from lib.config import load_config
+from lib.logging_utils import debug_log
+from lib.state import SessionStateStore
+
+
+def main():
+    try:
+        hook_input = json.loads(sys.stdin.read() or "{}")
+        config = load_config()
+        session_id = hook_input.get("session_id") or "unknown-session"
+        hook_input["source_client"] = config.get("sourceClient") or "claude-code"
+        with SessionStateStore(state_root()).locked(session_id) as state:
+            turn_id, turn_seq = state.ensure_agent_turn(session_id)
+            seq = state.next_agent_seq()
+            state.append_agent_event(
+                normalize_subagent_stop_event(
+                    hook_input, seq, turn_id=turn_id, turn_seq=turn_seq
+                )
+            )
+    except Exception as exc:
+        try:
+            debug_log(load_config(), "subagent_stop_failed", {"error": str(exc)})
+        except Exception:
+            pass
+    print(json.dumps({"continue": True}))
+
+
+if __name__ == "__main__":
+    main()

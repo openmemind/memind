@@ -87,6 +87,18 @@ class InstallerTest(unittest.TestCase):
             self.assertIn("echo existing", stop_commands)
             memind_commands = [command for command in stop_commands if "memind-integrations/codex" in command]
             self.assertEqual(len(memind_commands), 1)
+            memind_events = {
+                event
+                for event, groups in hooks.items()
+                for group in groups
+                for hook in group.get("hooks", [])
+                if "memind-integrations/codex" in hook.get("command", "")
+                or "/memind/codex/" in hook.get("command", "")
+            }
+            self.assertEqual(
+                memind_events,
+                {"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"},
+            )
 
     def test_uninstall_removes_only_memind_entries(self):
         with tempfile.TemporaryDirectory() as tmp:

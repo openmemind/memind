@@ -328,6 +328,7 @@ class HookTest(unittest.TestCase):
             self.assertEqual(raw_content["metadata"]["turnId"], "s1-turn-1")
             with SessionStateStore(state_root).locked("s1") as state:
                 self.assertEqual(state.agent_events(), [])
+                self.assertTrue(state.is_empty())
 
     def test_ingest_spools_agent_timeline_on_partial_success(self):
         sys.path.insert(0, str(ROOT / "scripts"))

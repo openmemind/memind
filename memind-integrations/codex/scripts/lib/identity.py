@@ -53,8 +53,5 @@ def resolve_identity(config, hook_input):
     cwd = hook_input.get("cwd") or os.getcwd()
     user_id = config.get("userId") or f"local{SEPARATOR}{getpass.getuser()}"
     base_agent = config.get("agentId") or "codex"
-    if config.get("agentIdMode") == "project":
-        agent_id = f"{base_agent}{SEPARATOR}{project_slug(cwd)}"
-    else:
-        agent_id = base_agent
+    agent_id = f"{base_agent}{SEPARATOR}{project_slug(cwd)}"
     return {"userId": user_id, "agentId": agent_id}

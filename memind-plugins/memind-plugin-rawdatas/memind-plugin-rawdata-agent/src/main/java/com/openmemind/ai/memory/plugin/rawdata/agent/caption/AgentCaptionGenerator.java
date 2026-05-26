@@ -52,15 +52,29 @@ public final class AgentCaptionGenerator implements CaptionGenerator {
     }
 
     private String summary(Map<String, Object> metadata) {
+        var parts = new java.util.ArrayList<String>();
         String file = first(metadata.get("files"));
         String command = first(metadata.get("commands"));
         if (!file.isBlank() && !command.isBlank()) {
-            return file + "; " + command;
+            parts.add(file + "; " + command);
+        } else if (!file.isBlank()) {
+            parts.add(file);
+        } else if (!command.isBlank()) {
+            parts.add(command);
         }
-        if (!file.isBlank()) {
-            return file;
+        String failureSignal = first(metadata.get("failureSignals"));
+        if (!failureSignal.isBlank()) {
+            parts.add(failureSignal);
         }
-        return command;
+        if (contains(metadata.get("eventKinds"), "subagent_stop")) {
+            parts.add("subagent");
+        }
+        if (contains(metadata.get("eventKinds"), "compact_boundary")) {
+            parts.add("compact");
+        } else if (contains(metadata.get("eventKinds"), "session_end")) {
+            parts.add("session end");
+        }
+        return String.join("; ", parts);
     }
 
     private String first(Object value) {
@@ -72,6 +86,16 @@ public final class AgentCaptionGenerator implements CaptionGenerator {
 
     private String stringValue(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private boolean contains(Object value, String expected) {
+        if (!(value instanceof List<?> list)) {
+            return false;
+        }
+        return list.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(Object::toString)
+                .anyMatch(item -> expected.equalsIgnoreCase(item));
     }
 
     private static String truncate(String content, int maxChars) {

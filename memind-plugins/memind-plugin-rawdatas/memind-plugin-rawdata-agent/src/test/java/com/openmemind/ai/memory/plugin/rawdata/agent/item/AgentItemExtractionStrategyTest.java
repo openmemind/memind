@@ -129,6 +129,104 @@ class AgentItemExtractionStrategyTest {
     }
 
     @Test
+    void shouldUseLaterMatchingValidationAndIntermediateFileEvidenceForResolution() {
+        ParsedSegment segment =
+                segment(
+                        Map.ofEntries(
+                                Map.entry("segmentType", "agent_episode"),
+                                Map.entry("episodeId", "episode-resolution"),
+                                Map.entry("sourceClient", "claude-code"),
+                                Map.entry("sessionId", "session-123"),
+                                Map.entry("timelineId", "timeline-123"),
+                                Map.entry("outcome", "success"),
+                                Map.entry("files", List.of("src/payment/calc.ts")),
+                                Map.entry("commands", List.of("npm test payment")),
+                                Map.entry("toolNames", List.of("Bash", "Edit")),
+                                Map.entry("failureSignals", List.of("payment rounding mismatch")),
+                                Map.entry(
+                                        "eventIds",
+                                        List.of(
+                                                "prompt",
+                                                "failed-test",
+                                                "early-pass",
+                                                "edit-calc",
+                                                "passed-test",
+                                                "outside-edit")),
+                                Map.entry(
+                                        "commandEvents",
+                                        List.of(
+                                                commandEvent(
+                                                        "early-pass",
+                                                        2,
+                                                        "npm test payment",
+                                                        "success",
+                                                        "passed before failure"),
+                                                commandEvent(
+                                                        "failed-test",
+                                                        3,
+                                                        "npm test payment",
+                                                        "failed",
+                                                        "payment rounding mismatch"),
+                                                commandEvent(
+                                                        "passed-test",
+                                                        8,
+                                                        "npm test payment",
+                                                        "success",
+                                                        "passed"))),
+                                Map.entry(
+                                        "fileEvents",
+                                        List.of(
+                                                fileEvent("edit-calc", 5, "src/payment/calc.ts"),
+                                                fileEvent("outside-edit", 9, "README.md")))));
+
+        List<ExtractedMemoryEntry> entries =
+                strategy.extract(List.of(segment), DefaultInsightTypes.all(), agentConfig())
+                        .block();
+
+        assertThat(entries)
+                .filteredOn(entry -> "resolution".equals(entry.category()))
+                .singleElement()
+                .satisfies(
+                        resolution -> {
+                            assertThat(resolution.metadata())
+                                    .containsEntry("validatedBy", "npm test payment");
+                            assertThat(resolution.metadata().get("evidenceEventIds"))
+                                    .asList()
+                                    .containsExactly("failed-test", "edit-calc", "passed-test");
+                        });
+    }
+
+    @Test
+    void shouldNotCreateDeterministicItemFromWeakNotificationOnlyEpisode() {
+        ParsedSegment segment =
+                segment(
+                        "Claude is waiting for input.",
+                        Map.of(
+                                "segmentType",
+                                "agent_episode",
+                                "episodeId",
+                                "episode-notification",
+                                "eventIds",
+                                List.of("notice-1"),
+                                "files",
+                                List.of(),
+                                "commands",
+                                List.of(),
+                                "toolNames",
+                                List.of(),
+                                "failureSignals",
+                                List.of(),
+                                "outcome",
+                                "unknown"));
+
+        List<ExtractedMemoryEntry> entries =
+                strategy.extract(List.of(segment), DefaultInsightTypes.all(), agentConfig())
+                        .block();
+
+        assertThat(entries).isEmpty();
+    }
+
+    @Test
     void shouldProduceStableCanonicalContentForDuplicateExtraction() {
         var first =
                 strategy.extract(
@@ -213,8 +311,12 @@ class AgentItemExtractionStrategyTest {
     }
 
     private static ParsedSegment segment(Map<String, Object> metadata) {
+        return segment("Goal: Fix payment tests", metadata);
+    }
+
+    private static ParsedSegment segment(String text, Map<String, Object> metadata) {
         return new ParsedSegment(
-                "Goal: Fix payment tests",
+                text,
                 null,
                 0,
                 23,

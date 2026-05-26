@@ -18,8 +18,12 @@ import unittest
 from scripts.lib.agent_timeline import (
     build_timeline_payload,
     normalize_assistant_message_event,
+    normalize_compact_boundary_event,
     normalize_hook_event,
+    normalize_notification_event,
+    normalize_session_end_event,
     normalize_stop_event,
+    normalize_subagent_stop_event,
     normalize_user_prompt_event,
 )
 
@@ -50,6 +54,8 @@ class AgentTimelineTest(unittest.TestCase):
         self.assertEqual(event["output"], '{"stdout": "rounding mismatch"}')
         self.assertEqual(event["metadata"]["validationType"], "test")
         self.assertEqual(event["metadata"]["normalizationVersion"], 1)
+        self.assertEqual(event["metadata"]["sessionId"], "s")
+        self.assertEqual(event["metadata"]["sourceClient"], "claude-code")
         self.assertEqual(event["metadata"]["turnId"], "s-turn-1")
         self.assertEqual(event["metadata"]["turnSeq"], 1)
 
@@ -207,10 +213,14 @@ class AgentTimelineTest(unittest.TestCase):
 
         self.assertEqual(prompt_event["kind"], "user_prompt")
         self.assertEqual(prompt_event["text"], "Fix payment tests")
+        self.assertEqual(prompt_event["metadata"]["sessionId"], "s")
+        self.assertEqual(prompt_event["metadata"]["sourceClient"], "claude-code")
         self.assertEqual(prompt_event["metadata"]["turnId"], "s-turn-1")
         self.assertEqual(prompt_event["metadata"]["turnSeq"], 1)
         self.assertEqual(stop_event["kind"], "stop")
         self.assertEqual(stop_event["status"], "success")
+        self.assertEqual(stop_event["metadata"]["sessionId"], "s")
+        self.assertEqual(stop_event["metadata"]["sourceClient"], "claude-code")
         self.assertEqual(stop_event["metadata"]["turnId"], "s-turn-1")
 
     def test_normalizes_assistant_message_event_from_transcript_text(self):
@@ -229,7 +239,79 @@ class AgentTimelineTest(unittest.TestCase):
         self.assertEqual(event["kind"], "assistant_message")
         self.assertEqual(event["text"], "Updated calc.ts and tests now pass.")
         self.assertEqual(event["status"], "success")
+        self.assertEqual(event["metadata"]["sessionId"], "s")
+        self.assertEqual(event["metadata"]["sourceClient"], "claude-code")
         self.assertEqual(event["metadata"]["turnId"], "s-turn-1")
+
+    def test_normalizes_notification_event(self):
+        event = normalize_notification_event(
+            {
+                "hook_event_name": "Notification",
+                "session_id": "s",
+                "message": "Claude needs permission to run Bash",
+                "timestamp": "2026-05-24T10:00:00Z",
+            },
+            seq=1,
+            turn_id="s-turn-1",
+            turn_seq=1,
+        )
+
+        self.assertEqual(event["kind"], "notification")
+        self.assertEqual(event["text"], "Claude needs permission to run Bash")
+        self.assertEqual(event["status"], "success")
+        self.assertEqual(event["metadata"]["notificationKind"], "blocked")
+        self.assertEqual(event["metadata"]["failureSignal"], "Claude needs permission to run Bash")
+
+    def test_normalizes_subagent_stop_event(self):
+        event = normalize_subagent_stop_event(
+            {
+                "hook_event_name": "SubagentStop",
+                "session_id": "s",
+                "subagent_type": "explorer",
+                "message": "Found failing resolver test",
+                "timestamp": "2026-05-24T10:01:00Z",
+            },
+            seq=2,
+            turn_id="s-turn-1",
+            turn_seq=1,
+        )
+
+        self.assertEqual(event["kind"], "subagent_stop")
+        self.assertEqual(event["operation"], "explorer")
+        self.assertIn("Found failing resolver test", event["text"])
+        self.assertEqual(event["metadata"]["subagentType"], "explorer")
+
+    def test_normalizes_compact_boundary_event(self):
+        event = normalize_compact_boundary_event(
+            {
+                "hook_event_name": "PreCompact",
+                "session_id": "s",
+                "timestamp": "2026-05-24T10:02:00Z",
+            },
+            seq=3,
+            turn_id="s-turn-1",
+            turn_seq=1,
+        )
+
+        self.assertEqual(event["kind"], "compact_boundary")
+        self.assertEqual(event["status"], "success")
+        self.assertEqual(event["operation"], "compact")
+
+    def test_normalizes_session_end_event(self):
+        event = normalize_session_end_event(
+            {
+                "hook_event_name": "SessionEnd",
+                "session_id": "s",
+                "timestamp": "2026-05-24T10:03:00Z",
+            },
+            seq=4,
+            turn_id="s-turn-1",
+            turn_seq=1,
+        )
+
+        self.assertEqual(event["kind"], "session_end")
+        self.assertEqual(event["status"], "success")
+        self.assertEqual(event["operation"], "session_end")
 
     def test_redacts_secret_fields_before_spool(self):
         event = normalize_hook_event(
@@ -281,8 +363,11 @@ class AgentTimelineTest(unittest.TestCase):
         self.assertEqual(payload["sessionId"], "s")
         self.assertEqual(payload["agentTurnId"], "s-turn-2")
         self.assertEqual(payload["timelineId"], "s-turn-2-timeline")
+        self.assertEqual(payload["metadata"]["sessionId"], "s")
+        self.assertEqual(payload["metadata"]["sourceClient"], "claude-code")
         self.assertEqual(payload["metadata"]["turnId"], "s-turn-2")
         self.assertEqual(payload["metadata"]["turnSeq"], 2)
+        self.assertEqual(payload["metadata"]["eventIds"], [event["eventId"]])
         self.assertIn("eventId", payload["events"][0])
         self.assertEqual(payload["events"][0]["seq"], 1)
         self.assertEqual(payload["project"]["name"], "project")

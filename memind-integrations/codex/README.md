@@ -126,6 +126,10 @@ The installed hooks are:
 | `PostToolUse` | `scripts/post_tool_use.py` | 5s | Buffer a redacted tool-result event in local session state. |
 | `Stop` | `scripts/ingest.py` | 15s | Flush buffered `agent_timeline` events after a turn. |
 
+Codex currently registers only the hook events listed above. Memind does not simulate Claude Code-only lifecycle
+events such as `PreCompact`, `SessionEnd`, `Notification`, or `SubagentStop` in the Codex adapter. If Codex adds
+native support for additional lifecycle events, they should be added as explicit hooks with tests.
+
 ## Configuration
 
 The default configuration works with a local Memind server at `http://127.0.0.1:8366`.
@@ -138,7 +142,6 @@ User configuration is optional. Save overrides as `~/.memind/codex.json`:
   "memindApiToken": null,
   "userId": "local__alice",
   "agentId": "codex",
-  "agentIdMode": "project",
   "sourceClient": "codex",
   "autoIngestAgentTimeline": true,
   "retrieveContextTurns": 0
@@ -158,8 +161,7 @@ Settings are loaded in this order:
 | `memindApiUrl` | `http://127.0.0.1:8366` | Memind server URL. |
 | `memindApiToken` | `null` | Optional bearer token. |
 | `userId` | `local__<system-user>` | Memind user identity. |
-| `agentId` | `codex` | Base agent identity. |
-| `agentIdMode` | `project` | `project` appends a stable project suffix; any other value uses `agentId` as-is. |
+| `agentId` | `codex` | Base agent identity. A stable project suffix is always appended before calling Memind. |
 | `sourceClient` | `codex` | Source marker stored with Memind data. |
 | `autoRetrieve` | `true` | Enables prompt-time memory retrieval. |
 | `autoIngestAgentTimeline` | `true` | Enables user prompt, tool/result, assistant message, and stop event buffering plus `agent_timeline` rawdata flush. |
@@ -179,7 +181,6 @@ export MEMIND_API_URL=http://127.0.0.1:8366
 export MEMIND_API_TOKEN=...
 export MEMIND_USER_ID=local__alice
 export MEMIND_AGENT_ID=codex
-export MEMIND_AGENT_ID_MODE=project
 export MEMIND_SOURCE_CLIENT=codex
 export MEMIND_AUTO_INGEST_AGENT_TIMELINE=true
 export MEMIND_RETRIEVE_CONTEXT_TURNS=0
@@ -201,14 +202,10 @@ By default, Memind stores Codex memory under:
 The project hash is based on the Git remote URL when available, otherwise the local project path. This keeps
 different repositories separated while allowing memory to survive moving between Codex sessions.
 
-To use one shared Codex memory across all projects:
-
-```json
-{
-  "agentId": "codex",
-  "agentIdMode": "fixed"
-}
-```
+`agentId` in configuration is the base identity only. The runtime always appends the project suffix before
+retrieval or ingestion, so this integration does not provide a global, all-project Codex memory mode.
+`sessionId`, `agentTurnId`, `timelineId`, and per-event turn metadata are stored only inside raw content and
+item metadata; they do not create Memind core project or session entities.
 
 ## Retrieval Behavior
 
@@ -242,9 +239,12 @@ Agent memory items are grouped separately when returned by Memind:
 ## Directives
 ```
 
+This phase keeps retrieval formatting intentionally simple. It does not add a new Retrieval Context Compiler;
+retrieved memories are still formatted from Memind items and insights by the adapter.
+
 ## Ingestion Behavior
 
-Ingestion is timeline-only for Codex. The plugin does not submit transcript conversation rawdata. It buffers one
+Ingestion is timeline-only for Codex. The plugin does not submit transcript conversation-style raw data. It buffers one
 turn timeline under `~/.memind/codex/state/`: the submitted user prompt, tool and command events, the latest
 assistant message when available from the transcript, and a stop boundary. It flushes the turn through
 `AsyncMemindClient.memory.extract(...)` as agent timeline rawdata. A typical timeline payload looks like:
@@ -302,7 +302,7 @@ assistant message when available from the transcript, and a stop boundary. It fl
 ```
 
 Secrets are redacted before events are written to local state. File content capture is disabled by default; the
-hook stores normalized tool metadata, commands, paths, statuses, and compact outputs.
+hook stores normalized tool metadata, commands, paths, statuses, and bounded outputs.
 
 On `SUCCESS`, the covered events are removed from local state. `PARTIAL_SUCCESS` and failures keep the events
 available and spool the full timeline payload for later `SessionStart` replay.
@@ -419,7 +419,7 @@ curl -fsSL http://127.0.0.1:8366/open/v1/health
 ```
 
 - Confirm `autoRetrieve` is `true`.
-- Confirm existing memories are stored under the same `userId` and `agentId`.
+- Confirm existing memories are stored under the same `userId` and resolved project-scoped `agentId`.
 - Try setting `retrieveContextTurns` to `1` or `2` if the current prompt is very short.
 
 ### Agent timeline events are not ingested
