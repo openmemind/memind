@@ -35,6 +35,8 @@ import { PlanningOverlay } from "@/features/shared/ui"
 import { cn } from "@/lib/utils"
 import * as React from "react"
 
+import logo from "@/assets/logo.png"
+
 export type AppPage =
   | "dashboard"
   | "memories"
@@ -63,9 +65,7 @@ function BrandMark() {
       className="flex items-center gap-3 rounded-lg px-2 py-1.5"
       role="img"
     >
-      <div className="flex size-10 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground ring-1 ring-sidebar-primary/20">
-        <Brain />
-      </div>
+      <img src={logo} alt="logo" className="size-10" />
       <div className="min-w-0">
         <div className="text-sm font-semibold tracking-tight">Memind</div>
         <div className="text-xs text-sidebar-foreground/65">Memory runtime</div>

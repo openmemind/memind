@@ -1914,6 +1914,19 @@ describe("Dashboard", () => {
     ).toBeInTheDocument()
   })
 
+  it("renders the sidebar GitHub button with an entrance animation", async () => {
+    renderApp()
+
+    const githubButtonAnimation = await screen.findByTestId(
+      "sidebar-github-button-animation"
+    )
+
+    expect(githubButtonAnimation).toHaveAttribute(
+      "data-animation",
+      "fade-rise"
+    )
+  })
+
   it("opens the API Keys page from the primary navigation", async () => {
     const user = userEvent.setup()
     renderApp()

@@ -13,7 +13,9 @@
 //
 
 import type * as React from "react"
+import { motion } from "motion/react"
 
+import { GithubButton } from "@/components/Github.tsx"
 import {
   Sidebar,
   SidebarFooter,
@@ -26,7 +28,6 @@ import {
   AnimatedSidebar,
 } from "@/features/shared/route-motion"
 import { cn } from "@/lib/utils"
-
 type SidebarShellProps = {
   sidebar: React.ReactNode
   children: React.ReactNode
@@ -54,6 +55,18 @@ export function SidebarShell({
           {sidebar}
         </AnimatedSidebar>
         <SidebarRail />
+        <SidebarFooter>
+          <motion.div
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="mx-auto mb-40"
+            data-animation="fade-rise"
+            data-testid="sidebar-github-button-animation"
+            initial={{ opacity: 0, scale: 0.96, y: 10 }}
+            transition={{ delay: 0.08, duration: 0.28, ease: [0, 0, 0.2, 1] }}
+          >
+            <GithubButton />
+          </motion.div>
+        </SidebarFooter>
       </Sidebar>
 
       <SidebarInset
@@ -70,7 +83,7 @@ export function SidebarShell({
         >
           <div
             className={cn(
-              "mx-auto min-h-full w-full max-w-[1500px]",
+              "mx-auto min-h-full w-full max-w-375",
               contentSurfaceClassName
             )}
             data-testid="console-content-surface"
