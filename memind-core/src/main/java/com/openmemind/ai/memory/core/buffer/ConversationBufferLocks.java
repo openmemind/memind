@@ -13,8 +13,10 @@
  */
 package com.openmemind.ai.memory.core.buffer;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import java.time.Duration;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
@@ -22,14 +24,15 @@ import java.util.function.Supplier;
  */
 public final class ConversationBufferLocks {
 
-    private static final ConcurrentHashMap<String, Object> LOCKS = new ConcurrentHashMap<>();
+    private static final Cache<String, Object> LOCKS =
+            Caffeine.newBuilder().maximumSize(1024).expireAfterAccess(Duration.ofHours(4)).build();
 
     private ConversationBufferLocks() {}
 
     public static <T> T withLock(String sessionId, Supplier<T> action) {
         Objects.requireNonNull(sessionId, "sessionId");
         Objects.requireNonNull(action, "action");
-        synchronized (LOCKS.computeIfAbsent(sessionId, ignored -> new Object())) {
+        synchronized (LOCKS.get(sessionId, __ -> new Object())) {
             return action.get();
         }
     }
