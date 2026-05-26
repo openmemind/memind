@@ -20,10 +20,11 @@ The integration is intentionally small:
 
 - **Retrieval**: `UserPromptSubmit` calls `MemindClient.memory.retrieve(...)` and injects relevant memories into
   Claude Code as `<memind_memories>...</memind_memories>` additional context.
-- **Ingestion**: `PreToolUse` and `PostToolUse` buffer normalized tool events locally. `Stop`, `PreCompact`, and
-  `SessionEnd` flush buffered events as `rawContent.type = "agent_timeline"` through
-  `AsyncMemindClient.memory.extract(...)`, so Memind can extract user and agent memories from the same agent turn.
-  `Notification` and `SubagentStop` are buffered as lifecycle evidence when Claude Code emits them.
+- **Ingestion**: `PreToolUse` and `PostToolUse` buffer normalized tool events locally. `Stop` flushes the complete
+  turn as `rawContent.type = "agent_timeline"` through `AsyncMemindClient.memory.extract(...)`, so Memind can extract
+  user and agent memories from the same agent turn. `PreCompact` only records a local `compact_boundary` checkpoint;
+  it is submitted with the next `Stop` or `SessionEnd` flush. `Notification` and `SubagentStop` are buffered as
+  lifecycle evidence when Claude Code emits them.
 - **Retry**: failed ingestion payloads are spooled under `~/.memind/claude-code/retry/` and replayed on later
   `SessionStart` hooks.
 - **Source tagging**: all requests use `sourceClient = "claude-code"` by default, so Memind can distinguish
@@ -107,7 +108,7 @@ The installed hooks are:
 | `PostToolUse` | `scripts/post_tool_use.py` | 5s | Buffer a redacted tool-result event in local session state. |
 | `Notification` | `scripts/notification.py` | 5s | Buffer permission, blocking, and other user-visible lifecycle notifications. |
 | `SubagentStop` | `scripts/subagent_stop.py` | 5s | Buffer subagent completion evidence for later playbook and handoff extraction. |
-| `PreCompact` | `scripts/pre_compact.py` | 30s | Flush buffered `agent_timeline` events before context compaction. |
+| `PreCompact` | `scripts/pre_compact.py` | 30s | Record a local `compact_boundary` checkpoint before context compaction. |
 | `Stop` | `scripts/ingest.py` | 15s | Flush buffered `agent_timeline` events after a turn. |
 | `SessionEnd` | `scripts/session_end.py` | 10s | Flush remaining buffered `agent_timeline` events at session end. |
 
@@ -230,9 +231,10 @@ retrieved memories are still formatted from Memind items and insights by the ada
 ## Ingestion Behavior
 
 Ingestion is timeline-only for Claude Code. The plugin does not submit transcript conversation-style raw data. It buffers
-one turn timeline under `~/.memind/claude-code/state/`: the submitted user prompt, tool and command events, the
-latest assistant message when available from the transcript, and a stop boundary. It flushes the turn through
-`AsyncMemindClient.memory.extract(...)` as agent timeline rawdata. A typical timeline payload looks like:
+one turn timeline under `~/.memind/claude-code/state/`: the submitted user prompt, tool and command events, optional
+compact checkpoints, the latest assistant message when available from the transcript, and a stop boundary. It flushes
+the turn through `AsyncMemindClient.memory.extract(...)` as agent timeline rawdata on `Stop`; `SessionEnd` flushes any
+remaining buffered events as a cleanup path. A typical timeline payload looks like:
 
 ```json
 {

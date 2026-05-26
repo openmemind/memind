@@ -25,7 +25,6 @@ from lib.client import MemindClient
 from lib.agent_timeline import (
     build_timeline_payload,
     normalize_assistant_message_event,
-    normalize_compact_boundary_event,
     normalize_session_end_event,
     normalize_stop_event,
 )
@@ -94,15 +93,6 @@ def _append_boundary_event(state, session_id, hook_input):
     hook_name = hook_input.get("hook_event_name") or ""
     if hook_name == "Stop":
         return _append_stop_events(state, session_id, hook_input)
-    if hook_name == "PreCompact":
-        turn_id, turn_seq = state.ensure_agent_turn(session_id)
-        seq = state.next_agent_seq()
-        state.append_agent_event(
-            normalize_compact_boundary_event(
-                hook_input, seq, turn_id=turn_id, turn_seq=turn_seq
-            )
-        )
-        return turn_id
     if hook_name == "SessionEnd":
         turn_id, turn_seq = state.ensure_agent_turn(session_id)
         seq = state.next_agent_seq()
@@ -126,7 +116,7 @@ async def ingest_messages_async(config, hook_input):
         if config.get("autoIngestAgentTimeline", True):
             hook_input["source_client"] = source_client or "claude-code"
             submitted_turn_id = _append_boundary_event(state, session_id, hook_input)
-            agent_events = state.agent_events()
+            agent_events = state.agent_events() if submitted_turn_id else []
         else:
             agent_events = []
         if agent_events:

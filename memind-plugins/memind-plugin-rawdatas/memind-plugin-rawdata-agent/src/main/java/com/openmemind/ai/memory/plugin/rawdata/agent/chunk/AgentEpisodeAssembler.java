@@ -14,7 +14,6 @@
 package com.openmemind.ai.memory.plugin.rawdata.agent.chunk;
 
 import com.openmemind.ai.memory.core.utils.HashUtils;
-import com.openmemind.ai.memory.core.utils.TokenUtils;
 import com.openmemind.ai.memory.plugin.rawdata.agent.config.AgentChunkingOptions;
 import com.openmemind.ai.memory.plugin.rawdata.agent.content.AgentTimelineContent;
 import com.openmemind.ai.memory.plugin.rawdata.agent.model.AgentCommand;
@@ -40,9 +39,6 @@ import java.util.Objects;
  */
 public final class AgentEpisodeAssembler {
 
-    private static final List<String> PHASE_ORDER =
-            List.of("investigation", "implementation", "validation", "handoff");
-
     private final AgentChunkingOptions options;
 
     public AgentEpisodeAssembler() {
@@ -57,16 +53,7 @@ public final class AgentEpisodeAssembler {
         if (timeline == null || timeline.events().isEmpty()) {
             return List.of();
         }
-        List<AgentEpisode> baseEpisodes = buildBaseEpisodes(timeline, sorted(timeline.events()));
-        List<AgentEpisode> result = new ArrayList<>();
-        for (AgentEpisode episode : baseEpisodes) {
-            if (TokenUtils.countTokens(episodeText(episode)) > options.targetEpisodeTokens()) {
-                result.addAll(splitByPhase(timeline, episode));
-            } else {
-                result.add(episode);
-            }
-        }
-        return List.copyOf(result);
+        return buildBaseEpisodes(timeline, sorted(timeline.events()));
     }
 
     private List<AgentEpisode> buildBaseEpisodes(
@@ -82,8 +69,8 @@ public final class AgentEpisodeAssembler {
             boolean crossesBoundary =
                     !current.isEmpty()
                             && (startsNewPrompt
-                                    || exceedsGap(previous, event)
-                                    || exceedsEventLimit(current)
+                                    || fallbackBoundaryExceeded(
+                                            currentBoundaryKey, previous, event, current)
                                     || boundaryKeyChanged(currentBoundaryKey, boundaryKey(event)));
             if (crossesBoundary) {
                 episodes.add(buildEpisode(timeline, current, "full", Map.of()));
@@ -151,47 +138,6 @@ public final class AgentEpisodeAssembler {
                 startTime,
                 endTime,
                 metadata);
-    }
-
-    private List<AgentEpisode> splitByPhase(AgentTimelineContent timeline, AgentEpisode episode) {
-        var byPhase = new LinkedHashMap<String, List<AgentEvent>>();
-        PHASE_ORDER.forEach(phase -> byPhase.put(phase, new ArrayList<>()));
-        for (AgentEvent event : episode.events()) {
-            byPhase.get(phase(event)).add(event);
-        }
-        List<AgentEpisode> split = new ArrayList<>();
-        for (String phase : PHASE_ORDER) {
-            List<AgentEvent> phaseEvents = byPhase.get(phase);
-            if (!phaseEvents.isEmpty()) {
-                split.add(phaseEpisode(timeline, episode, phaseEvents, phase));
-            }
-        }
-        return List.copyOf(split);
-    }
-
-    private AgentEpisode phaseEpisode(
-            AgentTimelineContent timeline,
-            AgentEpisode parent,
-            List<AgentEvent> phaseEvents,
-            String phase) {
-        AgentEpisode local = buildEpisode(timeline, phaseEvents, phase, Map.of("phaseSplit", true));
-        return new AgentEpisode(
-                local.id(),
-                parent.goal(),
-                parent.outcome(),
-                local.phase(),
-                local.events(),
-                local.eventIds(),
-                local.files(),
-                local.fileReferences(),
-                local.commands(),
-                local.commandEvents(),
-                local.toolNames(),
-                local.toolCalls(),
-                local.failureSignals(),
-                local.startTime(),
-                local.endTime(),
-                local.metadata());
     }
 
     private String episodeId(AgentTimelineContent timeline, List<String> eventIds) {
@@ -308,43 +254,6 @@ public final class AgentEpisodeAssembler {
                 .orElse("");
     }
 
-    private String phase(AgentEvent event) {
-        if (event.kind() == AgentEventKind.FILE_EDIT) {
-            return "implementation";
-        }
-        if (event.kind() == AgentEventKind.STOP
-                || event.kind() == AgentEventKind.SESSION_END
-                || event.kind() == AgentEventKind.COMPACT_BOUNDARY
-                || event.kind() == AgentEventKind.SYNTHETIC_BOUNDARY
-                || event.kind() == AgentEventKind.TASK_COMPLETED
-                || event.kind() == AgentEventKind.ASSISTANT_MESSAGE) {
-            return "handoff";
-        }
-        if ((event.kind() == AgentEventKind.COMMAND || event.kind() == AgentEventKind.TEST_RESULT)
-                && event.status() == AgentEventStatus.SUCCESS) {
-            return "validation";
-        }
-        return "investigation";
-    }
-
-    private String episodeText(AgentEpisode episode) {
-        var lines = new ArrayList<String>();
-        lines.add(episode.goal());
-        lines.addAll(episode.failureSignals());
-        lines.addAll(episode.files());
-        lines.addAll(episode.commands());
-        lines.addAll(
-                episode.events().stream()
-                        .map(
-                                event ->
-                                        String.join(
-                                                " ",
-                                                normalized(event.text()),
-                                                normalized(event.output())))
-                        .toList());
-        return String.join("\n", lines);
-    }
-
     private boolean exceedsGap(AgentEvent previous, AgentEvent event) {
         return previous != null
                 && previous.occurredAt() != null
@@ -356,6 +265,20 @@ public final class AgentEpisodeAssembler {
 
     private boolean exceedsEventLimit(List<AgentEvent> current) {
         return current.size() >= options.maxEventsPerEpisode();
+    }
+
+    private boolean fallbackBoundaryExceeded(
+            String currentBoundaryKey,
+            AgentEvent previous,
+            AgentEvent event,
+            List<AgentEvent> current) {
+        return !hasText(currentBoundaryKey)
+                && !hasOpenUserPrompt(current)
+                && (exceedsGap(previous, event) || exceedsEventLimit(current));
+    }
+
+    private boolean hasOpenUserPrompt(List<AgentEvent> current) {
+        return current.stream().anyMatch(event -> event.kind() == AgentEventKind.USER_PROMPT);
     }
 
     private boolean boundaryKeyChanged(String currentBoundaryKey, String nextBoundaryKey) {
@@ -381,7 +304,6 @@ public final class AgentEpisodeAssembler {
     private static boolean isTerminal(AgentEvent event) {
         return event.kind() == AgentEventKind.STOP
                 || event.kind() == AgentEventKind.SESSION_END
-                || event.kind() == AgentEventKind.COMPACT_BOUNDARY
                 || event.kind() == AgentEventKind.SYNTHETIC_BOUNDARY
                 || event.kind() == AgentEventKind.TASK_COMPLETED;
     }

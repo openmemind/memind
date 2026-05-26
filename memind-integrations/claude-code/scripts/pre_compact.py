@@ -19,16 +19,32 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from ingest import ingest_messages
+from ingest import state_root
+from lib.agent_timeline import normalize_compact_boundary_event
 from lib.config import load_config
 from lib.logging_utils import debug_log
+from lib.state import SessionStateStore
+
+
+def record_pre_compact(hook_input):
+    config = load_config()
+    session_id = hook_input.get("session_id") or "unknown-session"
+    hook_input["source_client"] = config.get("sourceClient") or "claude-code"
+    with SessionStateStore(state_root()).locked(session_id) as state:
+        turn_id, turn_seq = state.ensure_agent_turn(session_id)
+        seq = state.next_agent_seq()
+        state.append_agent_event(
+            normalize_compact_boundary_event(
+                hook_input, seq, turn_id=turn_id, turn_seq=turn_seq
+            )
+        )
+    return {"agentEventsBuffered": 1}
 
 
 def main():
     try:
         hook_input = json.loads(sys.stdin.read() or "{}")
-        config = load_config()
-        ingest_messages(config, hook_input)
+        record_pre_compact(hook_input)
     except Exception as exc:
         try:
             debug_log(load_config(), "pre_compact_failed", {"error": str(exc)})

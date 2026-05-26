@@ -194,7 +194,7 @@ class AgentEpisodeAssemblerTest {
     }
 
     @Test
-    void shouldSplitEpisodesOnThirtyOneMinuteGap() {
+    void shouldKeepExplicitTurnTogetherAcrossLongGap() {
         List<AgentEvent> events =
                 List.of(
                         AgentEpisodeTestSupport.event(
@@ -235,6 +235,58 @@ class AgentEpisodeAssemblerTest {
                                 null,
                                 null,
                                 "npm test payment",
+                                0),
+                        AgentEpisodeTestSupport.event(
+                                "e4",
+                                4,
+                                AgentEventKind.STOP,
+                                "2026-05-24T10:33:00Z",
+                                "done",
+                                null,
+                                null,
+                                AgentEventStatus.SUCCESS,
+                                null,
+                                null,
+                                null,
+                                null));
+
+        List<AgentEpisode> episodes =
+                new AgentEpisodeAssembler()
+                        .assemble(AgentEpisodeTestSupport.paymentTimeline(events));
+
+        assertThat(episodes).hasSize(1);
+        assertThat(episodes.getFirst().eventIds()).containsExactly("e1", "e2", "e3", "e4");
+    }
+
+    @Test
+    void shouldSplitFallbackEpisodesOnLongGapWhenNoPromptBoundaryExists() {
+        List<AgentEvent> events =
+                List.of(
+                        AgentEpisodeTestSupport.event(
+                                "e1",
+                                1,
+                                AgentEventKind.COMMAND,
+                                "2026-05-24T10:01:00Z",
+                                null,
+                                "Bash",
+                                "rounding mismatch",
+                                AgentEventStatus.FAILED,
+                                null,
+                                null,
+                                "npm test payment",
+                                1),
+                        AgentEpisodeTestSupport.event(
+                                "e2",
+                                2,
+                                AgentEventKind.COMMAND,
+                                "2026-05-24T10:32:01Z",
+                                null,
+                                "Bash",
+                                "passed",
+                                AgentEventStatus.SUCCESS,
+                                null,
+                                null,
+                                "npm test payment",
                                 0));
 
         List<AgentEpisode> episodes =
@@ -242,12 +294,12 @@ class AgentEpisodeAssemblerTest {
                         .assemble(AgentEpisodeTestSupport.paymentTimeline(events));
 
         assertThat(episodes).hasSize(2);
-        assertThat(episodes.getFirst().eventIds()).containsExactly("e1", "e2");
-        assertThat(episodes.get(1).eventIds()).containsExactly("e3");
+        assertThat(episodes.getFirst().eventIds()).containsExactly("e1");
+        assertThat(episodes.get(1).eventIds()).containsExactly("e2");
     }
 
     @Test
-    void shouldSplitEpisodesWhenEventCountExceedsMax() {
+    void shouldNotSplitExplicitTurnWhenEventCountExceedsMax() {
         AgentChunkingOptions options =
                 new AgentChunkingOptions(2_000, 4_000, 2, Duration.ofMinutes(30));
         List<AgentEvent> events = AgentEpisodeTestSupport.paymentEvents();
@@ -256,14 +308,12 @@ class AgentEpisodeAssemblerTest {
                 new AgentEpisodeAssembler(options)
                         .assemble(AgentEpisodeTestSupport.paymentTimeline(events));
 
-        assertThat(episodes).hasSize(3);
-        assertThat(episodes)
-                .extracting(AgentEpisode::eventIds)
-                .containsExactly(List.of("e1", "e2"), List.of("e3", "e4"), List.of("e5"));
+        assertThat(episodes).hasSize(1);
+        assertThat(episodes.getFirst().eventIds()).containsExactly("e1", "e2", "e3", "e4", "e5");
     }
 
     @Test
-    void shouldSplitOversizedEpisodeIntoPhases() {
+    void shouldNotSplitExplicitTurnWhenEpisodeExceedsTargetTokens() {
         AgentChunkingOptions options = new AgentChunkingOptions(20, 40, 80, Duration.ofMinutes(30));
 
         List<AgentEpisode> episodes =
@@ -272,15 +322,10 @@ class AgentEpisodeAssemblerTest {
                                 AgentEpisodeTestSupport.paymentTimeline(
                                         AgentEpisodeTestSupport.paymentEvents()));
 
-        assertThat(episodes)
-                .extracting(AgentEpisode::phase)
-                .containsExactly("investigation", "implementation", "validation", "handoff");
-        assertThat(episodes)
-                .allSatisfy(episode -> assertThat(episode.goal()).isEqualTo("Fix payment tests"));
-        assertThat(episodes)
-                .allSatisfy(
-                        episode ->
-                                assertThat(episode.metadata()).containsEntry("phaseSplit", true));
+        assertThat(episodes).hasSize(1);
+        assertThat(episodes.getFirst().phase()).isEqualTo("full");
+        assertThat(episodes.getFirst().goal()).isEqualTo("Fix payment tests");
+        assertThat(episodes.getFirst().metadata()).doesNotContainKey("phaseSplit");
     }
 
     @Test
@@ -320,7 +365,7 @@ class AgentEpisodeAssemblerTest {
     }
 
     @Test
-    void shouldCloseEpisodesOnStopAndCompactBoundary() {
+    void shouldCloseEpisodesOnStopButKeepCompactBoundaryInsideTurn() {
         List<AgentEvent> events =
                 List.of(
                         AgentEpisodeTestSupport.event(
@@ -427,7 +472,28 @@ class AgentEpisodeAssemblerTest {
     }
 
     @Test
-    void shouldClassifyLifecycleAndNotificationEventsConservatively() {
+    void shouldKeepSameTurnEventsTogetherAcrossCompactBoundaryUntilStop() {
+        List<AgentEvent> events =
+                List.of(
+                        eventWithTurnMetadata(
+                                "e1", 1, AgentEventKind.USER_PROMPT, "Fix payment tests", "turn-a"),
+                        eventWithTurnMetadata("e2", 2, AgentEventKind.COMMAND, null, "turn-a"),
+                        eventWithTurnMetadata(
+                                "e3", 3, AgentEventKind.COMPACT_BOUNDARY, "compact", "turn-a"),
+                        eventWithTurnMetadata("e4", 4, AgentEventKind.COMMAND, null, "turn-a"),
+                        eventWithTurnMetadata("e5", 5, AgentEventKind.STOP, "done", "turn-a"));
+
+        List<AgentEpisode> episodes =
+                new AgentEpisodeAssembler()
+                        .assemble(AgentEpisodeTestSupport.paymentTimeline(events));
+
+        assertThat(episodes).hasSize(1);
+        assertThat(episodes.getFirst().eventIds()).containsExactly("e1", "e2", "e3", "e4", "e5");
+        assertThat(episodes.getFirst().outcome()).isEqualTo(AgentOutcome.SUCCESS);
+    }
+
+    @Test
+    void shouldKeepLifecycleAndNotificationEventsInFullTurn() {
         AgentChunkingOptions options = new AgentChunkingOptions(1, 2, 80, Duration.ofMinutes(30));
         List<AgentEvent> events =
                 List.of(
@@ -488,12 +554,10 @@ class AgentEpisodeAssemblerTest {
                 new AgentEpisodeAssembler(options)
                         .assemble(AgentEpisodeTestSupport.paymentTimeline(events));
 
-        assertThat(episodes)
-                .extracting(AgentEpisode::phase)
-                .containsExactly("investigation", "handoff");
-        assertThat(episodes.getFirst().eventIds()).containsExactly("e1", "e2", "e3");
+        assertThat(episodes).hasSize(1);
+        assertThat(episodes.getFirst().phase()).isEqualTo("full");
+        assertThat(episodes.getFirst().eventIds()).containsExactly("e1", "e2", "e3", "e4");
         assertThat(episodes.getFirst().failureSignals()).contains("Permission required for Bash");
-        assertThat(episodes.get(1).eventIds()).containsExactly("e4");
     }
 
     private static AgentEvent eventWithMetadata(

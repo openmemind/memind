@@ -414,7 +414,44 @@ class HookTest(unittest.TestCase):
                 self.assertEqual(state.agent_events(), [])
                 self.assertTrue(state.is_empty())
 
-    def test_pre_compact_appends_compact_boundary_before_flush(self):
+    def test_pre_compact_appends_compact_boundary_without_extraction(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import pre_compact
+        from scripts.lib.state import SessionStateStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp) / "state"
+            with SessionStateStore(state_dir).locked("s1") as state:
+                state.append_agent_event(
+                    {
+                        "eventId": "e1",
+                        "seq": 1,
+                        "kind": "user_prompt",
+                        "text": "Continue before compaction",
+                        "metadata": {"turnId": "s1-turn-1", "turnSeq": 1},
+                    }
+                )
+            with mock.patch.object(pre_compact, "state_root", return_value=state_dir):
+                with mock.patch.object(pre_compact, "load_config") as load_config:
+                    load_config.return_value = {
+                        "sourceClient": "claude-code",
+                        "memindApiUrl": "http://127.0.0.1:8366",
+                    }
+                    result = pre_compact.record_pre_compact(
+                        {
+                            "hook_event_name": "PreCompact",
+                            "session_id": "s1",
+                            "cwd": tmp,
+                            "timestamp": "2026-05-24T10:04:00Z",
+                        },
+                    )
+            self.assertEqual(result, {"agentEventsBuffered": 1})
+            with SessionStateStore(state_dir).locked("s1") as state:
+                events = state.agent_events()
+                self.assertEqual([event["kind"] for event in events], ["user_prompt", "compact_boundary"])
+                self.assertEqual(events[-1]["metadata"]["turnId"], "s1-turn-1")
+
+    def test_ingest_ignores_pre_compact_as_flush_boundary(self):
         sys.path.insert(0, str(ROOT / "scripts"))
         import ingest
         from scripts.lib.state import SessionStateStore
@@ -454,10 +491,10 @@ class HookTest(unittest.TestCase):
                                 "timestamp": "2026-05-24T10:04:00Z",
                             },
                         )
-            self.assertEqual(result["agentEventsSubmitted"], 2)
-            client.extract.assert_awaited_once()
-            raw_content = client.extract.await_args.args[2]
-            self.assertEqual(raw_content["events"][-1]["kind"], "compact_boundary")
+            self.assertEqual(result["agentEventsSubmitted"], 0)
+            client.extract.assert_not_awaited()
+            with SessionStateStore(state_dir).locked("s1") as state:
+                self.assertEqual([event["kind"] for event in state.agent_events()], ["user_prompt"])
 
     def test_session_end_appends_session_end_before_flush(self):
         sys.path.insert(0, str(ROOT / "scripts"))
@@ -536,17 +573,25 @@ class HookTest(unittest.TestCase):
                         ingest.ingest_messages(
                             config,
                             {
+                                "hook_event_name": "Stop",
                                 "session_id": "s1",
                                 "cwd": tmp,
                             },
                         )
             payload = json.loads(next(retry_dir.glob("*.json")).read_text())
             self.assertEqual(payload["kind"], "extract")
-            self.assertEqual(payload["eventIds"], ["e1"])
             self.assertEqual(payload["rawContent"]["type"], "agent_timeline")
-            self.assertEqual(payload["rawContent"]["events"][0]["eventId"], "e1")
+            self.assertEqual(
+                [event["kind"] for event in payload["rawContent"]["events"]],
+                ["command", "stop"],
+            )
+            self.assertEqual(payload["eventIds"], [event["eventId"] for event in payload["rawContent"]["events"]])
+            self.assertEqual(payload["eventIds"][0], "e1")
             with SessionStateStore(state_dir).locked("s1") as state:
-                self.assertEqual(len(state.agent_events()), 1)
+                self.assertEqual(
+                    [event["kind"] for event in state.agent_events()],
+                    ["command", "stop"],
+                )
 
     def test_session_start_discards_legacy_conversation_extract_payload(self):
         sys.path.insert(0, str(ROOT / "scripts"))
