@@ -33,3 +33,7 @@ dist-ssr
 # Vitest artifacts (browser screenshots/attachments)
 **/__screenshots__/
 .vitest-attachments/
+.codex
+.superpowers
+/template
+skills-lock.json

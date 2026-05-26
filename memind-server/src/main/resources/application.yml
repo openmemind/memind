@@ -23,14 +23,16 @@ spring:
   application:
     name: memind-server
   datasource:
-    url: ${MEMIND_DATASOURCE_URL:jdbc:sqlite:./data/memind-server.db}
+    url: ${MEMIND_DATASOURCE_URL:jdbc:sqlite:./data/memind-server.db?journal_mode=WAL}
     driver-class-name: ${MEMIND_DATASOURCE_DRIVER_CLASS_NAME:org.sqlite.JDBC}
     username: ${MEMIND_DATASOURCE_USERNAME:}
     password: ${MEMIND_DATASOURCE_PASSWORD:}
     hikari:
-      maximum-pool-size: ${MEMIND_DATASOURCE_MAX_POOL_SIZE:1}
+      maximum-pool-size: ${MEMIND_DATASOURCE_MAX_POOL_SIZE:10}
       minimum-idle: ${MEMIND_DATASOURCE_MIN_IDLE:1}
       connection-test-query: ${MEMIND_DATASOURCE_CONNECTION_TEST_QUERY:SELECT 1}
+      connection-timeout: 5000
+      leak-detection-threshold: 2000
   jackson:
     default-property-inclusion: non_null
   ai:

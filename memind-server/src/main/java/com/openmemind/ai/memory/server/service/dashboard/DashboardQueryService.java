@@ -14,7 +14,9 @@
 package com.openmemind.ai.memory.server.service.dashboard;
 
 import com.openmemind.ai.memory.server.domain.config.view.MemoryOptionItemView;
+import com.openmemind.ai.memory.server.domain.dashboard.view.AdminAlertsSummaryView;
 import com.openmemind.ai.memory.server.domain.dashboard.view.AdminDashboardView;
+import com.openmemind.ai.memory.server.domain.dashboard.view.AdminRecentMemoryView;
 import com.openmemind.ai.memory.server.mapper.dashboard.AdminDashboardQueryMapper;
 import com.openmemind.ai.memory.server.service.config.MemoryOptionService;
 import java.util.LinkedHashMap;
@@ -44,6 +46,31 @@ public class DashboardQueryService {
                         || booleanOption(options, "retrieval.deep.graphAssist.enabled");
         return dashboardQueryMapper.dashboard(
                 memoryId, days, graphEnabled, retrievalGraphAssistEnabled);
+    }
+
+    public AdminAlertsSummaryView alertsSummary() {
+        AdminDashboardView.Backlog backlog = getDashboard(null, 7).backlog();
+        long critical = backlog.threadOutboxFailed();
+        long warning =
+                backlog.graphBatchRepairRequired()
+                        + backlog.insightUnbuilt()
+                        + backlog.threadOutboxPending();
+        return new AdminAlertsSummaryView(
+                critical,
+                warning,
+                List.of(
+                        new AdminAlertsSummaryView.Item(
+                                "Thread outbox failed",
+                                String.valueOf(backlog.threadOutboxFailed())),
+                        new AdminAlertsSummaryView.Item(
+                                "Graph repair required",
+                                String.valueOf(backlog.graphBatchRepairRequired())),
+                        new AdminAlertsSummaryView.Item(
+                                "Unbuilt insights", String.valueOf(backlog.insightUnbuilt()))));
+    }
+
+    public List<AdminRecentMemoryView> recentMemories(int limit) {
+        return dashboardQueryMapper.recentMemories(limit);
     }
 
     private static Map<String, MemoryOptionItemView> flattenOptions(

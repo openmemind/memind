@@ -1,3 +1,8 @@
+.codex
+.idea
+.pnpm-store
+.superpowers
+docs
 node_modules
 dist
 .DS_Store

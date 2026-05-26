@@ -12,46 +12,21 @@
 // limitations under the License.
 //
 
-import { StrictMode } from 'react'
-import ReactDOM from 'react-dom/client'
-import { QueryClientProvider } from '@tanstack/react-query'
-import { RouterProvider, createRouter } from '@tanstack/react-router'
-import { queryClient } from '@/lib/query-client'
-import { DirectionProvider } from './context/direction-provider'
-import { ThemeProvider } from './context/theme-provider'
-// Generated Routes
-import { routeTree } from './routeTree.gen'
-// Styles
-import './styles/index.css'
+import { StrictMode } from "react"
+import { createRoot } from "react-dom/client"
 
-// Create a new router instance
-const router = createRouter({
-  routeTree,
-  context: { queryClient },
-  defaultPreload: 'intent',
-  defaultPreloadStaleTime: 0,
-})
+import "./index.css"
+import App from "./App.tsx"
+import { ThemeProvider } from "@/components/theme-provider.tsx"
+import { QueryClientProvider } from "@tanstack/react-query"
+import { queryClient } from "@/lib/query-client.ts"
 
-// Register the router instance for type safety
-declare module '@tanstack/react-router' {
-  interface Register {
-    router: typeof router
-  }
-}
-
-// Render the app
-const rootElement = document.getElementById('root')!
-if (!rootElement.innerHTML) {
-  const root = ReactDOM.createRoot(rootElement)
-  root.render(
-    <StrictMode>
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <ThemeProvider>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <DirectionProvider>
-            <RouterProvider router={router} />
-          </DirectionProvider>
-        </ThemeProvider>
+        <App />
       </QueryClientProvider>
-    </StrictMode>
-  )
-}
+    </ThemeProvider>
+  </StrictMode>
+)

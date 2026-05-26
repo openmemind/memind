@@ -33,6 +33,9 @@ public final class ItemGraphViews {
             List<NamedCount> itemLinkCountByType,
             List<NamedCount> entityCountByType) {}
 
+    public record ExplorerView(
+            SummaryView summary, List<EntityView> nodes, List<ItemLinkView> edges) {}
+
     public record EntityView(
             Integer id,
             String memoryId,

@@ -34,6 +34,10 @@ public class ItemGraphQueryService {
         return itemGraphQueryMapper.summary(memoryId);
     }
 
+    public ItemGraphViews.ExplorerView explorer(String memoryId) {
+        return itemGraphQueryMapper.explorer(memoryId);
+    }
+
     public PageResponse<ItemGraphViews.EntityView> listEntities(
             ItemGraphPageQueries.EntityPageQuery query) {
         return itemGraphQueryMapper.pageEntities(query);

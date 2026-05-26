@@ -142,7 +142,7 @@ class OpenApiDocumentationTest {
 
         JsonNode root = objectMapper.readTree(result.getResponse().getContentAsString());
         writeOpenApiJsonIfRequested(root);
-        assertThat(root.path("paths").size()).isEqualTo(37);
+        assertThat(root.path("paths").size()).isEqualTo(53);
         assertThat(countOperations(root.path("paths"))).isGreaterThanOrEqualTo(40);
         assertThat(tagNames(root.path("tags"))).containsExactly("memory", "admin");
         assertThat(

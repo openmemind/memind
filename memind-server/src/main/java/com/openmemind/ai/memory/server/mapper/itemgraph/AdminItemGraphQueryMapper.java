@@ -48,6 +48,8 @@ public interface AdminItemGraphQueryMapper {
 
     ItemGraphViews.SummaryView summary(String memoryId);
 
+    ItemGraphViews.ExplorerView explorer(String memoryId);
+
     PageResponse<ItemGraphViews.EntityView> pageEntities(
             ItemGraphPageQueries.EntityPageQuery query);
 
@@ -160,6 +162,18 @@ final class MybatisAdminItemGraphQueryMapper implements AdminItemGraphQueryMappe
                 groupedCounts(TABLE_GRAPH_BATCH, "state", scope),
                 groupedCounts(TABLE_GRAPH_ITEM_LINK, "link_type", scope),
                 groupedCounts(TABLE_GRAPH_ENTITY, "entity_type", scope));
+    }
+
+    @Override
+    public ItemGraphViews.ExplorerView explorer(String memoryId) {
+        return new ItemGraphViews.ExplorerView(
+                summary(memoryId),
+                pageEntities(new ItemGraphPageQueries.EntityPageQuery(1, 100, memoryId, null, null))
+                        .items(),
+                pageItemLinks(
+                                new ItemGraphPageQueries.ItemLinkPageQuery(
+                                        1, 200, memoryId, null, null, null))
+                        .items());
     }
 
     @Override

@@ -1,0 +1,170 @@
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+import {
+  fetchDashboardAlertsSummary,
+  fetchDashboardMemoriesSummary,
+  fetchDashboardRecentMemories,
+} from "./dashboard/dashboard-api"
+import { fetchMemoriesPage } from "./memories/memories-api"
+import { fetchMemoryGraphExplorer } from "./memories/pages/GraphPage/graph-api"
+import {
+  fetchInsightsList,
+  fetchMemoryInsightTree,
+} from "./memories/pages/InsightsPage/insights-api"
+import { fetchMemoryItemsPage } from "./memories/pages/ItemsPage/items-api"
+import { forceMemorySnapshot } from "./memories/pages/OverviewPage/overview-api"
+import { fetchMemoryRawDataPage } from "./memories/pages/RawDataPage/raw-data-api"
+import { fetchMemoryThreadTimeline } from "./memories/pages/ThreadsPage/threads-api"
+import { fetchUiPreferences } from "./settings/settings-api"
+
+function jsonResponse(data: unknown) {
+  return new Response(JSON.stringify({ data }), { status: 200 })
+}
+
+describe("page API calls", () => {
+  const originalFetch = globalThis.fetch
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => jsonResponse({}))
+    )
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    globalThis.fetch = originalFetch
+  })
+
+  it.each([
+    {
+      call: () => fetchDashboardAlertsSummary(),
+      response: { critical: 0, items: [], warning: 0 },
+      url: "/admin/v1/alerts/summary",
+    },
+    {
+      call: () => fetchDashboardRecentMemories(5),
+      response: [],
+      url: "/admin/v1/dashboard/recent-memories?limit=5",
+    },
+    {
+      call: () => fetchDashboardMemoriesSummary(),
+      response: {
+        items: [],
+        page: {
+          hasNext: false,
+          hasPrevious: false,
+          page: 1,
+          pageSize: 1,
+          totalItems: 0,
+          totalPages: 0,
+        },
+      },
+      url: "/admin/v1/memories?page=1&pageSize=1",
+    },
+    {
+      call: () => fetchMemoriesPage(),
+      response: {
+        items: [],
+        page: {
+          hasNext: false,
+          hasPrevious: false,
+          page: 1,
+          pageSize: 20,
+          totalItems: 0,
+          totalPages: 0,
+        },
+      },
+      url: "/admin/v1/memories",
+    },
+    {
+      call: () => forceMemorySnapshot("mem_1"),
+      response: { memoryId: "mem_1", status: "accepted" },
+      url: "/admin/v1/memories/mem_1/snapshot",
+    },
+    {
+      call: () => fetchMemoryRawDataPage("mem_1"),
+      response: {
+        items: [],
+        page: {
+          hasNext: false,
+          hasPrevious: false,
+          page: 1,
+          pageSize: 20,
+          totalItems: 0,
+          totalPages: 0,
+        },
+      },
+      url: "/admin/v1/memories/mem_1/raw-data",
+    },
+    {
+      call: () => fetchMemoryItemsPage("mem_1"),
+      response: {
+        items: [],
+        page: {
+          hasNext: false,
+          hasPrevious: false,
+          page: 1,
+          pageSize: 20,
+          totalItems: 0,
+          totalPages: 0,
+        },
+      },
+      url: "/admin/v1/memories/mem_1/items",
+    },
+    {
+      call: () => fetchMemoryGraphExplorer("mem_1"),
+      response: { edges: [], nodes: [], summary: {} },
+      url: "/admin/v1/item-graph/explorer?memoryId=mem_1",
+    },
+    {
+      call: () => fetchMemoryThreadTimeline("mem_1", "thr_1"),
+      response: [],
+      url: "/admin/v1/memory-threads/thr_1/timeline?userId=mem_1",
+    },
+    {
+      call: () => fetchMemoryInsightTree("mem_1"),
+      response: { roots: [] },
+      url: "/admin/v1/insights/tree?userId=mem_1",
+    },
+    {
+      call: () => fetchInsightsList([118, 442]),
+      response: [],
+      url: "/admin/v1/insights/list?insightIds=118&insightIds=442",
+    },
+    {
+      call: () => fetchUiPreferences(),
+      response: {
+        autoHideEmptyCollections: true,
+        defaultMemoryView: "table",
+        defaultTimeRange: "7d",
+        showOnboardingTips: true,
+        theme: "system",
+      },
+      url: "/admin/v1/settings/ui-preferences",
+    },
+  ])("requests $url", async ({ call, response, url }) => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(response))
+
+    await call()
+
+    expect(fetch).toHaveBeenCalledWith(
+      url,
+      expect.objectContaining({ headers: expect.any(Headers) })
+    )
+  })
+})

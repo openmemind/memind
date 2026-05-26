@@ -15,6 +15,8 @@ package com.openmemind.ai.memory.server.service.insight;
 
 import com.openmemind.ai.memory.server.domain.common.PageResponse;
 import com.openmemind.ai.memory.server.domain.insight.query.InsightPageQuery;
+import com.openmemind.ai.memory.server.domain.insight.view.AdminInsightRegenerateResult;
+import com.openmemind.ai.memory.server.domain.insight.view.AdminInsightTreeView;
 import com.openmemind.ai.memory.server.domain.insight.view.AdminInsightView;
 import com.openmemind.ai.memory.server.mapper.insight.AdminInsightQueryMapper;
 import java.util.NoSuchElementException;
@@ -37,5 +39,16 @@ public class InsightQueryService {
         return insightQueryMapper
                 .findByBizId(insightId)
                 .orElseThrow(() -> new NoSuchElementException("Insight not found: " + insightId));
+    }
+
+    public AdminInsightTreeView tree(String userId, String agentId) {
+        return new AdminInsightTreeView(
+                listInsights(InsightPageQuery.of(1, 100, userId, agentId, null, null, "ROOT"))
+                        .items());
+    }
+
+    public AdminInsightRegenerateResult regenerate(Long insightId) {
+        getInsight(insightId);
+        return new AdminInsightRegenerateResult(insightId, "accepted");
     }
 }

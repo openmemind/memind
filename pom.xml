@@ -360,6 +360,10 @@
                         <exclude>LICENSE</exclude>
                         <exclude>NOTICE</exclude>
                         <exclude>.worktrees/**</exclude>
+                        <exclude>.agents/**</exclude>
+                        <exclude>**/.agents/**</exclude>
+                        <exclude>.codex/**</exclude>
+                        <exclude>**/.codex/**</exclude>
                         <exclude>.corepack/**</exclude>
                         <exclude>data/**</exclude>
                         <exclude>etc/**</exclude>

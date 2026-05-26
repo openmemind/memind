@@ -52,7 +52,7 @@ import reactor.core.scheduler.Schedulers;
 public class OpenMemoryApplicationService {
 
     private static final Logger log = LoggerFactory.getLogger(OpenMemoryApplicationService.class);
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(60);
     private static final String DEFAULT_SOURCE_CLIENT = "api";
 
     private final MemoryRuntimeManager runtimeManager;

@@ -16,14 +16,17 @@ package com.openmemind.ai.memory.server.mapper.memorythread;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
+import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadEventDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadMembershipDO;
 import com.openmemind.ai.memory.plugin.store.mybatis.dataobject.MemoryThreadProjectionDO;
+import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadEventMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadMembershipMapper;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.MemoryThreadProjectionMapper;
 import com.openmemind.ai.memory.server.domain.common.PageResponse;
 import com.openmemind.ai.memory.server.domain.memorythread.query.MemoryThreadPageQuery;
 import com.openmemind.ai.memory.server.domain.memorythread.view.AdminItemMemoryThreadView;
 import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadItemView;
+import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadTimelineItemView;
 import com.openmemind.ai.memory.server.domain.memorythread.view.AdminMemoryThreadView;
 import java.time.Instant;
 import java.util.HashMap;
@@ -31,6 +34,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -42,6 +46,9 @@ public interface AdminMemoryThreadQueryMapper {
 
     List<AdminMemoryThreadItemView> findItemsByThreadKey(String memoryId, String threadKey);
 
+    List<AdminMemoryThreadTimelineItemView> findTimelineByThreadKey(
+            String memoryId, String threadKey);
+
     List<AdminItemMemoryThreadView> findThreadsByItemId(String memoryId, Long itemId);
 }
 
@@ -50,12 +57,22 @@ final class MybatisAdminMemoryThreadQueryMapper implements AdminMemoryThreadQuer
 
     private final MemoryThreadProjectionMapper threadMapper;
     private final MemoryThreadMembershipMapper membershipMapper;
+    private final MemoryThreadEventMapper eventMapper;
+
+    @Autowired
+    MybatisAdminMemoryThreadQueryMapper(
+            MemoryThreadProjectionMapper threadMapper,
+            MemoryThreadMembershipMapper membershipMapper,
+            MemoryThreadEventMapper eventMapper) {
+        this.threadMapper = threadMapper;
+        this.membershipMapper = membershipMapper;
+        this.eventMapper = eventMapper;
+    }
 
     MybatisAdminMemoryThreadQueryMapper(
             MemoryThreadProjectionMapper threadMapper,
             MemoryThreadMembershipMapper membershipMapper) {
-        this.threadMapper = threadMapper;
-        this.membershipMapper = membershipMapper;
+        this(threadMapper, membershipMapper, null);
     }
 
     @Override
@@ -104,6 +121,22 @@ final class MybatisAdminMemoryThreadQueryMapper implements AdminMemoryThreadQuer
                                 MemoryThreadMembershipDO::getItemId,
                                 MemoryThreadMembershipDO::getId);
         return membershipMapper.selectList(wrapper).stream().map(item -> toItemView(item)).toList();
+    }
+
+    @Override
+    public List<AdminMemoryThreadTimelineItemView> findTimelineByThreadKey(
+            String memoryId, String threadKey) {
+        if (eventMapper == null) {
+            return List.of();
+        }
+        var wrapper =
+                Wrappers.lambdaQuery(MemoryThreadEventDO.class)
+                        .eq(MemoryThreadEventDO::getMemoryId, memoryId)
+                        .eq(MemoryThreadEventDO::getThreadKey, threadKey)
+                        .orderByAsc(MemoryThreadEventDO::getEventSeq, MemoryThreadEventDO::getId);
+        return eventMapper.selectList(wrapper).stream()
+                .map(MybatisAdminMemoryThreadQueryMapper::toTimelineItemView)
+                .toList();
     }
 
     @Override
@@ -202,6 +235,33 @@ final class MybatisAdminMemoryThreadQueryMapper implements AdminMemoryThreadQuer
                 dataObject.getRelevanceWeight() != null ? dataObject.getRelevanceWeight() : 0.0d,
                 dataObject.getCreatedAt(),
                 dataObject.getUpdatedAt());
+    }
+
+    private static AdminMemoryThreadTimelineItemView toTimelineItemView(
+            MemoryThreadEventDO dataObject) {
+        Map<String, Object> payload =
+                dataObject.getEventPayloadJson() != null
+                        ? dataObject.getEventPayloadJson()
+                        : Map.of();
+        return new AdminMemoryThreadTimelineItemView(
+                dataObject.getEventKey(),
+                Boolean.TRUE.equals(dataObject.getMeaningful()) ? "PRIMARY" : "SUPPORTING",
+                String.valueOf(dataObject.getEventTime()),
+                eventContent(dataObject, payload),
+                "thread event");
+    }
+
+    private static String eventContent(
+            MemoryThreadEventDO dataObject, Map<String, Object> payload) {
+        Object summary = payload.get("summary");
+        if (summary instanceof String text && StringUtils.hasText(text)) {
+            return text;
+        }
+        Object content = payload.get("content");
+        if (content instanceof String text && StringUtils.hasText(text)) {
+            return text;
+        }
+        return normalizeLabel(dataObject.getEventType());
     }
 
     private static AdminItemMemoryThreadView toItemThreadView(
