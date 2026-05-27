@@ -78,8 +78,7 @@ class InsightTierRetrieverTest {
                         .withTier1(RetrievalConfig.TierConfig.enabled(5))
                         .withTier2(RetrievalConfig.TierConfig.enabled(10))
                         .withTier3(RetrievalConfig.TierConfig.enabled(5))
-                        .withTimeout(Duration.ofSeconds(30))
-                        .withoutCache();
+                        .withTimeout(Duration.ofSeconds(30));
     }
 
     private MemoryInsight buildInsight(

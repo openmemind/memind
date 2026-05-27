@@ -483,7 +483,6 @@ public class ItemTierRetriever implements ItemTierSearch {
                 RetrievalConfig.RerankConfig.disabled(),
                 scoring,
                 Duration.ofSeconds(30),
-                false,
                 SimpleStrategyConfig.defaults());
     }
 

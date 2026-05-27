@@ -557,7 +557,6 @@ public class RawDataTierRetriever implements TierSearchable {
                 RetrievalConfig.RerankConfig.disabled(),
                 scoring,
                 java.time.Duration.ofSeconds(30),
-                false,
                 com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig.defaults());
     }
 }

@@ -378,7 +378,7 @@ class DefaultMemoryTest {
                             MemoryBuildOptions.builder()
                                     .retrieval(
                                             new RetrievalOptions(
-                                                    new RetrievalCommonOptions(false),
+                                                    RetrievalCommonOptions.defaults(),
                                                     SimpleRetrievalOptions.defaults(),
                                                     new DeepRetrievalOptions(
                                                             Duration.ofSeconds(45),
@@ -413,7 +413,6 @@ class DefaultMemoryTest {
                                         return request.config()
                                                         .timeout()
                                                         .equals(Duration.ofSeconds(45))
-                                                && !request.config().enableCache()
                                                 && request.config().tier2().topK() == 22
                                                 && expandedQueries == 5
                                                 && sufficiencyTopK == 9;

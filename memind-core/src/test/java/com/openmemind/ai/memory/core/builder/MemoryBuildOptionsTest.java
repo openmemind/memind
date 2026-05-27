@@ -57,10 +57,9 @@ class MemoryBuildOptionsTest {
     }
 
     @Test
-    void retrievalCommonOptionsShouldKeepBackwardCompatibleCacheConstructor() {
-        var common = new RetrievalCommonOptions(false);
+    void retrievalCommonOptionsShouldKeepAdmissionConstructor() {
+        var common = new RetrievalCommonOptions(RetrievalAdmissionOptions.defaults());
 
-        assertThat(common.cacheEnabled()).isFalse();
         assertThat(common.admission()).isEqualTo(RetrievalAdmissionOptions.defaults());
     }
 
