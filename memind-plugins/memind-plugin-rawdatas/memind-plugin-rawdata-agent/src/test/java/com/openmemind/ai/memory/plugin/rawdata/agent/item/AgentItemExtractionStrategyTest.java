@@ -51,6 +51,10 @@ class AgentItemExtractionStrategyTest {
                             assertThat(entry.insightTypes()).containsExactly("tools");
                             assertThat(entry.metadata()).containsEntry("episodeId", "episode-123");
                             assertThat(entry.metadata())
+                                    .containsEntry("projectId", "payments-api-remote")
+                                    .containsEntry("projectSlug", "payments-api-remote")
+                                    .containsEntry("projectName", "payments-api");
+                            assertThat(entry.metadata())
                                     .containsEntry("command", "npm test payment");
                             assertThat(entry.metadata()).containsEntry("successCount", 1);
                             assertThat(entry.metadata()).containsEntry("failCount", 1);
@@ -253,6 +257,9 @@ class AgentItemExtractionStrategyTest {
                         Map.entry("sourceClient", "codex"),
                         Map.entry("sessionId", "session-123"),
                         Map.entry("timelineId", "timeline-123"),
+                        Map.entry("projectId", "payments-api-remote"),
+                        Map.entry("projectSlug", "payments-api-remote"),
+                        Map.entry("projectName", "payments-api"),
                         Map.entry("outcome", "success"),
                         Map.entry("files", List.of("src/payment/calc.ts")),
                         Map.entry("commands", List.of("npm test payment")),

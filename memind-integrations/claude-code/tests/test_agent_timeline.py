@@ -372,6 +372,9 @@ class AgentTimelineTest(unittest.TestCase):
         self.assertEqual(payload["events"][0]["seq"], 1)
         self.assertEqual(payload["project"]["name"], "project")
         self.assertEqual(payload["project"]["rootPath"], "/tmp/project")
+        project_slug = payload["project"]["metadata"]["projectSlug"]
+        self.assertRegex(project_slug, r"^project-[a-f0-9]{12}$")
+        self.assertEqual(payload["metadata"]["projectSlug"], project_slug)
 
 
 if __name__ == "__main__":

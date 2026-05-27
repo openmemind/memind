@@ -23,7 +23,7 @@ from scripts.lib.config import load_config, parse_bool, parse_list
 class ConfigTest(unittest.TestCase):
     def test_defaults_are_codex_specific(self):
         config = load_config(plugin_root=Path(__file__).resolve().parents[1], user_config_path="/missing", env={})
-        self.assertEqual(config["agentId"], "codex")
+        self.assertEqual(config["agentId"], "coding-agent")
         self.assertEqual(config["sourceClient"], "codex")
         self.assertEqual(config["retrieveContextTurns"], 0)
         self.assertNotIn("agentIdMode", config)

@@ -41,6 +41,7 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(parse_list(" user , assistant ,,"), ["user", "assistant"])
 
     def test_defaults_match_spec(self):
+        self.assertEqual(DEFAULT_SETTINGS["agentId"], "coding-agent")
         self.assertEqual(DEFAULT_SETTINGS["retrieveContextTurns"], 0)
         self.assertEqual(DEFAULT_SETTINGS["sourceClient"], "claude-code")
         self.assertTrue(DEFAULT_SETTINGS["autoIngestAgentTimeline"])

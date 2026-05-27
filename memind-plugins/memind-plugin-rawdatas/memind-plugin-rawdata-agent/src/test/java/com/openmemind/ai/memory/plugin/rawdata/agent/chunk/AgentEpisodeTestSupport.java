@@ -33,7 +33,11 @@ final class AgentEpisodeTestSupport {
                 "session-123",
                 "session-123-agent-turn-1-5",
                 "timeline-123",
-                new AgentProject("payments-api", "/Users/alice/work/payments-api", null, Map.of()),
+                new AgentProject(
+                        "payments-api",
+                        "/Users/alice/work/payments-api",
+                        null,
+                        Map.of("projectSlug", "payments-api-remote")),
                 events);
     }
 

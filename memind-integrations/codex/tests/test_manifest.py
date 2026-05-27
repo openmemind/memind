@@ -49,7 +49,7 @@ class ManifestTest(unittest.TestCase):
 
     def test_default_settings_match_spec(self):
         settings = json.loads((ROOT / "settings.json").read_text())
-        self.assertEqual(settings["agentId"], "codex")
+        self.assertEqual(settings["agentId"], "coding-agent")
         self.assertEqual(settings["sourceClient"], "codex")
         self.assertTrue(settings["autoIngestAgentTimeline"])
         self.assertEqual(settings["retrieveContextTurns"], 0)

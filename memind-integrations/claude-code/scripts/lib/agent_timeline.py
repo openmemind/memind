@@ -17,6 +17,11 @@ import json
 import re
 from pathlib import Path
 
+try:
+    from .identity import project_slug
+except ImportError:
+    from lib.identity import project_slug
+
 
 MAX_TEXT_CHARS = 4000
 NORMALIZATION_VERSION = 1
@@ -565,7 +570,13 @@ def build_timeline_payload(config, identity, session_id, events, hook_input):
         payload["metadata"]["turnSeq"] = turn_seq
     if cwd:
         path = Path(cwd)
-        payload["project"] = {"name": path.name, "rootPath": str(path)}
+        slug = project_slug(path)
+        payload["project"] = {
+            "name": path.name,
+            "rootPath": str(path),
+            "metadata": {"projectSlug": slug},
+        }
+        payload["metadata"]["projectSlug"] = slug
     return payload
 
 

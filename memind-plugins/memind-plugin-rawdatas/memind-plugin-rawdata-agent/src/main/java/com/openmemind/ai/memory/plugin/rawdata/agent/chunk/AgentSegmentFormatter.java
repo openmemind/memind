@@ -79,6 +79,11 @@ public final class AgentSegmentFormatter {
             if (hasText(project.name())) {
                 metadata.put("projectName", project.name());
             }
+            String projectSlug = string(project.metadata().get("projectSlug"));
+            if (hasText(projectSlug)) {
+                metadata.put("projectSlug", projectSlug);
+                metadata.put("projectId", projectSlug);
+            }
             if (hasText(project.rootPath())) {
                 metadata.put(
                         "projectRootHash", "sha256:" + HashUtils.sampledSha256(project.rootPath()));
@@ -231,6 +236,14 @@ public final class AgentSegmentFormatter {
 
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private static String string(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = value.toString().trim();
+        return text.isEmpty() ? null : text;
     }
 
     public record FormattedSegment(String content, Map<String, Object> metadata) {

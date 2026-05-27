@@ -20,7 +20,7 @@ DEFAULT_SETTINGS = {
     "memindApiUrl": "http://127.0.0.1:8366",
     "memindApiToken": None,
     "userId": None,
-    "agentId": "codex",
+    "agentId": "coding-agent",
     "sourceClient": "codex",
     "autoRetrieve": True,
     "autoIngestAgentTimeline": True,

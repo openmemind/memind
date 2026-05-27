@@ -308,8 +308,7 @@ class HookTest(unittest.TestCase):
                 "autoIngestAgentTimeline": True,
                 "ingestRetrySpool": True,
                 "sourceClient": "claude-code",
-                "agentId": "claude-code",
-                "agentIdMode": "global",
+                "agentId": "coding-agent",
                 "userId": "u",
             }
             with tempfile.TemporaryDirectory() as tmp:
@@ -346,8 +345,7 @@ class HookTest(unittest.TestCase):
             "autoIngestAgentTimeline": True,
             "ingestRetrySpool": True,
             "sourceClient": "claude-code",
-            "agentId": "claude-code",
-            "agentIdMode": "global",
+            "agentId": "coding-agent",
             "userId": "u",
         }
         with tempfile.TemporaryDirectory() as tmp:
@@ -552,8 +550,7 @@ class HookTest(unittest.TestCase):
             "autoIngestAgentTimeline": True,
             "ingestRetrySpool": True,
             "sourceClient": "claude-code",
-            "agentId": "claude-code",
-            "agentIdMode": "global",
+            "agentId": "coding-agent",
             "userId": "u",
         }
         with tempfile.TemporaryDirectory() as tmp:

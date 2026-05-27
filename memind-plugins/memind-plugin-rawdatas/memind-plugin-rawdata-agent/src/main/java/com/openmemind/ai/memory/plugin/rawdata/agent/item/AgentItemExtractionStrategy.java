@@ -270,6 +270,11 @@ public class AgentItemExtractionStrategy implements ItemExtractionStrategy {
         copy(segment.metadata(), metadata, "sessionId");
         copy(segment.metadata(), metadata, "timelineId");
         copy(segment.metadata(), metadata, "sourceClient");
+        copy(segment.metadata(), metadata, "projectId");
+        copy(segment.metadata(), metadata, "projectSlug");
+        copy(segment.metadata(), metadata, "projectName");
+        copy(segment.metadata(), metadata, "projectRootHash");
+        copy(segment.metadata(), metadata, "gitBranch");
         copy(segment.metadata(), metadata, "outcome");
         copy(segment.metadata(), metadata, "files");
         copy(segment.metadata(), metadata, "commands");

@@ -20,7 +20,7 @@ DEFAULT_SETTINGS = {
     "memindApiUrl": "http://127.0.0.1:8366",
     "memindApiToken": None,
     "userId": None,
-    "agentId": "claude-code",
+    "agentId": "coding-agent",
     "sourceClient": "claude-code",
     "autoRetrieve": True,
     "autoIngestAgentTimeline": True,

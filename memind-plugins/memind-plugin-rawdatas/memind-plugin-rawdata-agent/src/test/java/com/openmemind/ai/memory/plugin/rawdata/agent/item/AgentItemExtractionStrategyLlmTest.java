@@ -96,7 +96,10 @@ class AgentItemExtractionStrategyLlmTest {
                                     .containsEntry("episodeId", "episode-123")
                                     .containsEntry("sessionId", "session-123")
                                     .containsEntry("timelineId", "timeline-123")
-                                    .containsEntry("sourceClient", "codex");
+                                    .containsEntry("sourceClient", "codex")
+                                    .containsEntry("projectId", "payments-api-remote")
+                                    .containsEntry("projectSlug", "payments-api-remote")
+                                    .containsEntry("projectName", "payments-api");
                             assertThat(entry.metadata().get("evidenceEventIds"))
                                     .asList()
                                     .containsExactly("e3", "e4", "e5");
@@ -336,6 +339,9 @@ class AgentItemExtractionStrategyLlmTest {
                         Map.entry("sourceClient", "codex"),
                         Map.entry("sessionId", "session-123"),
                         Map.entry("timelineId", "timeline-123"),
+                        Map.entry("projectId", "payments-api-remote"),
+                        Map.entry("projectSlug", "payments-api-remote"),
+                        Map.entry("projectName", "payments-api"),
                         Map.entry("outcome", "success"),
                         Map.entry("files", List.of("src/payment/calc.ts")),
                         Map.entry("commands", List.of("npm test payment")),

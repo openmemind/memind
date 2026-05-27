@@ -2,7 +2,7 @@
   "memindApiUrl": "http://127.0.0.1:8366",
   "memindApiToken": null,
   "userId": null,
-  "agentId": "claude-code",
+  "agentId": "coding-agent",
   "sourceClient": "claude-code",
   "autoRetrieve": true,
   "autoIngestAgentTimeline": true,

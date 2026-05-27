@@ -50,6 +50,8 @@ class AgentSegmentFormatterTest {
                 .containsEntry("sessionId", "session-123")
                 .containsEntry("timelineId", "timeline-123")
                 .containsEntry("projectName", "payments-api")
+                .containsEntry("projectId", "payments-api-remote")
+                .containsEntry("projectSlug", "payments-api-remote")
                 .containsEntry("outcome", "success");
         assertThat(formatted.metadata().get("files"))
                 .asList()

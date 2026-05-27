@@ -126,7 +126,7 @@ User configuration is optional. Save overrides as `~/.memind/claude-code.json`:
   "memindApiUrl": "http://127.0.0.1:8366",
   "memindApiToken": null,
   "userId": "local__alice",
-  "agentId": "claude-code",
+  "agentId": "coding-agent",
   "sourceClient": "claude-code",
   "autoIngestAgentTimeline": true,
   "retrieveContextTurns": 0
@@ -147,7 +147,7 @@ Settings are loaded in this order:
 | `memindApiUrl` | `http://127.0.0.1:8366` | Memind server URL. |
 | `memindApiToken` | `null` | Optional bearer token. |
 | `userId` | `local__<system-user>` | Memind user identity. |
-| `agentId` | `claude-code` | Base agent identity. A stable project suffix is always appended before calling Memind. |
+| `agentId` | `coding-agent` | Shared Memind agent identity. Use the same value from Claude Code, Codex, and API clients to share one coding-agent memory space. |
 | `sourceClient` | `claude-code` | Source marker stored with Memind data. |
 | `autoRetrieve` | `true` | Enables prompt-time memory retrieval. |
 | `autoIngestAgentTimeline` | `true` | Enables user prompt, tool/result, assistant message, and stop event buffering plus `agent_timeline` rawdata flush. |
@@ -166,7 +166,7 @@ Supported settings can be overridden with environment variables:
 export MEMIND_API_URL=http://127.0.0.1:8366
 export MEMIND_API_TOKEN=...
 export MEMIND_USER_ID=local__alice
-export MEMIND_AGENT_ID=claude-code
+export MEMIND_AGENT_ID=coding-agent
 export MEMIND_SOURCE_CLIENT=claude-code
 export MEMIND_AUTO_INGEST_AGENT_TIMELINE=true
 export MEMIND_RETRIEVE_CONTEXT_TURNS=0
@@ -183,15 +183,15 @@ Additional environment variables include `MEMIND_AUTO_RETRIEVE`, `MEMIND_RETRIEV
 By default, Memind stores Claude Code memory under:
 
 - `userId`: `local__<system-user>`
-- `agentId`: `claude-code__<project-name>-<stable-hash>`
+- `agentId`: `coding-agent`
 
-The project hash is based on the Git remote URL when available, otherwise the local project path. This keeps
-different repositories separated while allowing memory to survive moving between Claude Code sessions.
+Claude Code, Codex, and direct Memind API clients can share memory by using the same `userId` and `agentId`.
+`sourceClient` records where a memory came from; it is not an isolation boundary.
 
-`agentId` in configuration is the base identity only. The runtime always appends the project suffix before
-retrieval or ingestion, so this integration does not provide a global, all-project Claude Code memory mode.
-`sessionId`, `agentTurnId`, `timelineId`, and per-event turn metadata are stored only inside raw content and
-item metadata; they do not create Memind core project or session entities.
+Project information is stored as rawdata and item metadata, including a stable `projectSlug` based on the Git
+remote URL when available, otherwise the local project path. Project metadata supports ranking, diagnostics, and
+future context compilation without creating separate Memind core project or session entities. `sessionId`,
+`agentTurnId`, `timelineId`, and per-event turn metadata are also stored only inside raw content and item metadata.
 
 ## Retrieval Behavior
 
@@ -239,7 +239,7 @@ remaining buffered events as a cleanup path. A typical timeline payload looks li
 ```json
 {
   "userId": "local__alice",
-  "agentId": "claude-code__project_hash",
+  "agentId": "coding-agent",
   "sourceClient": "claude-code",
   "rawContent": {
     "type": "agent_timeline",
@@ -247,7 +247,11 @@ remaining buffered events as a cleanup path. A typical timeline payload looks li
     "sessionId": "session-123",
     "agentTurnId": "session-123-turn-1",
     "timelineId": "session-123-turn-1-timeline",
-    "project": {"name": "payment-service", "rootPath": "/repo/payment-service"},
+    "project": {
+      "name": "payment-service",
+      "rootPath": "/repo/payment-service",
+      "metadata": {"projectSlug": "payment-service-<stable-hash>"}
+    },
     "events": [
       {
         "eventId": "event-id",
@@ -332,7 +336,7 @@ claude plugin validate memind-integrations/claude-code
 
 ### End-to-End Smoke Test
 
-For a deterministic first test, use a fixed base Memind identity. If you already have
+For a deterministic first test, use a fixed Memind identity. If you already have
 `~/.memind/claude-code.json`, merge these fields instead of replacing the file:
 
 ```bash
@@ -340,7 +344,7 @@ mkdir -p ~/.memind
 cat > ~/.memind/claude-code.json <<'JSON'
 {
   "userId": "local__memind-smoke",
-  "agentId": "claude-code-smoke",
+  "agentId": "coding-agent-smoke",
   "sourceClient": "claude-code",
   "debug": true
 }
@@ -364,16 +368,16 @@ curl -fsSL -X POST http://127.0.0.1:8366/open/v1/memory/retrieve \
   -H 'Content-Type: application/json' \
   -d '{
     "userId": "local__memind-smoke",
-    "agentId": "claude-code-smoke__<project-suffix>",
+    "agentId": "coding-agent-smoke",
     "query": "blue-lake-42",
     "strategy": "SIMPLE",
     "trace": false
   }'
 ```
 
-Replace `<project-suffix>` with the stable suffix shown in debug logs or Memind item metadata. The response should
-include matching `items` or `insights` under `data`. If agent timelines exist but `items` and `insights` are empty,
-the server-side `rawdata-agent` extractor did not produce retrievable memory entries yet.
+The response should include matching `items` or `insights` under `data`. Project metadata such as `projectSlug`
+is stored on the rawdata/item metadata, not in `agentId`. If agent timelines exist but `items` and `insights` are
+empty, the server-side `rawdata-agent` extractor did not produce retrievable memory entries yet.
 
 For local debugging, enable logs:
 
@@ -455,7 +459,7 @@ curl -fsSL http://127.0.0.1:8366/open/v1/health
 ```
 
 - Confirm `autoRetrieve` is `true`.
-- Confirm existing memories are stored under the same `userId` and resolved project-scoped `agentId`.
+- Confirm existing memories are stored under the same `userId` and `agentId`.
 - Try setting `retrieveContextTurns` to `1` or `2` if the current prompt is very short.
 
 ### Agent timeline events are not ingested
@@ -469,7 +473,7 @@ curl -fsSL http://127.0.0.1:8366/open/v1/health
 
 The default reliable mode submits agent timelines through `AsyncMemindClient.memory.extract(...)`, so a `SUCCESS`
 response means extraction finished for that timeline payload. If retrieval still does not surface the expected
-memory, confirm the same `userId` and resolved project-scoped `agentId` are used for ingestion and retrieval, then inspect
+memory, confirm the same `userId` and `agentId` are used for ingestion and retrieval, then inspect
 `~/.memind/claude-code.log` with `MEMIND_DEBUG=true`.
 
 ## Limitations

@@ -141,7 +141,7 @@ User configuration is optional. Save overrides as `~/.memind/codex.json`:
   "memindApiUrl": "http://127.0.0.1:8366",
   "memindApiToken": null,
   "userId": "local__alice",
-  "agentId": "codex",
+  "agentId": "coding-agent",
   "sourceClient": "codex",
   "autoIngestAgentTimeline": true,
   "retrieveContextTurns": 0
@@ -161,7 +161,7 @@ Settings are loaded in this order:
 | `memindApiUrl` | `http://127.0.0.1:8366` | Memind server URL. |
 | `memindApiToken` | `null` | Optional bearer token. |
 | `userId` | `local__<system-user>` | Memind user identity. |
-| `agentId` | `codex` | Base agent identity. A stable project suffix is always appended before calling Memind. |
+| `agentId` | `coding-agent` | Shared Memind agent identity. Use the same value from Claude Code, Codex, and API clients to share one coding-agent memory space. |
 | `sourceClient` | `codex` | Source marker stored with Memind data. |
 | `autoRetrieve` | `true` | Enables prompt-time memory retrieval. |
 | `autoIngestAgentTimeline` | `true` | Enables user prompt, tool/result, assistant message, and stop event buffering plus `agent_timeline` rawdata flush. |
@@ -180,7 +180,7 @@ Every common setting can be overridden with an environment variable:
 export MEMIND_API_URL=http://127.0.0.1:8366
 export MEMIND_API_TOKEN=...
 export MEMIND_USER_ID=local__alice
-export MEMIND_AGENT_ID=codex
+export MEMIND_AGENT_ID=coding-agent
 export MEMIND_SOURCE_CLIENT=codex
 export MEMIND_AUTO_INGEST_AGENT_TIMELINE=true
 export MEMIND_RETRIEVE_CONTEXT_TURNS=0
@@ -197,15 +197,15 @@ Additional environment variables include `MEMIND_AUTO_RETRIEVE`,
 By default, Memind stores Codex memory under:
 
 - `userId`: `local__<system-user>`
-- `agentId`: `codex__<project-name>-<stable-hash>`
+- `agentId`: `coding-agent`
 
-The project hash is based on the Git remote URL when available, otherwise the local project path. This keeps
-different repositories separated while allowing memory to survive moving between Codex sessions.
+Claude Code, Codex, and direct Memind API clients can share memory by using the same `userId` and `agentId`.
+`sourceClient` records where a memory came from; it is not an isolation boundary.
 
-`agentId` in configuration is the base identity only. The runtime always appends the project suffix before
-retrieval or ingestion, so this integration does not provide a global, all-project Codex memory mode.
-`sessionId`, `agentTurnId`, `timelineId`, and per-event turn metadata are stored only inside raw content and
-item metadata; they do not create Memind core project or session entities.
+Project information is stored as rawdata and item metadata, including a stable `projectSlug` based on the Git
+remote URL when available, otherwise the local project path. Project metadata supports ranking, diagnostics, and
+future context compilation without creating separate Memind core project or session entities. `sessionId`,
+`agentTurnId`, `timelineId`, and per-event turn metadata are also stored only inside raw content and item metadata.
 
 ## Retrieval Behavior
 
@@ -252,7 +252,7 @@ assistant message when available from the transcript, and a stop boundary. It fl
 ```json
 {
   "userId": "local__alice",
-  "agentId": "codex__project_hash",
+  "agentId": "coding-agent",
   "sourceClient": "codex",
   "rawContent": {
     "type": "agent_timeline",
@@ -260,7 +260,11 @@ assistant message when available from the transcript, and a stop boundary. It fl
     "sessionId": "session-123",
     "agentTurnId": "session-123-turn-1",
     "timelineId": "session-123-turn-1-timeline",
-    "project": {"name": "payment-service", "rootPath": "/repo/payment-service"},
+    "project": {
+      "name": "payment-service",
+      "rootPath": "/repo/payment-service",
+      "metadata": {"projectSlug": "payment-service-<stable-hash>"}
+    },
     "events": [
       {
         "eventId": "event-id",
@@ -419,7 +423,7 @@ curl -fsSL http://127.0.0.1:8366/open/v1/health
 ```
 
 - Confirm `autoRetrieve` is `true`.
-- Confirm existing memories are stored under the same `userId` and resolved project-scoped `agentId`.
+- Confirm existing memories are stored under the same `userId` and `agentId`.
 - Try setting `retrieveContextTurns` to `1` or `2` if the current prompt is very short.
 
 ### Agent timeline events are not ingested

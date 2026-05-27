@@ -141,6 +141,11 @@ public final class AgentMemoryItemFactory {
         copy(episode.raw(), metadata, "sessionId");
         copy(episode.raw(), metadata, "timelineId");
         copy(episode.raw(), metadata, "sourceClient");
+        copy(episode.raw(), metadata, "projectId");
+        copy(episode.raw(), metadata, "projectSlug");
+        copy(episode.raw(), metadata, "projectName");
+        copy(episode.raw(), metadata, "projectRootHash");
+        copy(episode.raw(), metadata, "gitBranch");
         metadata.put("files", episode.files());
         metadata.put("commands", episode.commands());
         metadata.put("toolNames", episode.toolNames());

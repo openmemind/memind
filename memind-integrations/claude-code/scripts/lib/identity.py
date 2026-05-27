@@ -50,8 +50,6 @@ def project_slug(cwd):
 
 
 def resolve_identity(config, hook_input):
-    cwd = hook_input.get("cwd") or os.getcwd()
     user_id = config.get("userId") or f"local{SEPARATOR}{getpass.getuser()}"
-    base_agent = config.get("agentId") or "claude-code"
-    agent_id = f"{base_agent}{SEPARATOR}{project_slug(cwd)}"
+    agent_id = config.get("agentId") or "coding-agent"
     return {"userId": user_id, "agentId": agent_id}
