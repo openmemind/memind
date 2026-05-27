@@ -17,6 +17,8 @@ import { httpRequest } from '../core/http.js'
 import {
   assertAddMessageResponse,
   assertExtractMemoryResponse,
+  assertQueryMemoryItemsResponse,
+  assertQueryMemoryRawDataResponse,
   assertRetrieveMemoryResponse,
 } from '../core/validate.js'
 import type { RequestOptions } from '../types/common.js'
@@ -25,6 +27,10 @@ import type {
   CommitMemoryRequest,
   ExtractMemoryRequest,
   ExtractMemoryResponse,
+  QueryMemoryItemsRequest,
+  QueryMemoryItemsResponse,
+  QueryMemoryRawDataRequest,
+  QueryMemoryRawDataResponse,
   RetrieveMemoryRequest,
   RetrieveMemoryResponse,
 } from '../types/memory.js'
@@ -90,5 +96,35 @@ export class MemoryResource {
       maxRetries: options?.maxRetries,
     })
     return assertRetrieveMemoryResponse(data)
+  }
+
+  async queryItems(
+    request: QueryMemoryItemsRequest,
+    options?: RequestOptions,
+  ): Promise<QueryMemoryItemsResponse> {
+    const data = await httpRequest(this.config, {
+      method: 'POST',
+      path: '/memory/items/query',
+      body: request,
+      signal: options?.signal,
+      timeoutMs: options?.timeoutMs,
+      maxRetries: options?.maxRetries,
+    })
+    return assertQueryMemoryItemsResponse(data)
+  }
+
+  async queryRawData(
+    request: QueryMemoryRawDataRequest,
+    options?: RequestOptions,
+  ): Promise<QueryMemoryRawDataResponse> {
+    const data = await httpRequest(this.config, {
+      method: 'POST',
+      path: '/memory/raw-data/query',
+      body: request,
+      signal: options?.signal,
+      timeoutMs: options?.timeoutMs,
+      maxRetries: options?.maxRetries,
+    })
+    return assertQueryMemoryRawDataResponse(data)
   }
 }

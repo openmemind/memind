@@ -60,5 +60,25 @@ public record RetrieveMemoryResponse(
     public record RetrievedInsightView(String id, String text, String tier) {}
 
     public record RetrievedRawDataView(
-            String rawDataId, String caption, double maxScore, List<String> itemIds) {}
+            String rawDataId,
+            String caption,
+            double maxScore,
+            List<String> itemIds,
+            String type,
+            String sourceClient,
+            Map<String, Object> metadata,
+            Instant startTime,
+            Instant endTime,
+            Instant createdAt) {
+
+        public RetrievedRawDataView(
+                String rawDataId, String caption, double maxScore, List<String> itemIds) {
+            this(rawDataId, caption, maxScore, itemIds, null, null, Map.of(), null, null, null);
+        }
+
+        public RetrievedRawDataView {
+            itemIds = itemIds == null ? List.of() : List.copyOf(itemIds);
+            metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+        }
+    }
 }

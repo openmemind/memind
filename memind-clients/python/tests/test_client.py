@@ -22,8 +22,15 @@ from memind.types import (
     ConversationContent,
     ExtractMemoryResponse,
     Message,
+    MetadataCondition,
+    MetadataFilter,
+    QueryMemoryItemsRequest,
+    QueryMemoryRawDataRequest,
+    RawDataQueryIncludeOptions,
     RetrieveMemoryRequest,
+    RetrieveIncludeOptions,
     Strategy,
+    TimeRange,
 )
 
 
@@ -217,11 +224,26 @@ def test_retrieve_accepts_expanded_parameters(httpx_mock) -> None:
 
     client = MemindClient(base_url="https://api.example.test")
     result = client.memory.retrieve(
-        user_id="u1", agent_id="a1", query="coffee", strategy=Strategy.SIMPLE, trace=True
+        user_id="u1",
+        agent_id="a1",
+        query="coffee",
+        strategy=Strategy.SIMPLE,
+        trace=True,
+        scope="ALL",
+        categories=["profile"],
+        time_range=TimeRange(field="occurredAt", from_="2026-01-01T00:00:00Z"),
+        metadata_filter=MetadataFilter(
+            all=[MetadataCondition(path="project", op="eq", value="memind")]
+        ),
+        include=RetrieveIncludeOptions(raw_data_metadata=True),
     )
 
     assert result.items[0].text == "likes coffee"
-    assert b'"trace":true' in httpx_mock.get_request().content
+    content = httpx_mock.get_request().content
+    assert b'"trace":true' in content
+    assert b'"scope":"ALL"' in content
+    assert b'"categories":["profile"]' in content
+    assert b'"metadataFilter":{"all":[{"path":"project","op":"eq","value":"memind"}]}' in content
     client.close()
 
 
@@ -239,6 +261,87 @@ def test_retrieve_accepts_request_object(httpx_mock) -> None:
     result = client.memory.retrieve(request)
 
     assert result.items == []
+    client.close()
+
+
+def test_query_items_posts_to_open_query_endpoint(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/open/v1/memory/items/query",
+        json={
+            "data": {
+                "items": [
+                    {
+                        "id": "101",
+                        "text": "Use mvn -pl memind-server test.",
+                        "scope": "AGENT",
+                        "category": "playbook",
+                        "rawDataId": "rd-1",
+                        "rawDataType": "agent_timeline",
+                        "sourceClient": "claude-code",
+                        "metadata": {"project": "memind"},
+                    }
+                ],
+                "nextCursor": "101",
+            }
+        },
+    )
+
+    client = MemindClient(base_url="https://api.example.test")
+    result = client.memory.query_items(
+        QueryMemoryItemsRequest(
+            user_id="u1",
+            agent_id="a1",
+            categories=["playbook"],
+            source_clients=["claude-code"],
+            raw_data_types=["agent_timeline"],
+            limit=10,
+        )
+    )
+
+    assert result.items[0].text.startswith("Use mvn")
+    assert result.next_cursor == "101"
+    content = httpx_mock.get_request().content
+    assert b'"sourceClients":["claude-code"]' in content
+    assert b'"rawDataTypes":["agent_timeline"]' in content
+    client.close()
+
+
+def test_query_raw_data_posts_to_open_query_endpoint(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/open/v1/memory/raw-data/query",
+        json={
+            "data": {
+                "rawData": [
+                    {
+                        "id": "rd-1",
+                        "type": "agent_timeline",
+                        "sourceClient": "codex",
+                        "caption": "Fixed retry test.",
+                        "metadata": {"sessionId": "s1"},
+                        "segment": {"events": []},
+                    }
+                ],
+                "nextCursor": None,
+            }
+        },
+    )
+
+    client = MemindClient(base_url="https://api.example.test")
+    result = client.memory.query_raw_data(
+        QueryMemoryRawDataRequest(
+            user_id="u1",
+            agent_id="a1",
+            types=["agent_timeline"],
+            source_clients=["codex"],
+            include=RawDataQueryIncludeOptions(segment=True),
+        )
+    )
+
+    assert result.raw_data[0].id == "rd-1"
+    assert result.raw_data[0].segment == {"events": []}
+    assert b'"include":{"segment":true}' in httpx_mock.get_request().content
     client.close()
 
 

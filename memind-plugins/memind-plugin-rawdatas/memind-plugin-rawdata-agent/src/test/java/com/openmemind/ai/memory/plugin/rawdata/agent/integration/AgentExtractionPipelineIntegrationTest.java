@@ -44,6 +44,7 @@ import com.openmemind.ai.memory.core.store.InMemoryMemoryStore;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import com.openmemind.ai.memory.core.vector.VectorSearchResult;
+import com.openmemind.ai.memory.plugin.rawdata.agent.caption.AgentCaptionGenerator;
 import com.openmemind.ai.memory.plugin.rawdata.agent.config.AgentRawDataOptions;
 import com.openmemind.ai.memory.plugin.rawdata.agent.content.AgentTimelineContent;
 import com.openmemind.ai.memory.plugin.rawdata.agent.model.AgentEvent;
@@ -141,7 +142,9 @@ class AgentExtractionPipelineIntegrationTest {
 
         extract(fixture, paymentTimeline(paymentEvents()));
 
-        assertThat(client.structuredCalls()).isEqualTo(1);
+        assertThat(client.structuredCalls()).isEqualTo(2);
+        assertThat(client.captionCalls()).isEqualTo(1);
+        assertThat(client.itemExtractionCalls()).isEqualTo(1);
         assertThat(items(fixture))
                 .anySatisfy(
                         item -> {
@@ -501,10 +504,28 @@ class AgentExtractionPipelineIntegrationTest {
     private static final class ScriptedStructuredChatClient implements StructuredChatClient {
 
         private final MemoryItemExtractionResponse response;
+        private final AgentCaptionGenerator.AgentCaptionResponse captionResponse;
         private int structuredCalls;
+        private int captionCalls;
+        private int itemExtractionCalls;
 
         private ScriptedStructuredChatClient(MemoryItemExtractionResponse response) {
             this.response = response;
+            this.captionResponse =
+                    new AgentCaptionGenerator.AgentCaptionResponse(
+                            "Fix payment tests",
+                            "The turn investigated payment test failures, changed payment"
+                                    + " calculation logic, and validated the fix.",
+                            "success",
+                            List.of(
+                                    "Ran npm test payment and captured the rounding mismatch.",
+                                    "Edited src/payment/calc.ts.",
+                                    "Reran npm test payment successfully."),
+                            List.of(
+                                    "Command: npm test payment",
+                                    "File: src/payment/calc.ts",
+                                    "Validation: npm test payment passed"),
+                            "");
         }
 
         @Override
@@ -513,13 +534,30 @@ class AgentExtractionPipelineIntegrationTest {
         }
 
         @Override
+        @SuppressWarnings("unchecked")
         public <T> Mono<T> call(List<ChatMessage> messages, Class<T> responseType) {
             structuredCalls++;
-            return Mono.just(responseType.cast(response));
+            if (responseType == AgentCaptionGenerator.AgentCaptionResponse.class) {
+                captionCalls++;
+                return Mono.just((T) captionResponse);
+            }
+            if (responseType == MemoryItemExtractionResponse.class) {
+                itemExtractionCalls++;
+                return Mono.just((T) response);
+            }
+            return Mono.empty();
         }
 
         private int structuredCalls() {
             return structuredCalls;
+        }
+
+        private int captionCalls() {
+            return captionCalls;
+        }
+
+        private int itemExtractionCalls() {
+            return itemExtractionCalls;
         }
     }
 

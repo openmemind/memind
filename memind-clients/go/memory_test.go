@@ -51,6 +51,8 @@ func TestMemoryMethodsCallEndpoints(t *testing.T) {
 		"POST /open/v1/memory/sync/add-message",
 		"POST /open/v1/memory/sync/commit",
 		"POST /open/v1/memory/retrieve",
+		"POST /open/v1/memory/items/query",
+		"POST /open/v1/memory/raw-data/query",
 		"POST /open/v1/memory/async/extract",
 		"POST /open/v1/memory/async/add-message",
 		"POST /open/v1/memory/async/commit",
@@ -64,6 +66,10 @@ func TestMemoryMethodsCallEndpoints(t *testing.T) {
 			_, _ = w.Write([]byte(`{"data":{"triggered":false}}`))
 		case "/open/v1/memory/retrieve":
 			_, _ = w.Write([]byte(`{"data":{"items":[],"insights":[],"rawData":[],"evidences":[]}}`))
+		case "/open/v1/memory/items/query":
+			_, _ = w.Write([]byte(`{"data":{"items":[{"id":"101","text":"Run targeted tests.","rawDataType":"agent_timeline","sourceClient":"claude-code","metadata":{"project":"memind"}}],"nextCursor":"101"}}`))
+		case "/open/v1/memory/raw-data/query":
+			_, _ = w.Write([]byte(`{"data":{"rawData":[{"id":"rd-1","type":"agent_timeline","sourceClient":"codex","caption":"Fixed retry test.","metadata":{"sessionId":"s1"},"segment":{"events":[]}}]}}`))
 		case "/open/v1/memory/async/extract", "/open/v1/memory/async/add-message", "/open/v1/memory/async/commit":
 			w.WriteHeader(http.StatusAccepted)
 			_, _ = w.Write([]byte(`{"data":{"operationId":"op_1","status":"accepted","mode":"async"}}`))
@@ -81,15 +87,49 @@ func TestMemoryMethodsCallEndpoints(t *testing.T) {
 	extractReq := ExtractMemoryRequest{UserID: "u", AgentID: "a", RawContent: Conversation(UserMessage("hello"))}
 	addReq := AddMessageRequest{UserID: "u", AgentID: "a", Message: UserMessage("hello")}
 	commitReq := CommitMemoryRequest{UserID: "u", AgentID: "a"}
-	retrieveReq := RetrieveMemoryRequest{UserID: "u", AgentID: "a", Query: "q", Strategy: StrategySimple}
+	retrieveReq := RetrieveMemoryRequest{
+		UserID:     "u",
+		AgentID:    "a",
+		Query:      "q",
+		Strategy:   StrategySimple,
+		Scope:      "ALL",
+		Categories: []string{"playbook"},
+		TimeRange:  &TimeRange{Field: "occurredAt", From: timePtr(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))},
+		MetadataFilter: &MetadataFilter{All: []MetadataCondition{
+			{Path: "project", Op: "eq", Value: "memind"},
+		}},
+		Include: &RetrieveIncludeOptions{RawDataMetadata: boolPtr(true)},
+	}
 
 	_, _ = client.Memory.Extract(ctx, extractReq)
 	_, _ = client.Memory.AddMessage(ctx, addReq)
 	_, _ = client.Memory.Commit(ctx, commitReq)
 	_, _ = client.Memory.Retrieve(ctx, retrieveReq)
+	items, _ := client.Memory.QueryItems(ctx, QueryMemoryItemsRequest{
+		UserID:        "u",
+		AgentID:       "a",
+		Categories:    []string{"playbook"},
+		SourceClients: []string{"claude-code"},
+		RawDataTypes:  []string{"agent_timeline"},
+		Limit:         intPtr(10),
+	})
+	rawData, _ := client.Memory.QueryRawData(ctx, QueryMemoryRawDataRequest{
+		UserID:        "u",
+		AgentID:       "a",
+		Types:         []string{"agent_timeline"},
+		SourceClients: []string{"codex"},
+		Include:       &RawDataQueryIncludeOptions{Segment: boolPtr(true)},
+	})
 	_, _ = client.Memory.EnqueueExtract(ctx, extractReq)
 	_, _ = client.Memory.EnqueueAddMessage(ctx, addReq)
 	_, _ = client.Memory.EnqueueCommit(ctx, commitReq)
+
+	if items.NextCursor != "101" || len(items.Items) != 1 || items.Items[0].RawDataType != "agent_timeline" {
+		t.Fatalf("items response = %#v", items)
+	}
+	if len(rawData.RawData) != 1 || rawData.RawData[0].Segment == nil {
+		t.Fatalf("rawData response = %#v", rawData)
+	}
 
 	if len(seen) != len(expected) {
 		t.Fatalf("seen = %#v", seen)
@@ -99,6 +139,18 @@ func TestMemoryMethodsCallEndpoints(t *testing.T) {
 			t.Fatalf("seen[%d] = %q, want %q", i, seen[i], expected[i])
 		}
 	}
+}
+
+func boolPtr(value bool) *bool {
+	return &value
+}
+
+func intPtr(value int) *int {
+	return &value
+}
+
+func timePtr(value time.Time) *time.Time {
+	return &value
 }
 
 func TestMutatingMethodsDoNotRetryByDefault(t *testing.T) {

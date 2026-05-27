@@ -18,7 +18,13 @@ import pytest
 
 from memind._async_client import AsyncMemindClient
 from memind._exceptions import MemindAPIError, MemindError
-from memind.types import ConversationContent, Message, Strategy
+from memind.types import (
+    ConversationContent,
+    Message,
+    QueryMemoryItemsRequest,
+    QueryMemoryRawDataRequest,
+    Strategy,
+)
 
 
 @pytest.mark.asyncio
@@ -148,6 +154,40 @@ async def test_async_retrieve_returns_response(httpx_mock) -> None:
     await client.close()
 
     assert result.items[0].text == "likes coffee"
+
+
+@pytest.mark.asyncio
+async def test_async_query_methods_return_structured_results(httpx_mock) -> None:
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/open/v1/memory/items/query",
+        json={
+            "data": {
+                "items": [{"id": "101", "text": "Run targeted tests.", "metadata": {}}],
+                "nextCursor": None,
+            }
+        },
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/open/v1/memory/raw-data/query",
+        json={
+            "data": {
+                "rawData": [{"id": "rd-1", "type": "agent_timeline", "metadata": {}}],
+                "nextCursor": None,
+            }
+        },
+    )
+
+    client = AsyncMemindClient(base_url="https://api.example.test")
+    items = await client.memory.query_items(QueryMemoryItemsRequest(user_id="u1", agent_id="a1"))
+    raw_data = await client.memory.query_raw_data(
+        QueryMemoryRawDataRequest(user_id="u1", agent_id="a1")
+    )
+    await client.close()
+
+    assert items.items[0].id == "101"
+    assert raw_data.raw_data[0].id == "rd-1"
 
 
 @pytest.mark.asyncio

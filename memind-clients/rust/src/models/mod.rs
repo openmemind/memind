@@ -19,7 +19,10 @@ pub use common::{ExtractStatus, Role, Strategy};
 pub use health::HealthResponse;
 pub use memory::{
     AddMessageRequest, AddMessageResponse, CommitMemoryRequest, ExtractMemoryRequest,
-    ExtractMemoryResponse, FinalView, MergeView, RetrievalTraceView, RetrieveMemoryRequest,
-    RetrieveMemoryResponse, RetrievedInsight, RetrievedItem, RetrievedRawData, StageView,
+    ExtractMemoryResponse, FinalView, MemoryItem, MemoryRawData, MergeView, MetadataCondition,
+    MetadataFilter, QueryMemoryItemsRequest, QueryMemoryItemsResponse, QueryMemoryRawDataRequest,
+    QueryMemoryRawDataResponse, RawDataQueryIncludeOptions, RetrievalTraceView,
+    RetrieveIncludeOptions, RetrieveMemoryRequest, RetrieveMemoryResponse, RetrievedInsight,
+    RetrievedItem, RetrievedRawData, StageView, TimeRange,
 };
 pub use message::{ContentBlock, Message, RawContent, Source};

@@ -22,8 +22,13 @@ from memind import (
     MemindClient,
     MemindError,
     Message,
+    MetadataCondition,
+    MetadataFilter,
+    QueryMemoryItemsRequest,
+    QueryMemoryRawDataRequest,
     RawContentValue,
     Strategy,
+    TimeRange,
 )
 
 
@@ -37,3 +42,7 @@ def test_public_exports() -> None:
     assert Message.user("hello").role.value == "USER"
     assert Strategy.SIMPLE.value == "SIMPLE"
     assert ConversationContent(messages=[Message.user("hi")]).type == "conversation"
+    assert MetadataFilter(all=[MetadataCondition(path="project", op="eq", value="memind")])
+    assert QueryMemoryItemsRequest(user_id="u1", agent_id="a1")
+    assert QueryMemoryRawDataRequest(user_id="u1", agent_id="a1")
+    assert TimeRange(field="occurredAt")

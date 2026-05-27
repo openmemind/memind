@@ -28,6 +28,15 @@ from memind.types.memory import (
     ExtractMemoryResponse,
     RetrieveMemoryRequest,
     RetrieveMemoryResponse,
+    MetadataCondition,
+    MetadataFilter,
+    QueryMemoryItemsRequest,
+    QueryMemoryItemsResponse,
+    QueryMemoryRawDataRequest,
+    QueryMemoryRawDataResponse,
+    RawDataQueryIncludeOptions,
+    RetrieveIncludeOptions,
+    TimeRange,
 )
 from memind.types.message import (
     Base64Source,
@@ -267,6 +276,29 @@ class TestHealthAndMemoryModels:
         assert dumped["strategy"] == "DEEP"
         assert dumped["trace"] is True
 
+    def test_retrieve_memory_request_with_filters(self) -> None:
+        req = RetrieveMemoryRequest(
+            user_id="u1",
+            agent_id="a1",
+            query="recent decisions",
+            strategy=Strategy.DEEP,
+            scope="ALL",
+            categories=["resolution", "playbook"],
+            time_range=TimeRange(field="occurredAt", from_="2026-01-01T00:00:00Z"),
+            metadata_filter=MetadataFilter(
+                all=[MetadataCondition(path="project", op="eq", value="memind")],
+                not_=[MetadataCondition(path="archived", op="exists")],
+            ),
+            include=RetrieveIncludeOptions(raw_data_metadata=True, raw_data_segment=False),
+        )
+        dumped = req.model_dump(by_alias=True, exclude_none=True)
+        assert dumped["scope"] == "ALL"
+        assert dumped["categories"] == ["resolution", "playbook"]
+        assert dumped["timeRange"]["from"] == "2026-01-01T00:00:00Z"
+        assert dumped["metadataFilter"]["all"][0]["path"] == "project"
+        assert dumped["metadataFilter"]["not"][0]["op"] == "exists"
+        assert dumped["include"] == {"rawDataMetadata": True, "rawDataSegment": False}
+
     def test_retrieve_memory_response(self) -> None:
         data = {
             "status": "OK",
@@ -281,7 +313,18 @@ class TestHealthAndMemoryModels:
             ],
             "insights": [{"id": "ins-1", "text": "prefers hot drinks", "tier": "CORE"}],
             "rawData": [
-                {"rawDataId": "rd-1", "caption": "chat", "maxScore": 0.9, "itemIds": ["item-1"]}
+                {
+                    "rawDataId": "rd-1",
+                    "caption": "chat",
+                    "maxScore": 0.9,
+                    "itemIds": ["item-1"],
+                    "type": "agent_timeline",
+                    "sourceClient": "claude-code",
+                    "metadata": {"sessionId": "s1"},
+                    "startTime": "2026-01-01T00:00:00Z",
+                    "endTime": "2026-01-01T00:01:00Z",
+                    "createdAt": "2026-01-01T00:02:00Z",
+                }
             ],
             "evidences": ["evidence-1"],
             "strategy": "SIMPLE",
@@ -296,7 +339,89 @@ class TestHealthAndMemoryModels:
         assert resp.items[0].occurred_at == "2026-01-01T00:00:00Z"
         assert resp.insights[0].tier == "CORE"
         assert resp.raw_data[0].raw_data_id == "rd-1"
+        assert resp.raw_data[0].type == "agent_timeline"
+        assert resp.raw_data[0].source_client == "claude-code"
+        assert resp.raw_data[0].metadata == {"sessionId": "s1"}
         assert resp.evidences == ["evidence-1"]
+
+    def test_query_items_models(self) -> None:
+        req = QueryMemoryItemsRequest(
+            user_id="u1",
+            agent_id="a1",
+            scope="ALL",
+            categories=["resolution"],
+            source_clients=["claude-code"],
+            raw_data_types=["agent_timeline"],
+            time_range=TimeRange(field="occurredAt", to="2026-05-01T00:00:00Z"),
+            metadata_filter=MetadataFilter(
+                any=[MetadataCondition(path="repo", op="contains", value="memind")]
+            ),
+            limit=10,
+            cursor="item-9",
+        )
+        dumped = req.model_dump(by_alias=True, exclude_none=True)
+        assert dumped["sourceClients"] == ["claude-code"]
+        assert dumped["rawDataTypes"] == ["agent_timeline"]
+        assert dumped["timeRange"]["to"] == "2026-05-01T00:00:00Z"
+
+        response = QueryMemoryItemsResponse.model_validate(
+            {
+                "items": [
+                    {
+                        "id": "101",
+                        "text": "Run Java tests before pushing.",
+                        "scope": "AGENT",
+                        "category": "playbook",
+                        "type": "FACT",
+                        "rawDataId": "rd-1",
+                        "rawDataType": "agent_timeline",
+                        "sourceClient": "claude-code",
+                        "occurredAt": "2026-05-01T00:00:00Z",
+                        "observedAt": "2026-05-01T00:01:00Z",
+                        "createdAt": "2026-05-01T00:02:00Z",
+                        "metadata": {"repo": "memind"},
+                    }
+                ],
+                "nextCursor": "101",
+            }
+        )
+        assert response.items[0].raw_data_type == "agent_timeline"
+        assert response.items[0].metadata == {"repo": "memind"}
+        assert response.next_cursor == "101"
+
+    def test_query_raw_data_models(self) -> None:
+        req = QueryMemoryRawDataRequest(
+            user_id="u1",
+            agent_id="a1",
+            types=["agent_timeline"],
+            source_clients=["codex"],
+            include=RawDataQueryIncludeOptions(segment=True, metadata=True),
+            limit=5,
+        )
+        dumped = req.model_dump(by_alias=True, exclude_none=True)
+        assert dumped["types"] == ["agent_timeline"]
+        assert dumped["include"] == {"segment": True, "metadata": True}
+
+        response = QueryMemoryRawDataResponse.model_validate(
+            {
+                "rawData": [
+                    {
+                        "id": "rd-1",
+                        "type": "agent_timeline",
+                        "sourceClient": "codex",
+                        "caption": "Fixed retry test.",
+                        "metadata": {"sessionId": "s1"},
+                        "segment": {"events": []},
+                        "startTime": "2026-05-01T00:00:00Z",
+                        "endTime": "2026-05-01T00:01:00Z",
+                        "createdAt": "2026-05-01T00:02:00Z",
+                    }
+                ],
+                "nextCursor": None,
+            }
+        )
+        assert response.raw_data[0].id == "rd-1"
+        assert response.raw_data[0].segment == {"events": []}
 
     def test_retrieve_memory_response_with_trace(self) -> None:
         data = {

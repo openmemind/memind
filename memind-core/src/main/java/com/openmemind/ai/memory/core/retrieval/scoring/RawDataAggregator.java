@@ -16,7 +16,9 @@ package com.openmemind.ai.memory.core.retrieval.scoring;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
+import com.openmemind.ai.memory.core.retrieval.ItemRetrievalGuard;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
+import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -137,7 +139,16 @@ public final class RawDataAggregator {
                 if (caption != null && !caption.isBlank()) {
                     rawDataResults.add(
                             new RetrievalResult.RawDataResult(
-                                    groupKey, caption, maxScore, itemIds));
+                                    groupKey,
+                                    caption,
+                                    maxScore,
+                                    itemIds,
+                                    rawData.map(MemoryRawData::contentType).orElse(null),
+                                    rawData.map(MemoryRawData::sourceClient).orElse(null),
+                                    rawData.map(MemoryRawData::metadata).orElse(Map.of()),
+                                    rawData.map(MemoryRawData::startTime).orElse(null),
+                                    rawData.map(MemoryRawData::endTime).orElse(null),
+                                    rawData.map(MemoryRawData::createdAt).orElse(null)));
                 }
             }
         }
@@ -322,5 +333,43 @@ public final class RawDataAggregator {
                             return r;
                         })
                 .toList();
+    }
+
+    public static List<ScoredResult> filterItems(
+            List<ScoredResult> results, QueryContext context, MemoryStore store) {
+        if (store == null || results.isEmpty()) {
+            return results;
+        }
+        List<Long> itemIds =
+                results.stream()
+                        .filter(result -> result.sourceType() == ScoredResult.SourceType.ITEM)
+                        .map(RawDataAggregator::parseLong)
+                        .filter(Objects::nonNull)
+                        .toList();
+        if (itemIds.isEmpty()) {
+            return results;
+        }
+        Map<Long, MemoryItem> itemsById =
+                store.itemOperations().getItemsByIds(context.memoryId(), itemIds).stream()
+                        .collect(Collectors.toMap(MemoryItem::id, item -> item, (a, b) -> a));
+        return results.stream()
+                .filter(
+                        result -> {
+                            if (result.sourceType() != ScoredResult.SourceType.ITEM) {
+                                return true;
+                            }
+                            Long itemId = parseLong(result);
+                            MemoryItem item = itemId == null ? null : itemsById.get(itemId);
+                            return item != null && ItemRetrievalGuard.allows(item, context);
+                        })
+                .toList();
+    }
+
+    private static Long parseLong(ScoredResult result) {
+        try {
+            return Long.parseLong(result.sourceId());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

@@ -64,6 +64,64 @@ class RetrieveMemoryRequest(MemindModel):
     query: str
     strategy: Strategy
     trace: bool | None = None
+    scope: str | None = None
+    categories: list[str] | None = None
+    time_range: TimeRange | None = None
+    metadata_filter: MetadataFilter | None = None
+    include: RetrieveIncludeOptions | None = None
+
+
+class TimeRange(MemindModel):
+    field: str | None = None
+    from_: str | None = Field(default=None, alias="from")
+    to: str | None = None
+
+
+class MetadataCondition(MemindModel):
+    path: str
+    op: str
+    value: Any | None = None
+
+
+class MetadataFilter(MemindModel):
+    all: list[MetadataCondition] | None = None
+    any: list[MetadataCondition] | None = None
+    not_: list[MetadataCondition] | None = Field(default=None, alias="not")
+
+
+class RetrieveIncludeOptions(MemindModel):
+    raw_data_metadata: bool | None = None
+    raw_data_segment: bool | None = None
+
+
+class RawDataQueryIncludeOptions(MemindModel):
+    segment: bool | None = None
+    metadata: bool | None = None
+
+
+class QueryMemoryItemsRequest(MemindModel):
+    user_id: str
+    agent_id: str
+    scope: str | None = None
+    categories: list[str] | None = None
+    source_clients: list[str] | None = None
+    raw_data_types: list[str] | None = None
+    time_range: TimeRange | None = None
+    metadata_filter: MetadataFilter | None = None
+    limit: int | None = None
+    cursor: str | None = None
+
+
+class QueryMemoryRawDataRequest(MemindModel):
+    user_id: str
+    agent_id: str
+    types: list[str] | None = None
+    source_clients: list[str] | None = None
+    time_range: TimeRange | None = None
+    metadata_filter: MetadataFilter | None = None
+    include: RawDataQueryIncludeOptions | None = None
+    limit: int | None = None
+    cursor: str | None = None
 
 
 class RetrievedItem(MemindModel):
@@ -87,6 +145,12 @@ class RetrievedRawData(MemindModel):
     caption: str | None = None
     max_score: float = 0.0
     item_ids: list[str] | None = None
+    type: str | None = None
+    source_client: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    start_time: str | None = None
+    end_time: str | None = None
+    created_at: str | None = None
 
 
 class StageView(MemindModel):
@@ -141,3 +205,40 @@ class RetrieveMemoryResponse(MemindModel):
     strategy: str | None = None
     query: str | None = None
     trace: RetrievalTraceView | None = None
+
+
+class MemoryItem(MemindModel):
+    id: str
+    text: str
+    scope: str | None = None
+    category: str | None = None
+    type: str | None = None
+    raw_data_id: str | None = None
+    raw_data_type: str | None = None
+    source_client: str | None = None
+    occurred_at: str | None = None
+    observed_at: str | None = None
+    created_at: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class QueryMemoryItemsResponse(MemindModel):
+    items: list[MemoryItem] = Field(default_factory=list)
+    next_cursor: str | None = None
+
+
+class MemoryRawData(MemindModel):
+    id: str
+    type: str | None = None
+    source_client: str | None = None
+    caption: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    segment: dict[str, Any] | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    created_at: str | None = None
+
+
+class QueryMemoryRawDataResponse(MemindModel):
+    raw_data: list[MemoryRawData] = Field(default_factory=list)
+    next_cursor: str | None = None

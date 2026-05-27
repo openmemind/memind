@@ -27,11 +27,15 @@ import com.openmemind.ai.memory.server.domain.memory.request.ExtractMemoryReques
 import com.openmemind.ai.memory.server.domain.memory.request.RetrieveMemoryRequest;
 import com.openmemind.ai.memory.server.domain.memory.response.AddMessageResponse;
 import com.openmemind.ai.memory.server.domain.memory.response.ExtractMemoryResponse;
+import com.openmemind.ai.memory.server.domain.memory.response.QueryMemoryItemsResponse;
+import com.openmemind.ai.memory.server.domain.memory.response.QueryMemoryRawDataResponse;
 import com.openmemind.ai.memory.server.domain.memory.response.RetrieveMemoryResponse;
 import com.openmemind.ai.memory.server.handler.ApiExceptionHandler;
 import com.openmemind.ai.memory.server.service.memory.OpenMemoryApplicationService;
+import com.openmemind.ai.memory.server.service.memory.OpenMemoryAssetQueryService;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
@@ -43,6 +47,8 @@ import tools.jackson.databind.json.JsonMapper;
 class OpenMemoryControllerTest {
 
     private final StubOpenMemoryApplicationService service = new StubOpenMemoryApplicationService();
+    private final StubOpenMemoryAssetQueryService assetQueryService =
+            new StubOpenMemoryAssetQueryService();
     private final JsonMapper objectMapper = JsonUtils.mapper();
 
     private MockMvc mockMvc;
@@ -53,7 +59,7 @@ class OpenMemoryControllerTest {
         validator.afterPropertiesSet();
         this.mockMvc =
                 MockMvcBuilders.standaloneSetup(
-                                new OpenMemoryQueryController(service),
+                                new OpenMemoryQueryController(service, assetQueryService),
                                 new OpenMemorySyncController(service),
                                 new OpenMemoryAsyncController(service))
                         .setControllerAdvice(new ApiExceptionHandler())
@@ -288,6 +294,76 @@ class OpenMemoryControllerTest {
                 .andExpect(jsonPath("$.data.rawData[0].rawDataId").value("rd-1"));
     }
 
+    @Test
+    void queryItemsReturnsStructuredMemoryItems() throws Exception {
+        mockMvc.perform(
+                        post("/open/v1/memory/items/query")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1",
+                                          "scope": "AGENT",
+                                          "categories": ["tool", "resolution"],
+                                          "timeRange": {
+                                            "field": "occurredAt",
+                                            "from": "2026-05-01T00:00:00Z",
+                                            "to": "2026-05-27T00:00:00Z"
+                                          },
+                                          "metadataFilter": {
+                                            "all": [
+                                              {"path": "projectSlug", "op": "eq", "value": "memind"}
+                                            ]
+                                          },
+                                          "limit": 10
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(header().exists("X-Request-Id"))
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data.items[0].id").value("101"))
+                .andExpect(jsonPath("$.data.items[0].category").value("tool"))
+                .andExpect(jsonPath("$.data.items[0].metadata.projectSlug").value("memind"))
+                .andExpect(jsonPath("$.data.nextCursor").doesNotExist());
+
+        org.assertj.core.api.Assertions.assertThat(assetQueryService.lastItemsRequest).isNotNull();
+    }
+
+    @Test
+    void queryRawDataOmitsSegmentUnlessIncluded() throws Exception {
+        mockMvc.perform(
+                        post("/open/v1/memory/raw-data/query")
+                                .contentType(APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "u1",
+                                          "agentId": "a1",
+                                          "types": ["agent_timeline"],
+                                          "sourceClients": ["claude-code"],
+                                          "timeRange": {
+                                            "field": "startTime",
+                                            "from": "2026-05-01T00:00:00Z"
+                                          },
+                                          "include": {
+                                            "segment": false,
+                                            "metadata": true
+                                          },
+                                          "limit": 10
+                                        }
+                                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").doesNotExist())
+                .andExpect(jsonPath("$.data.rawData[0].id").value("rd-1"))
+                .andExpect(jsonPath("$.data.rawData[0].type").value("agent_timeline"))
+                .andExpect(jsonPath("$.data.rawData[0].metadata.projectSlug").value("memind"))
+                .andExpect(jsonPath("$.data.rawData[0].segment").doesNotExist());
+
+        org.assertj.core.api.Assertions.assertThat(assetQueryService.lastRawDataRequest)
+                .isNotNull();
+    }
+
     private static String validExtractJson() {
         return """
         {
@@ -401,6 +477,61 @@ class OpenMemoryControllerTest {
                     List.of("user likes coffee"),
                     "SIMPLE",
                     request.query());
+        }
+    }
+
+    private static final class StubOpenMemoryAssetQueryService extends OpenMemoryAssetQueryService {
+
+        private com.openmemind.ai.memory.server.domain.memory.request.QueryMemoryItemsRequest
+                lastItemsRequest;
+        private com.openmemind.ai.memory.server.domain.memory.request.QueryMemoryRawDataRequest
+                lastRawDataRequest;
+
+        private StubOpenMemoryAssetQueryService() {
+            super(null, null);
+        }
+
+        @Override
+        public QueryMemoryItemsResponse queryItems(
+                com.openmemind.ai.memory.server.domain.memory.request.QueryMemoryItemsRequest
+                        request) {
+            this.lastItemsRequest = request;
+            return new QueryMemoryItemsResponse(
+                    List.of(
+                            new QueryMemoryItemsResponse.MemoryItemView(
+                                    "101",
+                                    "Run mvn -pl memind-server -am for server tests",
+                                    "AGENT",
+                                    "tool",
+                                    "FACT",
+                                    "rd-1",
+                                    "agent_timeline",
+                                    "claude-code",
+                                    Instant.parse("2026-05-24T12:00:00Z"),
+                                    Instant.parse("2026-05-24T12:01:00Z"),
+                                    Instant.parse("2026-05-24T12:02:00Z"),
+                                    Map.of("projectSlug", "memind"))),
+                    null);
+        }
+
+        @Override
+        public QueryMemoryRawDataResponse queryRawData(
+                com.openmemind.ai.memory.server.domain.memory.request.QueryMemoryRawDataRequest
+                        request) {
+            this.lastRawDataRequest = request;
+            return new QueryMemoryRawDataResponse(
+                    List.of(
+                            new QueryMemoryRawDataResponse.MemoryRawDataView(
+                                    "rd-1",
+                                    "agent_timeline",
+                                    "claude-code",
+                                    "fixed server API",
+                                    Map.of("projectSlug", "memind"),
+                                    null,
+                                    Instant.parse("2026-05-24T12:00:00Z"),
+                                    Instant.parse("2026-05-24T12:10:00Z"),
+                                    Instant.parse("2026-05-24T12:11:00Z"))),
+                    null);
         }
     }
 }

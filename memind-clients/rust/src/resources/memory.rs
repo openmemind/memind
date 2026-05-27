@@ -15,7 +15,9 @@ use std::sync::Arc;
 use crate::client::ClientInner;
 use crate::models::{
     AddMessageRequest, AddMessageResponse, CommitMemoryRequest, ExtractMemoryRequest,
-    ExtractMemoryResponse, RetrieveMemoryRequest, RetrieveMemoryResponse,
+    ExtractMemoryResponse, QueryMemoryItemsRequest, QueryMemoryItemsResponse,
+    QueryMemoryRawDataRequest, QueryMemoryRawDataResponse, RetrieveMemoryRequest,
+    RetrieveMemoryResponse,
 };
 use crate::{http, RequestOptions, Result};
 
@@ -92,6 +94,54 @@ impl MemoryClient {
         http::post_json(
             &self.inner,
             "/memory/retrieve",
+            &request,
+            options,
+            self.inner.config.max_retries,
+        )
+        .await
+    }
+
+    pub async fn query_items(
+        &self,
+        request: QueryMemoryItemsRequest,
+    ) -> Result<QueryMemoryItemsResponse> {
+        self.query_items_with_options(request, RequestOptions::new())
+            .await
+    }
+
+    pub async fn query_items_with_options(
+        &self,
+        request: QueryMemoryItemsRequest,
+        options: RequestOptions,
+    ) -> Result<QueryMemoryItemsResponse> {
+        request.validate()?;
+        http::post_json(
+            &self.inner,
+            "/memory/items/query",
+            &request,
+            options,
+            self.inner.config.max_retries,
+        )
+        .await
+    }
+
+    pub async fn query_raw_data(
+        &self,
+        request: QueryMemoryRawDataRequest,
+    ) -> Result<QueryMemoryRawDataResponse> {
+        self.query_raw_data_with_options(request, RequestOptions::new())
+            .await
+    }
+
+    pub async fn query_raw_data_with_options(
+        &self,
+        request: QueryMemoryRawDataRequest,
+        options: RequestOptions,
+    ) -> Result<QueryMemoryRawDataResponse> {
+        request.validate()?;
+        http::post_json(
+            &self.inner,
+            "/memory/raw-data/query",
             &request,
             options,
             self.inner.config.max_retries,

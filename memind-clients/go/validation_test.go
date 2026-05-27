@@ -57,3 +57,19 @@ func TestValidateExtractAcceptsConversation(t *testing.T) {
 		t.Fatalf("validateExtractRequest conversation error = %v", err)
 	}
 }
+
+func TestValidateStructuredQueryRequests(t *testing.T) {
+	if err := validateQueryItemsRequest(QueryMemoryItemsRequest{UserID: "u", AgentID: "a", Limit: intPtr(100)}); err != nil {
+		t.Fatalf("validateQueryItemsRequest valid error = %v", err)
+	}
+	if err := validateQueryRawDataRequest(QueryMemoryRawDataRequest{UserID: "u", AgentID: "a", Limit: intPtr(100)}); err != nil {
+		t.Fatalf("validateQueryRawDataRequest valid error = %v", err)
+	}
+
+	if err := validateQueryItemsRequest(QueryMemoryItemsRequest{UserID: "u", AgentID: "a", Limit: intPtr(0)}); err == nil {
+		t.Fatal("validateQueryItemsRequest limit 0 error = nil, want error")
+	}
+	if err := validateQueryRawDataRequest(QueryMemoryRawDataRequest{UserID: "u", AgentID: "a", Limit: intPtr(101)}); err == nil {
+		t.Fatal("validateQueryRawDataRequest limit 101 error = nil, want error")
+	}
+}

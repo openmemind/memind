@@ -23,7 +23,15 @@ public record RawDataPageQuery(
         String agentId,
         Instant startTimeFrom,
         Instant startTimeTo,
+        List<String> types,
+        List<String> sourceClients,
         List<String> orderBy) {
+
+    public RawDataPageQuery {
+        types = types == null ? List.of() : List.copyOf(types);
+        sourceClients = sourceClients == null ? List.of() : List.copyOf(sourceClients);
+        orderBy = orderBy == null ? List.of() : List.copyOf(orderBy);
+    }
 
     public static RawDataPageQuery of(
             int pageNo,
@@ -39,6 +47,29 @@ public record RawDataPageQuery(
                 agentId,
                 startTimeFrom,
                 startTimeTo,
+                List.of(),
+                List.of(),
+                List.of("start_time DESC", "created_at DESC"));
+    }
+
+    public static RawDataPageQuery openApi(
+            int pageNo,
+            int pageSize,
+            String userId,
+            String agentId,
+            Instant startTimeFrom,
+            Instant startTimeTo,
+            List<String> types,
+            List<String> sourceClients) {
+        return new RawDataPageQuery(
+                pageNo,
+                pageSize,
+                userId,
+                agentId,
+                startTimeFrom,
+                startTimeTo,
+                types,
+                sourceClients,
                 List.of("start_time DESC", "created_at DESC"));
     }
 }

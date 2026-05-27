@@ -59,11 +59,69 @@ type CommitMemoryRequest struct {
 }
 
 type RetrieveMemoryRequest struct {
-	UserID   string   `json:"userId"`
-	AgentID  string   `json:"agentId"`
-	Query    string   `json:"query"`
-	Strategy Strategy `json:"strategy"`
-	Trace    *bool    `json:"trace,omitempty"`
+	UserID         string                  `json:"userId"`
+	AgentID        string                  `json:"agentId"`
+	Query          string                  `json:"query"`
+	Strategy       Strategy                `json:"strategy"`
+	Trace          *bool                   `json:"trace,omitempty"`
+	Scope          string                  `json:"scope,omitempty"`
+	Categories     []string                `json:"categories,omitempty"`
+	TimeRange      *TimeRange              `json:"timeRange,omitempty"`
+	MetadataFilter *MetadataFilter         `json:"metadataFilter,omitempty"`
+	Include        *RetrieveIncludeOptions `json:"include,omitempty"`
+}
+
+type TimeRange struct {
+	Field string     `json:"field,omitempty"`
+	From  *time.Time `json:"from,omitempty"`
+	To    *time.Time `json:"to,omitempty"`
+}
+
+type MetadataCondition struct {
+	Path  string `json:"path"`
+	Op    string `json:"op"`
+	Value any    `json:"value,omitempty"`
+}
+
+type MetadataFilter struct {
+	All []MetadataCondition `json:"all,omitempty"`
+	Any []MetadataCondition `json:"any,omitempty"`
+	Not []MetadataCondition `json:"not,omitempty"`
+}
+
+type RetrieveIncludeOptions struct {
+	RawDataMetadata *bool `json:"rawDataMetadata,omitempty"`
+	RawDataSegment  *bool `json:"rawDataSegment,omitempty"`
+}
+
+type RawDataQueryIncludeOptions struct {
+	Segment  *bool `json:"segment,omitempty"`
+	Metadata *bool `json:"metadata,omitempty"`
+}
+
+type QueryMemoryItemsRequest struct {
+	UserID         string          `json:"userId"`
+	AgentID        string          `json:"agentId"`
+	Scope          string          `json:"scope,omitempty"`
+	Categories     []string        `json:"categories,omitempty"`
+	SourceClients  []string        `json:"sourceClients,omitempty"`
+	RawDataTypes   []string        `json:"rawDataTypes,omitempty"`
+	TimeRange      *TimeRange      `json:"timeRange,omitempty"`
+	MetadataFilter *MetadataFilter `json:"metadataFilter,omitempty"`
+	Limit          *int            `json:"limit,omitempty"`
+	Cursor         string          `json:"cursor,omitempty"`
+}
+
+type QueryMemoryRawDataRequest struct {
+	UserID         string                      `json:"userId"`
+	AgentID        string                      `json:"agentId"`
+	Types          []string                    `json:"types,omitempty"`
+	SourceClients  []string                    `json:"sourceClients,omitempty"`
+	TimeRange      *TimeRange                  `json:"timeRange,omitempty"`
+	MetadataFilter *MetadataFilter             `json:"metadataFilter,omitempty"`
+	Include        *RawDataQueryIncludeOptions `json:"include,omitempty"`
+	Limit          *int                        `json:"limit,omitempty"`
+	Cursor         string                      `json:"cursor,omitempty"`
 }
 
 type HealthResponse struct {
@@ -104,11 +162,13 @@ type RetrieveMemoryResponse struct {
 }
 
 type RetrievedItem struct {
-	ID          string     `json:"id"`
-	Text        string     `json:"text"`
-	VectorScore float32    `json:"vectorScore"`
-	FinalScore  float64    `json:"finalScore"`
-	OccurredAt  *time.Time `json:"occurredAt,omitempty"`
+	ID          string         `json:"id"`
+	Text        string         `json:"text"`
+	VectorScore float32        `json:"vectorScore"`
+	FinalScore  float64        `json:"finalScore"`
+	OccurredAt  *time.Time     `json:"occurredAt,omitempty"`
+	Category    string         `json:"category,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
 type RetrievedInsight struct {
@@ -118,10 +178,53 @@ type RetrievedInsight struct {
 }
 
 type RetrievedRawData struct {
-	RawDataID string   `json:"rawDataId"`
-	Caption   string   `json:"caption,omitempty"`
-	MaxScore  float64  `json:"maxScore"`
-	ItemIDs   []string `json:"itemIds,omitempty"`
+	RawDataID    string         `json:"rawDataId"`
+	Caption      string         `json:"caption,omitempty"`
+	MaxScore     float64        `json:"maxScore"`
+	ItemIDs      []string       `json:"itemIds,omitempty"`
+	Type         string         `json:"type,omitempty"`
+	SourceClient string         `json:"sourceClient,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
+	StartTime    *time.Time     `json:"startTime,omitempty"`
+	EndTime      *time.Time     `json:"endTime,omitempty"`
+	CreatedAt    *time.Time     `json:"createdAt,omitempty"`
+}
+
+type QueryMemoryItemsResponse struct {
+	Items      []MemoryItem `json:"items"`
+	NextCursor string       `json:"nextCursor,omitempty"`
+}
+
+type MemoryItem struct {
+	ID           string         `json:"id"`
+	Text         string         `json:"text"`
+	Scope        string         `json:"scope,omitempty"`
+	Category     string         `json:"category,omitempty"`
+	Type         string         `json:"type,omitempty"`
+	RawDataID    string         `json:"rawDataId,omitempty"`
+	RawDataType  string         `json:"rawDataType,omitempty"`
+	SourceClient string         `json:"sourceClient,omitempty"`
+	OccurredAt   *time.Time     `json:"occurredAt,omitempty"`
+	ObservedAt   *time.Time     `json:"observedAt,omitempty"`
+	CreatedAt    *time.Time     `json:"createdAt,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
+}
+
+type QueryMemoryRawDataResponse struct {
+	RawData    []MemoryRawData `json:"rawData"`
+	NextCursor string          `json:"nextCursor,omitempty"`
+}
+
+type MemoryRawData struct {
+	ID           string         `json:"id"`
+	Type         string         `json:"type,omitempty"`
+	SourceClient string         `json:"sourceClient,omitempty"`
+	Caption      string         `json:"caption,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
+	Segment      map[string]any `json:"segment,omitempty"`
+	StartTime    *time.Time     `json:"startTime,omitempty"`
+	EndTime      *time.Time     `json:"endTime,omitempty"`
+	CreatedAt    *time.Time     `json:"createdAt,omitempty"`
 }
 
 type RetrievalTraceView struct {

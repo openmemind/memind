@@ -41,6 +41,7 @@ import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
+import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.trace.RetrievalFinalTrace;
 import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceContext;
@@ -48,6 +49,7 @@ import com.openmemind.ai.memory.server.configuration.MemindServerObservabilityPr
 import com.openmemind.ai.memory.server.domain.memory.request.AddMessageRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.CommitMemoryRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.ExtractMemoryRequest;
+import com.openmemind.ai.memory.server.domain.memory.request.MetadataFilter;
 import com.openmemind.ai.memory.server.domain.memory.request.RetrieveMemoryRequest;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeManager;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeUnavailableException;
@@ -195,6 +197,57 @@ class OpenMemoryApplicationServiceTest {
         assertThat(response.insights()).singleElement().extracting("tier").isEqualTo("LEAF");
         assertThat(response.rawData()).singleElement().extracting("rawDataId").isEqualTo("rd-1");
         assertThat(runtimeManager.currentHandle().inFlightRequests()).hasValue(0);
+    }
+
+    @Test
+    void retrieveUsesStructuredRequestWhenFiltersAreProvided() {
+        RecordingMemory memory = new RecordingMemory();
+        memory.retrieveResult = RetrievalResult.empty("SIMPLE", "project context");
+        MemoryRuntimeManager runtimeManager =
+                new MemoryRuntimeManager(
+                        new RuntimeHandle(memory, MemoryBuildOptions.defaults(), 1));
+        OpenMemoryApplicationService service = new OpenMemoryApplicationService(runtimeManager);
+
+        service.retrieve(
+                new RetrieveMemoryRequest(
+                        "u1",
+                        "a1",
+                        "project context",
+                        RetrievalConfig.Strategy.SIMPLE,
+                        null,
+                        "AGENT",
+                        List.of("directive", "playbook"),
+                        new RetrieveMemoryRequest.TimeRange(
+                                "occurredAt",
+                                Instant.parse("2026-05-01T00:00:00Z"),
+                                Instant.parse("2026-05-27T00:00:00Z")),
+                        new MetadataFilter(
+                                List.of(
+                                        new MetadataFilter.Condition(
+                                                "projectSlug", "eq", "memind-main")),
+                                List.of(),
+                                List.of()),
+                        new RetrieveMemoryRequest.IncludeOptions(true, true)));
+
+        assertThat(memory.lastRetrievalRequest).isNotNull();
+        assertThat(memory.lastRetrievalRequest.memoryId())
+                .isEqualTo(DefaultMemoryId.of("u1", "a1"));
+        assertThat(memory.lastRetrievalRequest.scope()).isEqualTo(MemoryScope.AGENT);
+        assertThat(memory.lastRetrievalRequest.categories())
+                .containsExactlyInAnyOrder(MemoryCategory.DIRECTIVE, MemoryCategory.PLAYBOOK);
+        assertThat(memory.lastRetrievalRequest.metadata())
+                .containsEntry("timeRangeStart", Instant.parse("2026-05-01T00:00:00Z"))
+                .containsEntry("timeRangeEnd", Instant.parse("2026-05-27T00:00:00Z"))
+                .containsKey(QueryContext.META_METADATA_FILTER);
+        assertThat(memory.lastRetrievalRequest.metadata().get(QueryContext.META_METADATA_FILTER))
+                .isEqualTo(
+                        new com.openmemind.ai.memory.core.retrieval.filter.MetadataFilter(
+                                List.of(
+                                        new com.openmemind.ai.memory.core.retrieval.filter
+                                                .MetadataFilter.Condition(
+                                                "projectSlug", "eq", "memind-main")),
+                                List.of(),
+                                List.of()));
     }
 
     @Test
@@ -357,6 +410,7 @@ class OpenMemoryApplicationServiceTest {
         private final CountDownLatch addMessageInvoked = new CountDownLatch(1);
         private final CountDownLatch commitInvoked = new CountDownLatch(1);
         private RetrievalResult retrieveResult;
+        private RetrievalRequest lastRetrievalRequest;
         private boolean recordTrace;
 
         @Override
@@ -439,7 +493,9 @@ class OpenMemoryApplicationServiceTest {
 
         @Override
         public Mono<RetrievalResult> retrieve(RetrievalRequest request) {
-            throw new UnsupportedOperationException();
+            this.lastMemoryId = request.memoryId();
+            this.lastRetrievalRequest = request;
+            return Mono.just(retrieveResult);
         }
 
         @Override

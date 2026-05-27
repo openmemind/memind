@@ -14,6 +14,7 @@
 package com.openmemind.ai.memory.core.retrieval;
 
 import com.openmemind.ai.memory.core.data.MemoryItem;
+import com.openmemind.ai.memory.core.retrieval.filter.MetadataFilterMatcher;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 
 /**
@@ -33,6 +34,9 @@ public final class ItemRetrievalGuard {
         if (context.categories() != null
                 && item.category() != null
                 && !context.categories().contains(item.category())) {
+            return false;
+        }
+        if (!MetadataFilterMatcher.matches(item.metadata(), context.metadataFilter())) {
             return false;
         }
         return ForesightFilter.isNotExpired(item);

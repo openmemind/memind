@@ -19,9 +19,14 @@ import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.MemoryRawData;
+import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
+import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.extraction.ExtractionRequest;
 import com.openmemind.ai.memory.core.extraction.ExtractionResult;
+import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
+import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
+import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.trace.BoundedRetrievalTraceCollector;
 import com.openmemind.ai.memory.core.retrieval.trace.RetrievalDebugTrace;
@@ -38,9 +43,14 @@ import com.openmemind.ai.memory.server.domain.memory.response.RetrievalTraceView
 import com.openmemind.ai.memory.server.domain.memory.response.RetrieveMemoryResponse;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeManager;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -170,15 +180,89 @@ public class OpenMemoryApplicationService {
             RetrieveMemoryRequest request,
             BoundedRetrievalTraceCollector traceCollector) {
         Mono<RetrievalResult> operation =
-                memory.retrieve(
-                        DefaultMemoryId.of(request.userId(), request.agentId()),
-                        request.query(),
-                        request.strategy());
+                shouldUseStructuredRetrieval(request)
+                        ? memory.retrieve(toRetrievalRequest(request))
+                        : memory.retrieve(
+                                DefaultMemoryId.of(request.userId(), request.agentId()),
+                                request.query(),
+                                request.strategy());
         if (traceCollector == null) {
             return operation;
         }
         return operation.contextWrite(
                 context -> RetrievalTraceContext.withCollector(context, traceCollector));
+    }
+
+    private static boolean shouldUseStructuredRetrieval(RetrieveMemoryRequest request) {
+        return hasText(request.scope())
+                || (request.categories() != null && !request.categories().isEmpty())
+                || request.timeRange() != null
+                || request.metadataFilter() != null
+                || request.include() != null;
+    }
+
+    private static RetrievalRequest toRetrievalRequest(RetrieveMemoryRequest request) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (request.timeRange() != null) {
+            if (request.timeRange().from() != null) {
+                metadata.put(QueryContext.META_TIME_RANGE_START, request.timeRange().from());
+            }
+            if (request.timeRange().to() != null) {
+                metadata.put(QueryContext.META_TIME_RANGE_END, request.timeRange().to());
+            }
+        }
+        if (request.metadataFilter() != null && !request.metadataFilter().isEmpty()) {
+            metadata.put(
+                    QueryContext.META_METADATA_FILTER, request.metadataFilter().toCoreFilter());
+        }
+        return new RetrievalRequest(
+                DefaultMemoryId.of(request.userId(), request.agentId()),
+                request.query(),
+                List.of(),
+                config(request.strategy()),
+                Map.copyOf(metadata),
+                parseScope(request.scope()),
+                parseCategories(request.categories()));
+    }
+
+    private static RetrievalConfig config(RetrievalConfig.Strategy strategy) {
+        return switch (strategy) {
+            case SIMPLE -> RetrievalConfig.simple();
+            case DEEP -> RetrievalConfig.deep();
+        };
+    }
+
+    private static MemoryScope parseScope(String scope) {
+        if (!hasText(scope)) {
+            return null;
+        }
+        return MemoryScope.valueOf(scope.trim().toUpperCase(Locale.ROOT));
+    }
+
+    private static Set<MemoryCategory> parseCategories(List<String> categories) {
+        if (categories == null || categories.isEmpty()) {
+            return null;
+        }
+        Set<MemoryCategory> parsed =
+                categories.stream()
+                        .filter(OpenMemoryApplicationService::hasText)
+                        .map(OpenMemoryApplicationService::parseCategory)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet());
+        return parsed.isEmpty() ? null : parsed;
+    }
+
+    private static MemoryCategory parseCategory(String category) {
+        String normalized = category.trim();
+        try {
+            return MemoryCategory.valueOf(normalized.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return MemoryCategory.byName(normalized.toLowerCase(Locale.ROOT)).orElse(null);
+        }
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private static ExtractionRequest extractionRequest(
@@ -289,7 +373,13 @@ public class OpenMemoryApplicationService {
                                                         rawData.rawDataId(),
                                                         rawData.caption(),
                                                         rawData.maxScore(),
-                                                        rawData.itemIds()))
+                                                        rawData.itemIds(),
+                                                        rawData.type(),
+                                                        rawData.sourceClient(),
+                                                        rawData.metadata(),
+                                                        rawData.startTime(),
+                                                        rawData.endTime(),
+                                                        rawData.createdAt()))
                                 .toList(),
                 result.evidences() == null ? List.of() : result.evidences(),
                 result.strategy(),

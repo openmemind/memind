@@ -20,10 +20,14 @@ import com.openmemind.ai.client.internal.MemindHttpClient;
 import com.openmemind.ai.client.model.request.AddMessageRequest;
 import com.openmemind.ai.client.model.request.CommitMemoryRequest;
 import com.openmemind.ai.client.model.request.ExtractMemoryRequest;
+import com.openmemind.ai.client.model.request.QueryMemoryItemsRequest;
+import com.openmemind.ai.client.model.request.QueryMemoryRawDataRequest;
 import com.openmemind.ai.client.model.request.RetrieveMemoryRequest;
 import com.openmemind.ai.client.model.response.AddMessageResponse;
 import com.openmemind.ai.client.model.response.ExtractMemoryResponse;
 import com.openmemind.ai.client.model.response.HealthResponse;
+import com.openmemind.ai.client.model.response.QueryMemoryItemsResponse;
+import com.openmemind.ai.client.model.response.QueryMemoryRawDataResponse;
 import com.openmemind.ai.client.model.response.RetrieveMemoryResponse;
 import java.time.Duration;
 import java.util.Objects;
@@ -64,6 +68,14 @@ public class MemindClient implements AutoCloseable {
         return joinAndUnwrap(retrieveAsync(request));
     }
 
+    public QueryMemoryItemsResponse queryItems(QueryMemoryItemsRequest request) {
+        return joinAndUnwrap(queryItemsAsync(request));
+    }
+
+    public QueryMemoryRawDataResponse queryRawData(QueryMemoryRawDataRequest request) {
+        return joinAndUnwrap(queryRawDataAsync(request));
+    }
+
     public HealthResponse health() {
         return joinAndUnwrap(healthAsync());
     }
@@ -102,6 +114,24 @@ public class MemindClient implements AutoCloseable {
                 "/open/v1/memory/retrieve",
                 Objects.requireNonNull(request, "request"),
                 new TypeReference<ApiResult<RetrieveMemoryResponse>>() {});
+    }
+
+    public CompletableFuture<QueryMemoryItemsResponse> queryItemsAsync(
+            QueryMemoryItemsRequest request) {
+        ensureOpen();
+        return httpClient.post(
+                "/open/v1/memory/items/query",
+                Objects.requireNonNull(request, "request"),
+                new TypeReference<ApiResult<QueryMemoryItemsResponse>>() {});
+    }
+
+    public CompletableFuture<QueryMemoryRawDataResponse> queryRawDataAsync(
+            QueryMemoryRawDataRequest request) {
+        ensureOpen();
+        return httpClient.post(
+                "/open/v1/memory/raw-data/query",
+                Objects.requireNonNull(request, "request"),
+                new TypeReference<ApiResult<QueryMemoryRawDataResponse>>() {});
     }
 
     public CompletableFuture<HealthResponse> healthAsync() {

@@ -35,10 +35,16 @@ import com.openmemind.ai.client.model.common.Strategy;
 import com.openmemind.ai.client.model.request.AddMessageRequest;
 import com.openmemind.ai.client.model.request.CommitMemoryRequest;
 import com.openmemind.ai.client.model.request.ExtractMemoryRequest;
+import com.openmemind.ai.client.model.request.MetadataFilter;
+import com.openmemind.ai.client.model.request.QueryMemoryItemsRequest;
+import com.openmemind.ai.client.model.request.QueryMemoryRawDataRequest;
 import com.openmemind.ai.client.model.request.RetrieveMemoryRequest;
 import com.openmemind.ai.client.model.response.ExtractMemoryResponse;
 import com.openmemind.ai.client.model.response.HealthResponse;
+import com.openmemind.ai.client.model.response.QueryMemoryItemsResponse;
+import com.openmemind.ai.client.model.response.QueryMemoryRawDataResponse;
 import com.openmemind.ai.client.model.response.RetrieveMemoryResponse;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -252,7 +258,7 @@ class MemindClientTest {
                                         """
                                         {"data":{
                                             "status":"success","items":[{"id":"1","text":"memory text","vectorScore":0.9,"finalScore":0.85}],
-                                            "insights":[],"rawData":[],"evidences":[],"strategy":"SIMPLE","query":"test"
+                                            "insights":[],"rawData":[{"rawDataId":"rd-1","type":"agent_timeline","sourceClient":"claude-code","metadata":{"sessionId":"s1"}}],"evidences":[],"strategy":"SIMPLE","query":"test"
                                         }}
                                         """)));
 
@@ -264,12 +270,96 @@ class MemindClientTest {
                                     .agentId("agent-1")
                                     .query("test")
                                     .strategy(Strategy.SIMPLE)
+                                    .scope("ALL")
+                                    .categories(List.of("playbook"))
+                                    .metadataFilter(
+                                            new MetadataFilter(
+                                                    List.of(
+                                                            new MetadataFilter.Condition(
+                                                                    "project", "eq", "memind")),
+                                                    List.of(),
+                                                    List.of()))
                                     .build());
 
             assertThat(response.status()).isEqualTo("success");
             assertThat(response.items()).hasSize(1);
             assertThat(response.items().get(0).text()).isEqualTo("memory text");
+            assertThat(response.rawData().get(0).type()).isEqualTo("agent_timeline");
+            assertThat(response.rawData().get(0).sourceClient()).isEqualTo("claude-code");
         }
+
+        verify(
+                postRequestedFor(urlEqualTo("/open/v1/memory/retrieve"))
+                        .withRequestBody(matchingJsonPath("$.scope", equalTo("ALL")))
+                        .withRequestBody(matchingJsonPath("$.categories[0]", equalTo("playbook")))
+                        .withRequestBody(
+                                matchingJsonPath(
+                                        "$.metadataFilter.all[0].path", equalTo("project"))));
+    }
+
+    @Test
+    void queryItems_usesStructuredEndpoint(WireMockRuntimeInfo wmInfo) {
+        stubFor(
+                post("/open/v1/memory/items/query")
+                        .willReturn(
+                                okJson(
+                                        """
+                                        {"data":{"items":[{"id":"101","text":"Run targeted tests.","rawDataType":"agent_timeline","sourceClient":"claude-code","metadata":{"project":"memind"}}],"nextCursor":"101"}}
+                                        """)));
+
+        try (MemindClient client = MemindClient.builder().baseUrl(wmInfo.getHttpBaseUrl()).build()) {
+            QueryMemoryItemsResponse response =
+                    client.queryItems(
+                            QueryMemoryItemsRequest.builder()
+                                    .userId("user-1")
+                                    .agentId("agent-1")
+                                    .categories(List.of("playbook"))
+                                    .sourceClients(List.of("claude-code"))
+                                    .rawDataTypes(List.of("agent_timeline"))
+                                    .limit(10)
+                                    .build());
+
+            assertThat(response.items()).hasSize(1);
+            assertThat(response.items().get(0).rawDataType()).isEqualTo("agent_timeline");
+            assertThat(response.nextCursor()).isEqualTo("101");
+        }
+
+        verify(
+                postRequestedFor(urlEqualTo("/open/v1/memory/items/query"))
+                        .withRequestBody(matchingJsonPath("$.sourceClients[0]", equalTo("claude-code")))
+                        .withRequestBody(
+                                matchingJsonPath("$.rawDataTypes[0]", equalTo("agent_timeline"))));
+    }
+
+    @Test
+    void queryRawData_usesStructuredEndpoint(WireMockRuntimeInfo wmInfo) {
+        stubFor(
+                post("/open/v1/memory/raw-data/query")
+                        .willReturn(
+                                okJson(
+                                        """
+                                        {"data":{"rawData":[{"id":"rd-1","type":"agent_timeline","sourceClient":"codex","caption":"Fixed retry test.","metadata":{"sessionId":"s1"},"segment":{"events":[]}}],"nextCursor":null}}
+                                        """)));
+
+        try (MemindClient client = MemindClient.builder().baseUrl(wmInfo.getHttpBaseUrl()).build()) {
+            QueryMemoryRawDataResponse response =
+                    client.queryRawData(
+                            QueryMemoryRawDataRequest.builder()
+                                    .userId("user-1")
+                                    .agentId("agent-1")
+                                    .types(List.of("agent_timeline"))
+                                    .sourceClients(List.of("codex"))
+                                    .include(new QueryMemoryRawDataRequest.IncludeOptions(true, true))
+                                    .build());
+
+            assertThat(response.rawData()).hasSize(1);
+            assertThat(response.rawData().get(0).id()).isEqualTo("rd-1");
+            assertThat(response.rawData().get(0).segment()).containsKey("events");
+        }
+
+        verify(
+                postRequestedFor(urlEqualTo("/open/v1/memory/raw-data/query"))
+                        .withRequestBody(matchingJsonPath("$.include.segment", equalTo("true"))));
     }
 
     @Test

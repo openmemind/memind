@@ -23,8 +23,15 @@ from memind.types.memory import (
     CommitMemoryRequest,
     ExtractMemoryRequest,
     ExtractMemoryResponse,
+    MetadataFilter,
+    QueryMemoryItemsRequest,
+    QueryMemoryItemsResponse,
+    QueryMemoryRawDataRequest,
+    QueryMemoryRawDataResponse,
+    RetrieveIncludeOptions,
     RetrieveMemoryRequest,
     RetrieveMemoryResponse,
+    TimeRange,
 )
 from memind.types.message import Message, RawContentValue
 
@@ -112,6 +119,11 @@ class AsyncMemoryResource:
         query: str | None = None,
         strategy: Strategy | None = None,
         trace: bool | None = None,
+        scope: str | None = None,
+        categories: list[str] | None = None,
+        time_range: TimeRange | None = None,
+        metadata_filter: MetadataFilter | None = None,
+        include: RetrieveIncludeOptions | None = None,
     ) -> RetrieveMemoryResponse:
         payload = request or RetrieveMemoryRequest(
             user_id=_required(user_id, "user_id"),
@@ -119,12 +131,37 @@ class AsyncMemoryResource:
             query=_required(query, "query"),
             strategy=_required(strategy, "strategy"),
             trace=trace,
+            scope=scope,
+            categories=categories,
+            time_range=time_range,
+            metadata_filter=metadata_filter,
+            include=include,
         )
         result = await self._client._post(
             "/memory/retrieve",
             payload,
             RetrieveMemoryResponse,
             retry=True,
+        )
+        assert result is not None
+        return result
+
+    async def query_items(
+        self,
+        request: QueryMemoryItemsRequest,
+    ) -> QueryMemoryItemsResponse:
+        result = await self._client._post(
+            "/memory/items/query", request, QueryMemoryItemsResponse, retry=True
+        )
+        assert result is not None
+        return result
+
+    async def query_raw_data(
+        self,
+        request: QueryMemoryRawDataRequest,
+    ) -> QueryMemoryRawDataResponse:
+        result = await self._client._post(
+            "/memory/raw-data/query", request, QueryMemoryRawDataResponse, retry=True
         )
         assert result is not None
         return result

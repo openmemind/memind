@@ -16,6 +16,7 @@ package com.openmemind.ai.memory.core.retrieval.query;
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.retrieval.filter.MetadataFilter;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +51,9 @@ public record QueryContext(
     /** metadata key: Time range end (Instant) */
     public static final String META_TIME_RANGE_END = "timeRangeEnd";
 
+    /** metadata key: Structured top-level metadata filter ({@link MetadataFilter}). */
+    public static final String META_METADATA_FILTER = "metadataFilter";
+
     /** Get the query text for vector search (prefer using the rewritten one) */
     public String searchQuery() {
         return rewrittenQuery != null && !rewrittenQuery.isBlank() ? rewrittenQuery : originalQuery;
@@ -68,6 +72,13 @@ public record QueryContext(
     /** Whether a time range is specified */
     public boolean hasTimeRange() {
         return timeRangeStart() != null || timeRangeEnd() != null;
+    }
+
+    public MetadataFilter metadataFilter() {
+        return metadata != null
+                        && metadata.get(META_METADATA_FILTER) instanceof MetadataFilter filter
+                ? filter
+                : null;
     }
 
     private static Instant castInstant(Object value) {

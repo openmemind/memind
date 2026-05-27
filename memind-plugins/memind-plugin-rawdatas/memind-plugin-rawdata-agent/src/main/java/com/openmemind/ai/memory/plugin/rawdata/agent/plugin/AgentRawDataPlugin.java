@@ -50,7 +50,7 @@ public final class AgentRawDataPlugin implements RawDataPlugin {
         return List.of(
                 new AgentTimelineContentProcessor(
                         new AgentTimelineChunker(options.chunking(), options.privacy()),
-                        new AgentCaptionGenerator(),
+                        new AgentCaptionGenerator(context.chatClientRegistry().defaultClient()),
                         new AgentItemExtractionStrategy(
                                 context.chatClientRegistry().defaultClient(),
                                 context.promptRegistry(),

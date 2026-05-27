@@ -413,8 +413,11 @@ public class ItemTierRetriever implements ItemTierSearch {
                             List<ScoredResult> decayed =
                                     TimeDecay.applyToBm25Only(withTime, context, scoring);
 
-                            log.debug("searchByKeyword completed: {} results", decayed.size());
-                            return decayed;
+                            List<ScoredResult> filtered =
+                                    RawDataAggregator.filterItems(decayed, context, memoryStore);
+
+                            log.debug("searchByKeyword completed: {} results", filtered.size());
+                            return filtered;
                         })
                 .onErrorResume(
                         e -> {

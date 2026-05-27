@@ -16,9 +16,11 @@ package com.openmemind.ai.memory.core.retrieval;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.openmemind.ai.memory.core.data.enums.InsightTier;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -43,7 +45,27 @@ public record RetrievalResult(
 
     /** RawData aggregation result */
     public record RawDataResult(
-            String rawDataId, String caption, double maxScore, List<String> itemIds) {}
+            String rawDataId,
+            String caption,
+            double maxScore,
+            List<String> itemIds,
+            String type,
+            String sourceClient,
+            Map<String, Object> metadata,
+            Instant startTime,
+            Instant endTime,
+            Instant createdAt) {
+
+        public RawDataResult(
+                String rawDataId, String caption, double maxScore, List<String> itemIds) {
+            this(rawDataId, caption, maxScore, itemIds, null, null, Map.of(), null, null, null);
+        }
+
+        public RawDataResult {
+            itemIds = itemIds == null ? List.of() : List.copyOf(itemIds);
+            metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+        }
+    }
 
     /** Insight result (no scores, only ID, text, and tier) */
     public record InsightResult(String id, String text, InsightTier tier) {

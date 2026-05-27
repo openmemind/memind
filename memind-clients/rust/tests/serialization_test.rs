@@ -12,8 +12,9 @@
 
 use memind::{
     AddMessageRequest, CommitMemoryRequest, ContentBlock, ExtractMemoryRequest,
-    ExtractMemoryResponse, ExtractStatus, Message, RawContent, RetrieveMemoryRequest, Role, Source,
-    Strategy,
+    ExtractMemoryResponse, ExtractStatus, Message, MetadataCondition, MetadataFilter,
+    QueryMemoryItemsRequest, QueryMemoryRawDataRequest, RawContent, RawDataQueryIncludeOptions,
+    RetrieveIncludeOptions, RetrieveMemoryRequest, Role, Source, Strategy, TimeRange,
 };
 use serde_json::json;
 
@@ -184,7 +185,18 @@ fn request_models_serialize_camel_case() {
 
 #[test]
 fn retrieve_request_serializes_strategy_and_trace() {
-    let request = RetrieveMemoryRequest::new("u1", "a1", "what", Strategy::Deep).trace(true);
+    let request = RetrieveMemoryRequest::new("u1", "a1", "what", Strategy::Deep)
+        .trace(true)
+        .scope("ALL")
+        .category("resolution")
+        .time_range(TimeRange::new("occurredAt").from("2026-01-01T00:00:00Z"))
+        .metadata_filter(MetadataFilter::all(vec![MetadataCondition::new(
+            "project", "eq", "memind",
+        )]))
+        .include(RetrieveIncludeOptions {
+            raw_data_metadata: Some(true),
+            raw_data_segment: Some(false),
+        });
     let value = serde_json::to_value(request).unwrap();
     assert_eq!(
         value,
@@ -193,8 +205,39 @@ fn retrieve_request_serializes_strategy_and_trace() {
             "agentId": "a1",
             "query": "what",
             "strategy": "DEEP",
-            "trace": true
+            "trace": true,
+            "scope": "ALL",
+            "categories": ["resolution"],
+            "timeRange": {"field": "occurredAt", "from": "2026-01-01T00:00:00Z"},
+            "metadataFilter": {"all": [{"path": "project", "op": "eq", "value": "memind"}]},
+            "include": {"rawDataMetadata": true, "rawDataSegment": false}
         })
+    );
+}
+
+#[test]
+fn structured_query_requests_serialize_camel_case() {
+    let items = QueryMemoryItemsRequest::new("u1", "a1")
+        .category("playbook")
+        .source_client("claude-code")
+        .raw_data_type("agent_timeline")
+        .limit(10);
+    let value = serde_json::to_value(items).unwrap();
+    assert_eq!(value["sourceClients"], json!(["claude-code"]));
+    assert_eq!(value["rawDataTypes"], json!(["agent_timeline"]));
+
+    let raw_data = QueryMemoryRawDataRequest::new("u1", "a1")
+        .raw_data_type("agent_timeline")
+        .source_client("codex")
+        .include(RawDataQueryIncludeOptions {
+            segment: Some(true),
+            metadata: Some(false),
+        });
+    let value = serde_json::to_value(raw_data).unwrap();
+    assert_eq!(value["types"], json!(["agent_timeline"]));
+    assert_eq!(
+        value["include"],
+        json!({"segment": true, "metadata": false})
     );
 }
 

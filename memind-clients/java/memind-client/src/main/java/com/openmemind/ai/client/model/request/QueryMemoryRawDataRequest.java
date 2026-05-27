@@ -14,49 +14,45 @@
 package com.openmemind.ai.client.model.request;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.openmemind.ai.client.model.common.Strategy;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public record RetrieveMemoryRequest(
+public record QueryMemoryRawDataRequest(
         String userId,
         String agentId,
-        String query,
-        Strategy strategy,
-        Boolean trace,
-        String scope,
-        List<String> categories,
+        List<String> types,
+        List<String> sourceClients,
         TimeRange timeRange,
         MetadataFilter metadataFilter,
-        IncludeOptions include) {
+        IncludeOptions include,
+        Integer limit,
+        String cursor) {
 
     public static Builder builder() {
         return new Builder();
     }
 
-    public RetrieveMemoryRequest(
-            String userId, String agentId, String query, Strategy strategy, Boolean trace) {
-        this(userId, agentId, query, strategy, trace, null, null, null, null, null);
+    public QueryMemoryRawDataRequest(String userId, String agentId) {
+        this(userId, agentId, null, null, null, null, null, null, null);
     }
 
     public record TimeRange(String field, Instant from, Instant to) {}
 
-    public record IncludeOptions(Boolean rawDataMetadata, Boolean rawDataSegment) {}
+    public record IncludeOptions(Boolean segment, Boolean metadata) {}
 
     public static final class Builder {
 
         private String userId;
         private String agentId;
-        private String query;
-        private Strategy strategy;
-        private Boolean trace;
-        private String scope;
-        private List<String> categories;
+        private List<String> types;
+        private List<String> sourceClients;
         private TimeRange timeRange;
         private MetadataFilter metadataFilter;
         private IncludeOptions include;
+        private Integer limit;
+        private String cursor;
 
         public Builder userId(String userId) {
             this.userId = userId;
@@ -68,28 +64,13 @@ public record RetrieveMemoryRequest(
             return this;
         }
 
-        public Builder query(String query) {
-            this.query = query;
+        public Builder types(List<String> types) {
+            this.types = types;
             return this;
         }
 
-        public Builder strategy(Strategy strategy) {
-            this.strategy = strategy;
-            return this;
-        }
-
-        public Builder trace(Boolean trace) {
-            this.trace = trace;
-            return this;
-        }
-
-        public Builder scope(String scope) {
-            this.scope = scope;
-            return this;
-        }
-
-        public Builder categories(List<String> categories) {
-            this.categories = categories;
+        public Builder sourceClients(List<String> sourceClients) {
+            this.sourceClients = sourceClients;
             return this;
         }
 
@@ -108,22 +89,29 @@ public record RetrieveMemoryRequest(
             return this;
         }
 
-        public RetrieveMemoryRequest build() {
+        public Builder limit(Integer limit) {
+            this.limit = limit;
+            return this;
+        }
+
+        public Builder cursor(String cursor) {
+            this.cursor = cursor;
+            return this;
+        }
+
+        public QueryMemoryRawDataRequest build() {
             Objects.requireNonNull(userId, "userId");
             Objects.requireNonNull(agentId, "agentId");
-            Objects.requireNonNull(query, "query");
-            Objects.requireNonNull(strategy, "strategy");
-            return new RetrieveMemoryRequest(
+            return new QueryMemoryRawDataRequest(
                     userId,
                     agentId,
-                    query,
-                    strategy,
-                    trace,
-                    scope,
-                    categories,
+                    types,
+                    sourceClients,
                     timeRange,
                     metadataFilter,
-                    include);
+                    include,
+                    limit,
+                    cursor);
         }
     }
 }

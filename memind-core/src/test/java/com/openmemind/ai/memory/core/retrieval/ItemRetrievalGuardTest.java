@@ -21,6 +21,7 @@ import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.enums.MemoryCategory;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
+import com.openmemind.ai.memory.core.retrieval.filter.MetadataFilter;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import java.time.Instant;
 import java.util.List;
@@ -48,6 +49,47 @@ class ItemRetrievalGuardTest {
         assertThat(ItemRetrievalGuard.allows(agentToolFact(), context)).isTrue();
         assertThat(ItemRetrievalGuard.allows(userEventFact(), context)).isFalse();
         assertThat(ItemRetrievalGuard.allows(expiredAgentToolForesight(), context)).isFalse();
+    }
+
+    @Test
+    void itemRetrievalGuardAppliesStructuredMetadataFilter() {
+        var context =
+                new QueryContext(
+                        MEMORY_ID,
+                        "q",
+                        null,
+                        List.of(),
+                        Map.of(
+                                QueryContext.META_METADATA_FILTER,
+                                new MetadataFilter(
+                                        List.of(
+                                                new MetadataFilter.Condition(
+                                                        "projectSlug", "eq", "memind")),
+                                        List.of(),
+                                        List.of())),
+                        null,
+                        null);
+
+        assertThat(
+                        ItemRetrievalGuard.allows(
+                                item(
+                                        201L,
+                                        MemoryScope.AGENT,
+                                        MemoryCategory.TOOL,
+                                        MemoryItemType.FACT,
+                                        Map.of("projectSlug", "memind")),
+                                context))
+                .isTrue();
+        assertThat(
+                        ItemRetrievalGuard.allows(
+                                item(
+                                        202L,
+                                        MemoryScope.AGENT,
+                                        MemoryCategory.TOOL,
+                                        MemoryItemType.FACT,
+                                        Map.of("projectSlug", "other")),
+                                context))
+                .isFalse();
     }
 
     private static MemoryItem agentToolFact() {

@@ -13,43 +13,33 @@
  */
 package com.openmemind.ai.memory.server.domain.memory.request;
 
-import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
 import java.util.List;
 
-public record RetrieveMemoryRequest(
+public record QueryMemoryItemsRequest(
         @NotBlank String userId,
         @NotBlank String agentId,
-        @NotBlank String query,
-        @NotNull RetrievalConfig.Strategy strategy,
-        Boolean trace,
         String scope,
         List<String> categories,
+        List<String> sourceClients,
+        List<String> rawDataTypes,
         TimeRange timeRange,
         MetadataFilter metadataFilter,
-        IncludeOptions include) {
+        @Min(1) @Max(100) Integer limit,
+        String cursor) {
 
-    public RetrieveMemoryRequest {
+    public QueryMemoryItemsRequest {
         categories = categories == null ? List.of() : List.copyOf(categories);
+        sourceClients = sourceClients == null ? List.of() : List.copyOf(sourceClients);
+        rawDataTypes = rawDataTypes == null ? List.of() : List.copyOf(rawDataTypes);
     }
 
-    public RetrieveMemoryRequest(
-            String userId, String agentId, String query, RetrievalConfig.Strategy strategy) {
-        this(userId, agentId, query, strategy, null);
-    }
-
-    public RetrieveMemoryRequest(
-            String userId,
-            String agentId,
-            String query,
-            RetrievalConfig.Strategy strategy,
-            Boolean trace) {
-        this(userId, agentId, query, strategy, trace, null, List.of(), null, null, null);
+    public int effectiveLimit() {
+        return limit == null ? 20 : limit;
     }
 
     public record TimeRange(String field, Instant from, Instant to) {}
-
-    public record IncludeOptions(Boolean rawDataMetadata, Boolean rawDataSegment) {}
 }

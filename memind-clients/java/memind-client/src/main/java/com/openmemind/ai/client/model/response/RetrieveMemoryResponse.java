@@ -54,5 +54,14 @@ public record RetrieveMemoryResponse(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record RetrievedRawData(
-            String rawDataId, String caption, double maxScore, List<String> itemIds) {}
+            String rawDataId,
+            String caption,
+            double maxScore,
+            List<String> itemIds,
+            String type,
+            String sourceClient,
+            Map<String, Object> metadata,
+            Instant startTime,
+            Instant endTime,
+            Instant createdAt) {}
 }

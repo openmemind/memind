@@ -62,6 +62,22 @@ func validateRetrieveRequest(req RetrieveMemoryRequest) error {
 	return validationErrorOrNil(issues)
 }
 
+func validateQueryItemsRequest(req QueryMemoryItemsRequest) error {
+	var issues []ValidationIssue
+	requireNonBlank(&issues, "userId", req.UserID)
+	requireNonBlank(&issues, "agentId", req.AgentID)
+	validateLimit(&issues, "limit", req.Limit)
+	return validationErrorOrNil(issues)
+}
+
+func validateQueryRawDataRequest(req QueryMemoryRawDataRequest) error {
+	var issues []ValidationIssue
+	requireNonBlank(&issues, "userId", req.UserID)
+	requireNonBlank(&issues, "agentId", req.AgentID)
+	validateLimit(&issues, "limit", req.Limit)
+	return validationErrorOrNil(issues)
+}
+
 func validateRawContent(raw RawContent) error {
 	payload, err := raw.MarshalJSON()
 	if err != nil {
@@ -230,6 +246,15 @@ func validateSource(source Source) error {
 func requireNonBlank(issues *[]ValidationIssue, field, value string) {
 	if strings.TrimSpace(value) == "" {
 		*issues = append(*issues, ValidationIssue{Field: field, Message: field + " is required"})
+	}
+}
+
+func validateLimit(issues *[]ValidationIssue, field string, value *int) {
+	if value == nil {
+		return
+	}
+	if *value < 1 || *value > 100 {
+		*issues = append(*issues, ValidationIssue{Field: field, Message: field + " must be between 1 and 100"})
 	}
 }
 

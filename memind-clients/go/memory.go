@@ -95,6 +95,36 @@ func (s *MemoryService) Retrieve(ctx context.Context, req RetrieveMemoryRequest,
 	return &out, nil
 }
 
+func (s *MemoryService) QueryItems(ctx context.Context, req QueryMemoryItemsRequest, opts ...RequestOption) (*QueryMemoryItemsResponse, error) {
+	if err := validateQueryItemsRequest(req); err != nil {
+		return nil, err
+	}
+	cfg, err := applyRequestOptions(opts)
+	if err != nil {
+		return nil, err
+	}
+	var out QueryMemoryItemsResponse
+	if err := s.client.do(ctx, http.MethodPost, "/memory/items/query", req, &out, cfg); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (s *MemoryService) QueryRawData(ctx context.Context, req QueryMemoryRawDataRequest, opts ...RequestOption) (*QueryMemoryRawDataResponse, error) {
+	if err := validateQueryRawDataRequest(req); err != nil {
+		return nil, err
+	}
+	cfg, err := applyRequestOptions(opts)
+	if err != nil {
+		return nil, err
+	}
+	var out QueryMemoryRawDataResponse
+	if err := s.client.do(ctx, http.MethodPost, "/memory/raw-data/query", req, &out, cfg); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (s *MemoryService) EnqueueExtract(ctx context.Context, req ExtractMemoryRequest, opts ...RequestOption) (*OperationAccepted, error) {
 	if err := validateExtractRequest(req); err != nil {
 		return nil, err

@@ -64,11 +64,31 @@ final class MybatisAdminItemQueryMapper implements AdminItemQueryMapper {
         if (StringUtils.hasText(query.category())) {
             wrapper.in(MemoryItemDO::getCategory, categoryFilterValues(query.category()));
         }
+        if (!query.categories().isEmpty()) {
+            wrapper.in(
+                    MemoryItemDO::getCategory,
+                    query.categories().stream()
+                            .flatMap(category -> categoryFilterValues(category).stream())
+                            .distinct()
+                            .toList());
+        }
         if (StringUtils.hasText(query.type())) {
             wrapper.eq(MemoryItemDO::getType, query.type());
         }
         if (StringUtils.hasText(query.rawDataId())) {
             wrapper.eq(MemoryItemDO::getRawDataId, query.rawDataId());
+        }
+        if (!query.sourceClients().isEmpty()) {
+            wrapper.in(MemoryItemDO::getSourceClient, query.sourceClients());
+        }
+        if (!query.rawDataTypes().isEmpty()) {
+            wrapper.in(MemoryItemDO::getRawDataType, query.rawDataTypes());
+        }
+        if (query.occurredAtFrom() != null) {
+            wrapper.ge(MemoryItemDO::getOccurredAt, query.occurredAtFrom());
+        }
+        if (query.occurredAtTo() != null) {
+            wrapper.le(MemoryItemDO::getOccurredAt, query.occurredAtTo());
         }
         wrapper.orderByDesc(
                 MemoryItemDO::getObservedAt, MemoryItemDO::getCreatedAt, MemoryItemDO::getBizId);

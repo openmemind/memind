@@ -13,8 +13,11 @@
 use memind::{
     AddMessageRequest, AddMessageResponse, ClientBuilder, CommitMemoryRequest, ContentBlock,
     ExtractMemoryRequest, ExtractMemoryResponse, ExtractStatus, HealthResponse, MemindApiError,
-    MemindClient, MemindError, MemoryClient, Message, RawContent, RequestOptions,
-    RetrieveMemoryRequest, RetrieveMemoryResponse, RetrievedItem, Role, Source, Strategy,
+    MemindClient, MemindError, MemoryClient, Message, MetadataCondition, MetadataFilter,
+    QueryMemoryItemsRequest, QueryMemoryItemsResponse, QueryMemoryRawDataRequest,
+    QueryMemoryRawDataResponse, RawContent, RawDataQueryIncludeOptions, RequestOptions,
+    RetrieveIncludeOptions, RetrieveMemoryRequest, RetrieveMemoryResponse, RetrievedItem, Role,
+    Source, Strategy, TimeRange,
 };
 
 #[test]
@@ -43,4 +46,13 @@ fn public_api_exports_expected_names() {
     assert_type::<RetrieveMemoryRequest>();
     assert_type::<RetrieveMemoryResponse>();
     assert_type::<RetrievedItem>();
+    assert_type::<MetadataCondition>();
+    assert_type::<MetadataFilter>();
+    assert_type::<TimeRange>();
+    assert_type::<RetrieveIncludeOptions>();
+    assert_type::<RawDataQueryIncludeOptions>();
+    assert_type::<QueryMemoryItemsRequest>();
+    assert_type::<QueryMemoryItemsResponse>();
+    assert_type::<QueryMemoryRawDataRequest>();
+    assert_type::<QueryMemoryRawDataResponse>();
 }

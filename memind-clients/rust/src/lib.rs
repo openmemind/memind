@@ -26,8 +26,11 @@ pub use config::RequestOptions;
 pub use error::{MemindApiError, MemindError, Result};
 pub use models::{
     AddMessageRequest, AddMessageResponse, CommitMemoryRequest, ContentBlock, ExtractMemoryRequest,
-    ExtractMemoryResponse, ExtractStatus, FinalView, HealthResponse, MergeView, Message,
-    RawContent, RetrievalTraceView, RetrieveMemoryRequest, RetrieveMemoryResponse,
-    RetrievedInsight, RetrievedItem, RetrievedRawData, Role, Source, StageView, Strategy,
+    ExtractMemoryResponse, ExtractStatus, FinalView, HealthResponse, MemoryItem, MemoryRawData,
+    MergeView, Message, MetadataCondition, MetadataFilter, QueryMemoryItemsRequest,
+    QueryMemoryItemsResponse, QueryMemoryRawDataRequest, QueryMemoryRawDataResponse, RawContent,
+    RawDataQueryIncludeOptions, RetrievalTraceView, RetrieveIncludeOptions, RetrieveMemoryRequest,
+    RetrieveMemoryResponse, RetrievedInsight, RetrievedItem, RetrievedRawData, Role, Source,
+    StageView, Strategy, TimeRange,
 };
 pub use resources::MemoryClient;

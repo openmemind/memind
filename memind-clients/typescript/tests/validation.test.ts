@@ -18,6 +18,8 @@ import {
   assertAddMessageResponse,
   assertExtractMemoryResponse,
   assertHealthResponse,
+  assertQueryMemoryItemsResponse,
+  assertQueryMemoryRawDataResponse,
   assertRetrieveMemoryResponse,
 } from '../src/core/validate.js'
 
@@ -80,7 +82,17 @@ describe('response validators', () => {
     const response = assertRetrieveMemoryResponse({
       items: [{ id: 'item-1', text: 'likes coffee', vectorScore: 0.9, finalScore: 0.8 }],
       insights: [{ id: 'ins-1', text: 'prefers concise answers' }],
-      rawData: [{ rawDataId: 'rd-1', maxScore: 0.7, itemIds: ['item-1'] }],
+      rawData: [
+        {
+          rawDataId: 'rd-1',
+          maxScore: 0.7,
+          itemIds: ['item-1'],
+          type: 'agent_timeline',
+          sourceClient: 'claude-code',
+          metadata: { sessionId: 's1' },
+          startTime: '2026-01-01T00:00:00Z',
+        },
+      ],
       evidences: ['evidence-1'],
       trace: {
         stages: [{ degraded: false, skipped: false, inputCount: 1 }],
@@ -91,6 +103,13 @@ describe('response validators', () => {
     })
 
     expect(response.items).toEqual([expect.objectContaining({ id: 'item-1' })])
+    expect(response.rawData[0]).toEqual(
+      expect.objectContaining({
+        type: 'agent_timeline',
+        sourceClient: 'claude-code',
+        metadata: { sessionId: 's1' },
+      }),
+    )
     expect(response.trace?.stages).toHaveLength(1)
     expectParseError(() => assertRetrieveMemoryResponse({ items: null }))
     expectParseError(() => assertRetrieveMemoryResponse({ items: [{ id: 1, text: 'bad' }] }))
@@ -98,5 +117,52 @@ describe('response validators', () => {
     expectParseError(() =>
       assertRetrieveMemoryResponse({ items: [], trace: { stages: [{ degraded: 'no' }] } }),
     )
+  })
+
+  it('validates structured item query responses', () => {
+    const response = assertQueryMemoryItemsResponse({
+      items: [
+        {
+          id: '101',
+          text: 'Run targeted tests.',
+          scope: 'AGENT',
+          category: 'playbook',
+          type: 'FACT',
+          rawDataId: 'rd-1',
+          rawDataType: 'agent_timeline',
+          sourceClient: 'claude-code',
+          occurredAt: '2026-05-01T00:00:00Z',
+          metadata: { project: 'memind' },
+        },
+      ],
+      nextCursor: '101',
+    })
+
+    expect(response.items[0]?.rawDataType).toBe('agent_timeline')
+    expect(response.items[0]?.metadata).toEqual({ project: 'memind' })
+    expect(response.nextCursor).toBe('101')
+    expectParseError(() => assertQueryMemoryItemsResponse({ items: null }))
+    expectParseError(() => assertQueryMemoryItemsResponse({ items: [{ id: 101, text: 'bad' }] }))
+  })
+
+  it('validates structured raw-data query responses', () => {
+    const response = assertQueryMemoryRawDataResponse({
+      rawData: [
+        {
+          id: 'rd-1',
+          type: 'agent_timeline',
+          sourceClient: 'codex',
+          caption: 'Fixed retry test.',
+          metadata: { sessionId: 's1' },
+          segment: { events: [] },
+        },
+      ],
+      nextCursor: null,
+    })
+
+    expect(response.rawData[0]?.segment).toEqual({ events: [] })
+    expect(response.nextCursor).toBeUndefined()
+    expectParseError(() => assertQueryMemoryRawDataResponse({ rawData: null }))
+    expectParseError(() => assertQueryMemoryRawDataResponse({ rawData: [{ id: 1 }] }))
   })
 })

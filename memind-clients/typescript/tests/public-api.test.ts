@@ -14,7 +14,15 @@
 
 import { describe, expect, it } from 'vitest'
 import * as api from '../src/index.js'
-import type { ApiError, ApiResult, RequestOptions } from '../src/index.js'
+import type {
+  ApiError,
+  ApiResult,
+  MetadataFilter,
+  QueryMemoryItemsRequest,
+  QueryMemoryRawDataRequest,
+  RequestOptions,
+  TimeRange,
+} from '../src/index.js'
 
 function identityResult<T>(result: ApiResult<T>): ApiResult<T> {
   return result
@@ -55,10 +63,20 @@ describe('public API exports', () => {
     const success: ApiResult<string> = identityResult({ data: 'ok' })
     const failure: ApiResult<string> = identityResult({ error })
     const requestOptions: RequestOptions = { timeoutMs: 1000, maxRetries: 1 }
+    const metadataFilter: MetadataFilter = {
+      all: [{ path: 'project', op: 'eq', value: 'memind' }],
+    }
+    const timeRange: TimeRange = { field: 'occurredAt' }
+    const itemsRequest: QueryMemoryItemsRequest = { userId: 'u1', agentId: 'a1' }
+    const rawDataRequest: QueryMemoryRawDataRequest = { userId: 'u1', agentId: 'a1' }
 
     expect(success).toEqual({ data: 'ok' })
     expect(failure).toEqual({ error })
     expect(requestOptions).toEqual({ timeoutMs: 1000, maxRetries: 1 })
+    expect(metadataFilter.all?.[0]?.path).toBe('project')
+    expect(timeRange.field).toBe('occurredAt')
+    expect(itemsRequest.userId).toBe('u1')
+    expect(rawDataRequest.agentId).toBe('a1')
   })
 
   it('exports error classes', () => {

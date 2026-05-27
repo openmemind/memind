@@ -66,6 +66,12 @@ final class MybatisAdminRawDataQueryMapper implements AdminRawDataQueryMapper {
         if (query.startTimeTo() != null) {
             wrapper.apply("start_time <= {0," + INSTANT_TYPE_HANDLER + "}", query.startTimeTo());
         }
+        if (!query.types().isEmpty()) {
+            wrapper.in(MemoryRawDataDO::getType, query.types());
+        }
+        if (!query.sourceClients().isEmpty()) {
+            wrapper.in(MemoryRawDataDO::getSourceClient, query.sourceClients());
+        }
         wrapper.orderByDesc(MemoryRawDataDO::getStartTime, MemoryRawDataDO::getCreatedAt);
         Page<MemoryRawDataDO> result = rawDataMapper.selectPage(page, wrapper);
         return new PageResponse<>(

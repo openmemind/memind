@@ -119,6 +119,16 @@ pub struct RetrieveMemoryRequest {
     pub strategy: Strategy,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trace: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub categories: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_range: Option<TimeRange>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata_filter: Option<MetadataFilter>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub include: Option<RetrieveIncludeOptions>,
 }
 
 impl RetrieveMemoryRequest {
@@ -134,11 +144,56 @@ impl RetrieveMemoryRequest {
             query: query.into(),
             strategy,
             trace: None,
+            scope: None,
+            categories: Vec::new(),
+            time_range: None,
+            metadata_filter: None,
+            include: None,
         }
     }
 
     pub fn trace(mut self, trace: bool) -> Self {
         self.trace = Some(trace);
+        self
+    }
+
+    pub fn scope(mut self, scope: impl Into<String>) -> Self {
+        self.scope = normalize_optional_string(scope.into());
+        self
+    }
+
+    pub fn category(mut self, category: impl Into<String>) -> Self {
+        let category = category.into();
+        if let Some(category) = normalize_optional_string(category) {
+            self.categories.push(category);
+        }
+        self
+    }
+
+    pub fn categories<I, S>(mut self, categories: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.categories = categories
+            .into_iter()
+            .filter_map(|category| normalize_optional_string(category.into()))
+            .collect();
+        self
+    }
+
+    pub fn time_range(mut self, time_range: TimeRange) -> Self {
+        self.time_range = Some(time_range);
+        self
+    }
+
+    pub fn metadata_filter(mut self, metadata_filter: MetadataFilter) -> Self {
+        self.metadata_filter = Some(metadata_filter);
+        self
+    }
+
+    pub fn include(mut self, include: RetrieveIncludeOptions) -> Self {
+        self.include = Some(include);
         self
     }
 
@@ -148,6 +203,239 @@ impl RetrieveMemoryRequest {
             return Err(MemindError::invalid_request("query must be non-blank"));
         }
         Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeRange {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+}
+
+impl TimeRange {
+    pub fn new(field: impl Into<String>) -> Self {
+        Self {
+            field: normalize_optional_string(field.into()),
+            from: None,
+            to: None,
+        }
+    }
+
+    pub fn from(mut self, from: impl Into<String>) -> Self {
+        self.from = normalize_optional_string(from.into());
+        self
+    }
+
+    pub fn to(mut self, to: impl Into<String>) -> Self {
+        self.to = normalize_optional_string(to.into());
+        self
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetadataCondition {
+    pub path: String,
+    pub op: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<serde_json::Value>,
+}
+
+impl MetadataCondition {
+    pub fn new(
+        path: impl Into<String>,
+        op: impl Into<String>,
+        value: impl Into<serde_json::Value>,
+    ) -> Self {
+        Self {
+            path: path.into(),
+            op: op.into(),
+            value: Some(value.into()),
+        }
+    }
+
+    pub fn flag(path: impl Into<String>, op: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            op: op.into(),
+            value: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetadataFilter {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub all: Vec<MetadataCondition>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub any: Vec<MetadataCondition>,
+    #[serde(default, rename = "not", skip_serializing_if = "Vec::is_empty")]
+    pub not_: Vec<MetadataCondition>,
+}
+
+impl MetadataFilter {
+    pub fn all(all: Vec<MetadataCondition>) -> Self {
+        Self {
+            all,
+            any: Vec::new(),
+            not_: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RetrieveIncludeOptions {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_data_metadata: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_data_segment: Option<bool>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RawDataQueryIncludeOptions {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub segment: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<bool>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryMemoryItemsRequest {
+    pub user_id: String,
+    pub agent_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub categories: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_clients: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub raw_data_types: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_range: Option<TimeRange>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata_filter: Option<MetadataFilter>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+}
+
+impl QueryMemoryItemsRequest {
+    pub fn new(user_id: impl Into<String>, agent_id: impl Into<String>) -> Self {
+        Self {
+            user_id: user_id.into(),
+            agent_id: agent_id.into(),
+            scope: None,
+            categories: Vec::new(),
+            source_clients: Vec::new(),
+            raw_data_types: Vec::new(),
+            time_range: None,
+            metadata_filter: None,
+            limit: None,
+            cursor: None,
+        }
+    }
+
+    pub fn category(mut self, category: impl Into<String>) -> Self {
+        if let Some(category) = normalize_optional_string(category.into()) {
+            self.categories.push(category);
+        }
+        self
+    }
+
+    pub fn source_client(mut self, source_client: impl Into<String>) -> Self {
+        if let Some(source_client) = normalize_optional_string(source_client.into()) {
+            self.source_clients.push(source_client);
+        }
+        self
+    }
+
+    pub fn raw_data_type(mut self, raw_data_type: impl Into<String>) -> Self {
+        if let Some(raw_data_type) = normalize_optional_string(raw_data_type.into()) {
+            self.raw_data_types.push(raw_data_type);
+        }
+        self
+    }
+
+    pub fn limit(mut self, limit: u32) -> Self {
+        self.limit = Some(limit);
+        self
+    }
+
+    pub(crate) fn validate(&self) -> Result<()> {
+        validate_identity(&self.user_id, &self.agent_id)?;
+        validate_limit(self.limit)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryMemoryRawDataRequest {
+    pub user_id: String,
+    pub agent_id: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub types: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_clients: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_range: Option<TimeRange>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata_filter: Option<MetadataFilter>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub include: Option<RawDataQueryIncludeOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+}
+
+impl QueryMemoryRawDataRequest {
+    pub fn new(user_id: impl Into<String>, agent_id: impl Into<String>) -> Self {
+        Self {
+            user_id: user_id.into(),
+            agent_id: agent_id.into(),
+            types: Vec::new(),
+            source_clients: Vec::new(),
+            time_range: None,
+            metadata_filter: None,
+            include: None,
+            limit: None,
+            cursor: None,
+        }
+    }
+
+    pub fn raw_data_type(mut self, raw_data_type: impl Into<String>) -> Self {
+        if let Some(raw_data_type) = normalize_optional_string(raw_data_type.into()) {
+            self.types.push(raw_data_type);
+        }
+        self
+    }
+
+    pub fn source_client(mut self, source_client: impl Into<String>) -> Self {
+        if let Some(source_client) = normalize_optional_string(source_client.into()) {
+            self.source_clients.push(source_client);
+        }
+        self
+    }
+
+    pub fn include(mut self, include: RawDataQueryIncludeOptions) -> Self {
+        self.include = Some(include);
+        self
+    }
+
+    pub(crate) fn validate(&self) -> Result<()> {
+        validate_identity(&self.user_id, &self.agent_id)?;
+        validate_limit(self.limit)
     }
 }
 
@@ -213,6 +501,10 @@ pub struct RetrievedItem {
         skip_serializing_if = "Option::is_none"
     )]
     pub occurred_at: Option<OffsetDateTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -234,6 +526,121 @@ pub struct RetrievedRawData {
     pub max_score: f64,
     #[serde(default)]
     pub item_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_client: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Map<String, serde_json::Value>>,
+    #[serde(
+        default,
+        with = "time::serde::rfc3339::option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub start_time: Option<OffsetDateTime>,
+    #[serde(
+        default,
+        with = "time::serde::rfc3339::option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub end_time: Option<OffsetDateTime>,
+    #[serde(
+        default,
+        with = "time::serde::rfc3339::option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub created_at: Option<OffsetDateTime>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryMemoryItemsResponse {
+    #[serde(default)]
+    pub items: Vec<MemoryItem>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryItem {
+    pub id: String,
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_data_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_data_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_client: Option<String>,
+    #[serde(
+        default,
+        with = "time::serde::rfc3339::option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub occurred_at: Option<OffsetDateTime>,
+    #[serde(
+        default,
+        with = "time::serde::rfc3339::option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub observed_at: Option<OffsetDateTime>,
+    #[serde(
+        default,
+        with = "time::serde::rfc3339::option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub created_at: Option<OffsetDateTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryMemoryRawDataResponse {
+    #[serde(default)]
+    pub raw_data: Vec<MemoryRawData>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryRawData {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_client: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caption: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Map<String, serde_json::Value>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub segment: Option<serde_json::Map<String, serde_json::Value>>,
+    #[serde(
+        default,
+        with = "time::serde::rfc3339::option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub start_time: Option<OffsetDateTime>,
+    #[serde(
+        default,
+        with = "time::serde::rfc3339::option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub end_time: Option<OffsetDateTime>,
+    #[serde(
+        default,
+        with = "time::serde::rfc3339::option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub created_at: Option<OffsetDateTime>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -341,6 +748,17 @@ fn validate_identity(user_id: &str, agent_id: &str) -> Result<()> {
     }
     if agent_id.trim().is_empty() {
         return Err(MemindError::invalid_request("agent_id must be non-blank"));
+    }
+    Ok(())
+}
+
+fn validate_limit(limit: Option<u32>) -> Result<()> {
+    if let Some(limit) = limit {
+        if !(1..=100).contains(&limit) {
+            return Err(MemindError::invalid_request(
+                "limit must be between 1 and 100",
+            ));
+        }
     }
     Ok(())
 }

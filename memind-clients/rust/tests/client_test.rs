@@ -15,7 +15,8 @@ use std::time::Duration;
 
 use memind::{
     AddMessageRequest, CommitMemoryRequest, ExtractMemoryRequest, MemindClient, MemindError,
-    RawContent, RequestOptions, RetrieveMemoryRequest,
+    QueryMemoryItemsRequest, QueryMemoryRawDataRequest, RawContent, RequestOptions,
+    RetrieveMemoryRequest,
 };
 use reqwest::header::{HeaderName, HeaderValue, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
 use serde_json::json;
@@ -368,6 +369,14 @@ async fn memory_methods_call_expected_endpoints() {
             "/open/v1/memory/retrieve",
             json!({"items": [], "insights": [], "rawData": [], "evidences": []}),
         ),
+        (
+            "/open/v1/memory/items/query",
+            json!({"items": [{"id": "101", "text": "Run targeted tests.", "rawDataType": "agent_timeline", "sourceClient": "claude-code", "metadata": {"project": "memind"}}], "nextCursor": "101"}),
+        ),
+        (
+            "/open/v1/memory/raw-data/query",
+            json!({"rawData": [{"id": "rd-1", "type": "agent_timeline", "sourceClient": "codex", "caption": "Fixed retry test.", "metadata": {"sessionId": "s1"}, "segment": {"events": []}}]}),
+        ),
     ] {
         Mock::given(method("POST"))
             .and(path(endpoint))
@@ -411,6 +420,34 @@ async fn memory_methods_call_expected_endpoints() {
         ))
         .await
         .unwrap();
+    let items = client
+        .memory()
+        .query_items(
+            QueryMemoryItemsRequest::new("u1", "a1")
+                .category("playbook")
+                .source_client("claude-code")
+                .raw_data_type("agent_timeline")
+                .limit(10),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        items.items[0].raw_data_type.as_deref(),
+        Some("agent_timeline")
+    );
+    assert_eq!(items.next_cursor.as_deref(), Some("101"));
+
+    let raw_data = client
+        .memory()
+        .query_raw_data(
+            QueryMemoryRawDataRequest::new("u1", "a1")
+                .raw_data_type("agent_timeline")
+                .source_client("codex"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(raw_data.raw_data[0].id, "rd-1");
+    assert!(raw_data.raw_data[0].segment.is_some());
 }
 
 #[tokio::test]

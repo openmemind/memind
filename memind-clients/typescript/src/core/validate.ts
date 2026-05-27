@@ -18,7 +18,11 @@ import type {
   AddMessageResponse,
   ExtractMemoryResponse,
   FinalView,
+  MemoryItem,
+  MemoryRawData,
   MergeView,
+  QueryMemoryItemsResponse,
+  QueryMemoryRawDataResponse,
   RetrievalTraceView,
   RetrieveMemoryResponse,
   RetrievedInsight,
@@ -198,6 +202,84 @@ function assertRetrievedRawData(value: unknown, index: number): RetrievedRawData
   if (caption !== undefined) rawData.caption = caption
   if (obj.itemIds !== undefined && obj.itemIds !== null) {
     rawData.itemIds = assertStringArray(obj.itemIds, `rawData[${index}].itemIds`)
+  }
+  for (const key of ['type', 'sourceClient', 'startTime', 'endTime', 'createdAt'] as const) {
+    const value = optionalString(obj[key], `rawData[${index}].${key}`)
+    if (value !== undefined) rawData[key] = value
+  }
+  if (obj.metadata !== undefined && obj.metadata !== null) {
+    rawData.metadata = objectRecord(obj.metadata, `rawData[${index}].metadata`)
+  }
+  return rawData
+}
+
+export function assertQueryMemoryItemsResponse(data: unknown): QueryMemoryItemsResponse {
+  const obj = objectRecord(data, 'queryItems')
+  const response: QueryMemoryItemsResponse = {
+    items: assertArray(obj.items, 'items').map(assertMemoryItem),
+  }
+  const nextCursor = optionalString(obj.nextCursor, 'nextCursor')
+  if (nextCursor !== undefined) response.nextCursor = nextCursor
+  return response
+}
+
+function assertMemoryItem(value: unknown, index: number): MemoryItem {
+  const obj = objectRecord(value, `items[${index}]`)
+  const item: MemoryItem = {
+    id: assertString(obj.id, `items[${index}].id`),
+    text: assertString(obj.text, `items[${index}].text`),
+  }
+  for (const key of [
+    'scope',
+    'category',
+    'type',
+    'rawDataId',
+    'rawDataType',
+    'sourceClient',
+    'occurredAt',
+    'observedAt',
+    'createdAt',
+  ] as const) {
+    const value = optionalString(obj[key], `items[${index}].${key}`)
+    if (value !== undefined) item[key] = value
+  }
+  if (obj.metadata !== undefined && obj.metadata !== null) {
+    item.metadata = objectRecord(obj.metadata, `items[${index}].metadata`)
+  }
+  return item
+}
+
+export function assertQueryMemoryRawDataResponse(data: unknown): QueryMemoryRawDataResponse {
+  const obj = objectRecord(data, 'queryRawData')
+  const response: QueryMemoryRawDataResponse = {
+    rawData: assertArray(obj.rawData, 'rawData').map(assertMemoryRawData),
+  }
+  const nextCursor = optionalString(obj.nextCursor, 'nextCursor')
+  if (nextCursor !== undefined) response.nextCursor = nextCursor
+  return response
+}
+
+function assertMemoryRawData(value: unknown, index: number): MemoryRawData {
+  const obj = objectRecord(value, `rawData[${index}]`)
+  const rawData: MemoryRawData = {
+    id: assertString(obj.id, `rawData[${index}].id`),
+  }
+  for (const key of [
+    'type',
+    'sourceClient',
+    'caption',
+    'startTime',
+    'endTime',
+    'createdAt',
+  ] as const) {
+    const value = optionalString(obj[key], `rawData[${index}].${key}`)
+    if (value !== undefined) rawData[key] = value
+  }
+  if (obj.metadata !== undefined && obj.metadata !== null) {
+    rawData.metadata = objectRecord(obj.metadata, `rawData[${index}].metadata`)
+  }
+  if (obj.segment !== undefined && obj.segment !== null) {
+    rawData.segment = objectRecord(obj.segment, `rawData[${index}].segment`)
   }
   return rawData
 }

@@ -22,9 +22,21 @@ public record ItemPageQuery(
         String agentId,
         String scope,
         String category,
+        List<String> categories,
         String type,
         String rawDataId,
+        List<String> sourceClients,
+        List<String> rawDataTypes,
+        java.time.Instant occurredAtFrom,
+        java.time.Instant occurredAtTo,
         List<String> orderBy) {
+
+    public ItemPageQuery {
+        categories = categories == null ? List.of() : List.copyOf(categories);
+        sourceClients = sourceClients == null ? List.of() : List.copyOf(sourceClients);
+        rawDataTypes = rawDataTypes == null ? List.of() : List.copyOf(rawDataTypes);
+        orderBy = orderBy == null ? List.of() : List.copyOf(orderBy);
+    }
 
     public static ItemPageQuery of(
             int pageNo,
@@ -42,8 +54,41 @@ public record ItemPageQuery(
                 agentId,
                 scope,
                 category,
+                List.of(),
                 type,
                 rawDataId,
+                List.of(),
+                List.of(),
+                null,
+                null,
+                List.of("observed_at DESC", "created_at DESC", "biz_id DESC"));
+    }
+
+    public static ItemPageQuery openApi(
+            int pageNo,
+            int pageSize,
+            String userId,
+            String agentId,
+            String scope,
+            List<String> categories,
+            List<String> sourceClients,
+            List<String> rawDataTypes,
+            java.time.Instant occurredAtFrom,
+            java.time.Instant occurredAtTo) {
+        return new ItemPageQuery(
+                pageNo,
+                pageSize,
+                userId,
+                agentId,
+                scope,
+                null,
+                categories,
+                null,
+                null,
+                sourceClients,
+                rawDataTypes,
+                occurredAtFrom,
+                occurredAtTo,
                 List.of("observed_at DESC", "created_at DESC", "biz_id DESC"));
     }
 }

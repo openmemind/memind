@@ -15,6 +15,34 @@
 import type { Strategy } from './common.js'
 import type { MessageValue, RawContentValue } from './message.js'
 
+export type MetadataCondition = {
+  path: string
+  op: 'eq' | 'in' | 'exists' | 'missing' | 'contains' | string
+  value?: unknown
+}
+
+export type MetadataFilter = {
+  all?: MetadataCondition[]
+  any?: MetadataCondition[]
+  not?: MetadataCondition[]
+}
+
+export type TimeRange = {
+  field?: string
+  from?: string
+  to?: string
+}
+
+export type RetrieveIncludeOptions = {
+  rawDataMetadata?: boolean
+  rawDataSegment?: boolean
+}
+
+export type RawDataQueryIncludeOptions = {
+  segment?: boolean
+  metadata?: boolean
+}
+
 export type ExtractMemoryRequest = {
   userId: string
   agentId: string
@@ -41,6 +69,36 @@ export type RetrieveMemoryRequest = {
   query: string
   strategy: Strategy
   trace?: boolean
+  scope?: string
+  categories?: string[]
+  timeRange?: TimeRange
+  metadataFilter?: MetadataFilter
+  include?: RetrieveIncludeOptions
+}
+
+export type QueryMemoryItemsRequest = {
+  userId: string
+  agentId: string
+  scope?: string
+  categories?: string[]
+  sourceClients?: string[]
+  rawDataTypes?: string[]
+  timeRange?: TimeRange
+  metadataFilter?: MetadataFilter
+  limit?: number
+  cursor?: string
+}
+
+export type QueryMemoryRawDataRequest = {
+  userId: string
+  agentId: string
+  types?: string[]
+  sourceClients?: string[]
+  timeRange?: TimeRange
+  metadataFilter?: MetadataFilter
+  include?: RawDataQueryIncludeOptions
+  limit?: number
+  cursor?: string
 }
 
 export type ExtractMemoryResponse = {
@@ -79,6 +137,12 @@ export type RetrievedRawData = {
   caption?: string
   maxScore: number
   itemIds?: string[]
+  type?: string
+  sourceClient?: string
+  metadata?: Record<string, unknown>
+  startTime?: string
+  endTime?: string
+  createdAt?: string
 }
 
 export type StageView = {
@@ -133,4 +197,41 @@ export type RetrieveMemoryResponse = {
   strategy?: string
   query?: string
   trace?: RetrievalTraceView
+}
+
+export type MemoryItem = {
+  id: string
+  text: string
+  scope?: string
+  category?: string
+  type?: string
+  rawDataId?: string
+  rawDataType?: string
+  sourceClient?: string
+  occurredAt?: string
+  observedAt?: string
+  createdAt?: string
+  metadata?: Record<string, unknown>
+}
+
+export type QueryMemoryItemsResponse = {
+  items: MemoryItem[]
+  nextCursor?: string
+}
+
+export type MemoryRawData = {
+  id: string
+  type?: string
+  sourceClient?: string
+  caption?: string
+  metadata?: Record<string, unknown>
+  segment?: Record<string, unknown>
+  startTime?: string
+  endTime?: string
+  createdAt?: string
+}
+
+export type QueryMemoryRawDataResponse = {
+  rawData: MemoryRawData[]
+  nextCursor?: string
 }

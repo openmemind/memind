@@ -224,6 +224,14 @@ func normalizeResponse(out any) {
 		if response.Trace != nil && response.Trace.Stages == nil {
 			response.Trace.Stages = []StageView{}
 		}
+	case *QueryMemoryItemsResponse:
+		if response.Items == nil {
+			response.Items = []MemoryItem{}
+		}
+	case *QueryMemoryRawDataResponse:
+		if response.RawData == nil {
+			response.RawData = []MemoryRawData{}
+		}
 	}
 }
 
@@ -261,6 +269,10 @@ func requiredArrayFields(out any) []string {
 		return []string{"rawDataIds", "itemIds", "insightIds"}
 	case *RetrieveMemoryResponse:
 		return []string{"items", "insights", "rawData", "evidences"}
+	case *QueryMemoryItemsResponse:
+		return []string{"items"}
+	case *QueryMemoryRawDataResponse:
+		return []string{"rawData"}
 	default:
 		return nil
 	}
