@@ -512,6 +512,72 @@ class HookTest(unittest.TestCase):
             self.assertEqual(list(retry_root.glob("*.json")), [])
             client.extract.assert_awaited_once()
 
+    def test_session_start_injects_project_context_when_available(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import session_start
+
+        config = {
+            "memindApiUrl": "http://127.0.0.1:8366",
+            "memindApiToken": None,
+            "sourceClient": "codex",
+            "userId": "u",
+            "agentId": "a",
+            "autoSessionContext": True,
+            "sessionContextRecentSessions": 1,
+            "sessionContextMaxItems": 3,
+            "sessionContextMaxChars": 4000,
+            "ingestRetryMaxFiles": 20,
+            "ingestRetryMaxAgeDays": 7,
+            "stateMaxAgeDays": 14,
+            "debug": False,
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            retry_root = Path(tmp) / "retry"
+            state_root = Path(tmp) / "state"
+            with mock.patch.object(session_start, "retry_root", return_value=retry_root):
+                with mock.patch.object(session_start, "state_root", return_value=state_root):
+                    with mock.patch.object(session_start, "project_slug", return_value="memind-main"):
+                        with mock.patch.object(session_start, "MemindClient") as client_cls:
+                            client = client_cls.return_value
+                            client.health = mock.AsyncMock(return_value=types.SimpleNamespace(status="UP"))
+                            client.query_raw_data.return_value = types.SimpleNamespace(
+                                raw_data=[
+                                    types.SimpleNamespace(
+                                        id="rd-1",
+                                        caption="Implemented Codex SessionStart context.",
+                                        metadata={},
+                                    )
+                                ]
+                            )
+                            client.query_items.side_effect = [
+                                types.SimpleNamespace(
+                                    items=[
+                                        types.SimpleNamespace(
+                                            id="it-1",
+                                            category="directive",
+                                            text="Keep Codex and Claude Code aligned.",
+                                        )
+                                    ]
+                                ),
+                                types.SimpleNamespace(items=[]),
+                                types.SimpleNamespace(items=[]),
+                                types.SimpleNamespace(items=[]),
+                            ]
+                            output = session_start.run_session_start(
+                                config,
+                                {"cwd": tmp, "session_id": "s1"},
+                            )
+
+        self.assertIn("hookSpecificOutput", output)
+        hook_output = output["hookSpecificOutput"]
+        self.assertEqual(hook_output["hookEventName"], "SessionStart")
+        self.assertIn("## Continue From", hook_output["additionalContext"])
+        self.assertIn("[rawdata:rd-1] Implemented Codex SessionStart context.", hook_output["additionalContext"])
+        self.assertIn("[item:it-1 directive] Keep Codex and Claude Code aligned.", hook_output["additionalContext"])
+        query_raw_call = client.query_raw_data.call_args.kwargs
+        self.assertEqual(query_raw_call["metadata_filter"]["all"][0]["value"], "memind-main")
+
 
 if __name__ == "__main__":
     unittest.main()

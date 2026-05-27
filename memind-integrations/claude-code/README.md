@@ -102,7 +102,7 @@ The installed hooks are:
 
 | Claude Code event | Script | Timeout | Purpose |
 | --- | --- | ---: | --- |
-| `SessionStart` | `scripts/session_start.py` | 5s | Health check, replay at most one failed retry payload, and clean old state. |
+| `SessionStart` | `scripts/session_start.py` | 5s | Health check, replay at most one failed retry payload, clean old state, and inject project continuity context when available. |
 | `UserPromptSubmit` | `scripts/retrieve.py` | 12s | Buffer the user prompt event and retrieve relevant Memind context. |
 | `PreToolUse` | `scripts/pre_tool_use.py` | 5s | Buffer a redacted tool-start event in local session state. |
 | `PostToolUse` | `scripts/post_tool_use.py` | 5s | Buffer a redacted tool-result event in local session state. |
@@ -150,11 +150,15 @@ Settings are loaded in this order:
 | `agentId` | `coding-agent` | Shared Memind agent identity. Use the same value from Claude Code, Codex, and API clients to share one coding-agent memory space. |
 | `sourceClient` | `claude-code` | Source marker stored with Memind data. |
 | `autoRetrieve` | `true` | Enables prompt-time memory retrieval. |
+| `autoSessionContext` | `true` | Enables SessionStart project continuity context injection. |
 | `autoIngestAgentTimeline` | `true` | Enables user prompt, tool/result, assistant message, and stop event buffering plus `agent_timeline` rawdata flush. |
 | `retrieveStrategy` | `SIMPLE` | Memind retrieval strategy. |
 | `retrieveMaxEntries` | `8` | Maximum formatted memory entries injected into Claude Code. |
 | `retrieveMaxChars` | `6000` | Maximum injected context characters. |
 | `retrieveContextTurns` | `0` | Number of recent transcript turns to include in the retrieval query. |
+| `sessionContextRecentSessions` | `3` | Maximum recent `agent_timeline` captions shown at SessionStart. |
+| `sessionContextMaxItems` | `6` | Maximum items fetched for each SessionStart context section. |
+| `sessionContextMaxChars` | `6000` | Maximum SessionStart context characters. |
 | `ingestRetrySpool` | `true` | Enables file-backed retry for failed extraction payloads. |
 | `debug` | `false` | Writes debug logs to `~/.memind/claude-code.log`. |
 
@@ -168,15 +172,17 @@ export MEMIND_API_TOKEN=...
 export MEMIND_USER_ID=local__alice
 export MEMIND_AGENT_ID=coding-agent
 export MEMIND_SOURCE_CLIENT=claude-code
+export MEMIND_AUTO_SESSION_CONTEXT=true
 export MEMIND_AUTO_INGEST_AGENT_TIMELINE=true
+export MEMIND_SESSION_CONTEXT_MAX_CHARS=6000
 export MEMIND_RETRIEVE_CONTEXT_TURNS=0
 export MEMIND_DEBUG=true
 ```
 
 Additional environment variables include `MEMIND_AUTO_RETRIEVE`, `MEMIND_RETRIEVE_STRATEGY`,
 `MEMIND_RETRIEVE_MAX_ENTRIES`, `MEMIND_RETRIEVE_MAX_CHARS`, `MEMIND_STATE_MAX_AGE_DAYS`,
-`MEMIND_INGEST_RETRY_SPOOL`, `MEMIND_INGEST_RETRY_MAX_FILES`, and
-`MEMIND_INGEST_RETRY_MAX_AGE_DAYS`.
+`MEMIND_SESSION_CONTEXT_RECENT_SESSIONS`, `MEMIND_SESSION_CONTEXT_MAX_ITEMS`,
+`MEMIND_INGEST_RETRY_SPOOL`, `MEMIND_INGEST_RETRY_MAX_FILES`, and `MEMIND_INGEST_RETRY_MAX_AGE_DAYS`.
 
 ## Identity Model
 
@@ -192,6 +198,37 @@ Project information is stored as rawdata and item metadata, including a stable `
 remote URL when available, otherwise the local project path. Project metadata supports ranking, diagnostics, and
 future context compilation without creating separate Memind core project or session entities. `sessionId`,
 `agentTurnId`, `timelineId`, and per-event turn metadata are also stored only inside raw content and item metadata.
+
+## SessionStart Context
+
+When `autoSessionContext = true`, the `SessionStart` hook reads existing Memind data for the current `userId`,
+`agentId`, and project `metadata.projectSlug`. It does not write rawdata and does not trigger memory extraction.
+
+The injected context is compiled from generic OpenAPI query results:
+
+```text
+<memind_session_context project="payment-service-<stable-hash>">
+Memind project memory. Use only when directly helpful. Prefer explicit user instructions and repository files over memory if they conflict.
+
+## Continue From
+- [rawdata:rd-1] Previous turn summary from agent_timeline caption.
+
+## Must Follow
+- [item:101 directive] Project or agent instruction extracted from previous work.
+
+## Watch Outs
+- [item:102 resolution] Previously solved issue or failure pattern.
+
+## Reusable Playbooks
+- [item:103 playbook] Repeatable workflow for this project.
+
+## Useful Facts
+- [item:104 event] Project fact useful for continuing work.
+</memind_session_context>
+```
+
+This project-continuity context is separate from prompt-time retrieval. It helps a new Claude Code session know what
+recently happened in this project before the first user prompt is handled.
 
 ## Retrieval Behavior
 

@@ -73,6 +73,14 @@ class _FakeSyncMemory:
             }
         )
 
+    def query_items(self, request):
+        self.calls.append(("query_items", request))
+        return SimpleNamespace(items=[SimpleNamespace(id="it-1", text="Use cargo test")])
+
+    def query_raw_data(self, request):
+        self.calls.append(("query_raw_data", request))
+        return SimpleNamespace(raw_data=[SimpleNamespace(id="rd-1", caption="Fixed Codex hook")])
+
 
 class _FakeSyncMemindClient:
     instances = []
@@ -101,11 +109,45 @@ class _Strategy(str):
         return str.__new__(cls, value)
 
 
+class _MetadataCondition:
+    def __init__(self, **kwargs):
+        self.path = kwargs.get("path")
+        self.op = kwargs.get("op")
+        self.value = kwargs.get("value")
+
+
+class _MetadataFilter:
+    def __init__(self, all=None, **kwargs):
+        self.all = [_MetadataCondition(**item) for item in (all or [])]
+
+
+class _RawDataQueryIncludeOptions:
+    def __init__(self, segment=None, metadata=None):
+        self.segment = segment
+        self.metadata = metadata
+
+
+class _QueryMemoryItemsRequest:
+    def __init__(self, metadata_filter=None, **kwargs):
+        self.__dict__.update(kwargs)
+        self.metadata_filter = _MetadataFilter(**metadata_filter) if isinstance(metadata_filter, dict) else metadata_filter
+
+
+class _QueryMemoryRawDataRequest:
+    def __init__(self, metadata_filter=None, include=None, **kwargs):
+        self.__dict__.update(kwargs)
+        self.metadata_filter = _MetadataFilter(**metadata_filter) if isinstance(metadata_filter, dict) else metadata_filter
+        self.include = include
+
+
 def _fake_memind_module():
     module = types.ModuleType("memind")
     module.AsyncMemindClient = _FakeAsyncMemindClient
     module.MemindClient = _FakeSyncMemindClient
     module.Strategy = _Strategy
+    module.QueryMemoryItemsRequest = _QueryMemoryItemsRequest
+    module.QueryMemoryRawDataRequest = _QueryMemoryRawDataRequest
+    module.RawDataQueryIncludeOptions = _RawDataQueryIncludeOptions
     return module
 
 
@@ -154,6 +196,37 @@ class ClientTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.model_dump(by_alias=True)["items"][0]["text"], "remember espresso")
         self.assertTrue(_FakeSyncMemindClient.instances[0].closed)
+
+    def test_query_wrappers_use_official_sync_query_models(self):
+        with mock.patch.dict(sys.modules, {"memind": _fake_memind_module()}):
+            MemindClient = _load_client_class()
+            client = MemindClient("http://127.0.0.1:8366", timeout=12, max_retries=0)
+            items = client.query_items(
+                "u",
+                "a",
+                categories=["playbook"],
+                raw_data_types=["agent_timeline"],
+                metadata_filter={"all": [{"path": "projectSlug", "op": "eq", "value": "memind"}]},
+                limit=5,
+            )
+            raw_data = client.query_raw_data(
+                "u",
+                "a",
+                types=["agent_timeline"],
+                metadata_filter={"all": [{"path": "projectSlug", "op": "eq", "value": "memind"}]},
+                include={"metadata": True, "segment": False},
+                limit=3,
+            )
+
+        self.assertEqual(items.items[0].id, "it-1")
+        self.assertEqual(raw_data.raw_data[0].id, "rd-1")
+        item_request = _FakeSyncMemindClient.instances[0].memory.calls[0][1]
+        raw_data_request = _FakeSyncMemindClient.instances[1].memory.calls[0][1]
+        self.assertEqual(item_request.user_id, "u")
+        self.assertEqual(item_request.categories, ["playbook"])
+        self.assertEqual(item_request.metadata_filter.all[0].value, "memind")
+        self.assertEqual(raw_data_request.types, ["agent_timeline"])
+        self.assertFalse(raw_data_request.include.segment)
 
     async def test_missing_official_client_import_propagates_to_hook_fail_open_boundary(self):
         with mock.patch.dict(sys.modules, {"memind": None}):

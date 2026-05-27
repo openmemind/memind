@@ -26,8 +26,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ingest import retry_root, state_root
 from lib.client import MemindClient
 from lib.config import load_config
+from lib.identity import project_slug, resolve_identity
 from lib.logging_utils import debug_log
 from lib.retry import RetrySpool
+from lib.session_context import build_session_context, render_session_context
 from lib.state import SessionStateStore
 
 
@@ -65,7 +67,31 @@ async def _replay_payload(client, payload):
     return 0
 
 
-async def run_session_start_async(config):
+def _base_output():
+    return {"continue": True, "suppressOutput": True}
+
+
+def _context_output(client, config, hook_input):
+    if not config.get("autoSessionContext", True):
+        return None
+    cwd = hook_input.get("cwd") or os.getcwd()
+    identity = resolve_identity(config, hook_input)
+    slug = project_slug(cwd)
+    context = build_session_context(client, identity, slug, config)
+    rendered = render_session_context(context, config)
+    if not rendered:
+        return None
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": rendered,
+        }
+    }
+
+
+async def run_session_start_async(config, hook_input=None):
+    hook_input = hook_input or {}
+    output = _base_output()
     try:
         client = MemindClient(config["memindApiUrl"], config.get("memindApiToken"), timeout=2, max_retries=0)
         try:
@@ -74,7 +100,7 @@ async def run_session_start_async(config):
             _tcp_check(config["memindApiUrl"], timeout=1)
     except Exception as exc:
         debug_log(config, "session_start_health_failed", {"error": str(exc)})
-        return
+        return output
 
     spool = RetrySpool(retry_root())
     claimed = None
@@ -98,22 +124,34 @@ async def run_session_start_async(config):
         SessionStateStore(state_root()).cleanup(int(config.get("stateMaxAgeDays", 14)))
     except Exception as exc:
         debug_log(config, "state_cleanup_failed", {"error": str(exc)})
+    try:
+        context_output = _context_output(client, config, hook_input)
+        if context_output:
+            output.update(context_output)
+    except Exception as exc:
+        debug_log(config, "session_context_failed", {"error": str(exc)})
+    return output
 
 
-def run_session_start(config):
-    asyncio.run(run_session_start_async(config))
+def run_session_start(config, hook_input=None):
+    return asyncio.run(run_session_start_async(config, hook_input))
 
 
 def main():
     try:
         config = load_config()
-        run_session_start(config)
+        try:
+            hook_input = json.loads(sys.stdin.read() or "{}")
+        except Exception:
+            hook_input = {}
+        output = run_session_start(config, hook_input)
     except Exception as exc:
         try:
             debug_log(load_config(), "session_start_failed", {"error": str(exc)})
         except Exception:
             pass
-    print(json.dumps({"continue": True, "suppressOutput": True}))
+        output = _base_output()
+    print(json.dumps(output))
 
 
 if __name__ == "__main__":

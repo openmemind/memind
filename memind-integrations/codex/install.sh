@@ -99,6 +99,9 @@ required = [
     "MemindClient",
     "ConversationContent",
     "Message",
+    "QueryMemoryItemsRequest",
+    "QueryMemoryRawDataRequest",
+    "RawDataQueryIncludeOptions",
     "Strategy",
 ]
 missing = [name for name in required if not hasattr(memind, name)]
@@ -189,6 +192,7 @@ download_remote_install() {
     "scripts/lib/identity.py"
     "scripts/lib/logging_utils.py"
     "scripts/lib/retry.py"
+    "scripts/lib/session_context.py"
     "scripts/lib/state.py"
   )
   mkdir -p "${INSTALL_ROOT}"

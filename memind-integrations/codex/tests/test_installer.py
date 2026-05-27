@@ -69,6 +69,9 @@ def _valid_memind_package(root):
             "MemindClient",
             "ConversationContent",
             "Message",
+            "QueryMemoryItemsRequest",
+            "QueryMemoryRawDataRequest",
+            "RawDataQueryIncludeOptions",
             "Strategy",
         ],
     )

@@ -26,6 +26,10 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config["agentId"], "coding-agent")
         self.assertEqual(config["sourceClient"], "codex")
         self.assertEqual(config["retrieveContextTurns"], 0)
+        self.assertTrue(config["autoSessionContext"])
+        self.assertEqual(config["sessionContextRecentSessions"], 3)
+        self.assertEqual(config["sessionContextMaxItems"], 6)
+        self.assertEqual(config["sessionContextMaxChars"], 6000)
         self.assertNotIn("agentIdMode", config)
         self.assertNotIn("commitOnStop", config)
 
@@ -36,6 +40,10 @@ class ConfigTest(unittest.TestCase):
             env = {
                 "MEMIND_API_URL": "http://example.test",
                 "MEMIND_RETRIEVE_CONTEXT_TURNS": "2",
+                "MEMIND_AUTO_SESSION_CONTEXT": "false",
+                "MEMIND_SESSION_CONTEXT_RECENT_SESSIONS": "4",
+                "MEMIND_SESSION_CONTEXT_MAX_ITEMS": "5",
+                "MEMIND_SESSION_CONTEXT_MAX_CHARS": "3000",
             }
             config = load_config(
                 plugin_root=Path(__file__).resolve().parents[1],
@@ -45,6 +53,10 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config["agentId"], "custom")
         self.assertEqual(config["memindApiUrl"], "http://example.test")
         self.assertEqual(config["retrieveContextTurns"], 2)
+        self.assertFalse(config["autoSessionContext"])
+        self.assertEqual(config["sessionContextRecentSessions"], 4)
+        self.assertEqual(config["sessionContextMaxItems"], 5)
+        self.assertEqual(config["sessionContextMaxChars"], 3000)
         self.assertNotIn("agentIdMode", config)
         self.assertNotIn("commitOnStop", config)
         self.assertNotIn("ingestionRoles", config)
