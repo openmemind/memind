@@ -57,6 +57,10 @@ class ManifestTest(unittest.TestCase):
     def test_default_settings(self):
         settings = json.loads((ROOT / "settings.json").read_text())
         self.assertEqual(settings["retrieveContextTurns"], 0)
+        self.assertFalse(settings["autoPromptContext"])
+        self.assertEqual(settings["promptContextProjectMinEntries"], 4)
+        self.assertEqual(settings["promptContextGlobalFallbackEntries"], 3)
+        self.assertEqual(settings["promptContextGlobalFallbackMinScore"], 0.65)
         self.assertTrue(settings["autoIngestAgentTimeline"])
         self.assertNotIn("agentIdMode", settings)
         self.assertNotIn("autoIngest", settings)

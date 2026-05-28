@@ -46,6 +46,10 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(DEFAULT_SETTINGS["agentId"], "coding-agent")
         self.assertEqual(DEFAULT_SETTINGS["retrieveContextTurns"], 0)
         self.assertEqual(DEFAULT_SETTINGS["sourceClient"], "claude-code")
+        self.assertFalse(DEFAULT_SETTINGS["autoPromptContext"])
+        self.assertEqual(DEFAULT_SETTINGS["promptContextProjectMinEntries"], 4)
+        self.assertEqual(DEFAULT_SETTINGS["promptContextGlobalFallbackEntries"], 3)
+        self.assertEqual(DEFAULT_SETTINGS["promptContextGlobalFallbackMinScore"], 0.65)
         self.assertTrue(DEFAULT_SETTINGS["autoSessionContext"])
         self.assertEqual(DEFAULT_SETTINGS["sessionContextRecentSessions"], 3)
         self.assertEqual(DEFAULT_SETTINGS["sessionContextMaxItems"], 6)
@@ -112,6 +116,24 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config["toolContextEntryMaxChars"], 400)
         self.assertEqual(config["toolContextMaxItems"], 4)
         self.assertEqual(config["toolContextMinExactItems"], 1)
+
+    def test_prompt_context_env_overrides(self):
+        config = load_config(
+            plugin_root=ROOT,
+            user_config_path=Path("/no/such/file"),
+            env={
+                "CLAUDE_PLUGIN_ROOT": str(ROOT),
+                "MEMIND_AUTO_PROMPT_CONTEXT": "true",
+                "MEMIND_PROMPT_CONTEXT_PROJECT_MIN_ENTRIES": "2",
+                "MEMIND_PROMPT_CONTEXT_GLOBAL_FALLBACK_ENTRIES": "1",
+                "MEMIND_PROMPT_CONTEXT_GLOBAL_FALLBACK_MIN_SCORE": "0.5",
+            },
+        )
+
+        self.assertTrue(config["autoPromptContext"])
+        self.assertEqual(config["promptContextProjectMinEntries"], 2)
+        self.assertEqual(config["promptContextGlobalFallbackEntries"], 1)
+        self.assertEqual(config["promptContextGlobalFallbackMinScore"], 0.5)
 
 
 if __name__ == "__main__":

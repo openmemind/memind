@@ -1,8 +1,8 @@
 # Memind Codex Integration
 
-Memind adds persistent project memory to Codex CLI. The integration retrieves relevant Memind context before
-each user prompt and submits Codex coding-agent timelines through Memind's reliable extraction endpoint after
-each turn.
+Memind adds persistent project memory to Codex CLI. The integration injects project continuity context at session
+start, can inject exact file/tool context before high-value tools, and submits Codex coding-agent timelines through
+Memind's reliable extraction endpoint after each turn.
 
 Use this integration when you want Codex to remember project facts, preferences, and previous decisions across
 sessions. The plugin connects Codex to an already-running Memind server; it does not start the server itself.
@@ -17,8 +17,9 @@ The integration is intentionally small:
 
 ## What It Does
 
-- **Retrieval**: `UserPromptSubmit` calls `MemindClient.memory.retrieve(...)` and injects relevant memories into
-  the Codex prompt as `<memind_memories>...</memind_memories>`.
+- **Prompt context (optional)**: `UserPromptSubmit` always buffers the user prompt into the local agent timeline.
+  If `autoPromptContext=true`, it also retrieves project-first Memind memories with a bounded global fallback and
+  injects them as `<memind_memories>...</memind_memories>`.
 - **Ingestion**: `PreToolUse` and `PostToolUse` buffer normalized tool events locally. The next `Stop` hook
   submits them as `rawContent.type = "agent_timeline"` so Memind can extract user and agent memories from the
   same agent turn.
@@ -121,7 +122,7 @@ The installed hooks are:
 | Codex event | Script | Timeout | Purpose |
 | --- | --- | ---: | --- |
 | `SessionStart` | `scripts/session_start.py` | 5s | Replay at most one failed timeline payload, clean old state, and inject project continuity context when available. |
-| `UserPromptSubmit` | `scripts/retrieve.py` | 12s | Buffer the user prompt event and retrieve relevant Memind context. |
+| `UserPromptSubmit` | `scripts/retrieve.py` | 12s | Buffer the user prompt event. Optionally inject project-first prompt memory when `autoPromptContext=true`. |
 | `PreToolUse` | `scripts/pre_tool_use.py` | 5s | Buffer a redacted tool-start event and, for high-value file edits or commands, inject compact file/tool memory context. |
 | `PostToolUse` | `scripts/post_tool_use.py` | 5s | Buffer a redacted tool-result event in local session state. |
 | `Stop` | `scripts/ingest.py` | 15s | Flush buffered `agent_timeline` events after a turn. |
@@ -147,6 +148,7 @@ User configuration is optional. Save overrides as `~/.memind/codex.json`:
   "agentId": "coding-agent",
   "sourceClient": "codex",
   "autoIngestAgentTimeline": true,
+  "autoPromptContext": false,
   "retrieveContextTurns": 0
 }
 ```
@@ -166,7 +168,8 @@ Settings are loaded in this order:
 | `userId` | `local__<system-user>` | Memind user identity. |
 | `agentId` | `coding-agent` | Shared Memind agent identity. Use the same value from Claude Code, Codex, and API clients to share one coding-agent memory space. |
 | `sourceClient` | `codex` | Source marker stored with Memind data. |
-| `autoRetrieve` | `true` | Enables prompt-time memory retrieval. |
+| `autoRetrieve` | `true` | Backward-compatible broad retrieval gate used by prompt and tool retrieval paths. Leave enabled unless you want to disable retrieval-assisted contexts entirely. |
+| `autoPromptContext` | `false` | Enables prompt-time `<memind_memories>` retrieval and injection on `UserPromptSubmit`. Off by default to avoid token cost and unrelated cross-project recall. |
 | `autoSessionContext` | `true` | Enables SessionStart project continuity context injection. |
 | `autoIngestAgentTimeline` | `true` | Enables user prompt, tool/result, assistant message, and stop event buffering plus `agent_timeline` rawdata flush. |
 | `autoToolContext` | `true` | Enables compact PreToolUse context for high-value file edits and commands. |
@@ -174,6 +177,9 @@ Settings are loaded in this order:
 | `retrieveMaxEntries` | `8` | Maximum formatted memory entries injected into Codex. |
 | `retrieveMaxChars` | `6000` | Maximum injected context characters. |
 | `retrieveContextTurns` | `0` | Number of recent transcript turns to include in the retrieval query. |
+| `promptContextProjectMinEntries` | `4` | Minimum current-project entries before global fallback is skipped. |
+| `promptContextGlobalFallbackEntries` | `3` | Maximum fallback entries from the shared memory space when current-project results are sparse. |
+| `promptContextGlobalFallbackMinScore` | `0.65` | Minimum score for fallback entries. |
 | `toolContextMaxChars` | `3500` | Maximum injected PreToolUse context characters. |
 | `toolContextEntryMaxChars` | `520` | Maximum characters per PreToolUse context entry. |
 | `toolContextMaxItems` | `6` | Maximum exact or fallback items considered for PreToolUse context. |
@@ -194,6 +200,7 @@ export MEMIND_API_TOKEN=...
 export MEMIND_USER_ID=local__alice
 export MEMIND_AGENT_ID=coding-agent
 export MEMIND_SOURCE_CLIENT=codex
+export MEMIND_AUTO_PROMPT_CONTEXT=false
 export MEMIND_AUTO_SESSION_CONTEXT=true
 export MEMIND_AUTO_TOOL_CONTEXT=true
 export MEMIND_AUTO_INGEST_AGENT_TIMELINE=true
@@ -206,6 +213,8 @@ export MEMIND_DEBUG=true
 Additional environment variables include `MEMIND_AUTO_RETRIEVE`,
 `MEMIND_RETRIEVE_STRATEGY`, `MEMIND_RETRIEVE_MAX_ENTRIES`, `MEMIND_RETRIEVE_MAX_CHARS`,
 `MEMIND_SESSION_CONTEXT_RECENT_SESSIONS`, `MEMIND_SESSION_CONTEXT_MAX_ITEMS`,
+`MEMIND_PROMPT_CONTEXT_PROJECT_MIN_ENTRIES`, `MEMIND_PROMPT_CONTEXT_GLOBAL_FALLBACK_ENTRIES`,
+`MEMIND_PROMPT_CONTEXT_GLOBAL_FALLBACK_MIN_SCORE`,
 `MEMIND_TOOL_CONTEXT_ENTRY_MAX_CHARS`, `MEMIND_TOOL_CONTEXT_MAX_ITEMS`,
 `MEMIND_TOOL_CONTEXT_MIN_EXACT_ITEMS`, `MEMIND_STATE_MAX_AGE_DAYS`,
 `MEMIND_INGEST_RETRY_SPOOL`, `MEMIND_INGEST_RETRY_MAX_FILES`, and `MEMIND_INGEST_RETRY_MAX_AGE_DAYS`.
@@ -256,33 +265,50 @@ Historical Memind project memory. Use only when directly helpful. Current user i
 This project-continuity context is separate from prompt-time retrieval. It helps a new Codex session know what
 recently happened in this project before the first user prompt is handled.
 
-## Retrieval Behavior
+## Prompt Context
 
-Retrieval runs before each user prompt when `autoRetrieve = true`.
+Prompt context is disabled by default. `UserPromptSubmit` still buffers the user prompt into the local
+`agent_timeline` state, but it does not inject `<memind_memories>` unless `autoPromptContext = true`.
+
+Enable prompt-time recall only when you want query-aware memory on every prompt:
+
+```json
+{
+  "autoPromptContext": true,
+  "promptContextProjectMinEntries": 4,
+  "promptContextGlobalFallbackEntries": 3,
+  "promptContextGlobalFallbackMinScore": 0.65
+}
+```
+
+When enabled, Memind first retrieves memories constrained by the current project's `metadata.projectSlug`. If those
+project hits are sparse, it adds a bounded global fallback from the same `userId + agentId` memory space. The injected
+context marks source provenance as `project`, `global`, or `shared`.
 
 The injected context format is:
 
 ```text
-<memind_memories>
+<memind_memories project="memind-main-a1b2c3" mode="project-first">
 Relevant memories from Memind. Use only when directly helpful:
 
 ## Directives
-- [item:201 directive] Do not default Claude Code or Codex to conversation rawdata.
+- [item:201 directive, project, 2026-05-27] Do not default Claude Code or Codex to conversation rawdata.
+- [item:206 behavior, global, 2026-05-20] User prefers Chinese replies for technical discussions.
 
 ## Resolved Problems
-- [item:202 resolution] Retry spool events are cleared only after successful agent_timeline extraction.
+- [item:202 resolution, project, 2026-05-27] Retry spool events are cleared only after successful agent_timeline extraction.
 
 ## Agent Playbooks
-- [item:203 playbook] When hooks change, run both integration test suites and git diff --check.
+- [item:203 playbook, project, 2026-05-27] When hooks change, run both integration test suites and git diff --check.
 
 ## Tool Notes
-- [item:204 tool] Use Python 3.12 for the Codex integration test suite.
+- [item:204 tool, shared, 2026-05-18] Use Python 3.12 for the Codex integration test suite.
 
 ## Insights
-- [insight:301 root] Coding-agent integrations share memory through stable userId and agentId.
+- [insight:301 root, project, 2026-05-27] Coding-agent integrations share memory through stable userId and agentId.
 
 ## Memory Items
-- [item:205 event] rawdata-agent emits agent_episode segment metadata.
+- [item:205 event, project, 2026-05-27] rawdata-agent emits agent_episode segment metadata.
 </memind_memories>
 ```
 
@@ -508,6 +534,7 @@ curl -fsSL http://127.0.0.1:8366/open/v1/health
 ```
 
 - Confirm `autoRetrieve` is `true`.
+- Confirm `autoPromptContext` is `true` for prompt-time `<memind_memories>` injection. SessionStart and PreToolUse context use separate switches.
 - Confirm existing memories are stored under the same `userId` and `agentId`.
 - Try setting `retrieveContextTurns` to `1` or `2` if the current prompt is very short.
 

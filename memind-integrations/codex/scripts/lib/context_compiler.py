@@ -165,7 +165,7 @@ def compile_prompt_retrieval_context(data, config):
     )
     rendered = _render_context(
         wrapper="memind_memories",
-        attrs={},
+        attrs=_prompt_attrs(data),
         preamble=preamble,
         sections=_prepare_sections(sections, "prompt_retrieval"),
         order=PROMPT_SECTION_ORDER,
@@ -178,7 +178,7 @@ def compile_prompt_retrieval_context(data, config):
         return rendered
     return _render_context(
         wrapper="memind_memories",
-        attrs={},
+        attrs=_prompt_attrs(data),
         preamble=preamble,
         sections={},
         order=PROMPT_SECTION_ORDER,
@@ -188,6 +188,15 @@ def compile_prompt_retrieval_context(data, config):
         trailing_notice=degraded_notice,
         allow_notice_only=True,
     )
+
+
+def _prompt_attrs(data):
+    attrs = {}
+    if data.get("projectSlug"):
+        attrs["project"] = data["projectSlug"]
+    if data.get("mode"):
+        attrs["mode"] = data["mode"]
+    return attrs
 
 
 def compile_tool_context(context, config):
@@ -296,6 +305,7 @@ def _normalize_retrieved_item(item):
         "text": _clean(_field(item, "text")),
         "createdAt": _field(item, "createdAt") or _field(item, "created_at"),
         "score": _number(_field(item, "finalScore"), _field(item, "vectorScore"), 0),
+        "source": _field(item, "memindContextSource"),
     }
 
 
@@ -307,6 +317,7 @@ def _normalize_insight(insight):
         "text": _clean(_field(insight, "text")),
         "createdAt": _field(insight, "createdAt") or _field(insight, "created_at"),
         "score": 0,
+        "source": _field(insight, "memindContextSource"),
     }
 
 
@@ -499,8 +510,13 @@ def _render_entry(entry, max_chars):
         label = f"insight:{entry.get('id')} {entry.get('category') or 'insight'}"
     else:
         label = f"item:{entry.get('id')} {entry.get('category') or 'memory'}"
+    source = entry.get("source")
+    label_parts = [label]
+    if source:
+        label_parts.append(source)
     if date:
-        label = f"{label}, {date}"
+        label_parts.append(date)
+    label = ", ".join(label_parts)
     return f"- [{label}] {_clip(entry.get('text'), max_chars)}"
 
 

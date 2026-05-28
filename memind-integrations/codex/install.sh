@@ -192,6 +192,7 @@ download_remote_install() {
     "scripts/lib/content.py"
     "scripts/lib/identity.py"
     "scripts/lib/logging_utils.py"
+    "scripts/lib/prompt_context.py"
     "scripts/lib/retry.py"
     "scripts/lib/session_context.py"
     "scripts/lib/state.py"

@@ -223,6 +223,53 @@ class ContextCompilerTest(unittest.TestCase):
         self.assertIn("Memory retrieval encountered an error", rendered)
         self.assertIn("<memind_memories>", rendered)
 
+    def test_prompt_context_renders_project_first_attrs_and_source_labels(self):
+        from scripts.lib.context_compiler import compile_prompt_retrieval_context
+
+        rendered = compile_prompt_retrieval_context(
+            {
+                "projectSlug": "memind-main",
+                "mode": "project-first",
+                "items": [
+                    {
+                        "id": "dir-1",
+                        "text": "Keep userId and agentId stable.",
+                        "category": "directive",
+                        "createdAt": "2026-05-27T10:00:00Z",
+                        "finalScore": 0.9,
+                        "memindContextSource": "project",
+                    },
+                    {
+                        "id": "beh-1",
+                        "text": "User prefers Chinese replies.",
+                        "category": "behavior",
+                        "createdAt": "2026-05-20T10:00:00Z",
+                        "finalScore": 0.88,
+                        "memindContextSource": "global",
+                    },
+                ],
+                "insights": [
+                    {
+                        "id": "ins-1",
+                        "text": "Run both Claude Code and Codex tests after hook edits.",
+                        "tier": "root",
+                        "createdAt": "2026-05-18T10:00:00Z",
+                        "memindContextSource": "shared",
+                    }
+                ],
+            },
+            {
+                "retrieveMaxEntries": 8,
+                "retrieveMaxChars": 6000,
+                "retrievePromptPreamble": "Relevant memories from Memind.",
+            },
+        )
+
+        self.assertIn('<memind_memories project="memind-main" mode="project-first">', rendered)
+        self.assertIn("[item:dir-1 directive, project, 2026-05-27]", rendered)
+        self.assertIn("[item:beh-1 behavior, global, 2026-05-20]", rendered)
+        self.assertIn("[insight:ins-1 root, shared, 2026-05-18]", rendered)
+
     def test_tool_context_compiler_renders_bounded_file_context(self):
         from scripts.lib.context_compiler import compile_tool_context
 

@@ -120,6 +120,105 @@ class HookTest(unittest.TestCase):
         self.assertLess(context.index("## Resolved Problems"), context.index("## Agent Playbooks"))
         self.assertNotIn("## Memory Items", context)
 
+    def test_retrieve_default_does_not_call_memind_but_buffers_prompt(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import retrieve
+
+        retrieve = importlib.reload(retrieve)
+
+        config = {
+            "sourceClient": "codex",
+            "autoRetrieve": True,
+            "autoPromptContext": False,
+            "retrieveContextTurns": 0,
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp) / "state"
+            with mock.patch.object(retrieve, "state_root", return_value=state_dir):
+                with mock.patch.object(retrieve, "load_config", return_value=config):
+                    with mock.patch.object(retrieve, "MemindClient") as client_cls:
+                        result = retrieve.handle_user_prompt_submit(
+                            {
+                                "hook_event_name": "UserPromptSubmit",
+                                "cwd": tmp,
+                                "session_id": "s1",
+                                "user_prompt": "Fix payment tests",
+                            }
+                        )
+
+            self.assertEqual(result, {"continue": True})
+            client_cls.assert_not_called()
+            state_file = next(state_dir.glob("*.json"))
+            event = json.loads(state_file.read_text())["agentEvents"][0]
+            self.assertEqual(event["kind"], "user_prompt")
+            self.assertEqual(event["text"], "Fix payment tests")
+
+    def test_retrieve_prompt_context_enabled_uses_project_first_context(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import retrieve
+
+        retrieve = importlib.reload(retrieve)
+
+        config = {
+            "sourceClient": "codex",
+            "memindApiUrl": "http://127.0.0.1:8366",
+            "memindApiToken": None,
+            "autoRetrieve": True,
+            "autoPromptContext": True,
+            "retrieveContextTurns": 0,
+            "retrieveStrategy": "SIMPLE",
+            "retrieveMaxEntries": 8,
+            "retrieveMaxChars": 6000,
+            "retrievePromptPreamble": "Relevant memories from Memind.",
+            "promptContextProjectMinEntries": 4,
+            "promptContextGlobalFallbackEntries": 3,
+            "promptContextGlobalFallbackMinScore": 0.65,
+        }
+
+        class FakeClient:
+            pass
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp) / "state"
+            with mock.patch.object(retrieve, "state_root", return_value=state_dir):
+                with mock.patch.object(retrieve, "load_config", return_value=config):
+                    with mock.patch.object(retrieve, "resolve_identity", return_value={"userId": "u", "agentId": "a"}):
+                        with mock.patch.object(retrieve, "project_slug", return_value="memind-main"):
+                            with mock.patch.object(retrieve, "MemindClient", return_value=FakeClient()):
+                                with mock.patch.object(
+                                    retrieve,
+                                    "build_prompt_context",
+                                    return_value={
+                                        "projectSlug": "memind-main",
+                                        "mode": "project-first",
+                                        "items": [
+                                            {
+                                                "id": "dir-1",
+                                                "text": "Keep ids stable.",
+                                                "category": "directive",
+                                                "memindContextSource": "project",
+                                            }
+                                        ],
+                                        "insights": [],
+                                    },
+                                ) as build_context:
+                                    result = retrieve.handle_user_prompt_submit(
+                                        {
+                                            "hook_event_name": "UserPromptSubmit",
+                                            "cwd": tmp,
+                                            "session_id": "s1",
+                                            "user_prompt": "Fix payment tests",
+                                        }
+                                    )
+
+        build_context.assert_called_once()
+        args = build_context.call_args.args
+        self.assertEqual(args[3], "memind-main")
+        context = result["hookSpecificOutput"]["additionalContext"]
+        self.assertIn('<memind_memories project="memind-main" mode="project-first">', context)
+        self.assertIn("[item:dir-1 directive, project]", context)
+
     def test_retrieve_fail_open_when_memind_unavailable(self):
         with tempfile.TemporaryDirectory() as tmp:
             env = {

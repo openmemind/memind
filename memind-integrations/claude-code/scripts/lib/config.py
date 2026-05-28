@@ -23,6 +23,7 @@ DEFAULT_SETTINGS = {
     "agentId": "coding-agent",
     "sourceClient": "claude-code",
     "autoRetrieve": True,
+    "autoPromptContext": False,
     "autoSessionContext": True,
     "autoIngestAgentTimeline": True,
     "retrieveStrategy": "SIMPLE",
@@ -30,6 +31,9 @@ DEFAULT_SETTINGS = {
     "retrieveMaxChars": 6000,
     "retrievePromptPreamble": "Relevant memories from Memind. Use only when directly helpful:",
     "retrieveContextTurns": 0,
+    "promptContextProjectMinEntries": 4,
+    "promptContextGlobalFallbackEntries": 3,
+    "promptContextGlobalFallbackMinScore": 0.65,
     "autoToolContext": True,
     "toolContextMaxChars": 3500,
     "toolContextEntryMaxChars": 520,
@@ -52,12 +56,16 @@ ENV_MAP = {
     "MEMIND_AGENT_ID": ("agentId", str),
     "MEMIND_SOURCE_CLIENT": ("sourceClient", str),
     "MEMIND_AUTO_RETRIEVE": ("autoRetrieve", "bool"),
+    "MEMIND_AUTO_PROMPT_CONTEXT": ("autoPromptContext", "bool"),
     "MEMIND_AUTO_SESSION_CONTEXT": ("autoSessionContext", "bool"),
     "MEMIND_AUTO_INGEST_AGENT_TIMELINE": ("autoIngestAgentTimeline", "bool"),
     "MEMIND_RETRIEVE_STRATEGY": ("retrieveStrategy", str),
     "MEMIND_RETRIEVE_MAX_ENTRIES": ("retrieveMaxEntries", "int"),
     "MEMIND_RETRIEVE_MAX_CHARS": ("retrieveMaxChars", "int"),
     "MEMIND_RETRIEVE_CONTEXT_TURNS": ("retrieveContextTurns", "int_allow_zero"),
+    "MEMIND_PROMPT_CONTEXT_PROJECT_MIN_ENTRIES": ("promptContextProjectMinEntries", "int_allow_zero"),
+    "MEMIND_PROMPT_CONTEXT_GLOBAL_FALLBACK_ENTRIES": ("promptContextGlobalFallbackEntries", "int_allow_zero"),
+    "MEMIND_PROMPT_CONTEXT_GLOBAL_FALLBACK_MIN_SCORE": ("promptContextGlobalFallbackMinScore", "float_allow_zero"),
     "MEMIND_AUTO_TOOL_CONTEXT": ("autoToolContext", "bool"),
     "MEMIND_TOOL_CONTEXT_MAX_CHARS": ("toolContextMaxChars", "int"),
     "MEMIND_TOOL_CONTEXT_ENTRY_MAX_CHARS": ("toolContextEntryMaxChars", "int"),
@@ -85,6 +93,13 @@ def parse_int(value, name, allow_zero=False):
     return parsed
 
 
+def parse_float(value, name, allow_zero=False):
+    parsed = float(value)
+    if parsed < 0 or (parsed == 0 and not allow_zero):
+        raise ValueError(f"{name} must be positive")
+    return parsed
+
+
 def parse_list(value):
     return [part.strip() for part in str(value).split(",") if part.strip()]
 
@@ -96,6 +111,8 @@ def _coerce(value, kind, name):
         return parse_int(value, name)
     if kind == "int_allow_zero":
         return parse_int(value, name, allow_zero=True)
+    if kind == "float_allow_zero":
+        return parse_float(value, name, allow_zero=True)
     if kind == "list":
         return parse_list(value)
     return kind(value)

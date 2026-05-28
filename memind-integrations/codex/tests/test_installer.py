@@ -82,6 +82,7 @@ class InstallerTest(unittest.TestCase):
         install_script = (ROOT / "install.sh").read_text()
 
         self.assertIn('"scripts/lib/context_compiler.py"', install_script)
+        self.assertIn('"scripts/lib/prompt_context.py"', install_script)
         self.assertIn('"scripts/lib/tool_context.py"', install_script)
 
     def test_install_merges_and_reinstall_is_idempotent(self):
