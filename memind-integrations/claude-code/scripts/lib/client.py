@@ -60,8 +60,37 @@ class MemindClient:
                 source_client=source_client,
             )
 
-    def retrieve(self, user_id, agent_id, query, strategy="SIMPLE", trace=False):
-        from memind import MemindClient as OfficialMemindClient
+    def retrieve(
+        self,
+        user_id,
+        agent_id,
+        query,
+        strategy="SIMPLE",
+        trace=False,
+        scope=None,
+        categories=None,
+        time_range=None,
+        metadata_filter=None,
+        include=None,
+    ):
+        from memind import (
+            MemindClient as OfficialMemindClient,
+            MetadataFilter,
+            RetrieveIncludeOptions,
+            TimeRange,
+        )
+
+        metadata_filter_obj = (
+            MetadataFilter(**metadata_filter)
+            if isinstance(metadata_filter, dict)
+            else metadata_filter
+        )
+        include_obj = (
+            RetrieveIncludeOptions(**include)
+            if isinstance(include, dict)
+            else include
+        )
+        time_range_obj = TimeRange(**time_range) if isinstance(time_range, dict) else time_range
 
         with OfficialMemindClient(
             base_url=self.base_url,
@@ -75,6 +104,11 @@ class MemindClient:
                 query=query,
                 strategy=strategy,
                 trace=trace,
+                scope=scope,
+                categories=categories,
+                time_range=time_range_obj,
+                metadata_filter=metadata_filter_obj,
+                include=include_obj,
             )
 
     def query_items(

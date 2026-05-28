@@ -117,8 +117,34 @@ class _MetadataCondition:
 
 
 class _MetadataFilter:
-    def __init__(self, all=None, **kwargs):
+    def __init__(self, all=None, any=None, not_=None, **kwargs):
+        excluded = kwargs.get("not", not_)
         self.all = [_MetadataCondition(**item) for item in (all or [])]
+        self.any = [_MetadataCondition(**item) for item in (any or [])]
+        self.not_ = [_MetadataCondition(**item) for item in (excluded or [])]
+
+
+class _RetrieveIncludeOptions:
+    def __init__(
+        self,
+        raw_data_metadata=None,
+        rawDataMetadata=None,
+        raw_data_segment=None,
+        rawDataSegment=None,
+    ):
+        self.raw_data_metadata = (
+            raw_data_metadata if raw_data_metadata is not None else rawDataMetadata
+        )
+        self.raw_data_segment = (
+            raw_data_segment if raw_data_segment is not None else rawDataSegment
+        )
+
+
+class _TimeRange:
+    def __init__(self, field=None, from_=None, to=None, **kwargs):
+        self.field = field
+        self.from_ = kwargs.get("from", from_)
+        self.to = to
 
 
 class _RawDataQueryIncludeOptions:
@@ -145,6 +171,9 @@ def _fake_memind_module():
     module.AsyncMemindClient = _FakeAsyncMemindClient
     module.MemindClient = _FakeSyncMemindClient
     module.Strategy = _Strategy
+    module.MetadataFilter = _MetadataFilter
+    module.RetrieveIncludeOptions = _RetrieveIncludeOptions
+    module.TimeRange = _TimeRange
     module.QueryMemoryItemsRequest = _QueryMemoryItemsRequest
     module.QueryMemoryRawDataRequest = _QueryMemoryRawDataRequest
     module.RawDataQueryIncludeOptions = _RawDataQueryIncludeOptions
@@ -196,6 +225,34 @@ class ClientTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.model_dump(by_alias=True)["items"][0]["text"], "remember espresso")
         self.assertTrue(_FakeSyncMemindClient.instances[0].closed)
+
+    def test_retrieve_passes_structured_filters(self):
+        with mock.patch.dict(sys.modules, {"memind": _fake_memind_module()}):
+            MemindClient = _load_client_class()
+            client = MemindClient("http://memind", "token", timeout=1, max_retries=0)
+            result = client.retrieve(
+                "u",
+                "a",
+                "payment context",
+                "SIMPLE",
+                False,
+                scope="AGENT",
+                categories=["resolution", "tool"],
+                metadata_filter={
+                    "all": [{"path": "projectSlug", "op": "eq", "value": "payment"}],
+                    "any": [{"path": "files", "op": "contains", "value": "src/payment/calc.ts"}],
+                },
+                include={"rawDataMetadata": True},
+            )
+
+        self.assertIsNotNone(result)
+        instance = _FakeSyncMemindClient.instances[0]
+        retrieve_call = instance.memory.calls[0][1]
+        self.assertEqual(retrieve_call["scope"], "AGENT")
+        self.assertEqual(retrieve_call["categories"], ["resolution", "tool"])
+        self.assertEqual(retrieve_call["metadata_filter"].all[0].path, "projectSlug")
+        self.assertEqual(retrieve_call["metadata_filter"].any[0].path, "files")
+        self.assertTrue(retrieve_call["include"].raw_data_metadata)
 
     def test_query_wrappers_use_official_sync_query_models(self):
         with mock.patch.dict(sys.modules, {"memind": _fake_memind_module()}):
