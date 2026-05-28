@@ -12,6 +12,7 @@
 # limitations under the License.
 #
 
+import importlib
 import os
 import json
 import subprocess
@@ -159,6 +160,117 @@ class HookTest(unittest.TestCase):
             event = json.loads(state_file.read_text())["agentEvents"][0]
             self.assertEqual(event["kind"], "test_result")
             self.assertEqual(event["status"], "running")
+
+    def test_pre_tool_use_injects_tool_context_when_memind_returns_matches(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import pre_tool_use
+        from scripts.lib.state import SessionStateStore, state_key
+
+        pre_tool_use = importlib.reload(pre_tool_use)
+        config = {
+            "memindApiUrl": "http://127.0.0.1:8366",
+            "memindApiToken": None,
+            "sourceClient": "codex",
+            "agentId": "coding-agent",
+            "userId": "u",
+            "autoRetrieve": True,
+            "autoToolContext": True,
+            "toolContextMaxItems": 6,
+            "toolContextMinExactItems": 1,
+            "toolContextMaxChars": 3500,
+            "toolContextEntryMaxChars": 520,
+            "retrieveStrategy": "SIMPLE",
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp) / "state"
+            store = SessionStateStore(state_dir)
+            session_key = state_key({"session_id": "s1"})
+            with store.locked(session_key) as state:
+                turn_id, turn_seq = state.start_agent_turn(session_key)
+                state.append_agent_event(
+                    {
+                        "eventId": "prompt",
+                        "seq": 1,
+                        "kind": "user_prompt",
+                        "text": "Fix payment tests",
+                        "metadata": {"turnId": turn_id, "turnSeq": turn_seq},
+                    }
+                )
+
+            class FakeClient:
+                def query_items(self, **kwargs):
+                    return types.SimpleNamespace(
+                        items=[
+                            types.SimpleNamespace(
+                                id="res-1",
+                                text="rounding mismatch was resolved in src/payment/calc.ts and validated with npm test payment.",
+                                category="resolution",
+                                created_at="2026-05-27T10:00:00Z",
+                                metadata={
+                                    "projectSlug": "tmp-project",
+                                    "files": ["src/payment/calc.ts"],
+                                },
+                            )
+                        ]
+                    )
+
+                def query_raw_data(self, **kwargs):
+                    return types.SimpleNamespace(raw_data=[])
+
+                def retrieve(self, *args, **kwargs):
+                    return types.SimpleNamespace(items=[], insights=[], raw_data=[])
+
+            with mock.patch.object(pre_tool_use, "state_root", return_value=state_dir):
+                with mock.patch.object(pre_tool_use, "load_config", return_value=config):
+                    with mock.patch.object(pre_tool_use, "resolve_identity", return_value={"userId": "u", "agentId": "coding-agent"}):
+                        with mock.patch.object(pre_tool_use, "MemindClient", return_value=FakeClient()):
+                            output = pre_tool_use.handle_pre_tool_use(
+                                {
+                                    "hook_event_name": "PreToolUse",
+                                    "cwd": tmp,
+                                    "session_id": "s1",
+                                    "tool_name": "Edit",
+                                    "tool_input": {"file_path": "src/payment/calc.ts"},
+                                    "timestamp": "2026-05-28T10:00:00Z",
+                                }
+                            )
+
+        self.assertIn("hookSpecificOutput", output)
+        context = output["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("<memind_tool_context", context)
+        self.assertIn("## Prior Resolutions", context)
+        self.assertIn("rounding mismatch", context)
+
+    def test_pre_tool_use_context_disabled_still_buffers_event(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import pre_tool_use
+
+        pre_tool_use = importlib.reload(pre_tool_use)
+        config = {
+            "sourceClient": "codex",
+            "autoRetrieve": True,
+            "autoToolContext": False,
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp) / "state"
+            with mock.patch.object(pre_tool_use, "state_root", return_value=state_dir):
+                with mock.patch.object(pre_tool_use, "load_config", return_value=config):
+                    output = pre_tool_use.handle_pre_tool_use(
+                        {
+                            "hook_event_name": "PreToolUse",
+                            "cwd": tmp,
+                            "session_id": "s1",
+                            "tool_name": "Edit",
+                            "tool_input": {"file_path": "src/payment/calc.ts"},
+                        }
+                    )
+
+            self.assertEqual(output, {"continue": True})
+            state_file = next(state_dir.glob("*.json"))
+            event = json.loads(state_file.read_text())["agentEvents"][0]
+            self.assertEqual(event["kind"], "file_edit")
 
     def test_post_tool_use_fails_open_and_buffers_event(self):
         with tempfile.TemporaryDirectory() as tmp:
