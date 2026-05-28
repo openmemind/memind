@@ -8,11 +8,15 @@
   "memoryMode": "hybrid",
   "autoRetrieve": true,
   "autoIngest": true,
+  "autoIngestAgentTimeline": true,
   "retrieveStrategy": "SIMPLE",
   "retrieveMaxEntries": 8,
   "retrieveMaxChars": 6000,
   "retrieveContextTurns": 1,
   "retrievePromptPreamble": "Relevant memories from Memind. Use only when directly helpful:",
   "ingestionRoles": ["user", "assistant"],
+  "timelineMaxEvents": 500,
+  "timelineMaxFieldChars": 8000,
+  "timelineFlushMinEvents": 2,
   "debug": false
 }

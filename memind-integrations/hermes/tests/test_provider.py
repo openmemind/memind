@@ -63,6 +63,8 @@ class FakeClient:
 
 class ProviderTest(unittest.TestCase):
     def provider(self, client=None, config=None):
+        self.addCleanup(lambda: getattr(self, "_tmp_state", None) and self._tmp_state.cleanup())
+        self._tmp_state = tempfile.TemporaryDirectory()
         cfg = {
             "memindApiUrl": "http://127.0.0.1:8366",
             "memindApiToken": None,
@@ -73,12 +75,17 @@ class ProviderTest(unittest.TestCase):
             "memoryMode": "hybrid",
             "autoRetrieve": True,
             "autoIngest": True,
+            "autoIngestAgentTimeline": True,
             "retrieveStrategy": "SIMPLE",
             "retrieveMaxEntries": 8,
             "retrieveMaxChars": 6000,
             "retrieveContextTurns": 1,
             "retrievePromptPreamble": "P",
             "ingestionRoles": ["user", "assistant"],
+            "timelineMaxEvents": 500,
+            "timelineMaxFieldChars": 8000,
+            "timelineFlushMinEvents": 2,
+            "stateDir": self._tmp_state.name,
             "debug": False,
         }
         if config:
@@ -149,7 +156,7 @@ class ProviderTest(unittest.TestCase):
 
         self.assertIn("User likes Rust", provider._prefetch_result)
 
-    def test_sync_turn_extracts_conversation_on_background_thread(self):
+    def test_sync_turn_extracts_agent_timeline_on_background_thread(self):
         client = FakeClient()
         provider = self.provider(client=client)
         provider.initialize("s1", cwd="/tmp/project")
@@ -161,20 +168,20 @@ class ProviderTest(unittest.TestCase):
         call = client.extract_calls[0]
         self.assertEqual(call["source_client"], "hermes")
         dumped = call["raw_content"].model_dump(by_alias=True, exclude_none=True)
-        self.assertEqual(dumped["type"], "conversation")
-        self.assertNotIn("memind_memories", dumped["messages"][0]["content"][0]["text"])
+        self.assertEqual(dumped["type"], "agent_timeline")
+        self.assertEqual(dumped["metadata"]["profile"], "general")
+        self.assertNotIn("memind_memories", dumped["events"][0]["text"])
+        self.assertEqual([event["kind"] for event in dumped["events"]], ["user_prompt", "assistant_message", "stop"])
 
-    def test_sync_turn_respects_ingestion_roles(self):
+    def test_sync_turn_respects_disabled_agent_timeline_ingestion(self):
         client = FakeClient()
-        provider = self.provider(client=client, config={"ingestionRoles": ["user"]})
+        provider = self.provider(client=client, config={"autoIngestAgentTimeline": False})
         provider.initialize("s1", cwd="/tmp/project")
 
         provider.sync_turn("remember espresso", "ok")
         provider._sync_thread.join(timeout=2)
 
-        dumped = client.extract_calls[0]["raw_content"].model_dump(by_alias=True, exclude_none=True)
-        self.assertEqual(len(dumped["messages"]), 1)
-        self.assertEqual(dumped["messages"][0]["role"], "USER")
+        self.assertEqual(client.extract_calls, [])
 
     def test_on_pre_compress_inserts_context(self):
         provider = self.provider()
@@ -227,8 +234,21 @@ class ProviderTest(unittest.TestCase):
         provider._sync_thread.join(timeout=2)
 
         dumped = client.extract_calls[0]["raw_content"].model_dump(by_alias=True, exclude_none=True)
-        self.assertEqual(dumped["messages"][0]["role"], "USER")
-        self.assertEqual(dumped["messages"][0]["content"][0]["text"], "remember espresso")
+        self.assertEqual(dumped["type"], "agent_timeline")
+        self.assertEqual(dumped["events"][0]["kind"], "notification")
+        self.assertEqual(dumped["events"][0]["metadata"]["memoryWrite"], True)
+        self.assertEqual(dumped["events"][0]["text"], "remember espresso")
+
+    def test_on_session_end_flushes_remaining_timeline_events(self):
+        client = FakeClient()
+        provider = self.provider(client=client)
+        provider.initialize("s1", cwd="/tmp/project")
+
+        provider.on_session_end([{"role": "user", "content": "bye"}])
+
+        dumped = client.extract_calls[0]["raw_content"].model_dump(by_alias=True, exclude_none=True)
+        self.assertEqual(dumped["type"], "agent_timeline")
+        self.assertEqual(dumped["events"][0]["kind"], "session_end")
 
     def test_get_config_schema_and_save_config(self):
         provider = self.provider()

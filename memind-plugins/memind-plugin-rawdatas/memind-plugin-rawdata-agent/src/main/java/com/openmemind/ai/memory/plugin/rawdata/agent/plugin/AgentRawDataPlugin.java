@@ -26,7 +26,7 @@ import com.openmemind.ai.memory.plugin.rawdata.agent.processor.AgentTimelineCont
 import java.util.List;
 
 /**
- * RawData plugin contribution for coding-agent timelines.
+ * RawData plugin contribution for agent runtime timelines.
  */
 public final class AgentRawDataPlugin implements RawDataPlugin {
 

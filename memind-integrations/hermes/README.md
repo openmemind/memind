@@ -1,11 +1,11 @@
 # Memind Hermes Agent Integration
 
-Memind adds persistent project memory to Hermes Agent through a native Hermes memory provider.
-The provider retrieves relevant Memind context before each turn and submits successful
-user/assistant conversation turns to Memind extraction after each response.
+Memind adds persistent agent memory to Hermes Agent through a native Hermes memory provider.
+The provider retrieves relevant Memind context before each turn and submits completed Hermes
+activity as Memind `agent_timeline` raw data after each response.
 
-Use this integration when you want Hermes to remember project facts, preferences, decisions,
-and prior discussions across sessions.
+Use this integration when you want Hermes to remember user preferences, durable facts, decisions,
+commitments, task outcomes, and prior discussions across sessions.
 
 The integration is intentionally small:
 
@@ -13,7 +13,8 @@ The integration is intentionally small:
 - Connects to an already-running `memind-server`.
 - Does not manage a local Memind daemon.
 - Does not require MCP for automatic memory.
-- Does not ingest tool calls or media in v0.1.
+- Captures general-agent lifecycle events; it does not enable coding-specific file context.
+- Does not ingest media in v0.1.
 
 ## Requirements
 
@@ -74,6 +75,7 @@ User overrides live in `~/.memind/hermes.json`:
   "memoryMode": "hybrid",
   "autoRetrieve": true,
   "autoIngest": true,
+  "autoIngestAgentTimeline": true,
   "retrieveStrategy": "SIMPLE"
 }
 ```
@@ -95,6 +97,10 @@ export MEMIND_AGENT_ID_MODE=project
 export MEMIND_SOURCE_CLIENT=hermes
 export MEMIND_MEMORY_MODE=hybrid
 export MEMIND_RETRIEVE_STRATEGY=SIMPLE
+export MEMIND_AUTO_INGEST_AGENT_TIMELINE=true
+export MEMIND_TIMELINE_MAX_EVENTS=500
+export MEMIND_TIMELINE_MAX_FIELD_CHARS=8000
+export MEMIND_TIMELINE_FLUSH_MIN_EVENTS=2
 ```
 
 ## Memory Modes
@@ -117,7 +123,8 @@ When `memoryMode` is `hybrid` or `tools`, the provider exposes:
 - `memind_retrieve`: retrieve relevant Memind memory for the configured `userId` and `agentId`.
 - `memind_extract_text`: extract memory from standalone text such as pasted notes or document excerpts.
 
-Normal Hermes conversation turns are captured automatically through the memory provider.
+Normal Hermes turns are captured automatically as `agent_timeline` raw data through the memory
+provider.
 Use `memind_extract_text` only for one-off text memory.
 
 ## Identity Model
@@ -128,8 +135,26 @@ By default, Memind stores Hermes memory under:
 - `agentId`: `hermes__<project-name>-<stable-hash>`
 
 The project hash is based on the Git remote URL when available, otherwise the local project path.
-Set `"agentIdMode": "fixed"` to share one Hermes memory scope across projects. Set
-`"agentIdMode": "session"` to isolate by Hermes session.
+This keeps existing users from unexpectedly merging memories across workspaces.
+
+For general-agent usage where the same assistant should remember across workspaces, channels, or
+sessions, set `"agentIdMode": "fixed"` and choose a stable `"agentId"`. Runtime context such as
+`workspaceDir` and `sessionKey` is stored in `agent_timeline.metadata`; it does not change the
+Memind memory identity. Set `"agentIdMode": "session"` to isolate by Hermes session.
+
+## Agent Timeline Ingestion
+
+Automatic lifecycle capture is controlled by `autoIngest` and `autoIngestAgentTimeline`.
+
+- `sync_turn` appends `user_prompt`, `assistant_message`, and `stop`, then flushes one timeline.
+- `on_memory_write` appends a `notification` event with `metadata.memoryWrite = true`, appends
+  `stop`, then flushes.
+- `on_pre_compress` appends `compact_boundary` and still injects pre-compress retrieval context.
+- `on_session_end` appends `session_end` and force-flushes remaining events.
+
+The submitted payload uses `metadata.profile = "general"` and `metadata.runtime = "hermes"`.
+The explicit `memind_extract_text` tool remains a standalone conversation/raw-text extraction path;
+it is intentionally separate from automatic agent lifecycle capture.
 
 ## Relationship To HTTP MCP
 

@@ -30,10 +30,16 @@ public final class AgentCaptionGenerator implements CaptionGenerator {
 
     private static final String SYSTEM_PROMPT =
             """
-            You summarize one completed coding-agent turn for a memory system.
+            You summarize one completed agent turn for a memory system.
+
+            The agent may be a coding agent or a general-purpose agent. Use profile and runtime \
+            metadata to decide which evidence matters. For coding agents, emphasize task, outcome, \
+            files, commands, validations, failures, decisions, and next steps. For general agents, \
+            emphasize user goal, outcome, decisions, commitments, external observations, tools, \
+            participants, and follow-up.
 
             The summary will be embedded and shown in retrieval results. It must be factual, \
-            concise, and useful for continuing the project later.
+            concise, and useful for continuing later work.
 
             Rules:
             - Use only the provided episode text and metadata.
@@ -108,6 +114,12 @@ public final class AgentCaptionGenerator implements CaptionGenerator {
         # Episode Metadata
 
         targetLanguage: %s
+        profile: %s
+        runtime: %s
+        channelId: %s
+        conversationId: %s
+        workspaceDir: %s
+        agentName: %s
         goal: %s
         outcome: %s
         sourceClient: %s
@@ -126,6 +138,12 @@ public final class AgentCaptionGenerator implements CaptionGenerator {
         """
                 .formatted(
                         string(language),
+                        string(safeMetadata.get("profile")),
+                        string(safeMetadata.get("runtime")),
+                        string(safeMetadata.get("channelId")),
+                        string(safeMetadata.get("conversationId")),
+                        string(safeMetadata.get("workspaceDir")),
+                        string(safeMetadata.get("agentName")),
                         string(safeMetadata.get("goal")),
                         string(safeMetadata.get("outcome")),
                         string(safeMetadata.get("sourceClient")),

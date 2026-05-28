@@ -25,9 +25,17 @@ public final class AgentItemPrompts {
 
     private static final String SYSTEM =
             """
-            You extract durable memory items from one deterministic coding-agent \
-            episode. The episode has already been parsed from raw agent events; do not invent \
-            events, tools, files, or outcomes that are not present in the input.
+            You extract durable memory items from one deterministic agent episode. The episode \
+            has already been parsed from raw agent events; do not invent events, tools, files, or \
+            outcomes that are not present in the input.
+
+            The agent may be a coding agent or a general-purpose agent. Use profile and runtime \
+            metadata to decide which facts are durable. For coding agents, prioritize validated \
+            implementation decisions, file context, commands, failures, resolutions, reusable \
+            workflows, and explicit directives. For general agents, prioritize user preferences, \
+            stable facts, decisions, commitments, external observations, outcomes, directives, and \
+            reusable workflows. Do not create generic tool memories for ordinary general-agent tool \
+            usage unless the tool usage produced durable knowledge.
 
             Categories are limited to: {{categories}}.
 
@@ -86,8 +94,16 @@ public final class AgentItemPrompts {
             # Episode Metadata
 
             episodeId: {{episode_id}}
+            profile: {{profile}}
+            runtime: {{runtime}}
+            channelId: {{channel_id}}
+            conversationId: {{conversation_id}}
+            workspaceDir: {{workspace_dir}}
+            agentName: {{agent_name}}
             sourceClient: {{source_client}}
             sessionId: {{session_id}}
+            sessionKey: {{session_key}}
+            turnId: {{turn_id}}
             timelineId: {{timeline_id}}
             outcome: {{outcome}}
             files: {{files}}
@@ -110,8 +126,16 @@ public final class AgentItemPrompts {
                 .userPrompt(USER_PROMPT)
                 .variable("categories", String.join(", ", categories))
                 .variable("episode_id", string(metadata.get("episodeId")))
+                .variable("profile", string(metadata.get("profile")))
+                .variable("runtime", string(metadata.get("runtime")))
+                .variable("channel_id", string(metadata.get("channelId")))
+                .variable("conversation_id", string(metadata.get("conversationId")))
+                .variable("workspace_dir", string(metadata.get("workspaceDir")))
+                .variable("agent_name", string(metadata.get("agentName")))
                 .variable("source_client", string(metadata.get("sourceClient")))
                 .variable("session_id", string(metadata.get("sessionId")))
+                .variable("session_key", string(metadata.get("sessionKey")))
+                .variable("turn_id", string(metadata.get("turnId")))
                 .variable("timeline_id", string(metadata.get("timelineId")))
                 .variable("outcome", string(metadata.get("outcome")))
                 .variable("files", formatList(metadata.get("files")))

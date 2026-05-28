@@ -32,6 +32,13 @@ export type SlotConfigLike = {
   slots?: Record<string, string>
   memoryPluginId?: string
 }
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue }
 
 export type MemindOpenClawConfig = {
   memindApiUrl: string
@@ -42,6 +49,7 @@ export type MemindOpenClawConfig = {
   sourceClient: string
   autoRetrieve: boolean
   autoIngest: boolean
+  autoIngestAgentTimeline: boolean
   retrieveStrategy: 'SIMPLE'
   retrieveMaxEntries: number
   retrieveMaxChars: number
@@ -54,6 +62,9 @@ export type MemindOpenClawConfig = {
   stateMaxAgeDays: number
   ingestRetryMaxFiles: number
   ingestRetryMaxAgeDays: number
+  timelineMaxEvents: number
+  timelineMaxFieldChars: number
+  timelineFlushMinEvents: number
   captureToolCalls: boolean
   captureMedia: boolean
   skipNonInteractiveTriggers: boolean
@@ -75,6 +86,46 @@ export type OpenClawMessage = {
 
 export type NormalizedMessage = MessageValue & {
   fingerprint: string
+}
+
+export type AgentTimelineEvent = {
+  eventId?: string
+  seq?: number
+  kind?: string
+  occurredAt?: string
+  text?: string
+  toolName?: string
+  input?: string
+  output?: string
+  status?: string
+  durationMs?: number
+  contentHash?: string
+  path?: string
+  operation?: string
+  command?: string
+  exitCode?: number
+  metadata?: Record<string, JsonValue>
+}
+
+export type AgentTimelineContent = {
+  type: 'agent_timeline'
+  sourceClient?: string
+  sourceVersion?: string
+  sessionId: string
+  agentTurnId: string
+  timelineId: string
+  events: AgentTimelineEvent[]
+  project?: Record<string, JsonValue>
+  metadata?: Record<string, JsonValue>
+}
+
+export type OpenClawTimelineContext = {
+  sessionKey: string
+  workspaceDir?: string
+  channelId?: string
+  conversationId?: string
+  agentName?: string
+  turnId?: string
 }
 
 export type Identity = {

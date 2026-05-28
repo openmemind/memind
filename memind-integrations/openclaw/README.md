@@ -2,19 +2,20 @@
 
 Memind memory backend for OpenClaw.
 
-The plugin retrieves relevant Memind memories before each prompt and submits successful
-user/assistant OpenClaw conversation text to Memind extraction after each agent turn. It connects
-to an already-running Memind server and does not start the server.
+The plugin retrieves relevant Memind memories before each prompt and submits completed OpenClaw
+agent activity as Memind `agent_timeline` raw data after each agent turn. It connects to an
+already-running Memind server and does not start the server.
 
-Use this plugin when you want OpenClaw to remember project facts, preferences, implementation
-decisions, and previous discussions across sessions.
+Use this plugin when you want OpenClaw to remember user preferences, durable facts, decisions,
+commitments, external observations, task outcomes, and previous discussions across sessions.
 
 The integration is intentionally small:
 
 - Uses the official `@openmemind/memind` TypeScript client.
 - Activates only when selected as OpenClaw's memory slot.
 - Does not manage a local Memind daemon.
-- Does not ingest tool calls or media in v0.1.
+- Captures general-agent lifecycle events; it does not enable coding-specific file context.
+- Does not ingest media in v0.1.
 
 ## Requirements
 
@@ -66,8 +67,8 @@ Restart the OpenClaw gateway or session after changing plugin configuration.
 
 - **Retrieval**: `before_prompt_build` calls `MemindClient.memory.retrieve(...)` and injects
   relevant memories into OpenClaw as `<memind_memories>...</memind_memories>`.
-- **Ingestion**: `agent_end` filters successful user/assistant messages and submits a caller-owned
-  conversation payload through `MemindClient.memory.extract(...)`.
+- **Ingestion**: lifecycle hooks append durable events to a local timeline buffer. `agent_end` and
+  `session_end` flush the completed buffer as `rawContent.type = "agent_timeline"`.
 - **Retry**: failed extraction payloads are spooled under OpenClaw's plugin state directory and
   replayed on later `agent_end` hooks.
 - **Source tagging**: all requests use `sourceClient = "openclaw"` by default, so Memind can
@@ -91,7 +92,8 @@ The default configuration works with a local Memind server at `http://127.0.0.1:
 | `agentIdMode`                 | `project`               | `project`, `fixed`, or `session`.                                                       |
 | `sourceClient`                | `openclaw`              | Source marker stored with Memind data.                                                  |
 | `autoRetrieve`                | `true`                  | Enables prompt-time memory retrieval.                                                   |
-| `autoIngest`                  | `true`                  | Enables post-turn conversation extraction.                                              |
+| `autoIngest`                  | `true`                  | Master switch for automatic ingestion.                                                  |
+| `autoIngestAgentTimeline`     | `true`                  | Enables lifecycle capture as `agent_timeline` raw data.                                 |
 | `retrieveStrategy`            | `SIMPLE`                | Memind retrieval strategy.                                                              |
 | `retrieveMaxEntries`          | `8`                     | Maximum formatted memory entries injected into OpenClaw.                                |
 | `retrieveMaxChars`            | `6000`                  | Maximum injected memory body characters, excluding the fixed XML envelope and preamble. |
@@ -104,6 +106,9 @@ The default configuration works with a local Memind server at `http://127.0.0.1:
 | `stateMaxAgeDays`             | `14`                    | Retention window for submitted-message fingerprints.                                    |
 | `ingestRetryMaxFiles`         | `20`                    | Maximum retry payload files to keep.                                                    |
 | `ingestRetryMaxAgeDays`       | `7`                     | Retention window for retry payloads.                                                    |
+| `timelineMaxEvents`           | `500`                   | Soft cap for buffered agent timeline events per session.                                |
+| `timelineMaxFieldChars`       | `8000`                  | Maximum characters kept from a single timeline event field.                             |
+| `timelineFlushMinEvents`      | `2`                     | Minimum buffered events before automatic timeline submission.                           |
 | `captureToolCalls`            | `false`                 | Reserved for a future release; v0.1 rejects `true`.                                     |
 | `captureMedia`                | `false`                 | Reserved for a future release; v0.1 rejects `true`.                                     |
 | `skipNonInteractiveTriggers`  | `true`                  | Skips cron, heartbeat, automation, and schedule sessions.                               |
@@ -138,8 +143,13 @@ By default, Memind stores OpenClaw memory under:
 - `userId`: `local__<system-user>`
 - `agentId`: `openclaw__<project-name>-<stable-hash>`
 
-The project hash is based on the OpenClaw workspace directory. This keeps different repositories
+The project hash is based on the OpenClaw workspace directory. This keeps different workspaces
 separated while allowing memory to survive across OpenClaw sessions in the same project.
+
+For general-agent usage where the same assistant should remember across workspaces, channels, or
+sessions, set `agentIdMode = fixed` and choose a stable `agentId`. Runtime context such as
+`channelId`, `conversationId`, `workspaceDir`, and `sessionKey` is stored in
+`agent_timeline.metadata`; it does not change the Memind memory identity.
 
 To use one shared OpenClaw memory across all projects:
 
@@ -183,25 +193,28 @@ preferred; `LEAF` insights are omitted by default unless no higher-level insight
 `retrieveContextTurns` defaults to `1`, so retrieval can use the current prompt plus the most recent
 conversation turn. Set it to `0` if you want retrieval queries to use only the current prompt.
 
-## Ingestion Behavior
+## Agent Timeline Ingestion
 
-Ingestion runs after successful OpenClaw agent turns when `autoIngest = true`.
+Ingestion runs after successful OpenClaw agent turns when `autoIngest = true` and
+`autoIngestAgentTimeline = true`.
 
-The capture hook:
+The lifecycle capture path:
 
-1. Reads messages from the OpenClaw hook payload.
-2. Extracts text from user and assistant messages.
-3. Strips previously injected `<memind_memories>` blocks to avoid feedback loops.
-4. Skips tool calls, media, unsupported roles, non-interactive triggers, and subagent sessions by
-   default.
-5. Keeps the final user turn and following assistant messages.
-6. Computes stable fingerprints and sends only messages that have not already been submitted.
-7. Builds one caller-owned conversation raw-content payload and submits it through
-   `MemindClient.memory.extract(...)`.
+1. `before_agent_start` appends a `user_prompt` event.
+2. `tool_result_persist` appends `tool_result` or `tool_failure` events.
+3. `after_compaction` appends a `compact_boundary` event.
+4. `agent_end` appends the final assistant message when available, appends `stop`, then flushes.
+5. `session_end` appends `session_end`, then flushes remaining events.
+6. Previously injected `<memind_memories>` blocks are stripped to avoid feedback loops.
+7. Non-interactive triggers and subagent sessions are skipped by default.
 
-The local retry spool stores the full extraction payload plus the covered message fingerprints.
-Fingerprints are marked submitted only after Memind returns `SUCCESS`; `PARTIAL_SUCCESS` and
-failures keep the payload available for later replay.
+The submitted payload uses `metadata.profile = "general"` and `metadata.runtime = "openclaw"`.
+Unlike Claude Code/Codex integrations, OpenClaw does not inject file-centric PreToolUse context or
+project-specific coding retrieval blocks.
+
+The local retry spool stores the full `agent_timeline` extraction payload plus the covered event
+ids. Buffered events are cleared only after Memind returns `SUCCESS`; failures keep the payload
+available for later replay.
 
 ## Troubleshooting
 

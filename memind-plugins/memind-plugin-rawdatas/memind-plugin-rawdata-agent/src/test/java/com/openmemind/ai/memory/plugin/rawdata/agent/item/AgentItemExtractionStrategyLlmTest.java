@@ -217,6 +217,91 @@ class AgentItemExtractionStrategyLlmTest {
     }
 
     @Test
+    void shouldPropagateGeneralAgentMetadataFromLlmItems() {
+        var client =
+                new StubStructuredChatClient(
+                        response(
+                                new MemoryItemExtractionResponse.ExtractedItem(
+                                        "The customer is concerned about renewal onboarding and"
+                                                + " support response time.",
+                                        0.88f,
+                                        null,
+                                        List.of("experiences"),
+                                        Map.of("evidenceEventIds", List.of("prompt-1")),
+                                        "event")));
+        AgentItemExtractionStrategy strategy = strategy(client);
+
+        List<ExtractedMemoryEntry> entries =
+                strategy.extract(
+                                List.of(generalEpisodeWithToolOnly()),
+                                DefaultInsightTypes.all(),
+                                allScopeConfig())
+                        .block();
+
+        assertThat(client.lastMessages())
+                .anySatisfy(
+                        message ->
+                                assertThat(message.content())
+                                        .contains(
+                                                "profile: general",
+                                                "runtime: hermes",
+                                                "channelId: slack:C123",
+                                                "conversationId: thread-456",
+                                                "sessionKey: hermes-s1",
+                                                "turnId: turn-7"));
+        assertThat(entries)
+                .filteredOn(entry -> "event".equals(entry.category()))
+                .singleElement()
+                .satisfies(
+                        entry ->
+                                assertThat(entry.metadata())
+                                        .containsEntry("profile", "general")
+                                        .containsEntry("runtime", "hermes")
+                                        .containsEntry("channelId", "slack:C123")
+                                        .containsEntry("conversationId", "thread-456")
+                                        .containsEntry("sessionKey", "hermes-s1")
+                                        .containsEntry("turnId", "turn-7"));
+    }
+
+    @Test
+    void shouldNotCreateDeterministicToolMemoryForGeneralAgentToolOnlyEpisode() {
+        AgentItemExtractionStrategy strategy = strategy(null);
+
+        List<ExtractedMemoryEntry> entries =
+                strategy.extract(
+                                List.of(generalEpisodeWithToolOnly()),
+                                DefaultInsightTypes.all(),
+                                allScopeConfig())
+                        .block();
+
+        assertThat(entries).noneMatch(entry -> "tool".equals(entry.category()));
+    }
+
+    @Test
+    void shouldKeepDeterministicToolMemoryForCodingAgentCommandEpisode() {
+        AgentItemExtractionStrategy strategy = strategy(null);
+
+        List<ExtractedMemoryEntry> entries =
+                strategy.extract(
+                                List.of(codingEpisodeWithCommand()),
+                                DefaultInsightTypes.all(),
+                                allScopeConfig())
+                        .block();
+
+        assertThat(entries)
+                .filteredOn(entry -> "tool".equals(entry.category()))
+                .singleElement()
+                .satisfies(
+                        entry ->
+                                assertThat(entry.metadata())
+                                        .containsEntry("profile", "coding")
+                                        .containsEntry("runtime", "codex")
+                                        .containsEntry("channelId", "terminal")
+                                        .containsEntry("sessionKey", "session-123")
+                                        .containsEntry("turnId", "turn-1"));
+    }
+
+    @Test
     void shouldAcceptSubagentBackedPlaybookWhenEvidenceBelongsToEpisode() {
         var client =
                 new StubStructuredChatClient(
@@ -359,6 +444,53 @@ class AgentItemExtractionStrategyLlmTest {
                                                 "rounding mismatch"),
                                         commandEvent(
                                                 "e4", 4, "npm test payment", "success", "passed"))),
+                        Map.entry(
+                                "fileEvents", List.of(fileEvent("e3", 3, "src/payment/calc.ts")))));
+    }
+
+    private static ParsedSegment generalEpisodeWithToolOnly() {
+        return segment(
+                Map.ofEntries(
+                        Map.entry("segmentType", "agent_episode"),
+                        Map.entry("episodeId", "episode-general"),
+                        Map.entry("profile", "general"),
+                        Map.entry("runtime", "hermes"),
+                        Map.entry("channelId", "slack:C123"),
+                        Map.entry("conversationId", "thread-456"),
+                        Map.entry("workspaceDir", "/tmp/acme"),
+                        Map.entry("agentName", "sales-assistant"),
+                        Map.entry("sessionKey", "hermes-s1"),
+                        Map.entry("turnId", "turn-7"),
+                        Map.entry("sourceClient", "hermes"),
+                        Map.entry("sessionId", "s1"),
+                        Map.entry("timelineId", "tl-1"),
+                        Map.entry("outcome", "success"),
+                        Map.entry("toolNames", List.of("gmail.search")),
+                        Map.entry("eventIds", List.of("prompt-1", "tool-1", "stop-1")),
+                        Map.entry("eventKinds", List.of("user_prompt", "tool_result", "stop"))));
+    }
+
+    private static ParsedSegment codingEpisodeWithCommand() {
+        return segment(
+                Map.ofEntries(
+                        Map.entry("segmentType", "agent_episode"),
+                        Map.entry("episodeId", "episode-coding"),
+                        Map.entry("profile", "coding"),
+                        Map.entry("runtime", "codex"),
+                        Map.entry("channelId", "terminal"),
+                        Map.entry("sessionKey", "session-123"),
+                        Map.entry("turnId", "turn-1"),
+                        Map.entry("sourceClient", "codex"),
+                        Map.entry("sessionId", "session-123"),
+                        Map.entry("timelineId", "timeline-123"),
+                        Map.entry("outcome", "success"),
+                        Map.entry("files", List.of("src/payment/calc.ts")),
+                        Map.entry("commands", List.of("mvn test")),
+                        Map.entry("toolNames", List.of("Bash")),
+                        Map.entry("eventIds", List.of("e1", "e2", "e3")),
+                        Map.entry(
+                                "commandEvents",
+                                List.of(commandEvent("e2", 2, "mvn test", "success", "passed"))),
                         Map.entry(
                                 "fileEvents", List.of(fileEvent("e3", 3, "src/payment/calc.ts")))));
     }

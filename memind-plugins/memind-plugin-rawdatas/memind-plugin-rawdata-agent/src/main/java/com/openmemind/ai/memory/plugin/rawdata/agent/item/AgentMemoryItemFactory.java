@@ -45,6 +45,9 @@ public final class AgentMemoryItemFactory {
         if (episode.commands().isEmpty() && episode.toolNames().isEmpty()) {
             return java.util.Optional.empty();
         }
+        if (episode.generalProfile() && !episode.hasCommandOrValidationEvidence()) {
+            return java.util.Optional.empty();
+        }
 
         String command = episode.commands().isEmpty() ? null : episode.commands().getFirst();
         String toolName = episode.toolNames().isEmpty() ? null : episode.toolNames().getFirst();
@@ -138,6 +141,7 @@ public final class AgentMemoryItemFactory {
     private Map<String, Object> baseMetadata(EpisodeMetadata episode) {
         var metadata = new LinkedHashMap<String, Object>();
         copy(episode.raw(), metadata, "episodeId");
+        copyGenericAgentMetadata(episode.raw(), metadata);
         copy(episode.raw(), metadata, "sessionId");
         copy(episode.raw(), metadata, "timelineId");
         copy(episode.raw(), metadata, "sourceClient");
@@ -154,6 +158,18 @@ public final class AgentMemoryItemFactory {
         metadata.put("toolNames", episode.toolNames());
         metadata.put("failureSignals", episode.failureSignals());
         return metadata;
+    }
+
+    private static void copyGenericAgentMetadata(
+            Map<String, Object> source, Map<String, Object> target) {
+        copy(source, target, "profile");
+        copy(source, target, "runtime");
+        copy(source, target, "channelId");
+        copy(source, target, "conversationId");
+        copy(source, target, "workspaceDir");
+        copy(source, target, "agentName");
+        copy(source, target, "sessionKey");
+        copy(source, target, "turnId");
     }
 
     private ExtractedGraphHints graphHints(
@@ -238,6 +254,10 @@ public final class AgentMemoryItemFactory {
             return string(raw.get("outcome"));
         }
 
+        boolean generalProfile() {
+            return "general".equalsIgnoreCase(string(raw.get("profile")));
+        }
+
         List<String> files() {
             return stringList(raw.get("files"));
         }
@@ -267,6 +287,12 @@ public final class AgentMemoryItemFactory {
                     .filter(Map.class::isInstance)
                     .map(entry -> CommandEvent.from((Map<?, ?>) entry))
                     .toList();
+        }
+
+        boolean hasCommandOrValidationEvidence() {
+            return !commands().isEmpty()
+                    || !commandEvents().isEmpty()
+                    || !failureSignals().isEmpty();
         }
 
         List<FileEvent> fileEvents() {

@@ -15,13 +15,24 @@
 import json
 import os
 import threading
+from pathlib import Path
 from urllib.parse import urlparse
 
-from memind_hermes.client import MemindClient, build_conversation_content
+from memind_hermes.agent_timeline import (
+    assistant_message_event,
+    build_timeline_content,
+    compact_boundary_event,
+    memory_write_event,
+    session_end_event,
+    stop_event,
+    user_prompt_event,
+)
+from memind_hermes.client import MemindClient, build_agent_timeline_content, build_conversation_content
 from memind_hermes.config import config_schema, load_config, save_config as save_provider_config
 from memind_hermes.content import text_or_empty
 from memind_hermes.format import format_memind_context
 from memind_hermes.identity import resolve_identity
+from memind_hermes.state import AgentTimelineState
 
 try:
     from agent.memory_provider import MemoryProvider
@@ -51,6 +62,7 @@ class MemindMemoryProvider(MemoryProvider):
         self._prefetch_thread = None
         self._prefetch_result = ""
         self._sync_thread = None
+        self._timeline_state = None
 
     @property
     def name(self):
@@ -88,6 +100,12 @@ class MemindMemoryProvider(MemoryProvider):
         self._cwd = kwargs.get("cwd") or os.getcwd()
         self._identity = resolve_identity(self._config, cwd=self._cwd, session_id=session_id)
         self._client = self._client_factory(self._config)
+        state_root = Path(
+            kwargs.get("state_dir")
+            or self._config.get("stateDir")
+            or Path.home() / ".memind" / "hermes" / "agent-events"
+        )
+        self._timeline_state = AgentTimelineState(state_root, max_events=int(self._config.get("timelineMaxEvents", 500)))
 
     def get_config_schema(self):
         return config_schema()
@@ -149,16 +167,79 @@ class MemindMemoryProvider(MemoryProvider):
             self._identity["sourceClient"],
         )
 
+    def _timeline_metadata(self, **extra):
+        metadata = {
+            "workspaceDir": self._cwd,
+            "agentName": "hermes",
+            **extra,
+        }
+        return {key: value for key, value in metadata.items() if value is not None}
+
+    def _append_timeline_event(self, event):
+        if event and self._timeline_state:
+            self._timeline_state.append(self._session_id, event)
+
+    def _next_timeline_seq(self):
+        return self._timeline_state.next_seq(self._session_id) if self._timeline_state else 1
+
+    def _flush_timeline(self, force=False):
+        if not self._timeline_state:
+            return
+        events = self._timeline_state.list(self._session_id)
+        if not force and len(events) < int(self._config.get("timelineFlushMinEvents", 2)):
+            return
+        timeline = build_timeline_content(
+            source_client=self._identity["sourceClient"],
+            session_id=self._session_id,
+            agent_turn_id=f"{self._session_id}-turn-{events[0].get('seq', 1)}",
+            timeline_id=f"hermes-{self._session_id}-{events[0].get('seq', 1)}-{events[-1].get('seq', 1)}",
+            events=events,
+            metadata=self._timeline_metadata(),
+        )
+        raw_content = build_agent_timeline_content(timeline)
+        result = self._client.extract(
+            self._identity["userId"],
+            self._identity["agentId"],
+            raw_content,
+            self._identity["sourceClient"],
+        )
+        status = getattr(result, "status", None)
+        if status == "SUCCESS" or status is None:
+            self._timeline_state.clear(self._session_id, [event.get("eventId") for event in events])
+
     def sync_turn(self, user=None, assistant=None, **kwargs):
         self._ensure_initialized()
         if not self._config.get("autoIngest", True):
+            return
+        if not self._config.get("autoIngestAgentTimeline", True):
+            self._sync_thread = threading.Thread(target=lambda: None, daemon=True)
+            self._sync_thread.start()
             return
         user_text = kwargs.get("user_content", user)
         assistant_text = kwargs.get("assistant_content", assistant)
 
         def run():
             try:
-                self._extract_pairs([("USER", user_text), ("ASSISTANT", assistant_text)])
+                self._append_timeline_event(
+                    user_prompt_event(
+                        user_text,
+                        self._next_timeline_seq(),
+                        session_id=self._session_id,
+                        max_field_chars=int(self._config.get("timelineMaxFieldChars", 8000)),
+                        metadata=self._timeline_metadata(),
+                    )
+                )
+                self._append_timeline_event(
+                    assistant_message_event(
+                        assistant_text,
+                        self._next_timeline_seq(),
+                        session_id=self._session_id,
+                        max_field_chars=int(self._config.get("timelineMaxFieldChars", 8000)),
+                        metadata=self._timeline_metadata(),
+                    )
+                )
+                self._append_timeline_event(stop_event(self._next_timeline_seq(), session_id=self._session_id, success=True))
+                self._flush_timeline()
             except Exception as exc:
                 self._debug(f"sync turn failed: {exc}")
 
@@ -166,10 +247,26 @@ class MemindMemoryProvider(MemoryProvider):
         self._sync_thread.start()
 
     def on_session_end(self, messages, **kwargs):
+        self._ensure_initialized()
+        if not self._config.get("autoIngest", True) or not self._config.get("autoIngestAgentTimeline", True):
+            return None
+        try:
+            self._append_timeline_event(
+                session_end_event(
+                    self._next_timeline_seq(),
+                    session_id=self._session_id,
+                    metadata=self._timeline_metadata(),
+                )
+            )
+            self._flush_timeline(force=True)
+        except Exception as exc:
+            self._debug(f"session end failed: {exc}")
         return None
 
     def on_pre_compress(self, messages, **kwargs):
         self._ensure_initialized()
+        if self._config.get("autoIngest", True) and self._config.get("autoIngestAgentTimeline", True):
+            self._append_timeline_event(compact_boundary_event(messages, self._next_timeline_seq(), session_id=self._session_id))
         if not self._auto_retrieve_enabled():
             return
         try:
@@ -201,7 +298,20 @@ class MemindMemoryProvider(MemoryProvider):
 
         def run():
             try:
-                self._extract_pairs([("USER", content)])
+                if not self._config.get("autoIngest", True) or not self._config.get("autoIngestAgentTimeline", True):
+                    return
+                self._append_timeline_event(
+                    memory_write_event(
+                        action,
+                        target,
+                        content,
+                        self._next_timeline_seq(),
+                        session_id=self._session_id,
+                        max_field_chars=int(self._config.get("timelineMaxFieldChars", 8000)),
+                    )
+                )
+                self._append_timeline_event(stop_event(self._next_timeline_seq(), session_id=self._session_id, success=True))
+                self._flush_timeline()
             except Exception as exc:
                 self._debug(f"memory write failed: {exc}")
 

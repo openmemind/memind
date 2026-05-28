@@ -30,6 +30,7 @@ export const DEFAULT_CONFIG: MemindOpenClawConfig = {
   sourceClient: 'openclaw',
   autoRetrieve: true,
   autoIngest: true,
+  autoIngestAgentTimeline: true,
   retrieveStrategy: 'SIMPLE',
   retrieveMaxEntries: 8,
   retrieveMaxChars: 6000,
@@ -42,6 +43,9 @@ export const DEFAULT_CONFIG: MemindOpenClawConfig = {
   stateMaxAgeDays: 14,
   ingestRetryMaxFiles: 20,
   ingestRetryMaxAgeDays: 7,
+  timelineMaxEvents: 500,
+  timelineMaxFieldChars: 8000,
+  timelineFlushMinEvents: 2,
   captureToolCalls: false,
   captureMedia: false,
   skipNonInteractiveTriggers: true,
@@ -79,6 +83,11 @@ export function parseConfig(value: unknown): MemindOpenClawConfig {
   cfg.sourceClient = stringValue(raw.sourceClient, cfg.sourceClient, 'sourceClient')
   cfg.autoRetrieve = booleanValue(raw.autoRetrieve, cfg.autoRetrieve, 'autoRetrieve')
   cfg.autoIngest = booleanValue(raw.autoIngest, cfg.autoIngest, 'autoIngest')
+  cfg.autoIngestAgentTimeline = booleanValue(
+    raw.autoIngestAgentTimeline,
+    cfg.autoIngestAgentTimeline,
+    'autoIngestAgentTimeline',
+  )
   cfg.retrieveStrategy = enumValue(
     raw.retrieveStrategy,
     cfg.retrieveStrategy,
@@ -132,6 +141,21 @@ export function parseConfig(value: unknown): MemindOpenClawConfig {
     raw.ingestRetryMaxAgeDays,
     cfg.ingestRetryMaxAgeDays,
     'ingestRetryMaxAgeDays',
+  )
+  cfg.timelineMaxEvents = positiveInteger(
+    raw.timelineMaxEvents,
+    cfg.timelineMaxEvents,
+    'timelineMaxEvents',
+  )
+  cfg.timelineMaxFieldChars = positiveInteger(
+    raw.timelineMaxFieldChars,
+    cfg.timelineMaxFieldChars,
+    'timelineMaxFieldChars',
+  )
+  cfg.timelineFlushMinEvents = positiveInteger(
+    raw.timelineFlushMinEvents,
+    cfg.timelineFlushMinEvents,
+    'timelineFlushMinEvents',
   )
   cfg.captureToolCalls = reservedFalseBoolean(raw.captureToolCalls, 'captureToolCalls')
   cfg.captureMedia = reservedFalseBoolean(raw.captureMedia, 'captureMedia')

@@ -49,6 +49,10 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(DEFAULT_SETTINGS["sourceClient"], "hermes")
         self.assertEqual(DEFAULT_SETTINGS["memoryMode"], "hybrid")
         self.assertEqual(DEFAULT_SETTINGS["retrieveStrategy"], "SIMPLE")
+        self.assertTrue(DEFAULT_SETTINGS["autoIngestAgentTimeline"])
+        self.assertEqual(DEFAULT_SETTINGS["timelineMaxEvents"], 500)
+        self.assertEqual(DEFAULT_SETTINGS["timelineMaxFieldChars"], 8000)
+        self.assertEqual(DEFAULT_SETTINGS["timelineFlushMinEvents"], 2)
 
     def test_load_order_settings_user_env(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -60,7 +64,9 @@ class ConfigTest(unittest.TestCase):
                 "MEMIND_RETRIEVE_MAX_ENTRIES": "7",
                 "MEMIND_MEMORY_MODE": "tools",
                 "MEMIND_AUTO_RETRIEVE": "false",
+                "MEMIND_AUTO_INGEST_AGENT_TIMELINE": "false",
                 "MEMIND_INGESTION_ROLES": "user,assistant",
+                "MEMIND_TIMELINE_MAX_EVENTS": "20",
             }
 
             cfg = load_config(plugin_root=root, user_config_path=user_config, env=env)
@@ -68,7 +74,9 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(cfg["retrieveMaxEntries"], 7)
         self.assertEqual(cfg["memoryMode"], "tools")
         self.assertFalse(cfg["autoRetrieve"])
+        self.assertFalse(cfg["autoIngestAgentTimeline"])
         self.assertEqual(cfg["ingestionRoles"], ["user", "assistant"])
+        self.assertEqual(cfg["timelineMaxEvents"], 20)
 
     def test_invalid_strategy_falls_back_to_simple(self):
         cfg = load_config(env={"MEMIND_RETRIEVE_STRATEGY": "bad"})

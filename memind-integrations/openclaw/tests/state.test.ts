@@ -18,7 +18,7 @@ import path from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { SubmittedStateStore } from '../src/state.js'
+import { AgentTimelineStateStore, SubmittedStateStore } from '../src/state.js'
 
 let dir: string
 
@@ -43,5 +43,58 @@ describe('SubmittedStateStore', () => {
     const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000)
     await utimes(path.join(dir, 'session_1.json'), twoDaysAgo, twoDaysAgo)
     await expect(store.filterUnsubmitted('session:1', ['a'])).resolves.toEqual(['a'])
+  })
+})
+
+describe('AgentTimelineStateStore', () => {
+  it('appends events in order and ignores duplicate event ids', async () => {
+    const store = new AgentTimelineStateStore(dir, { maxAgeDays: 14, maxEvents: 500 })
+    await store.appendAgentEvent('session:1', {
+      eventId: 'event-2',
+      seq: 2,
+      kind: 'assistant_message',
+    })
+    await store.appendAgentEvent('session:1', {
+      eventId: 'event-1',
+      seq: 1,
+      kind: 'user_prompt',
+    })
+    await store.appendAgentEvent('session:1', {
+      eventId: 'event-1',
+      seq: 1,
+      kind: 'user_prompt',
+      text: 'duplicate',
+    })
+
+    await expect(store.listAgentEvents('session:1')).resolves.toMatchObject([
+      { eventId: 'event-1', seq: 1, kind: 'user_prompt' },
+      { eventId: 'event-2', seq: 2, kind: 'assistant_message' },
+    ])
+  })
+
+  it('keeps only latest events when soft cap is reached', async () => {
+    const store = new AgentTimelineStateStore(dir, { maxAgeDays: 14, maxEvents: 2 })
+    await store.appendAgentEvent('session:1', { eventId: 'event-1', seq: 1, kind: 'user_prompt' })
+    await store.appendAgentEvent('session:1', { eventId: 'event-2', seq: 2, kind: 'tool_result' })
+    await store.appendAgentEvent('session:1', { eventId: 'event-3', seq: 3, kind: 'stop' })
+
+    await expect(store.listAgentEvents('session:1')).resolves.toMatchObject([
+      { eventId: 'event-2' },
+      { eventId: 'event-3' },
+    ])
+  })
+
+  it('clears selected submitted events and computes next sequence', async () => {
+    const store = new AgentTimelineStateStore(dir, { maxAgeDays: 14, maxEvents: 500 })
+    await store.appendAgentEvent('session:1', { eventId: 'event-1', seq: 1, kind: 'user_prompt' })
+    await store.appendAgentEvent('session:1', { eventId: 'event-3', seq: 3, kind: 'stop' })
+
+    await expect(store.nextAgentEventSeq('session:1')).resolves.toBe(4)
+    await store.clearAgentEvents('session:1', ['event-1'])
+    await expect(store.listAgentEvents('session:1')).resolves.toMatchObject([
+      { eventId: 'event-3' },
+    ])
+    await store.clearAgentEvents('session:1')
+    await expect(store.listAgentEvents('session:1')).resolves.toEqual([])
   })
 })

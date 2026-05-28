@@ -27,12 +27,16 @@ DEFAULT_SETTINGS = {
     "memoryMode": "hybrid",
     "autoRetrieve": True,
     "autoIngest": True,
+    "autoIngestAgentTimeline": True,
     "retrieveStrategy": "SIMPLE",
     "retrieveMaxEntries": 8,
     "retrieveMaxChars": 6000,
     "retrieveContextTurns": 1,
     "retrievePromptPreamble": "Relevant memories from Memind. Use only when directly helpful:",
     "ingestionRoles": ["user", "assistant"],
+    "timelineMaxEvents": 500,
+    "timelineMaxFieldChars": 8000,
+    "timelineFlushMinEvents": 2,
     "debug": False,
 }
 
@@ -46,11 +50,15 @@ ENV_MAP = {
     "MEMIND_MEMORY_MODE": ("memoryMode", str),
     "MEMIND_AUTO_RETRIEVE": ("autoRetrieve", "bool"),
     "MEMIND_AUTO_INGEST": ("autoIngest", "bool"),
+    "MEMIND_AUTO_INGEST_AGENT_TIMELINE": ("autoIngestAgentTimeline", "bool"),
     "MEMIND_RETRIEVE_STRATEGY": ("retrieveStrategy", str),
     "MEMIND_RETRIEVE_MAX_ENTRIES": ("retrieveMaxEntries", "int"),
     "MEMIND_RETRIEVE_MAX_CHARS": ("retrieveMaxChars", "int"),
     "MEMIND_RETRIEVE_CONTEXT_TURNS": ("retrieveContextTurns", "int_allow_zero"),
     "MEMIND_INGESTION_ROLES": ("ingestionRoles", "list"),
+    "MEMIND_TIMELINE_MAX_EVENTS": ("timelineMaxEvents", "int"),
+    "MEMIND_TIMELINE_MAX_FIELD_CHARS": ("timelineMaxFieldChars", "int"),
+    "MEMIND_TIMELINE_FLUSH_MIN_EVENTS": ("timelineFlushMinEvents", "int"),
     "MEMIND_DEBUG": ("debug", "bool"),
 }
 

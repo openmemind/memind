@@ -42,6 +42,12 @@ class IdentityTest(unittest.TestCase):
         self.assertEqual(identity["userId"], "u")
         self.assertEqual(identity["agentId"], "shared")
 
+    def test_fixed_agent_id_mode_shares_identity_across_workspaces(self):
+        config = {"agentId": "hermes", "agentIdMode": "fixed", "userId": "u", "sourceClient": "hermes"}
+
+        self.assertEqual(resolve_identity(config, cwd="/tmp/a", session_id="s1")["agentId"], "hermes")
+        self.assertEqual(resolve_identity(config, cwd="/tmp/b", session_id="s2")["agentId"], "hermes")
+
     def test_session_mode_uses_session_id(self):
         identity = resolve_identity(
             {"agentId": "hermes", "agentIdMode": "session", "userId": "u", "sourceClient": "hermes"},
