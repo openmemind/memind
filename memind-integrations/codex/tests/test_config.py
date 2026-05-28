@@ -17,7 +17,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.lib.config import load_config, parse_bool, parse_list
+from scripts.lib.config import DEFAULT_SETTINGS, load_config, parse_bool, parse_list
 
 
 class ConfigTest(unittest.TestCase):
@@ -30,6 +30,11 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(config["sessionContextRecentSessions"], 3)
         self.assertEqual(config["sessionContextMaxItems"], 6)
         self.assertEqual(config["sessionContextMaxChars"], 6000)
+        self.assertTrue(DEFAULT_SETTINGS["autoToolContext"])
+        self.assertEqual(DEFAULT_SETTINGS["toolContextMaxChars"], 3500)
+        self.assertEqual(DEFAULT_SETTINGS["toolContextEntryMaxChars"], 520)
+        self.assertEqual(DEFAULT_SETTINGS["toolContextMaxItems"], 6)
+        self.assertEqual(DEFAULT_SETTINGS["toolContextMinExactItems"], 2)
         self.assertNotIn("agentIdMode", config)
         self.assertNotIn("commitOnStop", config)
 
@@ -65,6 +70,26 @@ class ConfigTest(unittest.TestCase):
         self.assertTrue(parse_bool("yes"))
         self.assertFalse(parse_bool("0"))
         self.assertEqual(parse_list(" user, assistant ,, "), ["user", "assistant"])
+
+    def test_tool_context_env_overrides(self):
+        config = load_config(
+            plugin_root=Path(__file__).resolve().parents[1],
+            user_config_path=Path("/no/such/file"),
+            env={
+                "CODEX_PLUGIN_ROOT": str(Path(__file__).resolve().parents[1]),
+                "MEMIND_AUTO_TOOL_CONTEXT": "false",
+                "MEMIND_TOOL_CONTEXT_MAX_CHARS": "2500",
+                "MEMIND_TOOL_CONTEXT_ENTRY_MAX_CHARS": "400",
+                "MEMIND_TOOL_CONTEXT_MAX_ITEMS": "4",
+                "MEMIND_TOOL_CONTEXT_MIN_EXACT_ITEMS": "1",
+            },
+        )
+
+        self.assertFalse(config["autoToolContext"])
+        self.assertEqual(config["toolContextMaxChars"], 2500)
+        self.assertEqual(config["toolContextEntryMaxChars"], 400)
+        self.assertEqual(config["toolContextMaxItems"], 4)
+        self.assertEqual(config["toolContextMinExactItems"], 1)
 
 
 if __name__ == "__main__":

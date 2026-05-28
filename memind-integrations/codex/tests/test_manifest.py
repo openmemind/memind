@@ -46,6 +46,7 @@ class ManifestTest(unittest.TestCase):
             self.assertEqual(command_hook["type"], "command")
             self.assertIn("${CODEX_PLUGIN_ROOT}/scripts/", command_hook["command"])
             self.assertNotIn("async", command_hook)
+        self.assertNotIn("async", hooks["PreToolUse"][0]["hooks"][0])
 
     def test_default_settings_match_spec(self):
         settings = json.loads((ROOT / "settings.json").read_text())

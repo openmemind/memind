@@ -21,6 +21,8 @@ from unittest.mock import patch
 
 from scripts.lib.config import DEFAULT_SETTINGS, load_config, parse_bool, parse_int, parse_list
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 class ConfigTest(unittest.TestCase):
     def test_parse_bool(self):
@@ -48,6 +50,11 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(DEFAULT_SETTINGS["sessionContextRecentSessions"], 3)
         self.assertEqual(DEFAULT_SETTINGS["sessionContextMaxItems"], 6)
         self.assertEqual(DEFAULT_SETTINGS["sessionContextMaxChars"], 6000)
+        self.assertTrue(DEFAULT_SETTINGS["autoToolContext"])
+        self.assertEqual(DEFAULT_SETTINGS["toolContextMaxChars"], 3500)
+        self.assertEqual(DEFAULT_SETTINGS["toolContextEntryMaxChars"], 520)
+        self.assertEqual(DEFAULT_SETTINGS["toolContextMaxItems"], 6)
+        self.assertEqual(DEFAULT_SETTINGS["toolContextMinExactItems"], 2)
         self.assertTrue(DEFAULT_SETTINGS["autoIngestAgentTimeline"])
         self.assertNotIn("agentIdMode", DEFAULT_SETTINGS)
         self.assertNotIn("autoIngest", DEFAULT_SETTINGS)
@@ -85,6 +92,26 @@ class ConfigTest(unittest.TestCase):
             self.assertNotIn("agentIdMode", config)
             self.assertNotIn("ingestionRoles", config)
             self.assertEqual(config["stateMaxAgeDays"], 30)
+
+    def test_tool_context_env_overrides(self):
+        config = load_config(
+            plugin_root=ROOT,
+            user_config_path=Path("/no/such/file"),
+            env={
+                "CLAUDE_PLUGIN_ROOT": str(ROOT),
+                "MEMIND_AUTO_TOOL_CONTEXT": "false",
+                "MEMIND_TOOL_CONTEXT_MAX_CHARS": "2500",
+                "MEMIND_TOOL_CONTEXT_ENTRY_MAX_CHARS": "400",
+                "MEMIND_TOOL_CONTEXT_MAX_ITEMS": "4",
+                "MEMIND_TOOL_CONTEXT_MIN_EXACT_ITEMS": "1",
+            },
+        )
+
+        self.assertFalse(config["autoToolContext"])
+        self.assertEqual(config["toolContextMaxChars"], 2500)
+        self.assertEqual(config["toolContextEntryMaxChars"], 400)
+        self.assertEqual(config["toolContextMaxItems"], 4)
+        self.assertEqual(config["toolContextMinExactItems"], 1)
 
 
 if __name__ == "__main__":

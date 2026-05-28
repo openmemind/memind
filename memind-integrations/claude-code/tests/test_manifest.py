@@ -44,8 +44,10 @@ class ManifestTest(unittest.TestCase):
             self.assertNotIn("matcher", event_hooks[0])
             self.assertIn("hooks", event_hooks[0])
         stop_command = hooks["Stop"][0]["hooks"][0]
+        pre_tool_hook = hooks["PreToolUse"][0]["hooks"][0]
         self.assertTrue(stop_command["async"])
-        self.assertTrue(hooks["PreToolUse"][0]["hooks"][0]["async"])
+        self.assertNotIn("async", pre_tool_hook)
+        self.assertLessEqual(pre_tool_hook["timeout"], 5)
         self.assertTrue(hooks["PostToolUse"][0]["hooks"][0]["async"])
         self.assertTrue(hooks["Notification"][0]["hooks"][0]["async"])
         self.assertTrue(hooks["SubagentStop"][0]["hooks"][0]["async"])
