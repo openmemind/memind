@@ -51,6 +51,13 @@ describe('resolveIdentity', () => {
     expect(second.agentId).toBe(first.agentId)
   })
 
+  it('keeps fixed agent id shared across workspaces', () => {
+    const cfg = parseConfig({ userId: 'u1', agentId: 'openclaw', agentIdMode: 'fixed' })
+
+    expect(resolveIdentity(cfg, { cwd: '/tmp/a' }).agentId).toBe('openclaw')
+    expect(resolveIdentity(cfg, { cwd: '/tmp/b' }).agentId).toBe('openclaw')
+  })
+
   it('uses session suffix in session mode', () => {
     const cfg = parseConfig({ userId: 'u1', agentId: 'openclaw', agentIdMode: 'session' })
     const id = resolveIdentity(cfg, { sessionKey: 'agent:main:session:123' })

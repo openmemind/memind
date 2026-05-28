@@ -14,7 +14,7 @@
 
 import unittest
 
-from memind_hermes.client import build_conversation_content
+from memind_hermes.client import build_agent_timeline_content, build_conversation_content
 
 
 class ClientTest(unittest.TestCase):
@@ -29,6 +29,22 @@ class ClientTest(unittest.TestCase):
     def test_build_conversation_content_rejects_empty_messages(self):
         with self.assertRaises(ValueError):
             build_conversation_content([])
+
+    def test_build_agent_timeline_content_uses_map_raw_content(self):
+        content = build_agent_timeline_content(
+            {
+                "sourceClient": "hermes",
+                "sessionId": "s1",
+                "agentTurnId": "turn-1",
+                "timelineId": "timeline-1",
+                "events": [{"eventId": "e1", "seq": 1, "kind": "user_prompt"}],
+                "metadata": {"profile": "general", "runtime": "hermes"},
+            }
+        )
+
+        dumped = content.model_dump(by_alias=True, exclude_none=True)
+        self.assertEqual(dumped["type"], "agent_timeline")
+        self.assertEqual(dumped["events"][0]["kind"], "user_prompt")
 
 
 if __name__ == "__main__":

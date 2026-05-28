@@ -100,6 +100,58 @@ class AgentCaptionGeneratorTest {
     }
 
     @Test
+    void shouldIncludeGeneralAgentProfileMetadataInCaptionPrompt() {
+        CapturingChatClient client =
+                new CapturingChatClient(
+                        new AgentCaptionGenerator.AgentCaptionResponse(
+                                "Summarize the customer's renewal concerns",
+                                "The agent reviewed recent customer messages and identified renewal"
+                                        + " concerns around onboarding and support response time.",
+                                "success",
+                                List.of(
+                                        "Searched email history.",
+                                        "Captured the renewal concerns."),
+                                List.of("Tool: gmail.search"),
+                                ""));
+
+        new AgentCaptionGenerator(client)
+                .generate(
+                        "Goal: Summarize renewal concerns.\nEvents:\n- prompt-1 user_prompt",
+                        Map.of(
+                                "profile",
+                                "general",
+                                "runtime",
+                                "openclaw",
+                                "channelId",
+                                "slack:C123",
+                                "conversationId",
+                                "thread-456",
+                                "workspaceDir",
+                                "/tmp/acme",
+                                "agentName",
+                                "sales-assistant",
+                                "goal",
+                                "Summarize the customer's renewal concerns",
+                                "toolNames",
+                                List.of("gmail.search"),
+                                "eventIds",
+                                List.of("prompt-1", "tool-1", "stop-1")),
+                        "English")
+                .block();
+
+        assertThat(client.userPrompt())
+                .contains(
+                        "profile: general",
+                        "runtime: openclaw",
+                        "channelId: slack:C123",
+                        "conversationId: thread-456",
+                        "workspaceDir: /tmp/acme",
+                        "agentName: sales-assistant",
+                        "Summarize the customer's renewal concerns",
+                        "gmail.search");
+    }
+
+    @Test
     void shouldFallbackToDeterministicCaptionWhenLlmFails() {
         String caption =
                 new AgentCaptionGenerator(new FailingChatClient())

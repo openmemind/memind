@@ -30,7 +30,11 @@ import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 /**
- * Raw content for a coding-agent timeline.
+ * Raw content for an agent runtime timeline.
+ *
+ * <p>The same wire format is used by coding agents such as Claude Code/Codex and general agents
+ * such as OpenClaw/Hermes. Runtime-specific behavior is selected through content metadata such as
+ * {@code profile} and {@code runtime}.
  */
 public final class AgentTimelineContent extends RawContent {
 

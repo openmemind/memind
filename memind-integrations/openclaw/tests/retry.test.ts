@@ -59,6 +59,38 @@ describe('RetrySpool', () => {
     expect(await spool.size()).toBe(0)
   })
 
+  it('accepts agent_timeline retry payloads', async () => {
+    const spool = new RetrySpool(dir, { maxFiles: 20, maxAgeDays: 7 })
+    await spool.enqueue({
+      kind: 'extract',
+      userId: 'u',
+      agentId: 'a',
+      sourceClient: 'openclaw',
+      sessionKey: 's',
+      fingerprints: ['event-1', 'event-2'],
+      rawContent: {
+        type: 'agent_timeline',
+        sourceClient: 'openclaw',
+        sessionId: 's',
+        agentTurnId: 'turn-1',
+        timelineId: 'openclaw-s-turn-1',
+        events: [
+          { eventId: 'event-1', seq: 1, kind: 'user_prompt', text: 'hello' },
+          { eventId: 'event-2', seq: 2, kind: 'stop', status: 'success' },
+        ],
+        metadata: { profile: 'general', runtime: 'openclaw', sessionKey: 's' },
+      },
+    })
+
+    const extract = vi.fn().mockResolvedValue(successfulExtractResponse())
+    await expect(spool.flush({ extract })).resolves.toBe(1)
+    expect(extract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rawContent: expect.objectContaining({ type: 'agent_timeline' }),
+      }),
+    )
+  })
+
   it('keeps failed retries', async () => {
     const spool = new RetrySpool(dir, { maxFiles: 20, maxAgeDays: 7 })
     await spool.enqueue({

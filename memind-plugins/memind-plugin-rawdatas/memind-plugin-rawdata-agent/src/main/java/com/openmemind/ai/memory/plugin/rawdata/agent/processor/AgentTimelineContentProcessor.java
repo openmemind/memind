@@ -28,7 +28,10 @@ import java.util.Set;
 import reactor.core.publisher.Mono;
 
 /**
- * RawData processor for coding-agent timelines.
+ * RawData processor for agent runtime timelines.
+ *
+ * <p>The processor keeps one wire format for coding and general-purpose agents; profile-specific
+ * behavior is handled by prompts, deterministic extraction, and metadata.
  */
 public final class AgentTimelineContentProcessor
         implements RawContentProcessor<AgentTimelineContent> {

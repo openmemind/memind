@@ -267,6 +267,7 @@ public class AgentItemExtractionStrategy implements ItemExtractionStrategy {
             metadata.putAll(item.metadata());
         }
         copy(segment.metadata(), metadata, "episodeId");
+        copyGenericAgentMetadata(segment.metadata(), metadata);
         copy(segment.metadata(), metadata, "sessionId");
         copy(segment.metadata(), metadata, "timelineId");
         copy(segment.metadata(), metadata, "sourceClient");
@@ -281,6 +282,18 @@ public class AgentItemExtractionStrategy implements ItemExtractionStrategy {
         copy(segment.metadata(), metadata, "toolNames");
         copy(segment.metadata(), metadata, "failureSignals");
         return Map.copyOf(metadata);
+    }
+
+    private static void copyGenericAgentMetadata(
+            Map<String, Object> source, Map<String, Object> target) {
+        copy(source, target, "profile");
+        copy(source, target, "runtime");
+        copy(source, target, "channelId");
+        copy(source, target, "conversationId");
+        copy(source, target, "workspaceDir");
+        copy(source, target, "agentName");
+        copy(source, target, "sessionKey");
+        copy(source, target, "turnId");
     }
 
     private static void copy(Map<String, Object> source, Map<String, Object> target, String key) {

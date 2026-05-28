@@ -25,6 +25,10 @@ describe('parseConfig', () => {
     expect(cfg.sourceClient).toBe('openclaw')
     expect(cfg.autoRetrieve).toBe(true)
     expect(cfg.autoIngest).toBe(true)
+    expect(cfg.autoIngestAgentTimeline).toBe(true)
+    expect(cfg.timelineMaxEvents).toBe(500)
+    expect(cfg.timelineMaxFieldChars).toBe(8000)
+    expect(cfg.timelineFlushMinEvents).toBe(2)
     expect(cfg.captureToolCalls).toBe(false)
     expect(cfg.captureMedia).toBe(false)
     expect(cfg.captureSubagents).toBe(false)
@@ -64,6 +68,9 @@ describe('parseConfig', () => {
   it('rejects invalid numeric values', () => {
     expect(() => parseConfig({ retrieveMaxEntries: 0 })).toThrow('retrieveMaxEntries')
     expect(() => parseConfig({ ingestRetryMaxFiles: -1 })).toThrow('ingestRetryMaxFiles')
+    expect(() => parseConfig({ timelineMaxEvents: 0 })).toThrow('timelineMaxEvents')
+    expect(() => parseConfig({ timelineMaxFieldChars: 0 })).toThrow('timelineMaxFieldChars')
+    expect(() => parseConfig({ timelineFlushMinEvents: 0 })).toThrow('timelineFlushMinEvents')
   })
 
   it('rejects unsupported retrieve strategies and reserved capture switches', () => {

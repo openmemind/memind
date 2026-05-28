@@ -12,7 +12,22 @@
 // limitations under the License.
 //
 
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const memoryMocks = vi.hoisted(() => ({
+  extract: vi.fn().mockResolvedValue({
+    status: 'SUCCESS',
+    rawDataIds: [],
+    itemIds: [],
+    insightIds: [],
+    insightPending: false,
+  }),
+  retrieve: vi.fn().mockResolvedValue({ items: [], rawData: [], insights: [] }),
+}))
+
+vi.mock('@openmemind/memind', () => ({
+  MemindClient: vi.fn(() => ({ memory: memoryMocks })),
+}))
 
 import plugin from '../src/index.js'
 
@@ -40,6 +55,11 @@ function api(slots: Record<string, string> | undefined = { memory: 'memind-openc
 }
 
 describe('plugin entry', () => {
+  beforeEach(() => {
+    memoryMocks.extract.mockClear()
+    memoryMocks.retrieve.mockClear()
+  })
+
   it('registers service and hooks when selected as memory slot', () => {
     const fixture = api()
     plugin.register(fixture.api as TestApi)
@@ -47,7 +67,13 @@ describe('plugin entry', () => {
       expect.objectContaining({ id: 'memind-openclaw' }),
     )
     expect(fixture.api.on).toHaveBeenCalledWith('before_prompt_build', expect.any(Function))
+    expect(fixture.api.on).toHaveBeenCalledWith('session_start', expect.any(Function))
+    expect(fixture.api.on).toHaveBeenCalledWith('before_agent_start', expect.any(Function))
+    expect(fixture.api.on).toHaveBeenCalledWith('tool_result_persist', expect.any(Function))
+    expect(fixture.api.on).toHaveBeenCalledWith('after_compaction', expect.any(Function))
     expect(fixture.api.on).toHaveBeenCalledWith('agent_end', expect.any(Function))
+    expect(fixture.api.on).toHaveBeenCalledWith('session_end', expect.any(Function))
+    expect(fixture.api.on).toHaveBeenCalledWith('message_received', expect.any(Function))
   })
 
   it('warns and skips hooks when not selected as memory slot', () => {
@@ -107,5 +133,61 @@ describe('plugin entry', () => {
       expect.stringContaining('/tmp/openclaw-plugin-state'),
     )
     expect(fixture.api.logger.debug).toHaveBeenCalledWith(expect.stringContaining('/repo/from-ctx'))
+  })
+
+  it('appends lifecycle events and flushes one agent timeline on agent_end', async () => {
+    const fixture = api()
+    fixture.api.pluginConfig = { ingestRetrySpool: false }
+    plugin.register(fixture.api as TestApi)
+    const service = (fixture.api.registerService.mock.calls as Array<[RegisteredService]>)[0]?.[0]
+    service?.start({ stateDir: '/tmp/openclaw-plugin-state' })
+
+    await fixture.handlers.before_agent_start?.(
+      { prompt: 'Summarize renewal concerns' },
+      { sessionKey: 'agent:main:main', workspaceDir: '/repo/from-ctx' },
+    )
+    await fixture.handlers.tool_result_persist?.(
+      { toolName: 'gmail.search', output: { count: 2 }, success: true },
+      { sessionKey: 'agent:main:main', workspaceDir: '/repo/from-ctx' },
+    )
+    await fixture.handlers.agent_end?.(
+      { success: true, messages: [{ role: 'assistant', content: 'Found two concerns.' }] },
+      { sessionKey: 'agent:main:main', workspaceDir: '/repo/from-ctx' },
+    )
+
+    expect(fixture.api.logger.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('capture failed'),
+    )
+    expect(memoryMocks.extract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rawContent: expect.objectContaining({
+          type: 'agent_timeline',
+          metadata: expect.objectContaining({
+            profile: 'general',
+            runtime: 'openclaw',
+            turnId: 'agent:main:main-turn-1',
+          }),
+          events: expect.arrayContaining([
+            expect.objectContaining({
+              kind: 'user_prompt',
+              metadata: expect.objectContaining({ turnId: 'agent:main:main-turn-1' }),
+            }),
+            expect.objectContaining({
+              kind: 'tool_result',
+              metadata: expect.objectContaining({ turnId: 'agent:main:main-turn-1' }),
+            }),
+            expect.objectContaining({
+              kind: 'assistant_message',
+              metadata: expect.objectContaining({ turnId: 'agent:main:main-turn-1' }),
+            }),
+            expect.objectContaining({
+              kind: 'stop',
+              metadata: expect.objectContaining({ turnId: 'agent:main:main-turn-1' }),
+            }),
+          ]),
+        }),
+      }),
+      expect.any(Object),
+    )
   })
 })

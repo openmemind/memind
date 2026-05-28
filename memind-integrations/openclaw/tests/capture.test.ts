@@ -44,110 +44,83 @@ describe('handleCapture', () => {
       extract: vi.fn().mockResolvedValue(successfulExtractResponse()),
     }
     const state = {
-      filterUnsubmitted: vi
-        .fn()
-        .mockImplementation(async (_sessionKey: string, fingerprints: string[]) => fingerprints),
-      markSubmitted: vi.fn().mockResolvedValue(undefined),
+      listAgentEvents: vi.fn().mockResolvedValue([
+        { eventId: 'prompt-1', seq: 1, kind: 'user_prompt', text: 'remember me' },
+        { eventId: 'stop-1', seq: 2, kind: 'stop', status: 'success' },
+      ]),
+      clearAgentEvents: vi.fn().mockResolvedValue(undefined),
     }
     const result = await handleCapture({
       cfg,
       client,
       identity,
-      event: { success: true, messages: [{ role: 'user', content: 'remember me', id: 'f1' }] },
+      event: { success: true },
       ctx: { sessionKey: 's1' },
       state,
     })
-    expect(result.submitted).toBe(1)
+    expect(result.submitted).toBe(2)
     expect(client.extract).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'u1',
         agentId: 'a1',
         sourceClient: 'openclaw',
-      }),
-      expect.objectContaining({ maxRetries: 0 }),
-    )
-    expect(state.markSubmitted).toHaveBeenCalledWith('s1', expect.any(Array))
-  })
-
-  it('keeps only the final turn by default', async () => {
-    const cfg = parseConfig({})
-    const client: MemindMemoryClient = {
-      retrieve: vi.fn(),
-      extract: vi.fn().mockResolvedValue(successfulExtractResponse()),
-    }
-    const state = {
-      filterUnsubmitted: vi
-        .fn()
-        .mockImplementation(async (_sessionKey: string, fingerprints: string[]) => fingerprints),
-      markSubmitted: vi.fn().mockResolvedValue(undefined),
-    }
-    await handleCapture({
-      cfg,
-      client,
-      identity,
-      event: {
-        success: true,
-        messages: [
-          { role: 'user', content: 'old question', id: 'old-u' },
-          { role: 'assistant', content: 'old answer', id: 'old-a' },
-          { role: 'user', content: 'new question', id: 'new-u' },
-          { role: 'assistant', content: 'new answer', id: 'new-a' },
-        ],
-      },
-      ctx: { sessionKey: 's1' },
-      state,
-    })
-    expect(client.extract).toHaveBeenCalledWith(
-      expect.objectContaining({
         rawContent: expect.objectContaining({
-          type: 'conversation',
-          messages: [
-            expect.objectContaining({
-              role: 'USER',
-              content: [{ type: 'text', text: 'new question' }],
-            }),
-            expect.objectContaining({
-              role: 'ASSISTANT',
-              content: [{ type: 'text', text: 'new answer' }],
-            }),
+          type: 'agent_timeline',
+          metadata: expect.objectContaining({ profile: 'general', runtime: 'openclaw' }),
+          events: [
+            expect.objectContaining({ kind: 'user_prompt' }),
+            expect.objectContaining({ kind: 'stop' }),
           ],
         }),
       }),
-      expect.any(Object),
+      expect.objectContaining({ maxRetries: 0 }),
     )
+    expect(state.clearAgentEvents).toHaveBeenCalledWith('s1', ['prompt-1', 'stop-1'])
   })
 
-  it('respects ingestionMaxMessagesPerHook after final-turn selection', async () => {
-    const cfg = parseConfig({ ingestionMaxMessagesPerHook: 1 })
-    const client: MemindMemoryClient = {
-      retrieve: vi.fn(),
-      extract: vi.fn().mockResolvedValue(successfulExtractResponse()),
-    }
+  it('skips capture until enough timeline events are buffered', async () => {
+    const cfg = parseConfig({})
+    const client: MemindMemoryClient = { retrieve: vi.fn(), extract: vi.fn() }
     const state = {
-      filterUnsubmitted: vi
+      listAgentEvents: vi
         .fn()
-        .mockImplementation(async (_sessionKey: string, fingerprints: string[]) => fingerprints),
-      markSubmitted: vi.fn().mockResolvedValue(undefined),
+        .mockResolvedValue([
+          { eventId: 'prompt-1', seq: 1, kind: 'user_prompt', text: 'remember me' },
+        ]),
+      clearAgentEvents: vi.fn(),
     }
     const result = await handleCapture({
       cfg,
       client,
       identity,
-      event: {
-        success: true,
-        messages: [
-          { role: 'user', content: 'new question', id: 'new-u' },
-          { role: 'assistant', content: 'new answer', id: 'new-a' },
-        ],
-      },
+      event: { success: true },
       ctx: { sessionKey: 's1' },
       state,
     })
-    expect(result.submitted).toBe(1)
-    expect(state.markSubmitted).toHaveBeenCalledWith(
-      's1',
-      expect.arrayContaining([expect.any(String)]),
-    )
+    expect(result.submitted).toBe(0)
+    expect(client.extract).not.toHaveBeenCalled()
+  })
+
+  it('respects disabled agent timeline ingestion', async () => {
+    const cfg = parseConfig({ autoIngestAgentTimeline: false })
+    const client: MemindMemoryClient = {
+      retrieve: vi.fn(),
+      extract: vi.fn().mockResolvedValue(successfulExtractResponse()),
+    }
+    const state = {
+      listAgentEvents: vi.fn(),
+      clearAgentEvents: vi.fn(),
+    }
+    const result = await handleCapture({
+      cfg,
+      client,
+      identity,
+      event: { success: true },
+      ctx: { sessionKey: 's1' },
+      state,
+    })
+    expect(result.submitted).toBe(0)
+    expect(state.listAgentEvents).not.toHaveBeenCalled()
   })
 
   it('skips failed turns', async () => {
@@ -159,7 +132,7 @@ describe('handleCapture', () => {
       identity,
       event: { success: false, messages: [{ role: 'user', content: 'no' }] },
       ctx: { sessionKey: 's1' },
-      state: { filterUnsubmitted: vi.fn(), markSubmitted: vi.fn() },
+      state: { listAgentEvents: vi.fn(), clearAgentEvents: vi.fn() },
     })
     expect(result.submitted).toBe(0)
     expect(client.extract).not.toHaveBeenCalled()
@@ -179,14 +152,19 @@ describe('handleCapture', () => {
       event: { success: true, messages: [{ role: 'user', content: 'remember me' }] },
       ctx: { sessionKey: 's1' },
       state: {
-        filterUnsubmitted: vi
-          .fn()
-          .mockImplementation(async (_sessionKey: string, fingerprints: string[]) => fingerprints),
-        markSubmitted: vi.fn(),
+        listAgentEvents: vi.fn().mockResolvedValue([
+          { eventId: 'prompt-1', seq: 1, kind: 'user_prompt', text: 'remember me' },
+          { eventId: 'stop-1', seq: 2, kind: 'stop', status: 'success' },
+        ]),
+        clearAgentEvents: vi.fn(),
       },
       retry,
     })
     expect(result.submitted).toBe(0)
-    expect(retry.enqueue).toHaveBeenCalled()
+    expect(retry.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rawContent: expect.objectContaining({ type: 'agent_timeline' }),
+      }),
+    )
   })
 })

@@ -15,9 +15,16 @@
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import type { AgentTimelineEvent } from './types.js'
+
 type StateFile = {
   version: 1
   submitted: string[]
+}
+
+type AgentTimelineStateFile = {
+  version: 1
+  events: AgentTimelineEvent[]
 }
 
 export class SubmittedStateStore {
@@ -64,6 +71,83 @@ export class SubmittedStateStore {
   }
 }
 
+export class AgentTimelineStateStore {
+  constructor(
+    private readonly root: string,
+    private readonly options: { maxAgeDays: number; maxEvents: number },
+  ) {}
+
+  async appendAgentEvent(sessionKey: string, event: AgentTimelineEvent): Promise<void> {
+    if (!event.eventId) return
+    const state = await this.read(sessionKey)
+    if (state.events.some((candidate) => candidate.eventId === event.eventId)) return
+    const events = [...state.events, event]
+      .sort(compareEvents)
+      .slice(Math.max(0, state.events.length + 1 - this.options.maxEvents))
+    await this.write(sessionKey, { version: 1, events })
+  }
+
+  async listAgentEvents(sessionKey: string): Promise<AgentTimelineEvent[]> {
+    return (await this.read(sessionKey)).events.sort(compareEvents)
+  }
+
+  async clearAgentEvents(sessionKey: string, eventIds?: string[]): Promise<void> {
+    if (!eventIds || eventIds.length === 0) {
+      await this.write(sessionKey, { version: 1, events: [] })
+      return
+    }
+    const submitted = new Set(eventIds)
+    const state = await this.read(sessionKey)
+    await this.write(sessionKey, {
+      version: 1,
+      events: state.events.filter((event) => !event.eventId || !submitted.has(event.eventId)),
+    })
+  }
+
+  async nextAgentEventSeq(sessionKey: string): Promise<number> {
+    const events = await this.listAgentEvents(sessionKey)
+    const maxSeq = events.reduce((max, event) => Math.max(max, event.seq ?? 0), 0)
+    return maxSeq + 1
+  }
+
+  private async read(sessionKey: string): Promise<AgentTimelineStateFile> {
+    try {
+      const statePath = this.pathFor(sessionKey)
+      const info = await stat(statePath)
+      const ageDays = (Date.now() - info.mtimeMs) / 86_400_000
+      if (ageDays > this.options.maxAgeDays) return { version: 1, events: [] }
+      const raw = await readFile(statePath, 'utf8')
+      const parsed = JSON.parse(raw) as AgentTimelineStateFile
+      if (parsed.version === 1 && Array.isArray(parsed.events)) {
+        return {
+          version: 1,
+          events: parsed.events
+            .filter((event): event is AgentTimelineEvent => Boolean(event?.eventId))
+            .sort(compareEvents),
+        }
+      }
+    } catch {
+      return { version: 1, events: [] }
+    }
+    return { version: 1, events: [] }
+  }
+
+  private async write(sessionKey: string, state: AgentTimelineStateFile): Promise<void> {
+    await mkdir(this.root, { recursive: true })
+    await writeFile(this.pathFor(sessionKey), JSON.stringify(state, null, 2), 'utf8')
+  }
+
+  private pathFor(sessionKey: string): string {
+    return path.join(this.root, `${safeKey(sessionKey)}.json`)
+  }
+}
+
 export function safeKey(value: string): string {
   return value.replace(/[^a-zA-Z0-9_.-]+/g, '_') || 'default'
+}
+
+function compareEvents(left: AgentTimelineEvent, right: AgentTimelineEvent): number {
+  const seq = (left.seq ?? Number.MAX_SAFE_INTEGER) - (right.seq ?? Number.MAX_SAFE_INTEGER)
+  if (seq !== 0) return seq
+  return String(left.eventId ?? '').localeCompare(String(right.eventId ?? ''))
 }

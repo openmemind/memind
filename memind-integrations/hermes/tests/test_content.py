@@ -14,7 +14,7 @@
 
 import unittest
 
-from memind_hermes.content import strip_memind_blocks, text_or_empty
+from memind_hermes.content import clamp_text, strip_memind_blocks, text_or_empty
 
 
 class ContentTest(unittest.TestCase):
@@ -31,6 +31,11 @@ class ContentTest(unittest.TestCase):
         text = "<memind_memories>memory</memind_memories>remember espresso"
 
         self.assertEqual(text_or_empty(text), "remember espresso")
+
+    def test_clamp_text_strips_context_and_marks_truncation(self):
+        text = "<memind_memories>memory</memind_memories>" + "x" * 20
+
+        self.assertEqual(clamp_text(text, 16), "xxxx\n[truncated]")
 
 
 if __name__ == "__main__":

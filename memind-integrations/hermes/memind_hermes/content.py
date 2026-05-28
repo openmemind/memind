@@ -26,3 +26,11 @@ def text_or_empty(value):
     if value is None:
         return ""
     return strip_memind_blocks(str(value)).strip()
+
+
+def clamp_text(value, max_chars):
+    text = text_or_empty(value)
+    if len(text) <= max_chars:
+        return text
+    suffix = "\n[truncated]"
+    return text[: max(0, max_chars - len(suffix))].rstrip() + suffix

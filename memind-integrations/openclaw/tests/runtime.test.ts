@@ -42,8 +42,10 @@ describe('createRuntimeStores', () => {
     const stores = createRuntimeStores(parseConfig({}), () => '/tmp/openclaw-state')
     const runtime = stores.current()
     expect(runtime.stateRoot).toBe(path.join('/tmp/openclaw-state', 'state'))
+    expect(runtime.agentStateRoot).toBe(path.join('/tmp/openclaw-state', 'agent-events'))
     expect(runtime.retryRoot).toBe(path.join('/tmp/openclaw-state', 'retry'))
     expect(runtime.state).toBe(stores.current().state)
+    expect(runtime.agentState).toBe(stores.current().agentState)
   })
 
   it('recreates stores when service start updates stateDir', () => {
@@ -54,5 +56,6 @@ describe('createRuntimeStores', () => {
     const second = stores.current()
     expect(second.stateRoot).toBe(path.join('/tmp/second', 'state'))
     expect(second.state).not.toBe(first.state)
+    expect(second.agentState).not.toBe(first.agentState)
   })
 })

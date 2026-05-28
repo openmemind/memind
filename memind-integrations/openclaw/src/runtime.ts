@@ -15,13 +15,15 @@
 import path from 'node:path'
 
 import { RetrySpool } from './retry.js'
-import { SubmittedStateStore } from './state.js'
+import { AgentTimelineStateStore, SubmittedStateStore } from './state.js'
 import type { MemindOpenClawConfig } from './types.js'
 
 export type RuntimeStores = {
   stateRoot: string
+  agentStateRoot: string
   retryRoot?: string
   state: SubmittedStateStore
+  agentState: AgentTimelineStateStore
   retry?: RetrySpool
 }
 
@@ -50,12 +52,18 @@ export function createRuntimeStores(
       const stateDir = getStateDir()
       if (cached && cachedDir === stateDir) return cached
       const stateRoot = path.join(stateDir, 'state')
+      const agentStateRoot = path.join(stateDir, 'agent-events')
       const retryRoot = path.join(stateDir, 'retry')
       cachedDir = stateDir
       cached = {
         stateRoot,
+        agentStateRoot,
         retryRoot: cfg.ingestRetrySpool ? retryRoot : undefined,
         state: new SubmittedStateStore(stateRoot, { maxAgeDays: cfg.stateMaxAgeDays }),
+        agentState: new AgentTimelineStateStore(agentStateRoot, {
+          maxAgeDays: cfg.stateMaxAgeDays,
+          maxEvents: cfg.timelineMaxEvents,
+        }),
         retry: cfg.ingestRetrySpool
           ? new RetrySpool(retryRoot, {
               maxFiles: cfg.ingestRetryMaxFiles,

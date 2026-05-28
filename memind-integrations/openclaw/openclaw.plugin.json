@@ -1,7 +1,7 @@
 {
   "id": "memind-openclaw",
   "name": "Memind Memory",
-  "description": "Memind memory backend for OpenClaw. Retrieves relevant memories before prompts and extracts durable text-only conversation memory after successful turns.",
+  "description": "Memind memory backend for OpenClaw. Retrieves relevant memories before prompts and extracts durable general-agent timeline memory after successful turns.",
   "version": "0.1.0",
   "kind": "memory",
   "configContracts": {
@@ -47,6 +47,10 @@
         "default": true
       },
       "autoIngest": {
+        "type": "boolean",
+        "default": true
+      },
+      "autoIngestAgentTimeline": {
         "type": "boolean",
         "default": true
       },
@@ -109,6 +113,21 @@
         "type": "integer",
         "minimum": 1,
         "default": 7
+      },
+      "timelineMaxEvents": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 500
+      },
+      "timelineMaxFieldChars": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 8000
+      },
+      "timelineFlushMinEvents": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 2
       },
       "captureToolCalls": {
         "type": "boolean",

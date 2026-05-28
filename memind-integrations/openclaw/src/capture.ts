@@ -12,15 +12,16 @@
 // limitations under the License.
 //
 
-import { RawContent, type RawContentValue } from '@openmemind/memind'
+import type { RawContentValue } from '@openmemind/memind'
 
-import { extractMessages } from './content.js'
+import { buildAgentTimelineContent } from './agent-timeline.js'
 import { isNonInteractiveTrigger, isSubagentSession } from './identity.js'
 import type {
+  AgentTimelineEvent,
   Identity,
   MemindMemoryClient,
   MemindOpenClawConfig,
-  OpenClawMessage,
+  OpenClawTimelineContext,
 } from './types.js'
 
 export type CaptureInput = {
@@ -30,8 +31,8 @@ export type CaptureInput = {
   event: Record<string, unknown>
   ctx?: Record<string, unknown>
   state: {
-    filterUnsubmitted(sessionKey: string, fingerprints: string[]): Promise<string[]>
-    markSubmitted(sessionKey: string, fingerprints: string[]): Promise<void>
+    listAgentEvents(sessionKey: string): Promise<AgentTimelineEvent[]>
+    clearAgentEvents(sessionKey: string, eventIds?: string[]): Promise<void>
   }
   retry?: {
     enqueue(entry: {
@@ -49,7 +50,9 @@ export type CaptureInput = {
 
 export async function handleCapture(input: CaptureInput): Promise<{ submitted: number }> {
   const { cfg, client, identity, event, ctx, state, retry, logger } = input
-  if (!cfg.autoIngest || event.success === false) return { submitted: 0 }
+  if (!cfg.autoIngest || !cfg.autoIngestAgentTimeline || event.success === false) {
+    return { submitted: 0 }
+  }
   const trigger = typeof ctx?.trigger === 'string' ? ctx.trigger : undefined
   const sessionKey =
     typeof ctx?.sessionKey === 'string'
@@ -62,21 +65,19 @@ export async function handleCapture(input: CaptureInput): Promise<{ submitted: n
   }
   if (!cfg.captureSubagents && isSubagentSession(sessionKey)) return { submitted: 0 }
 
-  const rawMessages = selectMessages(event)
-  const messages = selectFinalTurn(extractMessages(rawMessages, cfg))
-  if (messages.length === 0) return { submitted: 0 }
-  const byFingerprint = new Map(messages.map((message) => [message.fingerprint, message]))
-  const selectedFingerprints = (
-    await state.filterUnsubmitted(sessionKey, [...byFingerprint.keys()])
-  ).slice(0, cfg.ingestionMaxMessagesPerHook)
-  if (selectedFingerprints.length === 0) return { submitted: 0 }
-  const selectedMessages = selectedFingerprints
-    .map((fingerprint) => byFingerprint.get(fingerprint))
-    .filter((message): message is NonNullable<typeof message> => Boolean(message))
-  if (selectedMessages.length === 0) return { submitted: 0 }
-  const rawContent = RawContent.conversation(
-    selectedMessages.map(({ fingerprint: _fingerprint, ...message }) => message),
-  )
+  const events = await state.listAgentEvents(sessionKey)
+  if (events.length < cfg.timelineFlushMinEvents) return { submitted: 0 }
+  const selectedFingerprints = events
+    .map((event) => event.eventId)
+    .filter((eventId): eventId is string => Boolean(eventId))
+  const timelineContext = contextFrom(ctx, event, sessionKey, events)
+  const rawContent = buildAgentTimelineContent({
+    sourceClient: identity.sourceClient,
+    sessionId: sessionKey,
+    agentTurnId: timelineContext.turnId ?? `${sessionKey}-turn`,
+    events,
+    context: timelineContext,
+  })
 
   try {
     const response = await client.extract(
@@ -89,8 +90,8 @@ export async function handleCapture(input: CaptureInput): Promise<{ submitted: n
       { timeoutMs: 15_000, maxRetries: 0 },
     )
     if (response.status === 'SUCCESS') {
-      await state.markSubmitted(sessionKey, selectedFingerprints)
-      return { submitted: selectedFingerprints.length }
+      await state.clearAgentEvents(sessionKey, selectedFingerprints)
+      return { submitted: events.length }
     }
     await retry?.enqueue({
       kind: 'extract',
@@ -117,21 +118,31 @@ export async function handleCapture(input: CaptureInput): Promise<{ submitted: n
   }
 }
 
-function selectMessages(event: Record<string, unknown>): OpenClawMessage[] {
-  const context = event.context as { sessionEntry?: { messages?: unknown } } | undefined
-  const fromContext = context?.sessionEntry?.messages
-  if (Array.isArray(fromContext)) return fromContext as OpenClawMessage[]
-  return Array.isArray(event.messages) ? (event.messages as OpenClawMessage[]) : []
+function contextFrom(
+  ctx: Record<string, unknown> | undefined,
+  event: Record<string, unknown>,
+  sessionKey: string,
+  events: AgentTimelineEvent[],
+): OpenClawTimelineContext {
+  return {
+    sessionKey,
+    turnId:
+      stringValue(ctx?.turnId ?? event.turnId) ?? latestEventTurnId(events) ?? `${sessionKey}-turn`,
+    workspaceDir: stringValue(ctx?.workspaceDir ?? event.workspaceDir ?? ctx?.cwd ?? event.cwd),
+    channelId: stringValue(ctx?.channelId ?? event.channelId),
+    conversationId: stringValue(ctx?.conversationId ?? event.conversationId),
+    agentName: stringValue(ctx?.agentName ?? event.agentName),
+  }
 }
 
-function selectFinalTurn<T extends { role: 'USER' | 'ASSISTANT' }>(messages: T[]): T[] {
-  let lastUserIndex = -1
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index]?.role === 'USER') {
-      lastUserIndex = index
-      break
-    }
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function latestEventTurnId(events: AgentTimelineEvent[]): string | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const turnId = events[index]?.metadata?.turnId
+    if (typeof turnId === 'string' && turnId.trim()) return turnId
   }
-  if (lastUserIndex < 0) return messages
-  return messages.slice(lastUserIndex)
+  return undefined
 }
