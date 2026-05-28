@@ -195,6 +195,7 @@ download_remote_install() {
     "scripts/lib/retry.py"
     "scripts/lib/session_context.py"
     "scripts/lib/state.py"
+    "scripts/lib/tool_context.py"
   )
   mkdir -p "${INSTALL_ROOT}"
   rm -rf "${INSTALL_ROOT}/scripts" "${INSTALL_ROOT}/hooks" "${INSTALL_ROOT}/.codex-plugin"
