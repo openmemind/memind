@@ -60,9 +60,9 @@ class HookTest(unittest.TestCase):
         context = _format_context(data, {"retrieveMaxEntries": 4, "retrieveMaxChars": 1000, "retrievePromptPreamble": "P"})
         self.assertIn("## Insights", context)
         self.assertIn("## Memory Items", context)
-        self.assertLess(context.index("[insight:1] root"), context.index("[insight:2] branch"))
+        self.assertLess(context.index("[insight:1 root] root"), context.index("[insight:2 branch] branch"))
         self.assertNotIn("leaf", context)
-        self.assertLess(context.index("[item:11] high"), context.index("[item:10] low"))
+        self.assertLess(context.index("[item:11 memory] high"), context.index("[item:10 memory] low"))
 
     def test_format_context_includes_degraded_notice_without_results(self):
         sys.path.insert(0, str(ROOT / "scripts"))
@@ -115,6 +115,8 @@ class HookTest(unittest.TestCase):
         self.assertIn("## Resolved Problems", context)
         self.assertIn("## Tool Notes", context)
         self.assertIn("## Directives", context)
+        self.assertLess(context.index("## Directives"), context.index("## Resolved Problems"))
+        self.assertLess(context.index("## Resolved Problems"), context.index("## Agent Playbooks"))
         self.assertNotIn("## Memory Items", context)
 
     def test_retrieve_fail_open_when_memind_unavailable(self):

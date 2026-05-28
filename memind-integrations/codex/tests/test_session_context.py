@@ -32,7 +32,12 @@ class FakeClient:
         self.raw_data_calls.append((user_id, agent_id, kwargs))
         return types.SimpleNamespace(
             raw_data=[
-                types.SimpleNamespace(id="rd-1", caption="Fixed Codex agent timeline flushing.", metadata={}),
+                types.SimpleNamespace(
+                    id="rd-1",
+                    caption="Fixed Codex agent timeline flushing.",
+                    metadata={},
+                    created_at="2026-05-27T01:00:00Z",
+                ),
             ]
         )
 
@@ -76,8 +81,11 @@ class SessionContextTest(unittest.TestCase):
 
         rendered = render_session_context(context, {"sessionContextMaxChars": 4000})
         self.assertIn('<memind_session_context project="memind-main">', rendered)
+        self.assertIn("Historical Memind project memory", rendered)
+        self.assertIn("Current user instructions and repository files take precedence", rendered)
+        self.assertIn("Verify old implementation details against the working tree", rendered)
         self.assertIn("## Continue From", rendered)
-        self.assertIn("[rawdata:rd-1] Fixed Codex agent timeline flushing.", rendered)
+        self.assertIn("[rawdata:rd-1, 2026-05-27] Fixed Codex agent timeline flushing.", rendered)
         self.assertIn("## Must Follow", rendered)
         self.assertIn("[item:it-1 directive] Keep Codex and Claude Code behavior aligned.", rendered)
         self.assertIn("## Watch Outs", rendered)
