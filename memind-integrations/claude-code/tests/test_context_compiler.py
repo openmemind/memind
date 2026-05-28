@@ -135,6 +135,74 @@ class ContextCompilerTest(unittest.TestCase):
 
         self.assertEqual(rendered, "")
 
+    def test_prompt_retrieval_context_groups_agent_categories_by_execution_value(self):
+        from scripts.lib.context_compiler import compile_prompt_retrieval_context
+
+        data = {
+            "insights": [
+                {"id": "ins-leaf", "text": "Leaf insight", "tier": "LEAF"},
+                {"id": "ins-root", "text": "Root insight", "tier": "ROOT"},
+            ],
+            "items": [
+                {"id": "tool-1", "text": "Use mvn -pl memind-server test for server checks.", "category": "tool", "finalScore": 0.6},
+                {"id": "res-1", "text": "Retry spool events are cleared only after successful agent_timeline extraction.", "category": "resolution", "finalScore": 0.9},
+                {"id": "pb-1", "text": "When hooks change, run both integration test suites.", "category": "playbook", "finalScore": 0.8},
+                {"id": "dir-1", "text": "Do not default Claude Code or Codex to conversation rawdata.", "category": "directive", "finalScore": 0.7},
+                {"id": "ev-1", "text": "rawdata-agent emits agent_episode segment metadata.", "category": "event", "finalScore": 0.5},
+                {"id": "ev-high", "text": "A high-scoring general fact should not crowd out agent-specific sections.", "category": "event", "finalScore": 0.99},
+            ],
+        }
+
+        rendered = compile_prompt_retrieval_context(
+            data,
+            {"retrieveMaxEntries": 8, "retrieveMaxChars": 6000, "retrievePromptPreamble": "Relevant memories from Memind."},
+        )
+
+        self.assertIn("<memind_memories>", rendered)
+        self.assertIn("## Directives", rendered)
+        self.assertIn("[item:dir-1 directive] Do not default Claude Code", rendered)
+        self.assertIn("## Resolved Problems", rendered)
+        self.assertIn("[item:res-1 resolution] Retry spool events", rendered)
+        self.assertIn("## Agent Playbooks", rendered)
+        self.assertIn("[item:pb-1 playbook] When hooks change", rendered)
+        self.assertIn("## Tool Notes", rendered)
+        self.assertIn("[item:tool-1 tool] Use mvn", rendered)
+        self.assertIn("## Insights", rendered)
+        self.assertIn("[insight:ins-root root] Root insight", rendered)
+        self.assertNotIn("ins-leaf", rendered)
+        self.assertIn("## Memory Items", rendered)
+        self.assertIn("[item:ev-high event] A high-scoring general fact", rendered)
+        self.assertIn("[item:ev-1 event] rawdata-agent emits", rendered)
+        self.assertTrue(rendered.endswith("</memind_memories>"))
+
+    def test_prompt_retrieval_context_preserves_insight_tier_order(self):
+        from scripts.lib.context_compiler import compile_prompt_retrieval_context
+
+        rendered = compile_prompt_retrieval_context(
+            {
+                "insights": [
+                    {"id": "leaf", "text": "Leaf memory", "tier": "LEAF"},
+                    {"id": "root", "text": "Root memory", "tier": "ROOT"},
+                    {"id": "branch", "text": "Branch memory", "tier": "BRANCH"},
+                ]
+            },
+            {"retrieveMaxEntries": 8, "retrieveMaxChars": 6000, "retrievePromptPreamble": ""},
+        )
+
+        self.assertLess(rendered.index("insight:root"), rendered.index("insight:branch"))
+        self.assertNotIn("insight:leaf", rendered)
+
+    def test_prompt_retrieval_context_keeps_degraded_notice(self):
+        from scripts.lib.context_compiler import compile_prompt_retrieval_context
+
+        rendered = compile_prompt_retrieval_context(
+            {"status": "degraded"},
+            {"retrieveMaxEntries": 8, "retrieveMaxChars": 1000, "retrievePromptPreamble": ""},
+        )
+
+        self.assertIn("Memory retrieval encountered an error", rendered)
+        self.assertIn("<memind_memories>", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

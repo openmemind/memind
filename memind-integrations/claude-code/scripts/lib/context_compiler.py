@@ -121,12 +121,13 @@ def compile_prompt_retrieval_context(data, config):
     insights = [_normalize_insight(insight) for insight in data.get("insights") or [] if _field(insight, "text")]
     sorted_items = _sort_prompt_items(items)
 
+    selected_insights = _select_prompt_insights(insights, _section_limit("insights", max_entries))
     sections = {
         "directives": _top_category(sorted_items, "directive", _section_limit("directives", max_entries)),
         "resolvedProblems": _top_category(sorted_items, "resolution", _section_limit("resolvedProblems", max_entries)),
         "playbooks": _top_category(sorted_items, "playbook", _section_limit("playbooks", max_entries)),
         "toolNotes": _top_category(sorted_items, "tool", _section_limit("toolNotes", max_entries)),
-        "insights": _sort_insights(insights)[: _section_limit("insights", max_entries)],
+        "insights": selected_insights,
         "memoryItems": _top_general_items(sorted_items, _section_limit("memoryItems", max_entries)),
     }
 
@@ -168,7 +169,7 @@ def _prepare_sections(sections, mode):
     prepared = {}
     high_value_seen = set()
     for key, entries in sections.items():
-        ranked = _rank_entries(entries, key, mode)
+        ranked = list(entries) if mode == "prompt_retrieval" and key == "insights" else _rank_entries(entries, key, mode)
         deduped = []
         section_seen = set()
         for entry in ranked:
@@ -285,6 +286,12 @@ def _sort_insights(insights):
         ),
         reverse=True,
     )
+
+
+def _select_prompt_insights(insights, limit):
+    sorted_insights = _sort_insights(insights)
+    high_level = [entry for entry in sorted_insights if entry.get("category") in {"root", "branch"}]
+    return (high_level or sorted_insights)[:limit]
 
 
 def _top_category(items, category, limit):
