@@ -78,6 +78,11 @@ def _valid_memind_package(root):
 
 
 class InstallerTest(unittest.TestCase):
+    def test_remote_install_file_list_includes_context_compiler(self):
+        install_script = (ROOT / "install.sh").read_text()
+
+        self.assertIn('"scripts/lib/context_compiler.py"', install_script)
+
     def test_install_merges_and_reinstall_is_idempotent(self):
         with tempfile.TemporaryDirectory() as tmp:
             hooks_path = Path(tmp) / "hooks.json"

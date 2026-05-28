@@ -188,6 +188,7 @@ download_remote_install() {
     "scripts/lib/agent_timeline.py"
     "scripts/lib/client.py"
     "scripts/lib/config.py"
+    "scripts/lib/context_compiler.py"
     "scripts/lib/content.py"
     "scripts/lib/identity.py"
     "scripts/lib/logging_utils.py"
