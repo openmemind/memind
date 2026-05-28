@@ -33,7 +33,7 @@ from memind.types.memory import (
     RetrieveMemoryResponse,
     TimeRange,
 )
-from memind.types.message import Message, RawContentValue
+from memind.types.message import MapRawContent, Message, RawContentValue
 
 if TYPE_CHECKING:
     from memind._client import MemindClient
@@ -70,7 +70,7 @@ class MemoryResource:
         timeline: dict[str, Any],
         source_client: str | None = None,
     ) -> ExtractMemoryResponse:
-        raw_content = {"type": "agent_timeline", **timeline}
+        raw_content = MapRawContent.model_validate({"type": "agent_timeline", **timeline})
         return self.extract(
             user_id=user_id,
             agent_id=agent_id,
