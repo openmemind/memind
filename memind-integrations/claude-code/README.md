@@ -534,9 +534,10 @@ memory, confirm the same `userId` and `agentId` are used for ingestion and retri
 - Arbitrary overlapping partial windows are adapter responsibility in v1.
 - File content capture is disabled by default.
 - `rawdata-toolcall` remains supported.
-- If `rawdata-toolcall` and `rawdata-agent` ingest the same tool activity, v1 may create semantically overlapping
-  TOOL items. This is acceptable compatibility behavior; do not add cross-plugin suppression in v1. Users who
-  want one canonical coding-agent path should enable `rawdata-agent` for full agent timelines and keep
-  `rawdata-toolcall` for pure legacy tool-call logs.
+- `rawdata-agent` absorbs deterministic tool telemetry from the `rawdata-toolcall` design: duration, token counts,
+  content hashes, per-episode tool records, and per-tool success/failure stats. Claude Code still submits one
+  canonical `agent_timeline` per turn; it does not submit duplicate `tool_call` raw data. `rawdata-toolcall`
+  remains the correct entry point for pure tool-call logs that do not have user prompts, agent turns, or Stop
+  boundaries.
 - Retrieval quality depends on existing extracted Memind items and insights.
 - The plugin does not start or configure the Memind server.

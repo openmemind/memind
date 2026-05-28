@@ -13,7 +13,12 @@
 #
 
 import json
+import sys
 import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 from scripts.lib.agent_timeline import (
     build_timeline_payload,
@@ -76,6 +81,101 @@ class AgentTimelineTest(unittest.TestCase):
         self.assertEqual(event["command"], "git status --short")
         self.assertEqual(event["status"], "success")
         self.assertEqual(event["metadata"]["normalizationVersion"], 1)
+
+    def test_normalizes_tool_telemetry_and_content_hash(self):
+        event = normalize_hook_event(
+            {
+                "hook_event_name": "PostToolUse",
+                "session_id": "s",
+                "tool_name": "Bash",
+                "tool_input": {"command": "npm test payment"},
+                "tool_response": {
+                    "exit_code": 0,
+                    "stdout": "passed",
+                    "duration_ms": 1234,
+                    "usage": {"input_tokens": 11, "output_tokens": 22},
+                },
+                "timestamp": "2026-05-24T10:00:00Z",
+            },
+            seq=1,
+        )
+
+        self.assertEqual(event["durationMs"], 1234)
+        self.assertEqual(event["inputTokens"], 11)
+        self.assertEqual(event["outputTokens"], 22)
+        self.assertTrue(event["contentHash"].startswith("sha256:"))
+        self.assertEqual(len(event["contentHash"]), len("sha256:") + 64)
+        self.assertEqual(event["output"], '{"stdout": "passed"}')
+        self.assertEqual(event["metadata"]["normalizationVersion"], 1)
+
+    def test_content_hash_uses_redacted_payload(self):
+        first = normalize_hook_event(
+            {
+                "hook_event_name": "PostToolUse",
+                "session_id": "s",
+                "tool_name": "CustomTool",
+                "tool_input": {"token": "Bearer first-secret-value"},
+                "tool_response": {"result": "ok"},
+                "timestamp": "2026-05-24T10:00:00Z",
+            },
+            seq=1,
+        )
+        second = normalize_hook_event(
+            {
+                "hook_event_name": "PostToolUse",
+                "session_id": "s",
+                "tool_name": "CustomTool",
+                "tool_input": {"token": "Bearer second-secret-value"},
+                "tool_response": {"result": "ok"},
+                "timestamp": "2026-05-24T10:00:01Z",
+            },
+            seq=2,
+        )
+
+        self.assertEqual(first["contentHash"], second["contentHash"])
+        self.assertIn("[REDACTED:bearer_token]", first["input"])
+        self.assertIn("[REDACTED:bearer_token]", second["input"])
+
+    def test_content_hash_ignores_volatile_telemetry_fields(self):
+        first = normalize_hook_event(
+            {
+                "hook_event_name": "PostToolUse",
+                "session_id": "s",
+                "tool_name": "Bash",
+                "tool_input": {"command": "npm test payment"},
+                "tool_response": {
+                    "exit_code": 0,
+                    "stdout": "passed",
+                    "duration_ms": 100,
+                    "metadata": {"duration_ms": 100},
+                    "usage": {"input_tokens": 11, "output_tokens": 22},
+                },
+                "timestamp": "2026-05-24T10:00:00Z",
+            },
+            seq=1,
+        )
+        second = normalize_hook_event(
+            {
+                "hook_event_name": "PostToolUse",
+                "session_id": "s",
+                "tool_name": "Bash",
+                "tool_input": {"command": "npm test payment"},
+                "tool_response": {
+                    "exit_code": 0,
+                    "stdout": "passed",
+                    "duration_ms": 999,
+                    "metadata": {"duration_ms": 999},
+                    "usage": {"input_tokens": 100, "output_tokens": 200},
+                },
+                "timestamp": "2026-05-24T10:00:01Z",
+            },
+            seq=2,
+        )
+
+        self.assertEqual(first["contentHash"], second["contentHash"])
+        self.assertNotIn("duration_ms", first.get("output", ""))
+        self.assertNotIn("metadata", first.get("output", ""))
+        self.assertNotIn("usage", first.get("output", ""))
 
     def test_normalizes_file_read_tool_with_path(self):
         event = normalize_hook_event(

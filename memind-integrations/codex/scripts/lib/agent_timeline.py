@@ -134,6 +134,104 @@ def _json_text(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
 
+def _number_value(*values):
+    for value in values:
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        if isinstance(value, str) and value.strip().isdigit():
+            return int(value.strip())
+    return None
+
+
+def _nested_number(mapping, *path):
+    current = mapping
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return _number_value(current)
+
+
+def _tool_telemetry(hook_input, tool_response):
+    usage = tool_response.get("usage") if isinstance(tool_response, dict) else {}
+    return {
+        "durationMs": _number_value(
+            hook_input.get("duration_ms"),
+            hook_input.get("durationMs"),
+            tool_response.get("duration_ms") if isinstance(tool_response, dict) else None,
+            tool_response.get("durationMs") if isinstance(tool_response, dict) else None,
+            _nested_number(tool_response, "metadata", "duration_ms"),
+            _nested_number(tool_response, "metadata", "durationMs"),
+        ),
+        "inputTokens": _number_value(
+            hook_input.get("input_tokens"),
+            hook_input.get("inputTokens"),
+            tool_response.get("input_tokens") if isinstance(tool_response, dict) else None,
+            tool_response.get("inputTokens") if isinstance(tool_response, dict) else None,
+            usage.get("input_tokens") if isinstance(usage, dict) else None,
+            usage.get("inputTokens") if isinstance(usage, dict) else None,
+        ),
+        "outputTokens": _number_value(
+            hook_input.get("output_tokens"),
+            hook_input.get("outputTokens"),
+            tool_response.get("output_tokens") if isinstance(tool_response, dict) else None,
+            tool_response.get("outputTokens") if isinstance(tool_response, dict) else None,
+            usage.get("output_tokens") if isinstance(usage, dict) else None,
+            usage.get("outputTokens") if isinstance(usage, dict) else None,
+        ),
+    }
+
+
+VOLATILE_TOOL_OUTPUT_KEYS = {
+    "exit_code",
+    "exitCode",
+    "duration_ms",
+    "durationMs",
+    "input_tokens",
+    "inputTokens",
+    "output_tokens",
+    "outputTokens",
+    "usage",
+}
+
+
+def _semantic_tool_output(raw_tool_response):
+    if isinstance(raw_tool_response, list):
+        return [
+            normalized
+            for normalized in (_semantic_tool_output(value) for value in raw_tool_response)
+            if normalized not in (None, {}, [])
+        ]
+    if not isinstance(raw_tool_response, dict):
+        return raw_tool_response
+    result = {}
+    for key, value in raw_tool_response.items():
+        if key in VOLATILE_TOOL_OUTPUT_KEYS or value is None:
+            continue
+        normalized = _semantic_tool_output(value)
+        if normalized not in (None, {}, []):
+            result[key] = normalized
+    return result
+
+
+def _content_hash(tool_name, normalized_input, normalized_output):
+    stable = json.dumps(
+        {
+            "toolName": tool_name or "",
+            "input": normalized_input or "",
+            "output": normalized_output or "",
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return "sha256:" + hashlib.sha256(stable.encode("utf-8")).hexdigest()
+
+
 def _tool_tokens(tool_name):
     if not tool_name:
         return []
@@ -451,18 +549,24 @@ def normalize_hook_event(hook_input, seq, turn_id=None, turn_seq=None):
     else:
         event["status"] = "success" if hook_input.get("hook_event_name") == "PostToolUse" else "running"
 
-    if isinstance(raw_tool_response, dict):
-        output = {
-            key: value
-            for key, value in raw_tool_response.items()
-            if key not in {"exit_code", "exitCode"} and value is not None
-        }
-    else:
-        output = raw_tool_response
+    output = _semantic_tool_output(raw_tool_response)
     if output:
         redacted_output, kinds = _redact_value(output)
         event["output"] = _json_text(redacted_output)
         redaction_kinds.extend(kinds)
+
+    telemetry = _tool_telemetry(hook_input, tool_response)
+    if telemetry.get("durationMs") is not None:
+        event["durationMs"] = telemetry["durationMs"]
+    if telemetry.get("inputTokens") is not None:
+        event["inputTokens"] = telemetry["inputTokens"]
+    if telemetry.get("outputTokens") is not None:
+        event["outputTokens"] = telemetry["outputTokens"]
+    event["contentHash"] = _content_hash(
+        tool_name,
+        event.get("command") if event.get("command") is not None else event.get("input"),
+        event.get("output"),
+    )
 
     metadata = {
         "hookEventName": hook_input.get("hook_event_name"),

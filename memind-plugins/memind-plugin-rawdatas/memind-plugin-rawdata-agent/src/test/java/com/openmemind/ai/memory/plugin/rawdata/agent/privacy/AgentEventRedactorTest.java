@@ -53,6 +53,9 @@ class AgentEventRedactorTest {
                         12L,
                         null,
                         null,
+                        null,
+                        null,
+                        null,
                         "deploy",
                         0,
                         Map.of("existing", "value"));
@@ -83,6 +86,9 @@ class AgentEventRedactorTest {
                         "secret file body",
                         AgentEventStatus.SUCCESS,
                         12L,
+                        null,
+                        null,
+                        null,
                         "/repo/.env",
                         "read",
                         null,
@@ -115,6 +121,9 @@ class AgentEventRedactorTest {
                         "DATABASE_URL=postgres://u:p@example/db",
                         AgentEventStatus.SUCCESS,
                         12L,
+                        null,
+                        null,
+                        null,
                         "/repo/fixtures/.env",
                         "read",
                         null,
@@ -130,6 +139,38 @@ class AgentEventRedactorTest {
                 .containsExactly("database_url");
     }
 
+    @Test
+    void shouldPreserveToolTelemetryWhenRedactingText() {
+        AgentEvent event =
+                new AgentEvent(
+                        "e1",
+                        1,
+                        AgentEventKind.COMMAND,
+                        Instant.parse("2026-05-24T10:00:00Z"),
+                        null,
+                        "Bash",
+                        null,
+                        "Bearer secret-token-value",
+                        AgentEventStatus.SUCCESS,
+                        1234L,
+                        11,
+                        22,
+                        "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                        null,
+                        null,
+                        "npm test payment",
+                        0,
+                        Map.of());
+
+        AgentEvent redacted = new AgentEventRedactor().redact(event);
+
+        assertThat(redacted.durationMs()).isEqualTo(1234L);
+        assertThat(redacted.inputTokens()).isEqualTo(11);
+        assertThat(redacted.outputTokens()).isEqualTo(22);
+        assertThat(redacted.contentHash()).isEqualTo(event.contentHash());
+        assertThat(redacted.output()).contains("[REDACTED:bearer_token]");
+    }
+
     private static AgentEvent commandWithOutput(String command, String output) {
         return new AgentEvent(
                 "e1",
@@ -142,6 +183,9 @@ class AgentEventRedactorTest {
                 output,
                 AgentEventStatus.SUCCESS,
                 42L,
+                null,
+                null,
+                null,
                 null,
                 null,
                 command,

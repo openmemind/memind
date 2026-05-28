@@ -146,6 +146,9 @@ public final class AgentMemoryItemFactory {
         copy(episode.raw(), metadata, "projectName");
         copy(episode.raw(), metadata, "projectRootHash");
         copy(episode.raw(), metadata, "gitBranch");
+        copy(episode.raw(), metadata, "toolStats");
+        copy(episode.raw(), metadata, "toolRecords");
+        copy(episode.raw(), metadata, "toolGroups");
         metadata.put("files", episode.files());
         metadata.put("commands", episode.commands());
         metadata.put("toolNames", episode.toolNames());
@@ -180,8 +183,13 @@ public final class AgentMemoryItemFactory {
             int successCount,
             int failCount) {
         if (command != null && !episode.files().isEmpty()) {
-            return "Use %s to validate changes touching %s."
-                    .formatted(command, String.join(", ", episode.files()));
+            String fileList = String.join(", ", episode.files());
+            if (failCount > 0 || successCount > 0) {
+                return "Use %s to validate changes touching %s; it failed %s and passed %s in this agent episode."
+                        .formatted(
+                                command, fileList, countWord(failCount), countWord(successCount));
+            }
+            return "Use %s to validate changes touching %s.".formatted(command, fileList);
         }
         if (command != null) {
             return "%s command %s failed %s and passed %s in episode %s."

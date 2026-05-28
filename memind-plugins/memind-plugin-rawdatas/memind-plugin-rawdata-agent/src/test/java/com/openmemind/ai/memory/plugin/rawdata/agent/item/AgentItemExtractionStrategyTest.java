@@ -56,8 +56,15 @@ class AgentItemExtractionStrategyTest {
                                     .containsEntry("projectName", "payments-api");
                             assertThat(entry.metadata())
                                     .containsEntry("command", "npm test payment");
-                            assertThat(entry.metadata()).containsEntry("successCount", 1);
-                            assertThat(entry.metadata()).containsEntry("failCount", 1);
+                            assertThat(entry.metadata())
+                                    .containsKeys("toolStats", "toolRecords", "toolGroups")
+                                    .containsEntry("successCount", 1)
+                                    .containsEntry("failCount", 1);
+                            assertThat(entry.content())
+                                    .contains("npm test payment")
+                                    .contains("failed once")
+                                    .contains("passed once")
+                                    .contains("src/payment/calc.ts");
                             assertThat(entry.graphHints().entities())
                                     .extracting(ExtractedGraphHints.ExtractedEntityHint::name)
                                     .contains("Bash", "npm test payment", "src/payment/calc.ts");
@@ -277,8 +284,63 @@ class AgentItemExtractionStrategyTest {
                                                 "rounding mismatch"),
                                         commandEvent(
                                                 "e4", 4, "npm test payment", "success", "passed"))),
+                        Map.entry("fileEvents", List.of(fileEvent("e3", 3, "src/payment/calc.ts"))),
                         Map.entry(
-                                "fileEvents", List.of(fileEvent("e3", 3, "src/payment/calc.ts")))));
+                                "toolStats",
+                                Map.of(
+                                        "Bash",
+                                        Map.of(
+                                                "callCount",
+                                                2,
+                                                "successCount",
+                                                1,
+                                                "failCount",
+                                                1,
+                                                "avgDurationMs",
+                                                10L))),
+                        Map.entry(
+                                "toolRecords",
+                                List.of(
+                                        Map.of(
+                                                "eventId",
+                                                "e2",
+                                                "seq",
+                                                2,
+                                                "toolName",
+                                                "Bash",
+                                                "status",
+                                                "failed",
+                                                "command",
+                                                "npm test payment",
+                                                "outputPreview",
+                                                "rounding mismatch"),
+                                        Map.of(
+                                                "eventId",
+                                                "e4",
+                                                "seq",
+                                                4,
+                                                "toolName",
+                                                "Bash",
+                                                "status",
+                                                "success",
+                                                "command",
+                                                "npm test payment",
+                                                "outputPreview",
+                                                "passed"))),
+                        Map.entry(
+                                "toolGroups",
+                                List.of(
+                                        Map.of(
+                                                "toolName",
+                                                "Bash",
+                                                "callCount",
+                                                2,
+                                                "successCount",
+                                                1,
+                                                "failCount",
+                                                1,
+                                                "commands",
+                                                List.of("npm test payment"))))));
     }
 
     private static ParsedSegment failedEpisode() {

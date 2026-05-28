@@ -55,6 +55,9 @@ class AgentTimelineContentTest {
                                 1200L,
                                 null,
                                 null,
+                                null,
+                                null,
+                                null,
                                 "npm test payment",
                                 1,
                                 Map.of()),
@@ -64,6 +67,9 @@ class AgentTimelineContentTest {
                                 AgentEventKind.USER_PROMPT,
                                 Instant.parse("2026-05-24T10:00:00Z"),
                                 "Fix payment tests",
+                                null,
+                                null,
+                                null,
                                 null,
                                 null,
                                 null,
@@ -127,6 +133,9 @@ class AgentTimelineContentTest {
                                         null,
                                         null,
                                         null,
+                                        null,
+                                        null,
+                                        null,
                                         Map.of())));
 
         String json = OBJECT_MAPPER.writeValueAsString(content);
@@ -172,6 +181,110 @@ class AgentTimelineContentTest {
     }
 
     @Test
+    void jacksonShouldPreserveToolTelemetryFields() throws Exception {
+        String json =
+                """
+                {
+                  "type": "agent_timeline",
+                  "sourceClient": "claude-code",
+                  "sessionId": "session-1",
+                  "agentTurnId": "turn-1",
+                  "timelineId": "timeline-1",
+                  "events": [
+                    {
+                      "eventId": "event-tool",
+                      "seq": 1,
+                      "kind": "command",
+                      "toolName": "Bash",
+                      "command": "npm test payment",
+                      "status": "success",
+                      "durationMs": 1234,
+                      "inputTokens": 11,
+                      "outputTokens": 22,
+                      "contentHash": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                    }
+                  ]
+                }
+                """;
+
+        RawContent decoded = OBJECT_MAPPER.readValue(json, RawContent.class);
+
+        AgentEvent event = ((AgentTimelineContent) decoded).events().getFirst();
+        assertThat(event.durationMs()).isEqualTo(1234L);
+        assertThat(event.inputTokens()).isEqualTo(11);
+        assertThat(event.outputTokens()).isEqualTo(22);
+        assertThat(event.contentHash())
+                .isEqualTo(
+                        "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+    }
+
+    @Test
+    void contentIdShouldIncludeTypedToolTelemetryFields() {
+        AgentProject project = new AgentProject("payment-service", "/repo/payment", null, Map.of());
+        AgentEvent first =
+                new AgentEvent(
+                        "e1",
+                        1,
+                        AgentEventKind.COMMAND,
+                        Instant.parse("2026-05-24T10:00:00Z"),
+                        null,
+                        "Bash",
+                        null,
+                        "passed",
+                        AgentEventStatus.SUCCESS,
+                        1234L,
+                        11,
+                        22,
+                        "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                        null,
+                        "run",
+                        "npm test payment",
+                        0,
+                        Map.of());
+        AgentEvent second =
+                new AgentEvent(
+                        "e1",
+                        1,
+                        AgentEventKind.COMMAND,
+                        Instant.parse("2026-05-24T10:00:00Z"),
+                        null,
+                        "Bash",
+                        null,
+                        "passed",
+                        AgentEventStatus.SUCCESS,
+                        1234L,
+                        11,
+                        23,
+                        "sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+                        null,
+                        "run",
+                        "npm test payment",
+                        0,
+                        Map.of());
+
+        AgentTimelineContent firstContent =
+                new AgentTimelineContent(
+                        "claude-code",
+                        "1.0",
+                        "session-123",
+                        "turn-1",
+                        "timeline-1",
+                        project,
+                        List.of(first));
+        AgentTimelineContent secondContent =
+                new AgentTimelineContent(
+                        "claude-code",
+                        "1.0",
+                        "session-123",
+                        "turn-1",
+                        "timeline-1",
+                        project,
+                        List.of(second));
+
+        assertThat(firstContent.getContentId()).isNotEqualTo(secondContent.getContentId());
+    }
+
+    @Test
     void eventKindShouldParseLifecycleWireValues() {
         assertThat(AgentEventKind.fromWireValue("notification"))
                 .isEqualTo(AgentEventKind.NOTIFICATION);
@@ -206,6 +319,9 @@ class AgentTimelineContentTest {
                                         AgentEventStatus.FAILED,
                                         null,
                                         null,
+                                        null,
+                                        null,
+                                        null,
                                         "blocked",
                                         null,
                                         null,
@@ -225,6 +341,9 @@ class AgentTimelineContentTest {
                                         null,
                                         null,
                                         null,
+                                        null,
+                                        null,
+                                        null,
                                         Map.of()),
                                 new AgentEvent(
                                         "compact-1",
@@ -236,6 +355,9 @@ class AgentTimelineContentTest {
                                         null,
                                         null,
                                         AgentEventStatus.SUCCESS,
+                                        null,
+                                        null,
+                                        null,
                                         null,
                                         null,
                                         "manual",

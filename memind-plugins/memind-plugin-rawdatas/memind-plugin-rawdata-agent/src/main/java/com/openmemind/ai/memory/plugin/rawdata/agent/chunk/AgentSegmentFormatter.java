@@ -99,6 +99,7 @@ public final class AgentSegmentFormatter {
         metadata.put("eventIds", episode.eventIds());
         metadata.put("commandEvents", commandEventMetadata(episode.commandEvents()));
         metadata.put("fileEvents", fileEventMetadata(episode.fileReferences()));
+        metadata.putAll(AgentToolTelemetry.metadata(episode.events()));
         if (episode.startTime() != null) {
             metadata.put("windowStart", episode.startTime());
         }

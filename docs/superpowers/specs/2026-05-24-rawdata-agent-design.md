@@ -1175,6 +1175,8 @@ rawdata-agent
   canonical path for complete agent work process timelines
 ```
 
+`rawdata-toolcall` remains a separate raw data type for pure tool-call logs. `rawdata-agent` may reuse deterministic tool telemetry ideas from `rawdata-toolcall`, but must not run the toolcall LLM extraction path by default and must not double-ingest Claude Code or Codex tool activity.
+
 Long-term, `rawdata-toolcall` can internally adapt pure tool-call records into `agent_timeline` episodes to reuse the same item extraction logic. This avoids duplicate tool extraction prompts and inconsistent TOOL memories.
 
 ## Configuration
