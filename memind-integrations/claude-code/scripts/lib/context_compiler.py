@@ -64,9 +64,34 @@ PROMPT_SECTION_LIMITS = {
     "memoryItems": 3,
 }
 
+TOOL_SECTION_ORDER = [
+    ("priorResolutions", "## Prior Resolutions"),
+    ("validationNotes", "## Validation Notes"),
+    ("relevantPlaybooks", "## Relevant Playbooks"),
+    ("directives", "## Directives"),
+    ("recentEvidence", "## Recent Evidence"),
+]
+
+TOOL_SECTION_BUDGETS = {
+    "priorResolutions": 900,
+    "validationNotes": 700,
+    "relevantPlaybooks": 700,
+    "directives": 500,
+    "recentEvidence": 700,
+}
+
+ALL_SECTION_ORDER = SESSION_SECTION_ORDER + PROMPT_SECTION_ORDER + TOOL_SECTION_ORDER
+
 SECTION_FIT_PRIORITY = {
     "memind_session_context": ["mustFollow", "watchOuts", "continueFrom", "playbooks", "facts"],
     "memind_memories": ["directives", "resolvedProblems", "playbooks", "toolNotes", "insights", "memoryItems"],
+    "memind_tool_context": [
+        "priorResolutions",
+        "validationNotes",
+        "directives",
+        "relevantPlaybooks",
+        "recentEvidence",
+    ],
 }
 
 WATCH_OUT_TERMS = {
@@ -165,6 +190,42 @@ def compile_prompt_retrieval_context(data, config):
     )
 
 
+def compile_tool_context(context, config):
+    target = context.get("target") or {}
+    items = [_normalize_tool_item(item) for item in context.get("items") or [] if _field(item, "text")]
+    raw_data = [_normalize_tool_rawdata(raw) for raw in context.get("rawData") or []]
+    sections = {
+        "priorResolutions": _top_category(items, "resolution", 2),
+        "validationNotes": _top_category(items, "tool", 3),
+        "relevantPlaybooks": _top_category(items, "playbook", 2),
+        "directives": _top_category(items, "directive", 2),
+        "recentEvidence": raw_data[:2],
+    }
+
+    attrs = {"tool": target.get("toolName") or "unknown"}
+    if target.get("path"):
+        attrs["file"] = target["path"]
+    if target.get("command"):
+        attrs["command"] = target["command"]
+    if target.get("projectSlug"):
+        attrs["project"] = target["projectSlug"]
+
+    return _render_context(
+        wrapper="memind_tool_context",
+        attrs=attrs,
+        preamble=(
+            "Use only if directly relevant to this exact tool call. "
+            "Current user instructions and repository files take precedence. "
+            "Verify old details against the working tree before relying on them."
+        ),
+        sections=_prepare_sections(sections, "tool_context"),
+        order=TOOL_SECTION_ORDER,
+        budgets=TOOL_SECTION_BUDGETS,
+        max_chars=int(config.get("toolContextMaxChars", 3500)),
+        entry_max_chars=int(config.get("toolContextEntryMaxChars", 520)),
+    )
+
+
 def _prepare_sections(sections, mode):
     prepared = {}
     high_value_seen = set()
@@ -247,6 +308,41 @@ def _normalize_insight(insight):
         "createdAt": _field(insight, "createdAt") or _field(insight, "created_at"),
         "score": 0,
     }
+
+
+def _normalize_tool_item(item):
+    category = str(_field(item, "category") or "memory").strip().lower()
+    return {
+        "kind": "item",
+        "id": _field(item, "id"),
+        "category": category,
+        "text": _clean(_field(item, "text")),
+        "createdAt": _field(item, "createdAt") or _field(item, "created_at"),
+        "score": _number(_field(item, "score"), _field(item, "finalScore"), 0),
+    }
+
+
+def _normalize_tool_rawdata(raw):
+    text = _field(raw, "caption") or _recent_evidence_from_metadata(_field(raw, "metadata") or {})
+    return {
+        "kind": "rawdata",
+        "id": _field(raw, "id") or _field(raw, "rawDataId") or _field(raw, "raw_data_id"),
+        "category": "agent_timeline",
+        "text": _clean(text),
+        "createdAt": _field(raw, "createdAt") or _field(raw, "created_at"),
+        "score": 0,
+    }
+
+
+def _recent_evidence_from_metadata(metadata):
+    stats = metadata.get("toolStats") or {}
+    parts = []
+    for tool_name, stat in stats.items():
+        success = int(stat.get("successCount") or 0)
+        failed = int(stat.get("failCount") or 0)
+        if success or failed:
+            parts.append(f"{tool_name} failed {failed} time(s) and passed {success} time(s)")
+    return "; ".join(parts)
 
 
 def _rank_entries(entries, section, mode):
@@ -430,7 +526,8 @@ def _fit_sections_to_total_budget(fixed_lines, rendered_sections, close_tag, max
         selected_keys.add(key)
         used += addition
 
-    selected_sections.sort(key=lambda item: [key for key, _title in SESSION_SECTION_ORDER + PROMPT_SECTION_ORDER].index(item[0]) if item[0] in {key for key, _title in SESSION_SECTION_ORDER + PROMPT_SECTION_ORDER} else 999)
+    order_index = {key: index for index, (key, _title) in enumerate(ALL_SECTION_ORDER)}
+    selected_sections.sort(key=lambda item: order_index.get(item[0], 999))
     selected = list(fixed_lines)
     for _key, section_lines in selected_sections:
         selected.append("")

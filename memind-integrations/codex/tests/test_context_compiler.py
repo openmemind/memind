@@ -223,6 +223,108 @@ class ContextCompilerTest(unittest.TestCase):
         self.assertIn("Memory retrieval encountered an error", rendered)
         self.assertIn("<memind_memories>", rendered)
 
+    def test_tool_context_compiler_renders_bounded_file_context(self):
+        from scripts.lib.context_compiler import compile_tool_context
+
+        rendered = compile_tool_context(
+            {
+                "target": {
+                    "toolName": "Edit",
+                    "kind": "file_edit",
+                    "path": "src/payment/calc.ts",
+                    "projectSlug": "payment-service-abc",
+                },
+                "items": [
+                    {
+                        "id": "res-1",
+                        "category": "resolution",
+                        "text": "rounding mismatch was resolved in src/payment/calc.ts and validated with npm test payment.",
+                        "metadata": {
+                            "files": ["src/payment/calc.ts"],
+                            "commands": ["npm test payment"],
+                        },
+                    },
+                    {
+                        "id": "tool-1",
+                        "category": "tool",
+                        "text": "Use npm test payment to validate changes touching src/payment/calc.ts; it failed once and passed once in this agent episode.",
+                        "metadata": {
+                            "files": ["src/payment/calc.ts"],
+                            "commands": ["npm test payment"],
+                            "toolStats": {"Bash": {"successCount": 1, "failCount": 1}},
+                        },
+                    },
+                    {
+                        "id": "pb-1",
+                        "category": "playbook",
+                        "text": "When payment calculation logic changes, update focused tests first, then run npm test payment.",
+                        "metadata": {},
+                    },
+                ],
+                "rawData": [
+                    {
+                        "id": "rd-1",
+                        "caption": "Edited src/payment/calc.ts and validated npm test payment.",
+                        "metadata": {
+                            "toolStats": {"Bash": {"successCount": 1, "failCount": 1}},
+                        },
+                    }
+                ],
+            },
+            {"toolContextMaxChars": 3500, "toolContextEntryMaxChars": 520},
+        )
+
+        self.assertIn('<memind_tool_context tool="Edit" file="src/payment/calc.ts"', rendered)
+        self.assertIn("Use only if directly relevant to this exact tool call", rendered)
+        self.assertIn("## Prior Resolutions", rendered)
+        self.assertIn("[item:res-1 resolution]", rendered)
+        self.assertIn("## Validation Notes", rendered)
+        self.assertIn("[item:tool-1 tool]", rendered)
+        self.assertIn("## Relevant Playbooks", rendered)
+        self.assertIn("[item:pb-1 playbook]", rendered)
+        self.assertIn("## Recent Evidence", rendered)
+        self.assertIn("[rawdata:rd-1]", rendered)
+        self.assertNotIn("durationMs", rendered)
+        self.assertNotIn("inputTokens", rendered)
+        self.assertNotIn("outputTokens", rendered)
+        self.assertTrue(rendered.endswith("</memind_tool_context>"))
+
+    def test_tool_context_compiler_renders_command_context_with_budget(self):
+        from scripts.lib.context_compiler import compile_tool_context
+
+        rendered = compile_tool_context(
+            {
+                "target": {
+                    "toolName": "Bash",
+                    "kind": "test_result",
+                    "command": "npm test payment",
+                    "projectSlug": "payment-service-abc",
+                },
+                "items": [
+                    {
+                        "id": "tool-1",
+                        "category": "tool",
+                        "text": "Use npm test payment after editing payment calculation files. " + "x" * 900,
+                        "metadata": {"commands": ["npm test payment"]},
+                    },
+                    {
+                        "id": "dir-1",
+                        "category": "directive",
+                        "text": "Do not skip focused payment validation after touching calculation code.",
+                        "metadata": {},
+                    },
+                ],
+                "rawData": [],
+            },
+            {"toolContextMaxChars": 900, "toolContextEntryMaxChars": 260},
+        )
+
+        self.assertLessEqual(len(rendered), 900)
+        self.assertIn('<memind_tool_context tool="Bash" command="npm test payment"', rendered)
+        self.assertIn("## Validation Notes", rendered)
+        self.assertIn("## Directives", rendered)
+        self.assertTrue(rendered.endswith("</memind_tool_context>"))
+
 
 if __name__ == "__main__":
     unittest.main()
