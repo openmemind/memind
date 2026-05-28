@@ -40,6 +40,30 @@ target/
 __pycache__/
 *.py[cod]
 
+### JavaScript / TypeScript ###
+node_modules/
+.pnpm-store/
+dist/
+dist-ssr/
+coverage/
+.turbo/
+.next/
+.vite/
+.vitest-attachments/
+**/__screenshots__/
+*.tsbuildinfo
+*.tgz
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+### Go ###
+*.test
+*.out
+coverage.out
+*.coverprofile
+
 .flattened-pom.xml
 **/dependency-reduced-pom.xml
 
