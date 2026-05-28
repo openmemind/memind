@@ -27,8 +27,8 @@ from memind.types import (
     QueryMemoryItemsRequest,
     QueryMemoryRawDataRequest,
     RawDataQueryIncludeOptions,
-    RetrieveMemoryRequest,
     RetrieveIncludeOptions,
+    RetrieveMemoryRequest,
     Strategy,
     TimeRange,
 )

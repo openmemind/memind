@@ -26,8 +26,6 @@ from memind.types.memory import (
     CommitMemoryRequest,
     ExtractMemoryRequest,
     ExtractMemoryResponse,
-    RetrieveMemoryRequest,
-    RetrieveMemoryResponse,
     MetadataCondition,
     MetadataFilter,
     QueryMemoryItemsRequest,
@@ -36,6 +34,8 @@ from memind.types.memory import (
     QueryMemoryRawDataResponse,
     RawDataQueryIncludeOptions,
     RetrieveIncludeOptions,
+    RetrieveMemoryRequest,
+    RetrieveMemoryResponse,
     TimeRange,
 )
 from memind.types.message import (
