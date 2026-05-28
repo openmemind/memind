@@ -208,22 +208,22 @@ The injected context is compiled from generic OpenAPI query results:
 
 ```text
 <memind_session_context project="payment-service-<stable-hash>">
-Memind project memory. Use only when directly helpful. Prefer explicit user instructions and repository files over memory if they conflict.
+Historical Memind project memory. Use only when directly helpful. Current user instructions and repository files take precedence. Verify old implementation details against the working tree before relying on them.
 
 ## Continue From
-- [rawdata:rd-1] Previous turn summary from agent_timeline caption.
+- [rawdata:rd-1, 2026-05-27] Completed SessionStart context injection for Claude Code and Codex.
 
 ## Must Follow
-- [item:101 directive] Project or agent instruction extracted from previous work.
+- [item:101 directive, 2026-05-27] Keep userId and agentId stable; use metadata.projectSlug for project isolation.
 
 ## Watch Outs
-- [item:102 resolution] Previously solved issue or failure pattern.
+- [item:102 resolution, 2026-05-27] Codex tests must run with Python 3.12; older Python can fail on modern type syntax.
 
 ## Reusable Playbooks
-- [item:103 playbook] Repeatable workflow for this project.
+- [item:103 playbook, 2026-05-27] After changing Claude Code or Codex hooks, run both integration unittest suites and git diff --check.
 
 ## Useful Facts
-- [item:104 event] Project fact useful for continuing work.
+- [item:104 event, 2026-05-27] SessionStart is read-only: it queries memory and injects context without writing rawdata.
 </memind_session_context>
 ```
 
@@ -239,16 +239,31 @@ The injected context format is:
 ```text
 <memind_memories>
 Relevant memories from Memind. Use only when directly helpful:
+
+## Directives
+- [item:201 directive] Do not default Claude Code or Codex to conversation rawdata.
+
+## Resolved Problems
+- [item:202 resolution] Retry spool events are cleared only after successful agent_timeline extraction.
+
+## Agent Playbooks
+- [item:203 playbook] When hooks change, run both integration test suites and git diff --check.
+
+## Tool Notes
+- [item:204 tool] Use Python 3.12 for the Codex integration test suite.
+
 ## Insights
-- [insight:42] ...
+- [insight:301 root] Coding-agent integrations share memory through stable userId and agentId.
 
 ## Memory Items
-- [item:101] ...
+- [item:205 event] rawdata-agent emits agent_episode segment metadata.
 </memind_memories>
 ```
 
-Insights are formatted before memory items. Higher-level insights (`ROOT`, then `BRANCH`) are preferred; `LEAF`
-insights are omitted by default unless no higher-level insights are available.
+The adapter compiles retrieved Memind results into execution-oriented sections. Directives, resolved problems,
+playbooks, and tool notes get independent caps so a high-scoring generic item cannot crowd out coding-agent memory.
+Higher-level insights (`ROOT`, then `BRANCH`) are preferred; `LEAF` insights are omitted by default unless no
+higher-level insights are available.
 
 `retrieveContextTurns` defaults to `0`, so retrieval uses only the current prompt and does not read large
 transcripts. Set it to `1` or `2` if your prompts are often short, such as "fix this" or "continue".
@@ -256,14 +271,14 @@ transcripts. Set it to `1` or `2` if your prompts are often short, such as "fix 
 Agent memory items are grouped separately when returned by Memind:
 
 ```text
-## Agent Playbooks
-## Resolved Problems
-## Tool Notes
 ## Directives
+## Resolved Problems
+## Agent Playbooks
+## Tool Notes
 ```
 
-This phase keeps retrieval formatting intentionally simple. It does not add a new Retrieval Context Compiler;
-retrieved memories are still formatted from Memind items and insights by the adapter.
+The compiler deduplicates per section, applies section budgets, and preserves the closing XML-style wrapper when the
+context must be truncated.
 
 ## Ingestion Behavior
 
