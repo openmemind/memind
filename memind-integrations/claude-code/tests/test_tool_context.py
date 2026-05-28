@@ -15,6 +15,7 @@
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -25,6 +26,56 @@ from scripts.lib.tool_context import (
     extract_tool_context_target,
     should_query_tool_context,
 )
+
+
+class FakeClient:
+    def __init__(self):
+        self.item_queries = []
+        self.raw_queries = []
+        self.retrieve_queries = []
+
+    def query_items(self, **kwargs):
+        self.item_queries.append(kwargs)
+        if kwargs.get("metadata_filter", {}).get("all"):
+            return SimpleNamespace(
+                items=[
+                    SimpleNamespace(
+                        id="res-1",
+                        text="rounding mismatch was resolved in src/payment/calc.ts and validated with npm test payment.",
+                        category="resolution",
+                        created_at="2026-05-27T10:00:00Z",
+                        metadata={
+                            "projectSlug": "payment-service-abc",
+                            "files": ["src/payment/calc.ts"],
+                            "commands": ["npm test payment"],
+                        },
+                    )
+                ]
+            )
+        return SimpleNamespace(items=[])
+
+    def query_raw_data(self, **kwargs):
+        self.raw_queries.append(kwargs)
+        return SimpleNamespace(
+            raw_data=[
+                SimpleNamespace(
+                    id="rd-1",
+                    caption="Edited src/payment/calc.ts and validated npm test payment.",
+                    type="agent_timeline",
+                    created_at="2026-05-27T10:05:00Z",
+                    metadata={
+                        "projectSlug": "payment-service-abc",
+                        "files": ["src/payment/calc.ts"],
+                        "commands": ["npm test payment"],
+                        "toolStats": {"Bash": {"successCount": 1, "failCount": 1}},
+                    },
+                )
+            ]
+        )
+
+    def retrieve(self, *args, **kwargs):
+        self.retrieve_queries.append(kwargs)
+        return SimpleNamespace(items=[], insights=[], raw_data=[])
 
 
 class ToolContextTest(unittest.TestCase):
@@ -118,6 +169,80 @@ class ToolContextTest(unittest.TestCase):
         )
 
         self.assertEqual(prompt, "Fix payment tests")
+
+    def test_load_tool_context_uses_exact_queries_first(self):
+        from scripts.lib.tool_context import load_tool_context
+
+        client = FakeClient()
+        context = load_tool_context(
+            client,
+            "u",
+            "a",
+            {
+                "toolName": "Edit",
+                "kind": "file_edit",
+                "path": "src/payment/calc.ts",
+                "projectSlug": "payment-service-abc",
+                "prompt": "Fix payment tests",
+            },
+            {"toolContextMaxItems": 6, "toolContextMinExactItems": 2},
+        )
+
+        self.assertEqual(len(client.item_queries), 2)
+        self.assertEqual(len(client.raw_queries), 1)
+        self.assertEqual(client.item_queries[0]["categories"], ["resolution", "tool", "playbook", "directive"])
+        self.assertEqual(client.item_queries[0]["metadata_filter"]["all"][0]["path"], "projectSlug")
+        self.assertEqual(client.raw_queries[0]["types"], ["agent_timeline"])
+        self.assertEqual(context["target"]["path"], "src/payment/calc.ts")
+        self.assertEqual(context["items"][0]["category"], "resolution")
+        self.assertEqual(context["rawData"][0]["id"], "rd-1")
+
+    def test_load_tool_context_uses_retrieve_fallback_when_exact_hits_are_sparse(self):
+        from scripts.lib.tool_context import load_tool_context
+
+        class SparseClient(FakeClient):
+            def query_items(self, **kwargs):
+                self.item_queries.append(kwargs)
+                return SimpleNamespace(items=[])
+
+            def query_raw_data(self, **kwargs):
+                self.raw_queries.append(kwargs)
+                return SimpleNamespace(raw_data=[])
+
+            def retrieve(self, *args, **kwargs):
+                self.retrieve_queries.append(kwargs)
+                return SimpleNamespace(
+                    items=[
+                        SimpleNamespace(
+                            id="tool-1",
+                            text="Use npm test payment after editing payment calculation files.",
+                            category="tool",
+                            created_at="2026-05-27T10:00:00Z",
+                            metadata={"commands": ["npm test payment"]},
+                        )
+                    ],
+                    insights=[],
+                    raw_data=[],
+                )
+
+        client = SparseClient()
+        context = load_tool_context(
+            client,
+            "u",
+            "a",
+            {
+                "toolName": "Bash",
+                "kind": "test_result",
+                "command": "npm test payment",
+                "projectSlug": "payment-service-abc",
+                "prompt": "Fix payment tests",
+            },
+            {"toolContextMaxItems": 6, "toolContextMinExactItems": 1},
+        )
+
+        self.assertEqual(len(client.retrieve_queries), 1)
+        self.assertEqual(client.retrieve_queries[0]["categories"], ["resolution", "tool", "playbook", "directive"])
+        self.assertEqual(context["items"][0]["id"], "tool-1")
 
 
 if __name__ == "__main__":
