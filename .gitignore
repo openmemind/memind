@@ -36,6 +36,10 @@ target/
 ### Mac OS ###
 .DS_Store
 
+### Python ###
+__pycache__/
+*.py[cod]
+
 .flattened-pom.xml
 **/dependency-reduced-pom.xml
 
