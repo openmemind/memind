@@ -122,13 +122,16 @@ The installed hooks are:
 | --- | --- | ---: | --- |
 | `SessionStart` | `scripts/session_start.py` | 5s | Replay at most one failed timeline payload, clean old state, and inject project continuity context when available. |
 | `UserPromptSubmit` | `scripts/retrieve.py` | 12s | Buffer the user prompt event and retrieve relevant Memind context. |
-| `PreToolUse` | `scripts/pre_tool_use.py` | 5s | Buffer a redacted tool-start event in local session state. |
+| `PreToolUse` | `scripts/pre_tool_use.py` | 5s | Buffer a redacted tool-start event and, for high-value file edits or commands, inject compact file/tool memory context. |
 | `PostToolUse` | `scripts/post_tool_use.py` | 5s | Buffer a redacted tool-result event in local session state. |
 | `Stop` | `scripts/ingest.py` | 15s | Flush buffered `agent_timeline` events after a turn. |
 
 Codex currently registers only the hook events listed above. Memind does not simulate Claude Code-only lifecycle
 events such as `PreCompact`, `SessionEnd`, `Notification`, or `SubagentStop` in the Codex adapter. If Codex adds
 native support for additional lifecycle events, they should be added as explicit hooks with tests.
+
+`PreToolUse` is intentionally synchronous because it may inject a small context block before the tool executes. The hook
+fails open and skips retrieval for low-value tools. `PostToolUse` and `Stop` keep their existing ingestion behavior.
 
 ## Configuration
 
@@ -166,10 +169,15 @@ Settings are loaded in this order:
 | `autoRetrieve` | `true` | Enables prompt-time memory retrieval. |
 | `autoSessionContext` | `true` | Enables SessionStart project continuity context injection. |
 | `autoIngestAgentTimeline` | `true` | Enables user prompt, tool/result, assistant message, and stop event buffering plus `agent_timeline` rawdata flush. |
+| `autoToolContext` | `true` | Enables compact PreToolUse context for high-value file edits and commands. |
 | `retrieveStrategy` | `SIMPLE` | Memind retrieval strategy. |
 | `retrieveMaxEntries` | `8` | Maximum formatted memory entries injected into Codex. |
 | `retrieveMaxChars` | `6000` | Maximum injected context characters. |
 | `retrieveContextTurns` | `0` | Number of recent transcript turns to include in the retrieval query. |
+| `toolContextMaxChars` | `3500` | Maximum injected PreToolUse context characters. |
+| `toolContextEntryMaxChars` | `520` | Maximum characters per PreToolUse context entry. |
+| `toolContextMaxItems` | `6` | Maximum exact or fallback items considered for PreToolUse context. |
+| `toolContextMinExactItems` | `2` | Minimum exact item hits before semantic retrieve fallback is skipped. |
 | `sessionContextRecentSessions` | `3` | Maximum recent `agent_timeline` captions shown at SessionStart. |
 | `sessionContextMaxItems` | `6` | Maximum items fetched for each SessionStart context section. |
 | `sessionContextMaxChars` | `6000` | Maximum SessionStart context characters. |
@@ -187,7 +195,9 @@ export MEMIND_USER_ID=local__alice
 export MEMIND_AGENT_ID=coding-agent
 export MEMIND_SOURCE_CLIENT=codex
 export MEMIND_AUTO_SESSION_CONTEXT=true
+export MEMIND_AUTO_TOOL_CONTEXT=true
 export MEMIND_AUTO_INGEST_AGENT_TIMELINE=true
+export MEMIND_TOOL_CONTEXT_MAX_CHARS=3500
 export MEMIND_SESSION_CONTEXT_MAX_CHARS=6000
 export MEMIND_RETRIEVE_CONTEXT_TURNS=0
 export MEMIND_DEBUG=true
@@ -196,8 +206,9 @@ export MEMIND_DEBUG=true
 Additional environment variables include `MEMIND_AUTO_RETRIEVE`,
 `MEMIND_RETRIEVE_STRATEGY`, `MEMIND_RETRIEVE_MAX_ENTRIES`, `MEMIND_RETRIEVE_MAX_CHARS`,
 `MEMIND_SESSION_CONTEXT_RECENT_SESSIONS`, `MEMIND_SESSION_CONTEXT_MAX_ITEMS`,
-`MEMIND_STATE_MAX_AGE_DAYS`, `MEMIND_INGEST_RETRY_SPOOL`, `MEMIND_INGEST_RETRY_MAX_FILES`,
-and `MEMIND_INGEST_RETRY_MAX_AGE_DAYS`.
+`MEMIND_TOOL_CONTEXT_ENTRY_MAX_CHARS`, `MEMIND_TOOL_CONTEXT_MAX_ITEMS`,
+`MEMIND_TOOL_CONTEXT_MIN_EXACT_ITEMS`, `MEMIND_STATE_MAX_AGE_DAYS`,
+`MEMIND_INGEST_RETRY_SPOOL`, `MEMIND_INGEST_RETRY_MAX_FILES`, and `MEMIND_INGEST_RETRY_MAX_AGE_DAYS`.
 
 ## Identity Model
 
@@ -294,6 +305,27 @@ Agent memory items are grouped separately when returned by Memind:
 
 The compiler deduplicates per section, applies section budgets, and preserves the closing XML-style wrapper when the
 context must be truncated.
+
+## PreToolUse Context
+
+For high-value tools such as `Edit`, `Write`, `MultiEdit`, and validation shell commands, Memind may inject a compact
+tool-specific context block:
+
+```text
+<memind_tool_context tool="Edit" file="src/payment/calc.ts">
+Use only if directly relevant to this exact tool call. Current user instructions and repository files take precedence.
+
+## Prior Resolutions
+- [item:res-1 resolution] rounding mismatch was resolved in src/payment/calc.ts and validated with npm test payment.
+
+## Validation Notes
+- [item:tool-1 tool] Use npm test payment to validate changes touching src/payment/calc.ts.
+</memind_tool_context>
+```
+
+The context is built from existing Memind items and `agent_episode` metadata. It does not add extra LLM calls and does
+not submit duplicate `tool_call` raw data. Setting `autoToolContext` to `false` disables only this PreToolUse context
+injection; tool-start events are still buffered into the local `agent_timeline` state for later Stop-time extraction.
 
 ## Ingestion Behavior
 

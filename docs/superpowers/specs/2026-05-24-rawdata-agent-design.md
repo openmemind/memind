@@ -1361,6 +1361,12 @@ Recommendation: not required for v1.
 
 Use `memory/extract` with `rawContent.type = "agent_timeline"` first. Add endpoint later as a convenience wrapper if client ergonomics demand it.
 
+### PreToolUse Context
+
+`rawdata-agent` stores enough deterministic file/tool metadata to support a retrieval-time PreToolUse context compiler.
+The compiler should use existing `tool`, `resolution`, `playbook`, `directive`, and `agent_episode` data. It must not
+change the rawdata storage model, must not run `rawdata-toolcall` extraction, and must not add per-tool LLM calls.
+
 ## Risks and Mitigations
 
 ### Risk: Too Much Noise
