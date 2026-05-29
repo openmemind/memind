@@ -558,3 +558,38 @@ Contributions are welcome! Feel free to open an [issue](https://github.com/openm
 ## License
 
 [Apache License 2.0](LICENSE)
+
+
+## FAQ
+
+### What is Memind?
+Memind is a hierarchical cognitive memory and context engine for AI agents, built natively in Java. Instead of treating memory as flat storage, Memind organizes memories into a structured **Insight Tree** that evolves over time, achieving SOTA results on LoCoMo (86.88%), LongMemEval (84.20%), and PersonaMem (67.91%) benchmarks.
+
+### Key Features
+| Feature | Description |
+|---------|-------------|
+| Insight Tree | Hierarchical knowledge organization that evolves over time |
+| Java Native | Built natively in Java with Spring Boot 4.0 and Spring AI 2.0 |
+| SOTA Benchmarks | Highest results on LoCoMo, LongMemEval, PersonaMem |
+| Knowledge Evolution | Memories consolidate into deeper understanding |
+| Structured Memory | Not flat facts - hierarchical organization |
+
+### Benchmark Results
+| Benchmark | Score | Comparison |
+|-----------|-------|------------|
+| LoCoMo | 86.88% | Surpassed EverMemOS |
+| LongMemEval | 84.20% | Surpassed EverMemOS |
+| PersonaMem | 67.91% | Exceeded MemOS |
+
+### Requirements
+- Java 21
+- Spring Boot 4.0
+- Spring AI 2.0
+
+### License
+Apache 2.0 License
+
+### Help Resources
+- [Documentation](./docs/)
+- [README_zh.md](./README_zh.md) - Chinese version
+- [Issues](https://github.com/openmemind/memind/issues)
