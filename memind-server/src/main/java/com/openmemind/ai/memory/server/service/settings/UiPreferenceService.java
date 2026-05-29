@@ -17,6 +17,7 @@ import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.server.domain.config.model.ServerRuntimeConfigDO;
 import com.openmemind.ai.memory.server.domain.settings.UiPreferences;
 import com.openmemind.ai.memory.server.service.config.ServerRuntimeConfigRepository;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.JacksonException;
@@ -49,16 +50,31 @@ public class UiPreferenceService {
         return repository
                 .findActive(CONFIG_KEY)
                 .map(config -> updateExisting(config, requested))
-                .orElseGet(() -> insertInitial(requested));
+                .orElseGet(() -> insertOrUpdate(requested));
     }
 
     private UiPreferences initializeDefaults() {
-        return insertInitial(UiPreferences.defaults());
+        return read(
+                repository
+                        .findOrInsertInitial(CONFIG_KEY, 1L, write(UiPreferences.defaults()))
+                        .getConfigJson());
     }
 
-    private UiPreferences insertInitial(UiPreferences preferences) {
-        repository.insertInitial(CONFIG_KEY, 1L, write(preferences));
-        return preferences;
+    private UiPreferences insertOrUpdate(UiPreferences preferences) {
+        try {
+            repository.insertInitial(CONFIG_KEY, 1L, write(preferences));
+            return preferences;
+        } catch (DuplicateKeyException e) {
+            ServerRuntimeConfigDO config =
+                    repository
+                            .findActive(CONFIG_KEY)
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "UI preferences were not found after initial"
+                                                            + " insert"));
+            return updateExisting(config, preferences);
+        }
     }
 
     private UiPreferences updateExisting(ServerRuntimeConfigDO config, UiPreferences preferences) {

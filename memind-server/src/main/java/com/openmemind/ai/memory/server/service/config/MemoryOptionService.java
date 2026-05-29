@@ -15,6 +15,7 @@ package com.openmemind.ai.memory.server.service.config;
 
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import com.openmemind.ai.memory.server.domain.config.model.ServerRuntimeConfigDO;
 import com.openmemind.ai.memory.server.domain.config.response.MemoryOptionsSnapshot;
 import com.openmemind.ai.memory.server.domain.config.view.MemoryOptionItemView;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeFactory;
@@ -85,18 +86,18 @@ public class MemoryOptionService {
     private MemoryOptionsState loadOrInitialize() {
         return repository
                 .findActive(CONFIG_KEY)
-                .map(
-                        config ->
-                                new MemoryOptionsState(
-                                        config.getConfigVersion(),
-                                        codec.read(config.getConfigJson())))
+                .map(this::toState)
                 .orElseGet(this::initializeDefaults);
     }
 
     private MemoryOptionsState initializeDefaults() {
         MemoryBuildOptions defaults = MemoryBuildOptions.defaults();
-        repository.insertInitial(CONFIG_KEY, 1L, codec.write(defaults));
-        return new MemoryOptionsState(1L, defaults);
+        return toState(repository.findOrInsertInitial(CONFIG_KEY, 1L, codec.write(defaults)));
+    }
+
+    private MemoryOptionsState toState(ServerRuntimeConfigDO config) {
+        return new MemoryOptionsState(
+                config.getConfigVersion(), codec.read(config.getConfigJson()));
     }
 
     private static OptimisticLockingFailureException versionConflict(
