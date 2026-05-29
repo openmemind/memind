@@ -58,6 +58,30 @@ public class PostgresqlConversationBufferAccessor {
             LIMIT :limit
             """;
 
+    private static final String DRAIN_PENDING_SQL =
+            """
+            WITH updated AS (
+                UPDATE memory_conversation_buffer AS b
+                SET extracted = TRUE, updated_at = CURRENT_TIMESTAMP
+                WHERE b.session_id = :sessionId
+                  AND b.extracted = FALSE
+                  AND b.deleted = FALSE
+                RETURNING b.id, b.session_id, b.role, b.content, b.user_name, b.timestamp
+            )
+            SELECT id, session_id, role, content, user_name, timestamp
+            FROM updated
+            ORDER BY id ASC
+            """;
+
+    private static final String CLEAR_PENDING_SQL =
+            """
+            UPDATE memory_conversation_buffer
+            SET extracted = TRUE, updated_at = CURRENT_TIMESTAMP
+            WHERE session_id = :sessionId
+              AND extracted = FALSE
+              AND deleted = FALSE
+            """;
+
     private static final String MARK_EXTRACTED_SQL =
             """
             UPDATE memory_conversation_buffer
@@ -116,6 +140,25 @@ public class PostgresqlConversationBufferAccessor {
                                         .list());
         Collections.reverse(descending);
         return descending;
+    }
+
+    public List<ConversationBufferRow> drainPending(String sessionId) {
+        Objects.requireNonNull(sessionId, "sessionId");
+        return jdbi.withHandle(
+                handle ->
+                        handle.createQuery(DRAIN_PENDING_SQL)
+                                .bind("sessionId", sessionId)
+                                .map(PostgresqlConversationBufferAccessor::mapRecord)
+                                .list());
+    }
+
+    public void clearPending(String sessionId) {
+        Objects.requireNonNull(sessionId, "sessionId");
+        jdbi.useHandle(
+                handle ->
+                        handle.createUpdate(CLEAR_PENDING_SQL)
+                                .bind("sessionId", sessionId)
+                                .execute());
     }
 
     public void markExtractedByIds(List<Long> ids) {

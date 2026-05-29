@@ -11,13 +11,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.openmemind.ai.memory.plugin.jdbc.sqlite;
+package com.openmemind.ai.memory.plugin.jdbc.mysql;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.mysql.cj.jdbc.MysqlDataSource;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.plugin.jdbc.internal.buffer.ConversationBufferRow;
-import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -30,48 +30,21 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import org.sqlite.SQLiteDataSource;
+import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
-class SqliteConversationBufferTest {
+@Testcontainers
+class MysqlConversationBufferConcurrencyTest {
 
-    @Test
-    void pendingAndRecentViewsShareOnePersistedConversationLog(@TempDir Path tempDir) {
-        SQLiteDataSource dataSource = new SQLiteDataSource();
-        dataSource.setUrl("jdbc:sqlite:" + tempDir.resolve("conversation.db"));
-
-        var pendingBuffer = new SqliteConversationBuffer(dataSource, true);
-        var recentBuffer = new SqliteRecentConversationBuffer(dataSource, true);
-        String sessionId = "user-1:agent-1";
-
-        pendingBuffer.append(
-                sessionId, Message.user("hello", Instant.parse("2026-04-01T00:00:00Z")));
-        pendingBuffer.append(
-                sessionId, Message.assistant("hi", Instant.parse("2026-04-01T00:00:01Z")));
-
-        assertThat(pendingBuffer.load(sessionId))
-                .extracting(Message::textContent)
-                .containsExactly("hello", "hi");
-        assertThat(recentBuffer.loadRecent(sessionId, 10))
-                .extracting(Message::textContent)
-                .containsExactly("hello", "hi");
-
-        assertThat(pendingBuffer.drain(sessionId))
-                .extracting(Message::textContent)
-                .containsExactly("hello", "hi");
-
-        assertThat(pendingBuffer.load(sessionId)).isEmpty();
-        assertThat(recentBuffer.loadRecent(sessionId, 10))
-                .extracting(Message::textContent)
-                .containsExactly("hello", "hi");
-    }
+    @Container private static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4");
 
     @Test
-    void concurrentDrainClaimsPreexistingBatchOnce(@TempDir Path tempDir) throws Exception {
-        SQLiteDataSource dataSource = sqliteDataSource(tempDir.resolve("concurrent.db"));
-        String sessionId = "sqlite-concurrent-user:agent";
+    void concurrentDrainClaimsPreexistingBatchOnce() throws Exception {
+        DataSource dataSource = dataSource();
+        String sessionId = "mysql-concurrent-user:agent";
         int messageCount = 20;
-        SqliteConversationBuffer seedBuffer = new SqliteConversationBuffer(dataSource);
+        MysqlConversationBuffer seedBuffer = new MysqlConversationBuffer(dataSource);
         for (int i = 0; i < messageCount; i++) {
             seedBuffer.append(
                     sessionId,
@@ -82,23 +55,23 @@ class SqliteConversationBufferTest {
         CyclicBarrier afterBothSelections = new CyclicBarrier(2);
         // Regression trap for the old select-then-mark drain path.
         var first =
-                new SqliteConversationBuffer(
+                new MysqlConversationBuffer(
                         new BlockingSelectAccessor(dataSource, afterBothSelections));
         var second =
-                new SqliteConversationBuffer(
+                new MysqlConversationBuffer(
                         new BlockingSelectAccessor(dataSource, afterBothSelections));
 
         List<List<Message>> drained = drainConcurrently(first, second, sessionId);
 
         assertAtomicDrainResult(drained, messageCount);
         assertThat(seedBuffer.load(sessionId)).isEmpty();
-        assertThat(new SqliteRecentConversationBuffer(dataSource).loadRecent(sessionId, 100))
+        assertThat(new MysqlRecentConversationBuffer(dataSource).loadRecent(sessionId, 100))
                 .extracting(Message::textContent)
                 .containsExactlyElementsOf(expectedMessages(messageCount));
     }
 
     private static List<List<Message>> drainConcurrently(
-            SqliteConversationBuffer first, SqliteConversationBuffer second, String sessionId)
+            MysqlConversationBuffer first, MysqlConversationBuffer second, String sessionId)
             throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CyclicBarrier startBarrier = new CyclicBarrier(2);
@@ -116,7 +89,7 @@ class SqliteConversationBufferTest {
     }
 
     private static List<Message> drainAfterBarrier(
-            SqliteConversationBuffer buffer, String sessionId, CyclicBarrier startBarrier) {
+            MysqlConversationBuffer buffer, String sessionId, CyclicBarrier startBarrier) {
         awaitBarrier(startBarrier);
         return buffer.drain(sessionId);
     }
@@ -140,13 +113,15 @@ class SqliteConversationBufferTest {
         return expected;
     }
 
-    private static SQLiteDataSource sqliteDataSource(Path path) {
-        SQLiteDataSource dataSource = new SQLiteDataSource();
-        dataSource.setUrl("jdbc:sqlite:" + path + "?busy_timeout=5000");
+    private static DataSource dataSource() {
+        MysqlDataSource dataSource = new MysqlDataSource();
+        dataSource.setUrl(MYSQL.getJdbcUrl());
+        dataSource.setUser(MYSQL.getUsername());
+        dataSource.setPassword(MYSQL.getPassword());
         return dataSource;
     }
 
-    private static final class BlockingSelectAccessor extends SqliteConversationBufferAccessor {
+    private static final class BlockingSelectAccessor extends MysqlConversationBufferAccessor {
 
         private final CyclicBarrier afterBothSelections;
 

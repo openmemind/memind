@@ -52,23 +52,13 @@ public class MysqlConversationBuffer implements PendingConversationBuffer {
 
     @Override
     public void clear(String sessionId) {
-        List<Long> ids =
-                accessor.selectPending(Objects.requireNonNull(sessionId, "sessionId")).stream()
-                        .map(ConversationBufferRow::id)
-                        .toList();
-        if (!ids.isEmpty()) {
-            accessor.markExtractedByIds(ids);
-        }
+        accessor.clearPending(Objects.requireNonNull(sessionId, "sessionId"));
     }
 
     @Override
     public List<Message> drain(String sessionId) {
         List<ConversationBufferRow> rows =
-                accessor.selectPending(Objects.requireNonNull(sessionId, "sessionId"));
-        List<Long> ids = rows.stream().map(ConversationBufferRow::id).toList();
-        if (!ids.isEmpty()) {
-            accessor.markExtractedByIds(ids);
-        }
+                accessor.drainPending(Objects.requireNonNull(sessionId, "sessionId"));
         return rows.stream().map(ConversationBufferRow::message).toList();
     }
 }

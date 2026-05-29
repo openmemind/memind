@@ -52,6 +52,7 @@ public class MemoryStoreDdl implements IDdl, Ordered {
         ensureItemTemporalColumnsPresent();
         ensureItemTemporalLookupSchemaPresent();
         ensureRawDataCaptionVectorIndexPresent();
+        ensureMultimodalRawDataSchemaPresent();
         if (!hadInsightTypeTable && tableExists("memory_insight_type")) {
             seedDefaultInsightTypes();
         }
@@ -324,6 +325,49 @@ public class MemoryStoreDdl implements IDdl, Ordered {
                 "idx_raw_data_caption_vector_id",
                 "CREATE INDEX idx_raw_data_caption_vector_id ON"
                         + " memory_raw_data(user_id, agent_id, caption_vector_id)");
+    }
+
+    private void ensureMultimodalRawDataSchemaPresent() {
+        if (!tableExists("memory_raw_data")) {
+            return;
+        }
+        switch (databaseDialectDetector.detect(dataSource)) {
+            case SQLITE -> {
+                ensureColumn(
+                        "memory_raw_data",
+                        "resource_id",
+                        "ALTER TABLE memory_raw_data ADD COLUMN resource_id TEXT");
+                ensureColumn(
+                        "memory_raw_data",
+                        "mime_type",
+                        "ALTER TABLE memory_raw_data ADD COLUMN mime_type TEXT");
+            }
+            case MYSQL -> {
+                ensureColumn(
+                        "memory_raw_data",
+                        "resource_id",
+                        "ALTER TABLE memory_raw_data ADD COLUMN resource_id VARCHAR(64)");
+                ensureColumn(
+                        "memory_raw_data",
+                        "mime_type",
+                        "ALTER TABLE memory_raw_data ADD COLUMN mime_type VARCHAR(128)");
+            }
+            case POSTGRESQL -> {
+                ensureColumn(
+                        "memory_raw_data",
+                        "resource_id",
+                        "ALTER TABLE memory_raw_data ADD COLUMN resource_id VARCHAR(64)");
+                ensureColumn(
+                        "memory_raw_data",
+                        "mime_type",
+                        "ALTER TABLE memory_raw_data ADD COLUMN mime_type VARCHAR(128)");
+            }
+        }
+        ensureIndex(
+                "memory_raw_data",
+                "idx_raw_data_resource_id",
+                "CREATE INDEX idx_raw_data_resource_id ON"
+                        + " memory_raw_data(user_id, agent_id, resource_id)");
     }
 
     private void ensureColumn(String tableName, String columnName, String sql) {

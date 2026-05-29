@@ -62,6 +62,59 @@ class SqlScriptRunnerTest {
     }
 
     @Test
+    void splitStatementsKeepsMysqlProcedureWithNestedIfBlocksTogether() {
+        List<String> statements =
+                SqlScriptRunner.splitStatements(
+                        """
+                        DROP PROCEDURE IF EXISTS init_sample;
+
+                        CREATE PROCEDURE init_sample()
+                        BEGIN
+                            IF NOT EXISTS (
+                                SELECT 1
+                            ) THEN
+                                SET @create_sample = 'CREATE TABLE sample (id BIGINT)';
+                                PREPARE stmt FROM @create_sample;
+                                EXECUTE stmt;
+                                DEALLOCATE PREPARE stmt;
+                            END IF;
+
+                            IF NOT EXISTS (
+                                SELECT 1
+                            ) THEN
+                                SET @create_other = 'CREATE TABLE other_sample (id BIGINT)';
+                                PREPARE stmt FROM @create_other;
+                                EXECUTE stmt;
+                                DEALLOCATE PREPARE stmt;
+                            END IF;
+                        END;
+
+                        CALL init_sample();
+                        """);
+
+        assertThat(statements).hasSize(3);
+        assertThat(statements.get(1))
+                .contains("CREATE PROCEDURE init_sample()")
+                .contains("END IF;")
+                .endsWith("END");
+    }
+
+    @Test
+    void splitStatementsDoesNotTreatIdentifierPartsAsBeginEndBlocks() {
+        List<String> statements =
+                SqlScriptRunner.splitStatements(
+                        """
+                        CREATE TABLE sample_begin (name TEXT);
+                        INSERT INTO sample_begin(name) VALUES ('ok');
+                        """);
+
+        assertThat(statements)
+                .containsExactly(
+                        "CREATE TABLE sample_begin (name TEXT)",
+                        "INSERT INTO sample_begin(name) VALUES ('ok')");
+    }
+
+    @Test
     void executeRunsClasspathSqlScript() {
         SqlScriptRunner.execute(dataSource, "db/jdbc/test/V1__sample.sql");
 

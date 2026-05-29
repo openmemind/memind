@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS memory_raw_data (
     segment           JSON,
     caption           TEXT,
     caption_vector_id VARCHAR(200),
+    resource_id       VARCHAR(64),
+    mime_type         VARCHAR(128),
     metadata          JSON,
     start_time        DATETIME(3) DEFAULT NULL,
     end_time          DATETIME(3) DEFAULT NULL,
@@ -180,14 +182,25 @@ CREATE TABLE IF NOT EXISTS memory_insight_buffer (
 -- limitations under the License.
 --
 
-ALTER TABLE memory_raw_data
-    ADD COLUMN IF NOT EXISTS segment_content TEXT GENERATED ALWAYS AS
-        (JSON_UNQUOTE(JSON_EXTRACT(segment, '$.content'))) STORED;
-
-DROP PROCEDURE IF EXISTS init_memind_mysql_text_search;
+-- @DELIMITER $$
+DROP PROCEDURE IF EXISTS init_memind_mysql_text_search$$
 
 CREATE PROCEDURE init_memind_mysql_text_search()
 BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'memory_raw_data'
+          AND COLUMN_NAME = 'segment_content'
+    ) THEN
+        SET @add_raw_data_segment_content =
+                'ALTER TABLE memory_raw_data ADD COLUMN segment_content TEXT GENERATED ALWAYS AS (JSON_UNQUOTE(JSON_EXTRACT(segment, ''$.content''))) STORED';
+        PREPARE stmt FROM @add_raw_data_segment_content;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+
     IF NOT EXISTS (
         SELECT 1
         FROM INFORMATION_SCHEMA.STATISTICS
@@ -229,11 +242,12 @@ BEGIN
         EXECUTE stmt;
         DEALLOCATE PREPARE stmt;
     END IF;
-END;
+END$$
 
-CALL init_memind_mysql_text_search();
+CALL init_memind_mysql_text_search$$
 
-DROP PROCEDURE IF EXISTS init_memind_mysql_text_search;
+DROP PROCEDURE IF EXISTS init_memind_mysql_text_search$$
+-- @DELIMITER ;
 
 -- === V3__multimodal.sql ===
 -- http://www.apache.org/licenses/LICENSE-2.0
@@ -266,11 +280,58 @@ CREATE TABLE IF NOT EXISTS memory_resource (
     KEY idx_resource_memory_id (user_id, agent_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-ALTER TABLE memory_raw_data
-    ADD COLUMN IF NOT EXISTS resource_id VARCHAR(64),
-    ADD COLUMN IF NOT EXISTS mime_type VARCHAR(128);
-CREATE INDEX idx_raw_data_resource_id
-    ON memory_raw_data(user_id, agent_id, resource_id);
+-- @DELIMITER $$
+DROP PROCEDURE IF EXISTS init_memind_mysql_multimodal$$
+
+CREATE PROCEDURE init_memind_mysql_multimodal()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'memory_raw_data'
+          AND COLUMN_NAME = 'resource_id'
+    ) THEN
+        SET @add_raw_data_resource_id =
+                'ALTER TABLE memory_raw_data ADD COLUMN resource_id VARCHAR(64)';
+        PREPARE stmt FROM @add_raw_data_resource_id;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'memory_raw_data'
+          AND COLUMN_NAME = 'mime_type'
+    ) THEN
+        SET @add_raw_data_mime_type =
+                'ALTER TABLE memory_raw_data ADD COLUMN mime_type VARCHAR(128)';
+        PREPARE stmt FROM @add_raw_data_mime_type;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'memory_raw_data'
+          AND INDEX_NAME = 'idx_raw_data_resource_id'
+    ) THEN
+        SET @create_raw_data_resource_index =
+                'CREATE INDEX idx_raw_data_resource_id ON memory_raw_data(user_id, agent_id, resource_id)';
+        PREPARE stmt FROM @create_raw_data_resource_index;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+END$$
+
+CALL init_memind_mysql_multimodal$$
+
+DROP PROCEDURE IF EXISTS init_memind_mysql_multimodal$$
+-- @DELIMITER ;
 
 -- === V4__bubble_state.sql ===
 -- http://www.apache.org/licenses/LICENSE-2.0
@@ -469,7 +530,7 @@ CREATE TABLE IF NOT EXISTS memory_graph_alias_batch_receipt (
     memory_id           VARCHAR(200) NOT NULL,
     entity_key          VARCHAR(255) NOT NULL,
     entity_type         VARCHAR(32)  NOT NULL,
-    normalized_alias    VARCHAR(255) NOT NULL,
+    normalized_alias    VARCHAR(191) NOT NULL,
     extraction_batch_id VARCHAR(64)  NOT NULL,
     created_at          DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     updated_at          DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
@@ -657,4 +718,3 @@ CREATE TABLE IF NOT EXISTS memory_thread_enrichment_input (
         entry_seq
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
