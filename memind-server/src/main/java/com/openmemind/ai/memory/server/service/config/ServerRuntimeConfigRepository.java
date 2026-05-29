@@ -15,12 +15,35 @@ package com.openmemind.ai.memory.server.service.config;
 
 import com.openmemind.ai.memory.server.domain.config.model.ServerRuntimeConfigDO;
 import java.util.Optional;
+import org.springframework.dao.DuplicateKeyException;
 
 public interface ServerRuntimeConfigRepository {
 
     Optional<ServerRuntimeConfigDO> findActive(String configKey);
 
     void insertInitial(String configKey, long version, String configJson);
+
+    default ServerRuntimeConfigDO findOrInsertInitial(
+            String configKey, long version, String configJson) {
+        return findActive(configKey)
+                .orElseGet(() -> insertInitialAndRead(configKey, version, configJson));
+    }
+
+    private ServerRuntimeConfigDO insertInitialAndRead(
+            String configKey, long version, String configJson) {
+        try {
+            insertInitial(configKey, version, configJson);
+        } catch (DuplicateKeyException e) {
+            // Another server instance inserted the same runtime config row concurrently.
+        }
+        return findActive(configKey)
+                .orElseThrow(
+                        () ->
+                                new IllegalStateException(
+                                        "Runtime config "
+                                                + configKey
+                                                + " was not found after initial insert"));
+    }
 
     boolean update(String configKey, long expectedVersion, String configJson);
 }

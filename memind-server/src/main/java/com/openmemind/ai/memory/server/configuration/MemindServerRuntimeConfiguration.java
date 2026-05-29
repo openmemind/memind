@@ -31,6 +31,7 @@ import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
+import com.openmemind.ai.memory.server.domain.config.model.ServerRuntimeConfigDO;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeFactory;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeManager;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeUnavailableException;
@@ -210,18 +211,23 @@ public class MemindServerRuntimeConfiguration {
             ServerRuntimeConfigRepository repository, MemoryOptionsCodec codec) {
         return repository
                 .findActive(MemoryOptionService.CONFIG_KEY)
-                .map(
-                        config ->
-                                new InitialRuntimeState(
-                                        config.getConfigVersion(),
-                                        codec.read(config.getConfigJson())))
+                .map(config -> toInitialRuntimeState(config, codec))
                 .orElseGet(
                         () -> {
                             MemoryBuildOptions defaults = MemoryBuildOptions.defaults();
-                            repository.insertInitial(
-                                    MemoryOptionService.CONFIG_KEY, 1L, codec.write(defaults));
-                            return new InitialRuntimeState(1L, defaults);
+                            return toInitialRuntimeState(
+                                    repository.findOrInsertInitial(
+                                            MemoryOptionService.CONFIG_KEY,
+                                            1L,
+                                            codec.write(defaults)),
+                                    codec);
                         });
+    }
+
+    private static InitialRuntimeState toInitialRuntimeState(
+            ServerRuntimeConfigDO config, MemoryOptionsCodec codec) {
+        return new InitialRuntimeState(
+                config.getConfigVersion(), codec.read(config.getConfigJson()));
     }
 
     private static <T> T requireRuntimeDependency(ObjectProvider<T> provider) {

@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DuplicateKeyException;
 import tools.jackson.databind.ObjectMapper;
 
 class MemoryOptionServiceTest {
@@ -67,6 +68,39 @@ class MemoryOptionServiceTest {
                         "memoryThread.lifecycle");
         assertThat(repository.findActive(MemoryOptionService.CONFIG_KEY))
                 .hasValueSatisfying(config -> assertThat(config.getConfigVersion()).isEqualTo(1));
+    }
+
+    @Test
+    void getCurrentToleratesConcurrentInitialInsertRace() {
+        var winner = MemoryBuildOptions.defaults();
+        InMemoryServerRuntimeConfigRepository repository =
+                new RacingInitialInsertRepository(
+                        MemoryOptionService.CONFIG_KEY, 7, codec.write(winner));
+        MemoryRuntimeManager runtimeManager =
+                new MemoryRuntimeManager(
+                        new RuntimeHandle(new TestMemory(), MemoryBuildOptions.defaults(), 1));
+        MemoryOptionService service =
+                new MemoryOptionService(
+                        repository,
+                        projectionMapper,
+                        codec,
+                        runtimeManager,
+                        options ->
+                                new MemoryRuntimeFactory.CreationResult(new TestMemory(), options));
+
+        MemoryOptionsSnapshot snapshot = service.getCurrent();
+
+        assertThat(snapshot.version()).isEqualTo(7);
+        assertThat(findValue(snapshot.config(), "retrieval.simple.itemTopK")).isEqualTo(15);
+        assertThat(repository.findActive(MemoryOptionService.CONFIG_KEY))
+                .hasValueSatisfying(config -> assertThat(config.getConfigVersion()).isEqualTo(7));
+        assertThat(
+                        codec.read(
+                                repository
+                                        .findActive(MemoryOptionService.CONFIG_KEY)
+                                        .orElseThrow()
+                                        .getConfigJson()))
+                .isEqualTo(winner);
     }
 
     @Test
@@ -351,6 +385,32 @@ class MemoryOptionServiceTest {
             copy.setUpdatedAt(source.getUpdatedAt());
             copy.setDeleted(source.getDeleted());
             return copy;
+        }
+    }
+
+    private static final class RacingInitialInsertRepository
+            extends InMemoryServerRuntimeConfigRepository {
+
+        private final String winnerConfigKey;
+        private final long winnerVersion;
+        private final String winnerConfigJson;
+        private boolean raced;
+
+        private RacingInitialInsertRepository(
+                String winnerConfigKey, long winnerVersion, String winnerConfigJson) {
+            this.winnerConfigKey = winnerConfigKey;
+            this.winnerVersion = winnerVersion;
+            this.winnerConfigJson = winnerConfigJson;
+        }
+
+        @Override
+        public void insertInitial(String configKey, long version, String configJson) {
+            if (!raced) {
+                raced = true;
+                super.insertInitial(winnerConfigKey, winnerVersion, winnerConfigJson);
+                throw new DuplicateKeyException("simulated concurrent initial insert");
+            }
+            super.insertInitial(configKey, version, configJson);
         }
     }
 

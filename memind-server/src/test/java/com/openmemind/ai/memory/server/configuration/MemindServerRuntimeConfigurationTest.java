@@ -68,10 +68,18 @@ import com.openmemind.ai.memory.plugin.rawdata.document.DocumentSemantics;
 import com.openmemind.ai.memory.plugin.rawdata.document.content.DocumentContent;
 import com.openmemind.ai.memory.plugin.rawdata.image.content.ImageContent;
 import com.openmemind.ai.memory.plugin.rawdata.image.parser.VisionImageContentParser;
+import com.openmemind.ai.memory.server.domain.config.model.ServerRuntimeConfigDO;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeFactory;
+import com.openmemind.ai.memory.server.runtime.MemoryRuntimeManager;
+import com.openmemind.ai.memory.server.service.config.MemoryOptionService;
+import com.openmemind.ai.memory.server.service.config.MemoryOptionsCodec;
+import com.openmemind.ai.memory.server.service.config.ServerRuntimeConfigRepository;
+import com.openmemind.ai.memory.server.support.TestMemory;
 import java.lang.reflect.Proxy;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.audio.transcription.AudioTranscription;
 import org.springframework.ai.audio.transcription.AudioTranscriptionPrompt;
@@ -84,10 +92,37 @@ import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.dao.DuplicateKeyException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 class MemindServerRuntimeConfigurationTest {
+
+    @Test
+    void memoryRuntimeInitializerToleratesConcurrentDefaultConfigInsert() throws Exception {
+        MemoryBuildOptions winner = MemoryBuildOptions.defaults();
+        var codec = new MemoryOptionsCodec(new tools.jackson.databind.ObjectMapper());
+        var repository =
+                new RacingInitialInsertRepository(
+                        MemoryOptionService.CONFIG_KEY, 9, codec.write(winner));
+        var runtimeManager = new MemoryRuntimeManager();
+        var configuration = new MemindServerRuntimeConfiguration();
+        ApplicationRunner initializer =
+                configuration.memoryRuntimeInitializer(
+                        repository,
+                        codec,
+                        runtimeManager,
+                        options ->
+                                new MemoryRuntimeFactory.CreationResult(new TestMemory(), options));
+
+        initializer.run(null);
+
+        assertThat(runtimeManager.currentVersion()).isEqualTo(9);
+        assertThat(runtimeManager.currentHandle().options()).isEqualTo(winner);
+        assertThat(repository.findActive(MemoryOptionService.CONFIG_KEY))
+                .hasValueSatisfying(config -> assertThat(config.getConfigVersion()).isEqualTo(9));
+    }
 
     @Test
     void runtimeFactoryForwardsBubbleTrackerStoreBeanIntoBuiltMemory() {
@@ -634,6 +669,62 @@ class MemindServerRuntimeConfigurationTest {
         public <T> Flux<T> observeFlux(
                 ObservationContext<T> ctx, java.util.function.Supplier<Flux<T>> operation) {
             return operation.get();
+        }
+    }
+
+    private static final class RacingInitialInsertRepository
+            implements ServerRuntimeConfigRepository {
+
+        private final String winnerConfigKey;
+        private final long winnerVersion;
+        private final String winnerConfigJson;
+        private final AtomicBoolean raced = new AtomicBoolean();
+        private ServerRuntimeConfigDO current;
+
+        private RacingInitialInsertRepository(
+                String winnerConfigKey, long winnerVersion, String winnerConfigJson) {
+            this.winnerConfigKey = winnerConfigKey;
+            this.winnerVersion = winnerVersion;
+            this.winnerConfigJson = winnerConfigJson;
+        }
+
+        @Override
+        public Optional<ServerRuntimeConfigDO> findActive(String configKey) {
+            if (current == null || !configKey.equals(current.getConfigKey())) {
+                return Optional.empty();
+            }
+            return Optional.of(copy(current));
+        }
+
+        @Override
+        public void insertInitial(String configKey, long version, String configJson) {
+            if (raced.compareAndSet(false, true)) {
+                current = config(winnerConfigKey, winnerVersion, winnerConfigJson);
+                throw new DuplicateKeyException("simulated concurrent initial insert");
+            }
+            current = config(configKey, version, configJson);
+        }
+
+        @Override
+        public boolean update(String configKey, long expectedVersion, String configJson) {
+            throw new UnsupportedOperationException("not used by this test");
+        }
+
+        private static ServerRuntimeConfigDO config(
+                String configKey, long version, String configJson) {
+            ServerRuntimeConfigDO config = new ServerRuntimeConfigDO();
+            config.setConfigKey(configKey);
+            config.setConfigVersion(version);
+            config.setConfigJson(configJson);
+            return config;
+        }
+
+        private static ServerRuntimeConfigDO copy(ServerRuntimeConfigDO source) {
+            ServerRuntimeConfigDO copy = new ServerRuntimeConfigDO();
+            copy.setConfigKey(source.getConfigKey());
+            copy.setConfigVersion(source.getConfigVersion());
+            copy.setConfigJson(source.getConfigJson());
+            return copy;
         }
     }
 
