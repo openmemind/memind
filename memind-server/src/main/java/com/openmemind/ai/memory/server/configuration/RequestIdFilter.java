@@ -29,12 +29,13 @@ public class RequestIdFilter extends OncePerRequestFilter {
 
     public static final String HEADER = "X-Request-Id";
     public static final String MDC_KEY = "requestId";
+    private static final int MAX_REQUEST_ID_LENGTH = 64;
 
     @Override
     protected void doFilterInternal(
             HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        String requestId = request.getHeader(HEADER);
+        String requestId = sanitizeRequestId(request.getHeader(HEADER));
         if (!StringUtils.hasText(requestId)) {
             requestId = UUID.randomUUID().toString();
         }
@@ -46,5 +47,19 @@ public class RequestIdFilter extends OncePerRequestFilter {
         } finally {
             MDC.remove(MDC_KEY);
         }
+    }
+
+    public static String sanitizeRequestId(String requestId) {
+        if (!StringUtils.hasText(requestId)) {
+            return null;
+        }
+        StringBuilder sanitized =
+                new StringBuilder(Math.min(requestId.length(), MAX_REQUEST_ID_LENGTH));
+        for (int i = 0; i < requestId.length() && sanitized.length() < MAX_REQUEST_ID_LENGTH; i++) {
+            char value = requestId.charAt(i);
+            sanitized.append(Character.isISOControl(value) ? '_' : value);
+        }
+        String result = sanitized.toString();
+        return StringUtils.hasText(result) ? result : null;
     }
 }

@@ -155,6 +155,26 @@ class ApiExceptionHandlerTest {
                 .contains("rid-2");
     }
 
+    @Test
+    void exceptionLogsUseSanitizedRequestId(CapturedOutput output) throws Exception {
+        mockMvc.perform(
+                        get("/boom/internal")
+                                .header(
+                                        "X-Request-Id",
+                                        "legit-id\n"
+                                            + "ERROR com.openmemind - Fake error injected\tend"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(
+                        header().string(
+                                        "X-Request-Id",
+                                        "legit-id_ERROR com.openmemind - Fake error injected_end"));
+
+        assertThat(output.getOut())
+                .contains("requestId=legit-id_ERROR com.openmemind - Fake error injected_end")
+                .doesNotContain("legit-id\nERROR com.openmemind - Fake error injected")
+                .doesNotContain("Fake error injected\tend");
+    }
+
     @RestController
     private static final class ThrowingController {
 
