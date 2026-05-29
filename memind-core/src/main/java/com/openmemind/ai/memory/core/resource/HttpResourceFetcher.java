@@ -13,9 +13,11 @@
  */
 package com.openmemind.ai.memory.core.resource;
 
+import com.openmemind.ai.memory.core.exception.ResourceFetchAccessDeniedException;
 import com.openmemind.ai.memory.core.exception.SourceTooLargeException;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.URLConnection;
 import java.net.URLDecoder;
@@ -27,11 +29,17 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * Default {@link ResourceFetcher} backed by JDK {@link HttpClient}.
+ *
+ * <p>The default policy is secure-by-default for untrusted URLs: it validates resolved addresses
+ * before sending outbound requests and follows redirects manually so each redirect target is
+ * revalidated.
  */
 public class HttpResourceFetcher implements ResourceFetcher {
 
@@ -42,55 +50,155 @@ public class HttpResourceFetcher implements ResourceFetcher {
 
     private final HttpClient httpClient;
     private final Duration requestTimeout;
+    private final HttpResourceFetchPolicy fetchPolicy;
+    private final ResourceAddressResolver addressResolver;
 
     public HttpResourceFetcher() {
-        this(
-                HttpClient.newBuilder()
-                        .followRedirects(HttpClient.Redirect.NORMAL)
-                        .connectTimeout(DEFAULT_CONNECT_TIMEOUT)
-                        .build(),
-                DEFAULT_REQUEST_TIMEOUT);
+        this(defaultHttpClient(), DEFAULT_REQUEST_TIMEOUT);
+    }
+
+    public HttpResourceFetcher(HttpResourceFetchPolicy fetchPolicy) {
+        this(defaultHttpClient(), DEFAULT_REQUEST_TIMEOUT, fetchPolicy);
     }
 
     public HttpResourceFetcher(HttpClient httpClient) {
         this(httpClient, DEFAULT_REQUEST_TIMEOUT);
     }
 
+    public HttpResourceFetcher(HttpClient httpClient, HttpResourceFetchPolicy fetchPolicy) {
+        this(httpClient, DEFAULT_REQUEST_TIMEOUT, fetchPolicy);
+    }
+
     public HttpResourceFetcher(HttpClient httpClient, Duration requestTimeout) {
+        this(httpClient, requestTimeout, HttpResourceFetchPolicy.secureDefaults());
+    }
+
+    public HttpResourceFetcher(
+            HttpClient httpClient, Duration requestTimeout, HttpResourceFetchPolicy fetchPolicy) {
+        this(httpClient, requestTimeout, fetchPolicy, ResourceAddressResolver.system());
+    }
+
+    HttpResourceFetcher(
+            HttpClient httpClient,
+            Duration requestTimeout,
+            HttpResourceFetchPolicy fetchPolicy,
+            ResourceAddressResolver addressResolver) {
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient is required");
+        if (this.httpClient.followRedirects() != HttpClient.Redirect.NEVER) {
+            throw new IllegalArgumentException(
+                    "httpClient must not follow redirects automatically");
+        }
         this.requestTimeout = Objects.requireNonNull(requestTimeout, "requestTimeout is required");
+        this.fetchPolicy = Objects.requireNonNull(fetchPolicy, "fetchPolicy is required");
+        this.addressResolver =
+                Objects.requireNonNull(addressResolver, "addressResolver is required");
     }
 
     @Override
     public Mono<FetchSession> open(ResourceFetchRequest request) {
         Objects.requireNonNull(request, "request is required");
+        URI sourceUri = URI.create(request.sourceUrl());
+        return sendWithRedirects(request, sourceUri, 0)
+                .map(response -> toFetchSession(request, response.finalUri(), response.response()));
+    }
 
+    private Mono<ValidatedHttpResponse> sendWithRedirects(
+            ResourceFetchRequest request, URI uri, int redirectCount) {
+        return validateTarget(uri)
+                .then(Mono.defer(() -> Mono.fromCompletionStage(send(uri))))
+                .flatMap(
+                        response -> {
+                            URI responseUri = response.uri() == null ? uri : response.uri();
+                            if (!isRedirect(response.statusCode())) {
+                                return validateTarget(responseUri)
+                                        .thenReturn(
+                                                new ValidatedHttpResponse(responseUri, response))
+                                        .doOnError(error -> closeBody(response));
+                            }
+                            if (redirectCount >= fetchPolicy.maxRedirects()) {
+                                closeBody(response);
+                                return Mono.error(
+                                        new IllegalStateException(
+                                                "Resource download failed: too many redirects,"
+                                                        + " source="
+                                                        + HttpResourceFetchPolicy.describe(
+                                                                URI.create(request.sourceUrl()))));
+                            }
+                            URI nextUri;
+                            try {
+                                nextUri = resolveRedirectUri(responseUri, response);
+                            } finally {
+                                closeBody(response);
+                            }
+                            return sendWithRedirects(request, nextUri, redirectCount + 1);
+                        });
+    }
+
+    private Mono<Void> validateTarget(URI uri) {
+        return Mono.fromCallable(
+                        () -> {
+                            fetchPolicy.validateUri(uri);
+                            List<InetAddress> addresses = addressResolver.resolve(uri.getHost());
+                            fetchPolicy.validateResolvedAddresses(uri, addresses);
+                            return true;
+                        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .then();
+    }
+
+    private CompletionStage<HttpResponse<InputStream>> send(URI uri) {
         HttpRequest httpRequest =
                 HttpRequest.newBuilder()
-                        .uri(URI.create(request.sourceUrl()))
+                        .uri(uri)
                         .header("Accept", "*/*")
                         .timeout(requestTimeout)
                         .GET()
                         .build();
-
-        return Mono.fromFuture(
-                        httpClient.sendAsync(
-                                httpRequest, HttpResponse.BodyHandlers.ofInputStream()))
-                .map(response -> toFetchSession(request, response));
+        return httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
     }
 
+    private URI resolveRedirectUri(URI currentUri, HttpResponse<InputStream> response) {
+        String location =
+                response.headers()
+                        .firstValue("Location")
+                        .filter(value -> !value.isBlank())
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Resource download failed: redirect missing"
+                                                        + " Location"));
+        URI redirectUri = currentUri.resolve(location);
+        if ("https".equalsIgnoreCase(currentUri.getScheme())
+                && "http".equalsIgnoreCase(redirectUri.getScheme())) {
+            throw new ResourceFetchAccessDeniedException(
+                    "Resource fetch denied: https to http redirect is not allowed, target="
+                            + HttpResourceFetchPolicy.describe(redirectUri));
+        }
+        return redirectUri;
+    }
+
+    private boolean isRedirect(int statusCode) {
+        return statusCode == 301
+                || statusCode == 302
+                || statusCode == 303
+                || statusCode == 307
+                || statusCode == 308;
+    }
+
+    private record ValidatedHttpResponse(URI finalUri, HttpResponse<InputStream> response) {}
+
     private FetchSession toFetchSession(
-            ResourceFetchRequest request, HttpResponse<InputStream> response) {
+            ResourceFetchRequest request, URI finalUri, HttpResponse<InputStream> response) {
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            closeBody(response);
             throw new IllegalStateException(
                     "Resource download failed: status="
                             + response.statusCode()
-                            + ", sourceUrl="
-                            + request.sourceUrl());
+                            + ", source="
+                            + HttpResourceFetchPolicy.describe(URI.create(request.sourceUrl())));
         }
-
         String sourceUrl = request.sourceUrl();
-        String finalUrl = response.uri() == null ? sourceUrl : response.uri().toString();
+        String finalUrl = finalUri == null ? sourceUrl : finalUri.toString();
         String resolvedFileName = resolveFileName(sourceUrl, request.requestedFileName(), response);
         String resolvedMimeType =
                 resolveMimeType(resolvedFileName, request.requestedMimeType(), response);
@@ -164,6 +272,25 @@ public class HttpResourceFetcher implements ResourceFetcher {
                         });
             }
         };
+    }
+
+    private static HttpClient defaultHttpClient() {
+        return HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .connectTimeout(DEFAULT_CONNECT_TIMEOUT)
+                .build();
+    }
+
+    private void closeBody(HttpResponse<InputStream> response) {
+        InputStream body = response.body();
+        if (body == null) {
+            return;
+        }
+        try {
+            body.close();
+        } catch (Exception ignored) {
+            // Closing a discarded response body is best effort.
+        }
     }
 
     private String resolveFileName(

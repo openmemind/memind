@@ -18,6 +18,9 @@ import java.util.Objects;
 
 /**
  * Input to a downloader before opening the remote resource.
+ *
+ * <p>{@code sourceUrl} is treated as untrusted input. The default HTTP fetcher validates the
+ * scheme, host, resolved addresses, and redirect targets before sending outbound requests.
  */
 public record ResourceFetchRequest(
         MemoryId memoryId, String sourceUrl, String requestedFileName, String requestedMimeType) {

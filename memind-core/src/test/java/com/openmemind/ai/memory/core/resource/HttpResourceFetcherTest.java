@@ -22,6 +22,7 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.net.Authenticator;
 import java.net.CookieHandler;
+import java.net.InetAddress;
 import java.net.ProxySelector;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -30,9 +31,12 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import javax.net.ssl.SSLContext;
@@ -52,7 +56,7 @@ class HttpResourceFetcherTest {
                         Map.of("Content-Type", List.of("application/pdf")));
 
         var session =
-                new HttpResourceFetcher(new StubHttpClient(response))
+                fetcher(new StubHttpClient(response))
                         .open(
                                 new ResourceFetchRequest(
                                         DefaultMemoryId.of("user-1", "agent-1"),
@@ -76,27 +80,182 @@ class HttpResourceFetcherTest {
     }
 
     @Test
-    void openShouldInferFileNameFromRedirectTarget() {
-        var response =
-                new StubHttpResponse(
-                        200,
-                        URI.create("https://example.com/downloads/final.pdf"),
-                        "payload".getBytes(StandardCharsets.UTF_8),
-                        Map.of("Content-Type", List.of("application/pdf")));
+    void openShouldRejectLoopbackAddressBeforeSendingRequest() {
+        var client =
+                new StubHttpClient(
+                        okResponse(
+                                URI.create("http://127.0.0.1/admin"),
+                                "secret".getBytes(StandardCharsets.UTF_8),
+                                Map.of("Content-Type", List.of("text/plain"))));
+
+        assertThatThrownBy(() -> fetcher(client).open(request("http://127.0.0.1/admin")).block())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("denied");
+        assertThat(client.sentRequests()).isEmpty();
+    }
+
+    @Test
+    void openShouldRejectHostThatResolvesToPrivateAddress() throws Exception {
+        var client =
+                new StubHttpClient(
+                        okResponse(
+                                URI.create("https://documents.example/report.pdf"),
+                                "secret".getBytes(StandardCharsets.UTF_8),
+                                Map.of("Content-Type", List.of("application/pdf"))));
+
+        assertThatThrownBy(
+                        () ->
+                                fetcher(client, host -> List.of(address("10.1.2.3")))
+                                        .open(request("https://documents.example/report.pdf"))
+                                        .block())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("denied");
+        assertThat(client.sentRequests()).isEmpty();
+    }
+
+    @Test
+    void openShouldRejectHostWhenAnyResolvedAddressIsPrivate() throws Exception {
+        var client =
+                new StubHttpClient(
+                        okResponse(
+                                URI.create("https://documents.example/report.pdf"),
+                                "secret".getBytes(StandardCharsets.UTF_8),
+                                Map.of("Content-Type", List.of("application/pdf"))));
+
+        assertThatThrownBy(
+                        () ->
+                                fetcher(
+                                                client,
+                                                host ->
+                                                        List.of(
+                                                                address("93.184.216.34"),
+                                                                address("192.168.1.10")))
+                                        .open(request("https://documents.example/report.pdf"))
+                                        .block())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("denied");
+        assertThat(client.sentRequests()).isEmpty();
+    }
+
+    @Test
+    void openShouldAllowPrivateNetworkWhenExplicitlyConfigured() throws Exception {
+        var client =
+                new StubHttpClient(
+                        okResponse(
+                                URI.create("https://documents.example/report.pdf"),
+                                "payload".getBytes(StandardCharsets.UTF_8),
+                                Map.of("Content-Type", List.of("application/pdf"))));
+        var policy = HttpResourceFetchPolicy.builder().allowPrivateNetwork(true).build();
 
         var session =
-                new HttpResourceFetcher(new StubHttpClient(response))
-                        .open(
-                                new ResourceFetchRequest(
-                                        DefaultMemoryId.of("user-1", "agent-1"),
-                                        "https://example.com/redirect",
-                                        null,
-                                        null))
+                fetcher(client, policy, host -> List.of(address("10.1.2.3")))
+                        .open(request("https://documents.example/report.pdf"))
                         .block();
+
+        assertThat(session).isNotNull();
+        assertThat(client.sentRequests())
+                .extracting(request -> request.uri().toString())
+                .containsExactly("https://documents.example/report.pdf");
+    }
+
+    @Test
+    void openShouldRejectLinkLocalEvenWhenPrivateNetworkIsAllowed() throws Exception {
+        var client =
+                new StubHttpClient(
+                        okResponse(
+                                URI.create("https://metadata.example/latest"),
+                                "secret".getBytes(StandardCharsets.UTF_8),
+                                Map.of("Content-Type", List.of("text/plain"))));
+        var policy = HttpResourceFetchPolicy.builder().allowPrivateNetwork(true).build();
+
+        assertThatThrownBy(
+                        () ->
+                                fetcher(client, policy, host -> List.of(address("169.254.169.254")))
+                                        .open(request("https://metadata.example/latest"))
+                                        .block())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("denied");
+        assertThat(client.sentRequests()).isEmpty();
+    }
+
+    @Test
+    void openShouldRejectRedirectToBlockedAddress() {
+        var client =
+                new StubHttpClient(
+                        new StubHttpResponse(
+                                302,
+                                URI.create("https://documents.example/redirect"),
+                                new byte[0],
+                                Map.of(
+                                        "Location",
+                                        List.of("http://169.254.169.254/latest/meta-data/"))),
+                        okResponse(
+                                URI.create("http://169.254.169.254/latest/meta-data/"),
+                                "secret".getBytes(StandardCharsets.UTF_8),
+                                Map.of("Content-Type", List.of("text/plain"))));
+
+        assertThatThrownBy(
+                        () ->
+                                fetcher(client)
+                                        .open(request("https://documents.example/redirect"))
+                                        .block())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("denied");
+        assertThat(client.sentRequests())
+                .extracting(request -> request.uri().toString())
+                .containsExactly("https://documents.example/redirect");
+    }
+
+    @Test
+    void openShouldRejectHttpsToHttpRedirectDowngrade() {
+        var client =
+                new StubHttpClient(
+                        new StubHttpResponse(
+                                302,
+                                URI.create("https://example.com/redirect"),
+                                new byte[0],
+                                Map.of(
+                                        "Location",
+                                        List.of("http://example.com/downloads/final.pdf"))),
+                        okResponse(
+                                URI.create("http://example.com/downloads/final.pdf"),
+                                "payload".getBytes(StandardCharsets.UTF_8),
+                                Map.of("Content-Type", List.of("application/pdf"))));
+
+        assertThatThrownBy(
+                        () -> fetcher(client).open(request("https://example.com/redirect")).block())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("https to http redirect");
+        assertThat(client.sentRequests())
+                .extracting(request -> request.uri().toString())
+                .containsExactly("https://example.com/redirect");
+    }
+
+    @Test
+    void openShouldInferFileNameFromRedirectTarget() {
+        var client =
+                new StubHttpClient(
+                        new StubHttpResponse(
+                                302,
+                                URI.create("https://example.com/redirect"),
+                                new byte[0],
+                                Map.of(
+                                        "Location",
+                                        List.of("https://example.com/downloads/final.pdf"))),
+                        okResponse(
+                                URI.create("https://example.com/downloads/final.pdf"),
+                                "payload".getBytes(StandardCharsets.UTF_8),
+                                Map.of("Content-Type", List.of("application/pdf"))));
+
+        var session = fetcher(client).open(request("https://example.com/redirect")).block();
 
         assertThat(session).isNotNull();
         assertThat(session.resolvedFileName()).isEqualTo("final.pdf");
         assertThat(session.finalUrl()).isEqualTo("https://example.com/downloads/final.pdf");
+        assertThat(client.sentRequests())
+                .extracting(request -> request.uri().toString())
+                .containsExactly(
+                        "https://example.com/redirect", "https://example.com/downloads/final.pdf");
     }
 
     @Test
@@ -109,7 +268,7 @@ class HttpResourceFetcherTest {
                         Map.of("Content-Type", List.of("text/plain")));
 
         var session =
-                new HttpResourceFetcher(new StubHttpClient(response))
+                fetcher(new StubHttpClient(response))
                         .open(
                                 new ResourceFetchRequest(
                                         DefaultMemoryId.of("user-1", "agent-1"),
@@ -135,7 +294,7 @@ class HttpResourceFetcherTest {
                                 "Content-Length", List.of("4096")));
 
         var session =
-                new HttpResourceFetcher(new StubHttpClient(response))
+                fetcher(new StubHttpClient(response))
                         .open(
                                 new ResourceFetchRequest(
                                         DefaultMemoryId.of("user-1", "agent-1"),
@@ -151,6 +310,13 @@ class HttpResourceFetcherTest {
     }
 
     @Test
+    void constructorShouldRejectClientsThatFollowRedirectsAutomatically() {
+        assertThatThrownBy(() -> new HttpResourceFetcher(new RedirectingStubHttpClient()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must not follow redirects");
+    }
+
+    @Test
     void openShouldFailWhenStatusIsNotSuccessful() {
         var response =
                 new StubHttpResponse(
@@ -161,7 +327,7 @@ class HttpResourceFetcherTest {
 
         assertThatThrownBy(
                         () ->
-                                new HttpResourceFetcher(new StubHttpClient(response))
+                                fetcher(new StubHttpClient(response))
                                         .open(
                                                 new ResourceFetchRequest(
                                                         DefaultMemoryId.of("user-1", "agent-1"),
@@ -173,12 +339,56 @@ class HttpResourceFetcherTest {
                 .hasMessageContaining("status=404");
     }
 
-    private static final class StubHttpClient extends HttpClient {
+    private static HttpResourceFetcher fetcher(StubHttpClient client) {
+        return fetcher(client, HttpResourceFetchPolicy.secureDefaults(), publicResolver());
+    }
 
-        private final HttpResponse<InputStream> response;
+    private static HttpResourceFetcher fetcher(
+            StubHttpClient client, ResourceAddressResolver resolver) {
+        return fetcher(client, HttpResourceFetchPolicy.secureDefaults(), resolver);
+    }
 
-        private StubHttpClient(HttpResponse<InputStream> response) {
-            this.response = response;
+    private static HttpResourceFetcher fetcher(
+            StubHttpClient client,
+            HttpResourceFetchPolicy policy,
+            ResourceAddressResolver resolver) {
+        return new HttpResourceFetcher(client, Duration.ofSeconds(30), policy, resolver);
+    }
+
+    private static ResourceAddressResolver publicResolver() {
+        return host -> List.of(address(host.matches("[0-9.]+") ? host : "93.184.216.34"));
+    }
+
+    private static InetAddress address(String address) {
+        try {
+            return InetAddress.getByName(address);
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Invalid test address: " + address, ex);
+        }
+    }
+
+    private static ResourceFetchRequest request(String sourceUrl) {
+        return new ResourceFetchRequest(
+                DefaultMemoryId.of("user-1", "agent-1"), sourceUrl, null, null);
+    }
+
+    private static StubHttpResponse okResponse(
+            URI uri, byte[] body, Map<String, List<String>> headers) {
+        return new StubHttpResponse(200, uri, body, headers);
+    }
+
+    private static class StubHttpClient extends HttpClient {
+
+        private final Queue<HttpResponse<InputStream>> responses;
+        private final List<HttpRequest> sentRequests = new ArrayList<>();
+
+        @SafeVarargs
+        private StubHttpClient(HttpResponse<InputStream>... responses) {
+            this.responses = new ArrayDeque<>(List.of(responses));
+        }
+
+        private List<HttpRequest> sentRequests() {
+            return List.copyOf(sentRequests);
         }
 
         @Override
@@ -193,7 +403,7 @@ class HttpResourceFetcherTest {
 
         @Override
         public Redirect followRedirects() {
-            return Redirect.NORMAL;
+            return Redirect.NEVER;
         }
 
         @Override
@@ -236,6 +446,12 @@ class HttpResourceFetcherTest {
         @SuppressWarnings("unchecked")
         public <T> CompletableFuture<HttpResponse<T>> sendAsync(
                 HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler) {
+            sentRequests.add(request);
+            HttpResponse<InputStream> response = responses.poll();
+            if (response == null) {
+                return CompletableFuture.failedFuture(
+                        new AssertionError("No stubbed response for " + request.uri()));
+            }
             return CompletableFuture.completedFuture((HttpResponse<T>) response);
         }
 
@@ -245,6 +461,18 @@ class HttpResourceFetcherTest {
                 HttpResponse.BodyHandler<T> responseBodyHandler,
                 HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
             return sendAsync(request, responseBodyHandler);
+        }
+    }
+
+    private static final class RedirectingStubHttpClient extends StubHttpClient {
+
+        private RedirectingStubHttpClient() {
+            super();
+        }
+
+        @Override
+        public Redirect followRedirects() {
+            return Redirect.NORMAL;
         }
     }
 
