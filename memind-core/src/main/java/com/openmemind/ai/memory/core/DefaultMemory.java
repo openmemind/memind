@@ -450,31 +450,54 @@ public class DefaultMemory implements Memory {
 
         return Mono.fromCallable(
                         () -> memoryStore.itemOperations().getItemsByIds(memoryId, requestedIds))
-                .map(
-                        items ->
-                                items.stream()
-                                        .map(MemoryItem::vectorId)
-                                        .filter(Objects::nonNull)
-                                        .distinct()
-                                        .toList())
+                .map(this::collectVectorIds)
                 .flatMap(
                         vectorIds ->
-                                vectorIds.isEmpty()
-                                        ? Mono.<Void>empty()
-                                        : vector.deleteBatch(memoryId, vectorIds))
-                .then(
-                        Mono.fromRunnable(
-                                () ->
-                                        memoryStore
-                                                .threadOperations()
-                                                .markRebuildRequired(memoryId, "item deletion")))
-                .then(
-                        Mono.<Void>fromRunnable(
-                                () ->
-                                        memoryStore
-                                                .itemOperations()
-                                                .deleteItems(memoryId, requestedIds)))
+                                Mono.fromRunnable(
+                                                () ->
+                                                        memoryStore
+                                                                .threadOperations()
+                                                                .markRebuildRequired(
+                                                                        memoryId, "item deletion"))
+                                        .then(
+                                                Mono.<Void>fromRunnable(
+                                                        () ->
+                                                                memoryStore
+                                                                        .itemOperations()
+                                                                        .deleteItems(
+                                                                                memoryId,
+                                                                                requestedIds)))
+                                        .then(
+                                                Mono.defer(
+                                                        () ->
+                                                                cleanupDeletedItemVectors(
+                                                                        memoryId, vectorIds))))
                 .doOnSuccess(ignored -> retriever.onDataChanged(memoryId));
+    }
+
+    private List<String> collectVectorIds(List<MemoryItem> items) {
+        return items.stream()
+                .map(MemoryItem::vectorId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
+    private Mono<Void> cleanupDeletedItemVectors(MemoryId memoryId, List<String> vectorIds) {
+        if (vectorIds.isEmpty()) {
+            return Mono.empty();
+        }
+        return vector.deleteBatch(memoryId, vectorIds)
+                .onErrorResume(
+                        error -> {
+                            log.warn(
+                                    "Vector cleanup failed after item deletion: memoryId={},"
+                                            + " vectorCount={}",
+                                    memoryId.toIdentifier(),
+                                    vectorIds.size(),
+                                    error);
+                            return Mono.empty();
+                        });
     }
 
     @Override

@@ -17,9 +17,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -569,8 +571,8 @@ class DefaultMemoryTest {
     class DeleteApis {
 
         @Test
-        @DisplayName("deleteItems deletes vectors before store rows and invalidates retriever")
-        void deleteItemsDeletesVectorsThenStoreRowsAndInvalidatesRetriever() {
+        @DisplayName("deleteItems deletes store rows before vectors and invalidates retriever")
+        void deleteItemsDeletesStoreRowsBeforeVectorsAndInvalidatesRetriever() {
             var itemIds = List.of(1L, 2L);
             var items = List.of(memoryItem(1L, "vec-1"), memoryItem(2L, "vec-2"));
             when(itemOperations.getItemsByIds(memoryId, itemIds)).thenReturn(items);
@@ -578,10 +580,11 @@ class DefaultMemoryTest {
 
             StepVerifier.create(memind.deleteItems(memoryId, itemIds)).verifyComplete();
 
-            InOrder inOrder = inOrder(itemOperations, vector, retriever);
+            InOrder inOrder = inOrder(itemOperations, vector, threadProjectionStore, retriever);
             inOrder.verify(itemOperations).getItemsByIds(memoryId, itemIds);
-            inOrder.verify(vector).deleteBatch(memoryId, List.of("vec-1", "vec-2"));
+            inOrder.verify(threadProjectionStore).markRebuildRequired(memoryId, "item deletion");
             inOrder.verify(itemOperations).deleteItems(memoryId, itemIds);
+            inOrder.verify(vector).deleteBatch(memoryId, List.of("vec-1", "vec-2"));
             inOrder.verify(retriever).onDataChanged(memoryId);
         }
 
@@ -594,8 +597,9 @@ class DefaultMemoryTest {
 
             StepVerifier.create(memind.deleteItems(memoryId, itemIds)).verifyComplete();
 
-            InOrder inOrder = inOrder(itemOperations, retriever);
+            InOrder inOrder = inOrder(itemOperations, threadProjectionStore, retriever);
             inOrder.verify(itemOperations).getItemsByIds(memoryId, itemIds);
+            inOrder.verify(threadProjectionStore).markRebuildRequired(memoryId, "item deletion");
             inOrder.verify(itemOperations).deleteItems(memoryId, itemIds);
             inOrder.verify(retriever).onDataChanged(memoryId);
             verifyNoInteractions(vector);
@@ -613,9 +617,49 @@ class DefaultMemoryTest {
 
             InOrder inOrder = inOrder(itemOperations, vector, threadProjectionStore, retriever);
             inOrder.verify(itemOperations).getItemsByIds(memoryId, itemIds);
-            inOrder.verify(vector).deleteBatch(memoryId, List.of("vec-101"));
             inOrder.verify(threadProjectionStore).markRebuildRequired(memoryId, "item deletion");
             inOrder.verify(itemOperations).deleteItems(memoryId, itemIds);
+            inOrder.verify(vector).deleteBatch(memoryId, List.of("vec-101"));
+            inOrder.verify(retriever).onDataChanged(memoryId);
+        }
+
+        @Test
+        @DisplayName("deleteItems does not delete vectors when store delete fails")
+        void deleteItemsDoesNotDeleteVectorsWhenStoreDeleteFails() {
+            var itemIds = List.of(201L);
+            when(itemOperations.getItemsByIds(memoryId, itemIds))
+                    .thenReturn(List.of(memoryItem(201L, "vec-201")));
+            doThrow(new IllegalStateException("store unavailable"))
+                    .when(itemOperations)
+                    .deleteItems(memoryId, itemIds);
+
+            StepVerifier.create(memind.deleteItems(memoryId, itemIds))
+                    .expectErrorMessage("store unavailable")
+                    .verify();
+
+            verify(itemOperations).getItemsByIds(memoryId, itemIds);
+            verify(threadProjectionStore).markRebuildRequired(memoryId, "item deletion");
+            verify(itemOperations).deleteItems(memoryId, itemIds);
+            verifyNoInteractions(vector);
+            verify(retriever, never()).onDataChanged(memoryId);
+        }
+
+        @Test
+        @DisplayName("deleteItems succeeds and invalidates retriever when vector cleanup fails")
+        void deleteItemsSucceedsAndInvalidatesRetrieverWhenVectorCleanupFails() {
+            var itemIds = List.of(301L);
+            when(itemOperations.getItemsByIds(memoryId, itemIds))
+                    .thenReturn(List.of(memoryItem(301L, "vec-301")));
+            when(vector.deleteBatch(memoryId, List.of("vec-301")))
+                    .thenReturn(Mono.error(new IllegalStateException("vector unavailable")));
+
+            StepVerifier.create(memind.deleteItems(memoryId, itemIds)).verifyComplete();
+
+            InOrder inOrder = inOrder(itemOperations, vector, threadProjectionStore, retriever);
+            inOrder.verify(itemOperations).getItemsByIds(memoryId, itemIds);
+            inOrder.verify(threadProjectionStore).markRebuildRequired(memoryId, "item deletion");
+            inOrder.verify(itemOperations).deleteItems(memoryId, itemIds);
+            inOrder.verify(vector).deleteBatch(memoryId, List.of("vec-301"));
             inOrder.verify(retriever).onDataChanged(memoryId);
         }
 
