@@ -35,6 +35,7 @@ import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
+import com.openmemind.ai.memory.plugin.store.mybatis.buffer.DialectConversationBufferAtomicOperations;
 import com.openmemind.ai.memory.plugin.store.mybatis.handler.DefaultDBFieldHandler;
 import com.openmemind.ai.memory.plugin.store.mybatis.initializer.MemoryStoreProperties;
 import com.openmemind.ai.memory.plugin.store.mybatis.mapper.ConversationBufferMapper;
@@ -251,10 +252,13 @@ public class MemoryMybatisPlusAutoConfiguration {
     @ConditionalOnMissingBean(MemoryBuffer.class)
     public MemoryBuffer memoryBuffer(
             InsightBufferMapper insightBufferMapper,
-            ConversationBufferMapper conversationBufferMapper) {
+            ConversationBufferMapper conversationBufferMapper,
+            DataSource dataSource) {
         return MemoryBuffer.of(
                 new MybatisPlusInsightBuffer(insightBufferMapper),
-                new MybatisPlusConversationBuffer(conversationBufferMapper),
+                new MybatisPlusConversationBuffer(
+                        conversationBufferMapper,
+                        new DialectConversationBufferAtomicOperations(dataSource)),
                 new MybatisPlusRecentConversationBuffer(conversationBufferMapper));
     }
 

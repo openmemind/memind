@@ -298,13 +298,22 @@ public final class StoreSchemaBootstrap {
                     KEY idx_resource_memory_id (user_id, agent_id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 """);
-        execute(
+        ensureMysqlTableColumn(
                 dataSource,
-                """
-                ALTER TABLE memory_raw_data
-                    ADD COLUMN IF NOT EXISTS resource_id VARCHAR(64),
-                    ADD COLUMN IF NOT EXISTS mime_type VARCHAR(128)
-                """);
+                "memory_raw_data",
+                "resource_id",
+                "ALTER TABLE memory_raw_data ADD COLUMN resource_id VARCHAR(64)");
+        ensureMysqlTableColumn(
+                dataSource,
+                "memory_raw_data",
+                "mime_type",
+                "ALTER TABLE memory_raw_data ADD COLUMN mime_type VARCHAR(128)");
+        ensureMysqlIndex(
+                dataSource,
+                "memory_raw_data",
+                "idx_raw_data_resource_id",
+                "CREATE INDEX idx_raw_data_resource_id ON"
+                        + " memory_raw_data(user_id, agent_id, resource_id)");
     }
 
     private static void ensureMysqlItemTemporalSchema(

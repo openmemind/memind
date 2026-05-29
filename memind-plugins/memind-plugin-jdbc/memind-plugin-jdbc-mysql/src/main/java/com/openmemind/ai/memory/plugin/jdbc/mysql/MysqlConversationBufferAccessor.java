@@ -17,10 +17,14 @@ import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.mes
 import com.openmemind.ai.memory.plugin.jdbc.internal.buffer.ConversationBufferRow;
 import com.openmemind.ai.memory.plugin.jdbc.internal.jdbi.JdbiFactory;
 import com.openmemind.ai.memory.plugin.jdbc.internal.schema.StoreSchemaBootstrap;
+import com.openmemind.ai.memory.plugin.jdbc.internal.support.JdbcPluginException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -48,6 +52,17 @@ public class MysqlConversationBufferAccessor {
             ORDER BY id ASC
             """;
 
+    private static final String LOCK_PENDING_SQL =
+            """
+            SELECT id, session_id, role, content, user_name, timestamp
+            FROM memory_conversation_buffer
+            WHERE session_id = ?
+              AND extracted = 0
+              AND deleted = 0
+            ORDER BY id ASC
+            FOR UPDATE
+            """;
+
     private static final String SELECT_RECENT_SQL =
             """
             SELECT id, session_id, role, content, user_name, timestamp
@@ -66,6 +81,16 @@ public class MysqlConversationBufferAccessor {
               AND id IN (<ids>)
             """;
 
+    private static final String CLEAR_PENDING_SQL =
+            """
+            UPDATE memory_conversation_buffer
+            SET extracted = 1, updated_at = CURRENT_TIMESTAMP
+            WHERE session_id = :sessionId
+              AND extracted = 0
+              AND deleted = 0
+            """;
+
+    private final DataSource dataSource;
     private final Jdbi jdbi;
 
     public MysqlConversationBufferAccessor(DataSource dataSource) {
@@ -74,6 +99,7 @@ public class MysqlConversationBufferAccessor {
 
     public MysqlConversationBufferAccessor(DataSource dataSource, boolean createIfNotExist) {
         DataSource checkedDataSource = Objects.requireNonNull(dataSource, "dataSource");
+        this.dataSource = checkedDataSource;
         this.jdbi = JdbiFactory.create(checkedDataSource);
         StoreSchemaBootstrap.ensureMysql(checkedDataSource, createIfNotExist);
     }
@@ -118,6 +144,47 @@ public class MysqlConversationBufferAccessor {
         return descending;
     }
 
+    public List<ConversationBufferRow> drainPending(String sessionId) {
+        Objects.requireNonNull(sessionId, "sessionId");
+        try (Connection connection = dataSource.getConnection()) {
+            boolean originalAutoCommit = connection.getAutoCommit();
+            int originalIsolation = connection.getTransactionIsolation();
+            boolean originalReadOnly = connection.isReadOnly();
+            Throwable failure = null;
+            try {
+                connection.setReadOnly(false);
+                connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+                connection.setAutoCommit(false);
+                List<ConversationBufferRow> rows = lockPendingRows(connection, sessionId);
+                markLockedRowsExtracted(connection, rows);
+                connection.commit();
+                return rows;
+            } catch (SQLException | RuntimeException ex) {
+                failure = ex;
+                rollback(connection, ex);
+                throw ex;
+            } finally {
+                restoreConnectionState(
+                        connection,
+                        originalAutoCommit,
+                        originalIsolation,
+                        originalReadOnly,
+                        failure);
+            }
+        } catch (SQLException e) {
+            throw new JdbcPluginException("Failed to drain pending conversation buffer rows", e);
+        }
+    }
+
+    public void clearPending(String sessionId) {
+        Objects.requireNonNull(sessionId, "sessionId");
+        jdbi.useHandle(
+                handle ->
+                        handle.createUpdate(CLEAR_PENDING_SQL)
+                                .bind("sessionId", sessionId)
+                                .execute());
+    }
+
     public void markExtractedByIds(List<Long> ids) {
         Objects.requireNonNull(ids, "ids");
         if (ids.isEmpty()) {
@@ -136,8 +203,76 @@ public class MysqlConversationBufferAccessor {
                 .bind("memoryId", scope.memoryId());
     }
 
+    private static List<ConversationBufferRow> lockPendingRows(
+            Connection connection, String sessionId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(LOCK_PENDING_SQL)) {
+            statement.setString(1, sessionId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<ConversationBufferRow> rows = new ArrayList<>();
+                while (resultSet.next()) {
+                    rows.add(mapCurrentRow(resultSet));
+                }
+                return rows;
+            }
+        }
+    }
+
+    private static void markLockedRowsExtracted(
+            Connection connection, List<ConversationBufferRow> rows) throws SQLException {
+        if (rows.isEmpty()) {
+            return;
+        }
+        String sql =
+                "UPDATE memory_conversation_buffer SET extracted = 1, updated_at ="
+                        + " CURRENT_TIMESTAMP WHERE extracted = 0 AND deleted = 0 AND id IN ("
+                        + placeholders(rows.size())
+                        + ")";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            for (int i = 0; i < rows.size(); i++) {
+                statement.setLong(i + 1, rows.get(i).id());
+            }
+            statement.executeUpdate();
+        }
+    }
+
+    private static String placeholders(int count) {
+        return String.join(",", Collections.nCopies(count, "?"));
+    }
+
+    private static void rollback(Connection connection, Exception cause) {
+        try {
+            connection.rollback();
+        } catch (SQLException rollbackException) {
+            cause.addSuppressed(rollbackException);
+        }
+    }
+
+    private static void restoreConnectionState(
+            Connection connection,
+            boolean originalAutoCommit,
+            int originalIsolation,
+            boolean originalReadOnly,
+            Throwable previousFailure)
+            throws SQLException {
+        try {
+            connection.setTransactionIsolation(originalIsolation);
+            connection.setReadOnly(originalReadOnly);
+            connection.setAutoCommit(originalAutoCommit);
+        } catch (SQLException restoreException) {
+            if (previousFailure != null) {
+                previousFailure.addSuppressed(restoreException);
+                return;
+            }
+            throw restoreException;
+        }
+    }
+
     private static ConversationBufferRow mapRecord(ResultSet resultSet, StatementContext context)
             throws SQLException {
+        return mapCurrentRow(resultSet);
+    }
+
+    private static ConversationBufferRow mapCurrentRow(ResultSet resultSet) throws SQLException {
         Message.Role role = Message.Role.valueOf(resultSet.getString("role"));
         String content = resultSet.getString("content");
         String userName = resultSet.getString("user_name");

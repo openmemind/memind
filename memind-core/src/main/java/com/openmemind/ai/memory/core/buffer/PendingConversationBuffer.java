@@ -18,6 +18,12 @@ import java.util.List;
 
 /**
  * Pending conversation buffer used by boundary detection and commit.
+ *
+ * <p>Persistent or otherwise shared implementations must make {@link #drain(String)} atomic
+ * across independent buffer instances and processes: a drain call should return only the pending
+ * messages that it successfully claimed. The default {@code load()} followed by {@code clear()}
+ * implementation is suitable only for in-memory buffers or implementations whose callers provide
+ * equivalent external serialization.
  */
 public interface PendingConversationBuffer extends AutoCloseable {
 

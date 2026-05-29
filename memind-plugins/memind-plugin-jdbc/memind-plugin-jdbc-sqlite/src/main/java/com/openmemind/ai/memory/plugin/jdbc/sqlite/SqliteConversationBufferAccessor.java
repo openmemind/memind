@@ -26,6 +26,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import javax.sql.DataSource;
@@ -60,6 +61,33 @@ public class SqliteConversationBufferAccessor {
               AND deleted = 0
             ORDER BY id DESC
             LIMIT :limit
+            """;
+
+    private static final String DRAIN_PENDING_SQL =
+            """
+            UPDATE memory_conversation_buffer
+            SET extracted = 1, updated_at = CURRENT_TIMESTAMP
+            WHERE session_id = :sessionId
+              AND extracted = 0
+              AND deleted = 0
+              AND id IN (
+                  SELECT id
+                  FROM memory_conversation_buffer
+                  WHERE session_id = :sessionId
+                    AND extracted = 0
+                    AND deleted = 0
+                  ORDER BY id ASC
+              )
+            RETURNING id, session_id, role, content, user_name, timestamp
+            """;
+
+    private static final String CLEAR_PENDING_SQL =
+            """
+            UPDATE memory_conversation_buffer
+            SET extracted = 1, updated_at = CURRENT_TIMESTAMP
+            WHERE session_id = :sessionId
+              AND extracted = 0
+              AND deleted = 0
             """;
 
     private static final String MARK_EXTRACTED_SQL =
@@ -127,6 +155,29 @@ public class SqliteConversationBufferAccessor {
                                         .list());
         Collections.reverse(descending);
         return descending;
+    }
+
+    public List<ConversationBufferRow> drainPending(String sessionId) {
+        Objects.requireNonNull(sessionId, "sessionId");
+        return jdbi.withHandle(
+                handle ->
+                        handle
+                                .createQuery(DRAIN_PENDING_SQL)
+                                .bind("sessionId", sessionId)
+                                .map(SqliteConversationBufferAccessor::mapRecord)
+                                .list()
+                                .stream()
+                                .sorted(Comparator.comparingLong(ConversationBufferRow::id))
+                                .toList());
+    }
+
+    public void clearPending(String sessionId) {
+        Objects.requireNonNull(sessionId, "sessionId");
+        jdbi.useHandle(
+                handle ->
+                        handle.createUpdate(CLEAR_PENDING_SQL)
+                                .bind("sessionId", sessionId)
+                                .execute());
     }
 
     public void markExtractedByIds(List<Long> ids) {
