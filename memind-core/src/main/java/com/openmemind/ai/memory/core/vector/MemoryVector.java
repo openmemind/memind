@@ -193,9 +193,13 @@ public interface MemoryVector {
     // ===== Embedding operations =====
 
     /**
-     * Calculate the embedding vector of the text
+     * Calculate the embedding vector of the text.
      *
-     * <p>Used for MMR and other reordering algorithms, requires obtaining the vector representation of the query and candidates
+     * <p>Used for MMR and other reordering algorithms, requires obtaining the vector
+     * representation of the query and candidates.
+     *
+     * <p>Implementations should return a non-empty vector for non-empty text. Vectors produced by
+     * one implementation/model are expected to have a consistent dimension.
      *
      * @param text Text to calculate embedding
      * @return Embedding vector
@@ -203,15 +207,20 @@ public interface MemoryVector {
     Mono<List<Float>> embed(String text);
 
     /**
-     * Batch calculate the embedding vectors of the texts
+     * Batch calculate the embedding vectors of the texts.
      *
-     * <p>Used for MMR and other reordering algorithms, batch obtain the vector representation of candidates
+     * <p>Used for MMR and other reordering algorithms, batch obtain the vector representation of
+     * candidates.
      *
-     * @param texts List of texts to calculate embedding
+     * <p>For non-empty input, the result should contain one embedding per input text, in order.
+     * Each embedding should follow the same dimensionality contract as {@link #embed(String)}.
+     *
      * <p>Stage 3 semantic-linking contract: returned embeddings must live in the same vector space
      * as the scores returned by {@link #search(MemoryId, String, int, double, Map)} and
      * {@link #searchBatch(MemoryId, List, int)} when those values are merged in one semantic-link
      * normalization path.
+     *
+     * @param texts List of texts to calculate embedding
      * @return List of embedding vectors, corresponding to the input texts
      */
     Mono<List<List<Float>>> embedAll(List<String> texts);

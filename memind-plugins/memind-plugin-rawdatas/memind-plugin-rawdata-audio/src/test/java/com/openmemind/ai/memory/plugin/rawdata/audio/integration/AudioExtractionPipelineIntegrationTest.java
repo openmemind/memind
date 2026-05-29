@@ -63,15 +63,19 @@ import reactor.core.publisher.Mono;
 
 class AudioExtractionPipelineIntegrationTest {
 
+    private static final int TEST_EMBEDDING_DIMENSION = 8;
+
     @Test
     void wholeTranscriptPersistenceStillFeedsMemoryItemsWithTranscriptText() {
         MemoryId memoryId = DefaultMemoryId.of("user-1", "agent-1");
         MemoryStore store = recordingStore();
         var memoryItemStep = new RecordingMemoryItemStep("rollback code is R-17");
+        var vector = new StubMemoryVector();
         var extractor =
                 extractor(
                         store,
                         memoryItemStep,
+                        vector,
                         new AudioExtractionOptions(
                                 new SourceLimitOptions(1024),
                                 new ParsedContentLimitOptions(
@@ -114,6 +118,13 @@ class AudioExtractionPipelineIntegrationTest {
                 .extracting(ParsedSegment::caption)
                 .singleElement()
                 .satisfies(caption -> assertThat(caption).doesNotContain("rollback code is R-17"));
+        assertThat(vector.embed("audio transcript caption").block())
+                .isNotNull()
+                .hasSize(TEST_EMBEDDING_DIMENSION);
+        assertThat(vector.embedAll(List.of("intro", "rollback")).block())
+                .isNotNull()
+                .hasSize(2)
+                .allSatisfy(embedding -> assertThat(embedding).hasSize(TEST_EMBEDDING_DIMENSION));
     }
 
     @Test
@@ -124,6 +135,7 @@ class AudioExtractionPipelineIntegrationTest {
                 extractor(
                         store,
                         new RecordingMemoryItemStep(),
+                        new StubMemoryVector(),
                         new AudioExtractionOptions(
                                 new SourceLimitOptions(1024),
                                 new ParsedContentLimitOptions(
@@ -183,15 +195,12 @@ class AudioExtractionPipelineIntegrationTest {
     private static DefaultMemoryExtractor extractor(
             MemoryStore store,
             RecordingMemoryItemStep memoryItemStep,
+            StubMemoryVector vector,
             AudioExtractionOptions options) {
         var processor = new AudioContentProcessor(new TranscriptSegmentChunker(), options);
         var rawDataLayer =
                 new RawDataLayer(
-                        List.of(processor),
-                        new AudioCaptionGenerator(),
-                        store,
-                        new StubMemoryVector(),
-                        16);
+                        List.of(processor), new AudioCaptionGenerator(), store, vector, 16);
         return new DefaultMemoryExtractor(
                 rawDataLayer,
                 memoryItemStep,
@@ -318,12 +327,19 @@ class AudioExtractionPipelineIntegrationTest {
 
         @Override
         public Mono<List<Float>> embed(String text) {
-            return Mono.just(List.of());
+            return Mono.just(testEmbedding(text));
         }
 
         @Override
         public Mono<List<List<Float>>> embedAll(List<String> texts) {
-            return Mono.just(List.of());
+            return Mono.just(texts.stream().map(StubMemoryVector::testEmbedding).toList());
+        }
+
+        private static List<Float> testEmbedding(String text) {
+            int seed = text == null ? 0 : text.hashCode();
+            return IntStream.range(0, TEST_EMBEDDING_DIMENSION)
+                    .mapToObj(i -> ((seed + i * 31) & 0xff) / 255.0f)
+                    .toList();
         }
     }
 }

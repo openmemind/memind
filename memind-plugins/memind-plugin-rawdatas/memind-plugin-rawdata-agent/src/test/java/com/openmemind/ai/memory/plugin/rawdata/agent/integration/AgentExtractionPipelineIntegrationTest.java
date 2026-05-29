@@ -64,6 +64,8 @@ import reactor.core.publisher.Mono;
 
 class AgentExtractionPipelineIntegrationTest {
 
+    private static final int TEST_EMBEDDING_DIMENSION = 8;
+
     private static final MemoryId MEMORY_ID = DefaultMemoryId.of("user-1", "agent-1");
 
     @Test
@@ -93,6 +95,13 @@ class AgentExtractionPipelineIntegrationTest {
                             assertThat(rawData.segment().metadata())
                                     .containsEntry("segmentType", "agent_episode");
                         });
+        assertThat(fixture.vector().embed("agent episode caption").block())
+                .isNotNull()
+                .hasSize(TEST_EMBEDDING_DIMENSION);
+        assertThat(fixture.vector().embedAll(List.of("tool", "resolution")).block())
+                .isNotNull()
+                .hasSize(2)
+                .allSatisfy(embedding -> assertThat(embedding).hasSize(TEST_EMBEDDING_DIMENSION));
     }
 
     @Test
@@ -608,12 +617,19 @@ class AgentExtractionPipelineIntegrationTest {
 
         @Override
         public Mono<List<Float>> embed(String text) {
-            return Mono.just(List.of());
+            return Mono.just(testEmbedding(text));
         }
 
         @Override
         public Mono<List<List<Float>>> embedAll(List<String> texts) {
-            return Mono.just(List.of());
+            return Mono.just(texts.stream().map(RecordingMemoryVector::testEmbedding).toList());
+        }
+
+        private static List<Float> testEmbedding(String text) {
+            int seed = text == null ? 0 : text.hashCode();
+            return IntStream.range(0, TEST_EMBEDDING_DIMENSION)
+                    .mapToObj(i -> ((seed + i * 31) & 0xff) / 255.0f)
+                    .toList();
         }
     }
 }

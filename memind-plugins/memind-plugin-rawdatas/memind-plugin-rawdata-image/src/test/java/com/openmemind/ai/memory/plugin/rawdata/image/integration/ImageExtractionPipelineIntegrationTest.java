@@ -61,6 +61,8 @@ import reactor.core.publisher.Mono;
 
 class ImageExtractionPipelineIntegrationTest {
 
+    private static final int TEST_EMBEDDING_DIMENSION = 8;
+
     @Test
     void pluginOwnedParserCanParseFileAndPersistSingleCaptionedRawData() {
         MemoryId memoryId = DefaultMemoryId.of("user-1", "agent-1");
@@ -123,8 +125,22 @@ class ImageExtractionPipelineIntegrationTest {
                             assertThat(rawData.segment().content())
                                     .isEqualTo("Dashboard screenshot showing Total Revenue 30%");
                             assertThat(rawData.caption()).isEqualTo("Revenue dashboard screenshot");
+                            assertThat(rawData.captionVectorId()).isNotBlank();
+                            assertThat(rawData.metadata())
+                                    .containsEntry("vectorId", rawData.captionVectorId());
+                            assertThat(rawData.segment().metadata())
+                                    .containsEntry("vectorId", rawData.captionVectorId());
                         });
         assertThat(vector.storedTexts()).containsExactly("Revenue dashboard screenshot");
+        assertThat(vector.embed("Revenue dashboard screenshot").block())
+                .isNotNull()
+                .hasSize(TEST_EMBEDDING_DIMENSION);
+        assertThat(
+                        vector.embedAll(List.of("Revenue dashboard screenshot", "Total revenue"))
+                                .block())
+                .isNotNull()
+                .hasSize(2)
+                .allSatisfy(embedding -> assertThat(embedding).hasSize(TEST_EMBEDDING_DIMENSION));
     }
 
     private static ContentParser testImageParser() {
@@ -233,12 +249,19 @@ class ImageExtractionPipelineIntegrationTest {
 
         @Override
         public Mono<List<Float>> embed(String text) {
-            return Mono.just(List.of());
+            return Mono.just(testEmbedding(text));
         }
 
         @Override
         public Mono<List<List<Float>>> embedAll(List<String> texts) {
-            return Mono.just(List.of());
+            return Mono.just(texts.stream().map(RecordingMemoryVector::testEmbedding).toList());
+        }
+
+        private static List<Float> testEmbedding(String text) {
+            int seed = text == null ? 0 : text.hashCode();
+            return IntStream.range(0, TEST_EMBEDDING_DIMENSION)
+                    .mapToObj(i -> ((seed + i * 31) & 0xff) / 255.0f)
+                    .toList();
         }
 
         private List<String> storedTexts() {
