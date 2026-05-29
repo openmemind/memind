@@ -50,6 +50,23 @@ class RequestIdFilterTest {
     }
 
     @Test
+    void sanitizesRequestIdHeaderBeforeEchoingIt() throws Exception {
+        mockMvc.perform(
+                        get("/open/v1/health")
+                                .header(
+                                        RequestIdFilter.HEADER,
+                                        "legit-id\n"
+                                            + "ERROR fake\t"
+                                            + "012345678901234567890123456789012345678901234567890123456789"))
+                .andExpect(status().isOk())
+                .andExpect(
+                        header().string(
+                                        RequestIdFilter.HEADER,
+                                        "legit-id_ERROR"
+                                            + " fake_01234567890123456789012345678901234567890123"));
+    }
+
+    @Test
     void generatesMissingRequestIdHeader() throws Exception {
         mockMvc.perform(get("/open/v1/health"))
                 .andExpect(status().isOk())

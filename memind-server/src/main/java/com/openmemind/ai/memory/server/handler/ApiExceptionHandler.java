@@ -159,6 +159,7 @@ public class ApiExceptionHandler {
         if (requestId == null || requestId.isBlank()) {
             requestId = request.getHeader(RequestIdFilter.HEADER);
         }
+        requestId = RequestIdFilter.sanitizeRequestId(requestId);
         if (requestId == null || requestId.isBlank()) {
             return "-";
         }
