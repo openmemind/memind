@@ -43,4 +43,8 @@ public class ItemQueryService {
     public List<AdminItemView> listItemsByRawDataId(String rawDataId) {
         return itemQueryMapper.findByRawDataIds(List.of(rawDataId));
     }
+
+    public List<AdminItemView> listItemsByIds(List<Long> itemIds) {
+        return itemQueryMapper.findByBizIds(itemIds);
+    }
 }

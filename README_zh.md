@@ -190,15 +190,20 @@ Claude Code 可以这样连接本地服务：
 claude mcp add --transport http memind http://localhost:8366/mcp
 ```
 
-当前暴露的 MCP tools：
+默认 MCP tools：
 
-- `memind_retrieve`：按 `userId`、`agentId` 和自然语言 `query` 检索记忆；`strategy`
-  可选 `SIMPLE` 或 `DEEP`，默认是 `SIMPLE`。
-- `memind_extract_text`：立即从一段独立文本中提取记忆，适合用户粘贴的笔记、文档片段或总结。
-- `memind_add_message`：向 Memind 的待提交对话缓冲区添加一条 `user` 或 `assistant` 消息。
-- `memind_commit`：提交同一个 `userId` 和 `agentId` 下的待处理对话消息。
+- 检索与上下文：`memind_compile_context`、`memind_retrieve`、`memind_recent`。
+- 写入流程：`memind_extract_text`、`memind_extract_rawdata`、`memind_add_message`、`memind_commit`。
+- Memory item 检查：`memind_items_search`、`memind_items_get`、`memind_items_sources`。
+- Rawdata 检查：`memind_rawdata_search`、`memind_rawdata_get`。
 
-`memind_extract_text` 适合一次性的文本记忆；`memind_add_message` 加 `memind_commit` 适合对话流式记忆。
+当 Agent 需要一段精简、分组后的上下文时，优先使用 `memind_compile_context`；当它需要结构化检索结果时，使用
+`memind_retrieve`。`memind_extract_text` 适合一次性的文本记忆，`memind_extract_rawdata` 适合 typed rawdata，
+`memind_add_message` 加 `memind_commit` 适合对话流式记忆。
+
+可选治理工具 `memind_forget` 默认关闭。设置 `MEMIND_MCP_GOVERNANCE_ENABLED=true` 后启用；它默认 dry-run，
+要求填写非空 reason，并且只会删除匹配传入 `userId` 和 `agentId` 的 `ITEM` 或 `RAWDATA` 记录。
+
 如果要关闭 MCP 端点，在启动 `memind-server` 前设置 `MEMIND_MCP_ENABLED=false`。
 
 不要在没有鉴权网关或等价网络控制的情况下把 `/mcp` 直接暴露到公网。MCP tools 可以读写对应作用域下的记忆。

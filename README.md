@@ -185,19 +185,24 @@ Claude Code can connect to the local server with:
 claude mcp add --transport http memind http://localhost:8366/mcp
 ```
 
-Available MCP tools:
+Default MCP tools:
 
-- `memind_retrieve`: retrieve memory for a `userId` and `agentId` with a natural-language `query`;
-  `strategy` can be `SIMPLE` or `DEEP`, and defaults to `SIMPLE`.
-- `memind_extract_text`: immediately extract memory from standalone text, such as pasted notes,
-  document excerpts, or summaries.
-- `memind_add_message`: add one `user` or `assistant` conversation message to Memind's pending
-  conversation buffer.
-- `memind_commit`: commit pending conversation messages for the same `userId` and `agentId`.
+- Retrieval and context: `memind_compile_context`, `memind_retrieve`, `memind_recent`.
+- Write flows: `memind_extract_text`, `memind_extract_rawdata`, `memind_add_message`,
+  `memind_commit`.
+- Memory item inspection: `memind_items_search`, `memind_items_get`, `memind_items_sources`.
+- Rawdata inspection: `memind_rawdata_search`, `memind_rawdata_get`.
 
-Use `memind_extract_text` for one-off text memory. Use `memind_add_message` followed by
-`memind_commit` for conversation-style memory. To disable the MCP endpoint, set
-`MEMIND_MCP_ENABLED=false` before starting `memind-server`.
+Use `memind_compile_context` when an agent needs a concise, sectioned context pack. Use
+`memind_retrieve` when it needs the structured retrieval response. Use `memind_extract_text` for
+one-off text memory, `memind_extract_rawdata` for typed rawdata payloads, and
+`memind_add_message` followed by `memind_commit` for conversation-style memory.
+
+The optional governance tool `memind_forget` is disabled by default. Enable it with
+`MEMIND_MCP_GOVERNANCE_ENABLED=true`; it defaults to dry-run mode, requires a non-blank reason,
+and deletes only `ITEM` or `RAWDATA` records that match the supplied `userId` and `agentId`.
+
+To disable the MCP endpoint, set `MEMIND_MCP_ENABLED=false` before starting `memind-server`.
 
 Do not expose `/mcp` directly to public networks without an authentication gateway or equivalent
 network controls. MCP tools can read and write scoped memory.
