@@ -548,6 +548,79 @@ Re-running the same `run-name` resumes from checkpoints. Use a new `run-name` fo
 
 ---
 
+## FAQ
+
+### What is Memind?
+
+Memind is a **hierarchical cognitive memory and context engine** for AI agents, built natively in Java. It organizes memory into structured **Insight Trees** that evolve over time, helping agents retain context, build understanding, and recall knowledge at multiple abstraction levels.
+
+### What is the Insight Tree?
+
+The **Insight Tree** is Memind's core innovation. It progressively distills knowledge through three tiers:
+
+| Tier | Input | What it produces |
+|------|-------|-------------------|
+| 🍃 **Leaf** | Grouped memory items | Insights within a single semantic group |
+| 🌿 **Branch** | Multiple leaves | Cross-group patterns within one dimension |
+| 🌳 **Root** | Multiple branches | Cross-dimensional insights invisible at lower levels |
+
+Each tier reveals insights the previous one couldn't see. Leaves know facts. Branches see patterns. Roots understand the person.
+
+### What are Memind's key features?
+
+| Feature | Description |
+|----------|-------------|
+| **Java-native** | First Java-native SOTA memory engine for AI agents |
+| **Hierarchical Memory** | Insight Tree organizes knowledge into structured understanding |
+| **Two-Scope Memory** | USER scope (Profile/Behavior/Event) + AGENT scope (Tool/Directive/Playbook/Resolution) |
+| **Dual Retrieval** | Simple (Vector + BM25 + RRF) and Deep (LLM-assisted query expansion + reranking) |
+| **SOTA Benchmarks** | 86.88% LoCoMo, 84.20% LongMemEval, 67.91% PersonaMem |
+| **Spring Boot Integration** | Native Spring AI 2.0 support |
+
+### What benchmarks does Memind support?
+
+Memind achieves **state-of-the-art results** across three benchmarks:
+
+| Benchmark | Score | Comparison |
+|-----------|-------|------------|
+| **LoCoMo** | 86.88% | +0.12% overall vs strongest baseline |
+| **LongMemEval** | 84.20% | +1.20% overall vs strongest baseline |
+| **PersonaMem** | 67.91% | Preference-aligned recommendations, user facts recall |
+
+### What are the requirements?
+
+- Java 21+
+- Spring Boot 4.0
+- Spring AI 2.0
+- Maven
+- Embedding model (OpenAI or local)
+- Optional: Jina reranker for best results
+
+### How do I install Memind?
+
+```bash
+git clone https://github.com/openmemind/memind.git
+cd memind
+mvn clean install -DskipTests
+```
+
+Configure environment variables for embedding and reranking, then run the evaluation or use the API.
+
+### What is Two-Scope Memory?
+
+Memind maintains separate memory scopes:
+
+| Scope | Categories | Purpose |
+|-------|-----------|---------|
+| **USER** | Profile, Behavior, Event | User identity, preferences, experiences |
+| **AGENT** | Tool, Directive, Playbook, Resolution | Tool usage, durable instructions, reusable workflows |
+
+### What license does Memind use?
+
+Apache 2.0 License. Open-source, free for commercial and non-commercial use.
+
+---
+
 ## Contributing
 
 Contributions are welcome! Feel free to open an [issue](https://github.com/openmemind/memind/issues) or submit a pull request.
