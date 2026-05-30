@@ -73,6 +73,14 @@ server:
   port: ${SERVER_PORT:8366}
 
 memind:
+  mcp:
+    governance-enabled: ${MEMIND_MCP_GOVERNANCE_ENABLED:false}
+    default-token-budget: ${MEMIND_MCP_DEFAULT_TOKEN_BUDGET:1800}
+    max-token-budget: ${MEMIND_MCP_MAX_TOKEN_BUDGET:6000}
+    max-items-per-context: ${MEMIND_MCP_MAX_ITEMS_PER_CONTEXT:50}
+    max-result-limit: ${MEMIND_MCP_MAX_RESULT_LIMIT:100}
+    max-ids-per-request: ${MEMIND_MCP_MAX_IDS_PER_REQUEST:50}
+    max-raw-segment-chars: ${MEMIND_MCP_MAX_RAW_SEGMENT_CHARS:12000}
   vector:
     # Used only by the fallback local file vector store.
     # When an external VectorStore bean such as Qdrant is configured, this path is ignored.

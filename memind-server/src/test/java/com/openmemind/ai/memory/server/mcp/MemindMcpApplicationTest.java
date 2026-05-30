@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.server.mcp;
 
+import static java.util.Map.entry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
@@ -45,6 +46,37 @@ import org.springframework.web.context.WebApplicationContext;
 
 class MemindMcpApplicationTest {
 
+    private static final List<String> DEFAULT_TOOL_NAMES =
+            List.of(
+                    "memind_add_message",
+                    "memind_commit",
+                    "memind_compile_context",
+                    "memind_extract_rawdata",
+                    "memind_extract_text",
+                    "memind_items_get",
+                    "memind_items_search",
+                    "memind_items_sources",
+                    "memind_rawdata_get",
+                    "memind_rawdata_search",
+                    "memind_recent",
+                    "memind_retrieve");
+
+    private static final List<String> GOVERNANCE_TOOL_NAMES =
+            List.of(
+                    "memind_add_message",
+                    "memind_commit",
+                    "memind_compile_context",
+                    "memind_extract_rawdata",
+                    "memind_extract_text",
+                    "memind_forget",
+                    "memind_items_get",
+                    "memind_items_search",
+                    "memind_items_sources",
+                    "memind_rawdata_get",
+                    "memind_rawdata_search",
+                    "memind_recent",
+                    "memind_retrieve");
+
     @Nested
     @SpringBootTest(classes = {MemindServerApplication.class, NoopRuntimeTestConfiguration.class})
     class Enabled {
@@ -74,34 +106,21 @@ class MemindMcpApplicationTest {
         }
 
         @Test
-        void contextRegistersOnlyMemindMcpTools() {
+        void contextRegistersOnlyDefaultMemindMcpTools() {
             assertThat(applicationContext.getBeanNamesForType(MemindMcpToolService.class))
                     .hasSize(1);
+            assertThat(applicationContext.getBeanNamesForType(MemindMcpGovernanceToolService.class))
+                    .isEmpty();
             assertThat(applicationContext.getBeanNamesForType(McpStatelessSyncServer.class))
                     .hasSize(1);
 
-            assertThat(toolNames())
-                    .containsExactly(
-                            "memind_add_message",
-                            "memind_commit",
-                            "memind_extract_text",
-                            "memind_retrieve");
+            assertThat(toolNames()).containsExactlyElementsOf(DEFAULT_TOOL_NAMES);
         }
 
         @Test
         void toolsExposeFlatInputSchemas() {
-            Map<String, List<String>> requiredFieldsByTool =
-                    Map.of(
-                            "memind_retrieve", List.of("userId", "agentId", "query"),
-                            "memind_extract_text", List.of("userId", "agentId", "text"),
-                            "memind_add_message", List.of("userId", "agentId", "role", "content"),
-                            "memind_commit", List.of("userId", "agentId"));
-            Map<String, List<String>> optionalFieldsByTool =
-                    Map.of(
-                            "memind_retrieve", List.of("strategy", "trace"),
-                            "memind_extract_text", List.of("sourceClient"),
-                            "memind_add_message", List.of("sourceClient"),
-                            "memind_commit", List.of("sourceClient"));
+            Map<String, List<String>> requiredFieldsByTool = requiredFieldsByDefaultTool();
+            Map<String, List<String>> optionalFieldsByTool = optionalFieldsByDefaultTool();
 
             toolSpecifications()
                     .forEach(
@@ -116,15 +135,19 @@ class MemindMcpApplicationTest {
                                 assertThat(inputSchema.properties())
                                         .containsKeys(
                                                 expectedRequiredFields.toArray(String[]::new));
-                                assertThat(inputSchema.properties())
-                                        .containsKeys(
-                                                expectedOptionalFields.toArray(String[]::new));
+                                if (!expectedOptionalFields.isEmpty()) {
+                                    assertThat(inputSchema.properties())
+                                            .containsKeys(
+                                                    expectedOptionalFields.toArray(String[]::new));
+                                }
                                 assertThat(inputSchema.properties()).doesNotContainKey("request");
                                 assertThat(inputSchema.required())
                                         .containsExactlyInAnyOrderElementsOf(
                                                 expectedRequiredFields);
-                                assertThat(inputSchema.required())
-                                        .doesNotContainAnyElementsOf(expectedOptionalFields);
+                                if (!expectedOptionalFields.isEmpty()) {
+                                    assertThat(inputSchema.required())
+                                            .doesNotContainAnyElementsOf(expectedOptionalFields);
+                                }
                             });
         }
 
@@ -150,14 +173,82 @@ class MemindMcpApplicationTest {
                             jsonPath("$.result.tools[*].name")
                                     .value(
                                             containsInAnyOrder(
-                                                    "memind_add_message",
-                                                    "memind_commit",
-                                                    "memind_extract_text",
-                                                    "memind_retrieve")));
+                                                    DEFAULT_TOOL_NAMES.toArray(String[]::new))));
         }
 
         private MockMvc mcpClient() {
             return MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
+        }
+
+        private List<McpStatelessServerFeatures.SyncToolSpecification> toolSpecifications() {
+            return syncToolSpecifications.stream().flatMap(List::stream).toList();
+        }
+
+        private List<String> toolNames() {
+            return toolSpecifications().stream().map(spec -> spec.tool().name()).sorted().toList();
+        }
+    }
+
+    @Nested
+    @SpringBootTest(classes = {MemindServerApplication.class, NoopRuntimeTestConfiguration.class})
+    class GovernanceEnabled {
+
+        private static final Path DB_PATH =
+                Path.of("target", "memind-mcp-governance-" + UUID.randomUUID() + ".db")
+                        .toAbsolutePath();
+
+        @Autowired private ApplicationContext applicationContext;
+        @Autowired private WebApplicationContext webApplicationContext;
+
+        @Autowired
+        private ObjectProvider<List<McpStatelessServerFeatures.SyncToolSpecification>>
+                syncToolSpecifications;
+
+        @DynamicPropertySource
+        static void registerProperties(DynamicPropertyRegistry registry) {
+            prepareDatabasePath(DB_PATH);
+            registry.add("spring.main.web-application-type", () -> "servlet");
+            registry.add("spring.datasource.url", () -> "jdbc:sqlite:" + DB_PATH);
+            registry.add("spring.datasource.driver-class-name", () -> "org.sqlite.JDBC");
+            registry.add("memind.store.init-schema", () -> "true");
+            registry.add("spring.ai.mcp.server.enabled", () -> "true");
+            registry.add("memind.mcp.governance-enabled", () -> "true");
+            registry.add(
+                    "spring.autoconfigure.exclude",
+                    () -> NoopRuntimeTestConfiguration.SPRING_AI_AUTOCONFIG_EXCLUDES);
+        }
+
+        @Test
+        void contextRegistersGovernanceToolWhenEnabled() {
+            assertThat(applicationContext.getBeanNamesForType(MemindMcpGovernanceToolService.class))
+                    .hasSize(1);
+            assertThat(toolNames()).containsExactlyElementsOf(GOVERNANCE_TOOL_NAMES);
+        }
+
+        @Test
+        void mcpEndpointListsGovernanceToolWhenEnabled() throws Exception {
+            MockMvcBuilders.webAppContextSetup(webApplicationContext)
+                    .build()
+                    .perform(
+                            post("/mcp")
+                                    .contentType(APPLICATION_JSON)
+                                    .accept(APPLICATION_JSON, TEXT_EVENT_STREAM)
+                                    .content(
+                                            """
+                                            {
+                                              "jsonrpc": "2.0",
+                                              "id": 1,
+                                              "method": "tools/list",
+                                              "params": {}
+                                            }
+                                            """))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.error").doesNotExist())
+                    .andExpect(
+                            jsonPath("$.result.tools[*].name")
+                                    .value(
+                                            containsInAnyOrder(
+                                                    GOVERNANCE_TOOL_NAMES.toArray(String[]::new))));
         }
 
         private List<McpStatelessServerFeatures.SyncToolSpecification> toolSpecifications() {
@@ -225,6 +316,65 @@ class MemindMcpApplicationTest {
                                             """))
                     .andExpect(status().is4xxClientError());
         }
+    }
+
+    private static Map<String, List<String>> requiredFieldsByDefaultTool() {
+        return Map.ofEntries(
+                entry("memind_add_message", List.of("userId", "agentId", "role", "content")),
+                entry("memind_commit", List.of("userId", "agentId")),
+                entry("memind_compile_context", List.of("userId", "agentId", "query")),
+                entry("memind_extract_rawdata", List.of("userId", "agentId", "type", "content")),
+                entry("memind_extract_text", List.of("userId", "agentId", "text")),
+                entry("memind_items_get", List.of("userId", "agentId", "ids")),
+                entry("memind_items_search", List.of("userId", "agentId")),
+                entry("memind_items_sources", List.of("userId", "agentId", "ids")),
+                entry("memind_rawdata_get", List.of("userId", "agentId", "ids")),
+                entry("memind_rawdata_search", List.of("userId", "agentId")),
+                entry("memind_recent", List.of("userId", "agentId")),
+                entry("memind_retrieve", List.of("userId", "agentId", "query")));
+    }
+
+    private static Map<String, List<String>> optionalFieldsByDefaultTool() {
+        return Map.ofEntries(
+                entry("memind_add_message", List.of("sourceClient")),
+                entry("memind_commit", List.of("sourceClient")),
+                entry(
+                        "memind_compile_context",
+                        List.of(
+                                "strategy",
+                                "maxItems",
+                                "tokenBudget",
+                                "includeSources",
+                                "metadataFilter")),
+                entry("memind_extract_rawdata", List.of("metadata", "sourceClient")),
+                entry("memind_extract_text", List.of("sourceClient")),
+                entry("memind_items_get", List.of()),
+                entry(
+                        "memind_items_search",
+                        List.of(
+                                "scope",
+                                "categories",
+                                "sourceClients",
+                                "rawDataTypes",
+                                "timeRange",
+                                "metadataFilter",
+                                "limit",
+                                "cursor")),
+                entry("memind_items_sources", List.of("includeSegment")),
+                entry("memind_rawdata_get", List.of("includeSegment")),
+                entry(
+                        "memind_rawdata_search",
+                        List.of(
+                                "types",
+                                "sourceClients",
+                                "timeRange",
+                                "metadataFilter",
+                                "includeSegment",
+                                "includeMetadata",
+                                "limit",
+                                "cursor")),
+                entry("memind_recent", List.of("types", "limit", "cursor", "metadataFilter")),
+                entry("memind_retrieve", List.of("strategy", "trace")));
     }
 
     private static void prepareDatabasePath(Path dbPath) {

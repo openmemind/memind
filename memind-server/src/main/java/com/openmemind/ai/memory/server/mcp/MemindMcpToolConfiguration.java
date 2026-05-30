@@ -37,7 +37,7 @@ class MemindMcpToolConfiguration {
 
     @Bean
     List<McpStatelessServerFeatures.SyncToolSpecification> memindMcpToolSpecifications(
-            MemindMcpToolService toolService) {
-        return SyncMcpAnnotationProviders.statelessToolSpecifications(List.of(toolService));
+            List<MemindMcpToolProvider> toolProviders) {
+        return SyncMcpAnnotationProviders.statelessToolSpecifications(List.copyOf(toolProviders));
     }
 }

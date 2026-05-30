@@ -23,11 +23,19 @@ import com.openmemind.ai.memory.server.domain.memory.response.QueryMemoryItemsRe
 import com.openmemind.ai.memory.server.domain.memory.response.QueryMemoryRawDataResponse;
 import com.openmemind.ai.memory.server.domain.rawdata.query.RawDataPageQuery;
 import com.openmemind.ai.memory.server.domain.rawdata.view.AdminRawDataView;
+import com.openmemind.ai.memory.server.mcp.response.MemindItemSourcesResponse;
+import com.openmemind.ai.memory.server.mcp.response.MemindItemsGetResponse;
+import com.openmemind.ai.memory.server.mcp.response.MemindRawDataGetResponse;
+import com.openmemind.ai.memory.server.mcp.support.MemindMcpSegmentLimiter;
 import com.openmemind.ai.memory.server.service.item.ItemQueryService;
 import com.openmemind.ai.memory.server.service.rawdata.RawDataQueryService;
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -65,6 +73,84 @@ public class OpenMemoryAssetQueryService {
         return new QueryMemoryItemsResponse(items, null);
     }
 
+    public MemindItemsGetResponse getItemsByIds(String userId, String agentId, List<Long> itemIds) {
+        List<AdminItemView> scopedItems =
+                itemQueryService.listItemsByIds(itemIds).stream()
+                        .filter(
+                                item ->
+                                        matchesScope(
+                                                item.userId(), item.agentId(), userId, agentId))
+                        .toList();
+        List<String> foundIds =
+                scopedItems.stream().map(AdminItemView::itemId).map(String::valueOf).toList();
+        List<String> requestedIds = itemIds.stream().map(String::valueOf).toList();
+        return new MemindItemsGetResponse(
+                scopedItems.stream().map(OpenMemoryAssetQueryService::toItemView).toList(),
+                missingIds(requestedIds, foundIds));
+    }
+
+    public MemindRawDataGetResponse getRawDataByIds(
+            String userId,
+            String agentId,
+            List<String> rawDataIds,
+            boolean includeSegment,
+            int maxSegmentChars) {
+        List<AdminRawDataView> scopedRawData =
+                rawDataQueryService.listRawDataByIds(rawDataIds).stream()
+                        .filter(raw -> matchesScope(raw.userId(), raw.agentId(), userId, agentId))
+                        .toList();
+        List<String> foundIds = scopedRawData.stream().map(AdminRawDataView::rawDataId).toList();
+        return new MemindRawDataGetResponse(
+                scopedRawData.stream()
+                        .map(raw -> toMcpRawData(raw, includeSegment, maxSegmentChars))
+                        .toList(),
+                missingIds(rawDataIds, foundIds));
+    }
+
+    public MemindItemSourcesResponse getItemSourcesByItemIds(
+            String userId,
+            String agentId,
+            List<Long> itemIds,
+            boolean includeSegment,
+            int maxSegmentChars) {
+        List<AdminItemView> scopedItems =
+                itemQueryService.listItemsByIds(itemIds).stream()
+                        .filter(
+                                item ->
+                                        matchesScope(
+                                                item.userId(), item.agentId(), userId, agentId))
+                        .toList();
+        List<String> foundItemIds =
+                scopedItems.stream().map(AdminItemView::itemId).map(String::valueOf).toList();
+        List<String> rawDataIds =
+                scopedItems.stream()
+                        .map(AdminItemView::rawDataId)
+                        .filter(OpenMemoryAssetQueryService::hasText)
+                        .distinct()
+                        .toList();
+        Map<String, AdminRawDataView> rawDataById =
+                rawDataQueryService.listRawDataByIds(rawDataIds).stream()
+                        .filter(raw -> matchesScope(raw.userId(), raw.agentId(), userId, agentId))
+                        .collect(
+                                Collectors.toMap(
+                                        AdminRawDataView::rawDataId,
+                                        Function.identity(),
+                                        (left, right) -> left));
+        List<MemindItemSourcesResponse.Source> sources =
+                scopedItems.stream()
+                        .map(
+                                item ->
+                                        toItemSource(
+                                                item,
+                                                rawDataById.get(item.rawDataId()),
+                                                includeSegment,
+                                                maxSegmentChars))
+                        .filter(Objects::nonNull)
+                        .toList();
+        List<String> requestedItemIds = itemIds.stream().map(String::valueOf).toList();
+        return new MemindItemSourcesResponse(sources, missingIds(requestedItemIds, foundItemIds));
+    }
+
     public QueryMemoryRawDataResponse queryRawData(QueryMemoryRawDataRequest request) {
         QueryMemoryRawDataRequest.TimeRange timeRange = request.timeRange();
         var page =
@@ -85,6 +171,56 @@ public class OpenMemoryAssetQueryService {
                         .map(raw -> toRawDataView(raw, include))
                         .toList();
         return new QueryMemoryRawDataResponse(rawData, null);
+    }
+
+    private static MemindRawDataGetResponse.RawData toMcpRawData(
+            AdminRawDataView rawData, boolean includeSegment, int maxSegmentChars) {
+        return new MemindRawDataGetResponse.RawData(
+                rawData.rawDataId(),
+                rawData.type(),
+                rawData.sourceClient(),
+                rawData.caption(),
+                rawData.metadata(),
+                includeSegment
+                        ? MemindMcpSegmentLimiter.limit(rawData.segment(), maxSegmentChars)
+                        : null,
+                rawData.startTime(),
+                rawData.endTime(),
+                rawData.createdAt());
+    }
+
+    private static MemindItemSourcesResponse.Source toItemSource(
+            AdminItemView item,
+            AdminRawDataView rawData,
+            boolean includeSegment,
+            int maxSegmentChars) {
+        if (rawData == null) {
+            return null;
+        }
+        return new MemindItemSourcesResponse.Source(
+                String.valueOf(item.itemId()),
+                rawData.rawDataId(),
+                rawData.type(),
+                rawData.caption(),
+                rawData.sourceClient(),
+                rawData.metadata(),
+                includeSegment
+                        ? MemindMcpSegmentLimiter.limit(rawData.segment(), maxSegmentChars)
+                        : null);
+    }
+
+    private static boolean matchesScope(
+            String actualUserId,
+            String actualAgentId,
+            String expectedUserId,
+            String expectedAgentId) {
+        return Objects.equals(actualUserId, expectedUserId)
+                && Objects.equals(actualAgentId, expectedAgentId);
+    }
+
+    private static List<String> missingIds(List<String> requestedIds, List<String> foundIds) {
+        var found = new LinkedHashSet<>(foundIds);
+        return requestedIds.stream().filter(id -> !found.contains(id)).toList();
     }
 
     private static boolean matchesMetadata(Map<String, Object> metadata, MetadataFilter filter) {
@@ -121,6 +257,10 @@ public class OpenMemoryAssetQueryService {
                 rawData.startTime(),
                 rawData.endTime(),
                 rawData.createdAt());
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private static Instant createdAt(AdminItemView item) {

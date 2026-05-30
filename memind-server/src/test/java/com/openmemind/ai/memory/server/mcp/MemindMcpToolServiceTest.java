@@ -19,22 +19,43 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.conversation.message.Message;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
+import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.server.domain.memory.request.AddMessageRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.CommitMemoryRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.ExtractMemoryRequest;
+import com.openmemind.ai.memory.server.domain.memory.request.QueryMemoryItemsRequest;
+import com.openmemind.ai.memory.server.domain.memory.request.QueryMemoryRawDataRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.RetrieveMemoryRequest;
 import com.openmemind.ai.memory.server.domain.memory.response.AddMessageResponse;
 import com.openmemind.ai.memory.server.domain.memory.response.ExtractMemoryResponse;
+import com.openmemind.ai.memory.server.domain.memory.response.QueryMemoryItemsResponse;
+import com.openmemind.ai.memory.server.domain.memory.response.QueryMemoryRawDataResponse;
 import com.openmemind.ai.memory.server.domain.memory.response.RetrieveMemoryResponse;
+import com.openmemind.ai.memory.server.mcp.compiler.MemindMcpContextCompiler;
+import com.openmemind.ai.memory.server.mcp.config.MemindMcpToolProperties;
+import com.openmemind.ai.memory.server.mcp.response.MemindItemSourcesResponse;
+import com.openmemind.ai.memory.server.mcp.response.MemindItemsGetResponse;
+import com.openmemind.ai.memory.server.mcp.response.MemindRawDataGetResponse;
 import com.openmemind.ai.memory.server.service.memory.OpenMemoryApplicationService;
+import com.openmemind.ai.memory.server.service.memory.OpenMemoryAssetQueryService;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class MemindMcpToolServiceTest {
 
     private final RecordingOpenMemoryApplicationService applicationService =
             new RecordingOpenMemoryApplicationService();
-    private final MemindMcpToolService toolService = new MemindMcpToolService(applicationService);
+    private final RecordingOpenMemoryAssetQueryService assetQueryService =
+            new RecordingOpenMemoryAssetQueryService();
+    private final MemindMcpToolService toolService =
+            new MemindMcpToolService(
+                    applicationService,
+                    assetQueryService,
+                    new MemindMcpContextCompiler(),
+                    new MemindMcpToolProperties(false, 1800, 6000, 50, 100, 50, 12000),
+                    JsonUtils.mapper());
 
     @Test
     void retrieveDefaultsToSimpleStrategy() {
@@ -73,6 +94,44 @@ class MemindMcpToolServiceTest {
     }
 
     @Test
+    void compileContextDelegatesToRetrieveHonorsMaxItemsAndIncludesSourcesByDefault() {
+        applicationService.retrieveResponse =
+                new RetrieveMemoryResponse(
+                        "success",
+                        List.of(
+                                item("1", "Always run tests", "directive"),
+                                item("2", "Second item", "tool")),
+                        List.of(),
+                        List.of(
+                                new RetrieveMemoryResponse.RetrievedRawDataView(
+                                        "rd-1",
+                                        "Test turn",
+                                        0.9,
+                                        List.of("1"),
+                                        "agent_timeline",
+                                        "claude-code",
+                                        Map.of(),
+                                        Instant.parse("2026-05-01T00:00:00Z"),
+                                        Instant.parse("2026-05-01T00:01:00Z"),
+                                        Instant.parse("2026-05-01T00:02:00Z"))),
+                        List.of(),
+                        "SIMPLE",
+                        "tests");
+
+        var response =
+                toolService.compileContext(
+                        "user-1", "agent-1", " tests ", null, 1, 1200, null, null);
+
+        assertThat(applicationService.lastRetrieveRequest.query()).isEqualTo("tests");
+        assertThat(response.contextText())
+                .contains("Always run tests")
+                .doesNotContain("Second item");
+        assertThat(response.sources())
+                .singleElement()
+                .satisfies(source -> assertThat(source.rawDataId()).isEqualTo("rd-1"));
+    }
+
+    @Test
     void extractTextCreatesConversationContentAndDefaultsSourceClient() {
         applicationService.extractResponse =
                 new ExtractMemoryResponse(
@@ -92,6 +151,32 @@ class MemindMcpToolServiceTest {
                             assertThat(message.role()).isEqualTo(Message.Role.USER);
                             assertThat(message.textContent()).isEqualTo("remember this");
                         });
+    }
+
+    @Test
+    void extractRawDataUsesRawContentMapperAndRejectsNestedType() {
+        applicationService.extractResponse =
+                new ExtractMemoryResponse(
+                        "SUCCESS", List.of("rd-1"), List.of(), List.of(), false, 1L, null);
+
+        toolService.extractRawData(
+                "user-1", "agent-1", "conversation", Map.of("messages", List.of()), null, null);
+
+        assertThat(applicationService.lastExtractRequest.rawContent())
+                .isInstanceOf(ConversationContent.class);
+        assertThat(applicationService.lastExtractRequest.sourceClient()).isEqualTo("mcp");
+
+        assertThatThrownBy(
+                        () ->
+                                toolService.extractRawData(
+                                        "user-1",
+                                        "agent-1",
+                                        "conversation",
+                                        Map.of("type", "tool_call"),
+                                        null,
+                                        null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("content must not contain type");
     }
 
     @Test
@@ -148,6 +233,87 @@ class MemindMcpToolServiceTest {
         assertThat(applicationService.lastCommitRequest).isNull();
     }
 
+    @Test
+    void itemsSearchDelegatesToAssetQueryServiceWithFilters() {
+        toolService.itemsSearch(
+                "user-1",
+                "agent-1",
+                "AGENT",
+                List.of("tool"),
+                List.of("claude-code"),
+                List.of("agent_timeline"),
+                null,
+                null,
+                10,
+                null);
+
+        QueryMemoryItemsRequest request = assetQueryService.lastItemsRequest;
+        assertThat(request.userId()).isEqualTo("user-1");
+        assertThat(request.agentId()).isEqualTo("agent-1");
+        assertThat(request.scope()).isEqualTo("AGENT");
+        assertThat(request.categories()).containsExactly("tool");
+        assertThat(request.sourceClients()).containsExactly("claude-code");
+        assertThat(request.rawDataTypes()).containsExactly("agent_timeline");
+        assertThat(request.limit()).isEqualTo(10);
+    }
+
+    @Test
+    void itemsGetParsesIdsAndDelegatesToScopedLookup() {
+        toolService.itemsGet("user-1", "agent-1", List.of(" 101 ", "102"));
+
+        assertThat(assetQueryService.lastItemIds).containsExactly(101L, 102L);
+    }
+
+    @Test
+    void itemsSourcesDefaultsIncludeSegmentFalse() {
+        toolService.itemsSources("user-1", "agent-1", List.of("101"), null);
+
+        assertThat(assetQueryService.lastIncludeSegment).isFalse();
+    }
+
+    @Test
+    void rawDataSearchDefaultsIncludeSegmentFalseAndMetadataTrue() {
+        toolService.rawDataSearch(
+                "user-1",
+                "agent-1",
+                List.of("agent_timeline"),
+                List.of("codex"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+
+        QueryMemoryRawDataRequest request = assetQueryService.lastRawDataRequest;
+        assertThat(request.effectiveInclude().includeSegment()).isFalse();
+        assertThat(request.effectiveInclude().includeMetadata()).isTrue();
+    }
+
+    @Test
+    void rawDataGetDefaultsIncludeSegmentFalse() {
+        toolService.rawDataGet("user-1", "agent-1", List.of("rd-1"), null);
+
+        assertThat(assetQueryService.lastRawDataIds).containsExactly("rd-1");
+        assertThat(assetQueryService.lastIncludeSegment).isFalse();
+    }
+
+    @Test
+    void recentMergesItemsAndRawDataByTime() {
+        var response =
+                toolService.recent("user-1", "agent-1", List.of("ITEM", "RAWDATA"), 2, null, null);
+
+        assertThat(response.entries()).hasSize(2);
+        assertThat(response.entries().get(0).kind()).isEqualTo("RAWDATA");
+        assertThat(response.entries().get(1).kind()).isEqualTo("ITEM");
+    }
+
+    private static RetrieveMemoryResponse.RetrievedItemView item(
+            String id, String text, String category) {
+        return new RetrieveMemoryResponse.RetrievedItemView(
+                id, text, 1.0f, 1.0, Instant.parse("2026-05-01T00:00:00Z"), category, Map.of());
+    }
+
     private static final class RecordingOpenMemoryApplicationService
             extends OpenMemoryApplicationService {
 
@@ -192,6 +358,90 @@ class MemindMcpToolServiceTest {
         public ExtractMemoryResponse commit(CommitMemoryRequest request) {
             this.lastCommitRequest = request;
             return commitResponse;
+        }
+    }
+
+    private static final class RecordingOpenMemoryAssetQueryService
+            extends OpenMemoryAssetQueryService {
+
+        private QueryMemoryItemsRequest lastItemsRequest;
+        private QueryMemoryRawDataRequest lastRawDataRequest;
+        private List<Long> lastItemIds;
+        private List<String> lastRawDataIds;
+        private boolean lastIncludeSegment;
+
+        private RecordingOpenMemoryAssetQueryService() {
+            super(null, null);
+        }
+
+        @Override
+        public QueryMemoryItemsResponse queryItems(QueryMemoryItemsRequest request) {
+            this.lastItemsRequest = request;
+            return new QueryMemoryItemsResponse(
+                    List.of(
+                            new QueryMemoryItemsResponse.MemoryItemView(
+                                    "101",
+                                    "Run mvn test",
+                                    "AGENT",
+                                    "tool",
+                                    "FACT",
+                                    "rd-1",
+                                    "agent_timeline",
+                                    "claude-code",
+                                    Instant.parse("2026-05-01T00:00:00Z"),
+                                    Instant.parse("2026-05-01T00:01:00Z"),
+                                    Instant.parse("2026-05-01T00:02:00Z"),
+                                    Map.of())),
+                    null);
+        }
+
+        @Override
+        public QueryMemoryRawDataResponse queryRawData(QueryMemoryRawDataRequest request) {
+            this.lastRawDataRequest = request;
+            return new QueryMemoryRawDataResponse(
+                    List.of(
+                            new QueryMemoryRawDataResponse.MemoryRawDataView(
+                                    "rd-1",
+                                    "agent_timeline",
+                                    "claude-code",
+                                    "Fixed build",
+                                    Map.of(),
+                                    null,
+                                    Instant.parse("2026-05-01T00:03:00Z"),
+                                    Instant.parse("2026-05-01T00:04:00Z"),
+                                    Instant.parse("2026-05-01T00:05:00Z"))),
+                    null);
+        }
+
+        @Override
+        public MemindItemsGetResponse getItemsByIds(
+                String userId, String agentId, List<Long> itemIds) {
+            this.lastItemIds = itemIds;
+            return new MemindItemsGetResponse(List.of(), List.of());
+        }
+
+        @Override
+        public MemindItemSourcesResponse getItemSourcesByItemIds(
+                String userId,
+                String agentId,
+                List<Long> itemIds,
+                boolean includeSegment,
+                int maxSegmentChars) {
+            this.lastItemIds = itemIds;
+            this.lastIncludeSegment = includeSegment;
+            return new MemindItemSourcesResponse(List.of(), List.of());
+        }
+
+        @Override
+        public MemindRawDataGetResponse getRawDataByIds(
+                String userId,
+                String agentId,
+                List<String> rawDataIds,
+                boolean includeSegment,
+                int maxSegmentChars) {
+            this.lastRawDataIds = rawDataIds;
+            this.lastIncludeSegment = includeSegment;
+            return new MemindRawDataGetResponse(List.of(), List.of());
         }
     }
 }

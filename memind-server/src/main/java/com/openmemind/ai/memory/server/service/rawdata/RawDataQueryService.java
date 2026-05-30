@@ -17,6 +17,7 @@ import com.openmemind.ai.memory.server.domain.common.PageResponse;
 import com.openmemind.ai.memory.server.domain.rawdata.query.RawDataPageQuery;
 import com.openmemind.ai.memory.server.domain.rawdata.view.AdminRawDataView;
 import com.openmemind.ai.memory.server.mapper.rawdata.AdminRawDataQueryMapper;
+import java.util.List;
 import java.util.NoSuchElementException;
 import org.springframework.stereotype.Service;
 
@@ -37,5 +38,9 @@ public class RawDataQueryService {
         return rawDataQueryMapper
                 .findByBizId(rawDataId)
                 .orElseThrow(() -> new NoSuchElementException("Raw data not found: " + rawDataId));
+    }
+
+    public List<AdminRawDataView> listRawDataByIds(List<String> rawDataIds) {
+        return rawDataQueryMapper.findByBizIds(rawDataIds);
     }
 }
