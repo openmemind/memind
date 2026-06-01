@@ -135,10 +135,6 @@ public class MemoryOptionsProjectionMapper {
                             "Whether graph assist may reorder LEAF or higher-tier evidence inputs"
                                     + " without changing their membership."),
                     Map.entry(
-                            "retrieval.common.cacheEnabled",
-                            "Whether retrieval can reuse cached ranking artifacts for repeated"
-                                    + " requests."),
-                    Map.entry(
                             "retrieval.simple.timeout",
                             "Maximum time allowed for a simple retrieval request."),
                     Map.entry(

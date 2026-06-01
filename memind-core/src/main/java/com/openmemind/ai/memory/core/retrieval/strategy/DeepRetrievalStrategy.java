@@ -813,9 +813,4 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
         return config.withTier2(
                 RetrievalConfig.TierConfig.enabled(deep.tier2InitTopK(), deep.minScore()));
     }
-
-    @Override
-    public void onDataChanged(MemoryId memoryId) {
-        insightRetriever.invalidateCache(memoryId);
-    }
 }

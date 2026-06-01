@@ -306,10 +306,8 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
             if (textSearch != null) {
                 textSearch.invalidate(memoryId);
             }
-            // Notify strategy of internal cache invalidation
             strategies.values().forEach(s -> s.onDataChanged(memoryId));
-            log.debug(
-                    "Index and strategy caches invalidated: memoryId={}", memoryId.toIdentifier());
+            log.debug("Retrieval data change notification handled: memoryId={}", memoryId);
         }
     }
 }

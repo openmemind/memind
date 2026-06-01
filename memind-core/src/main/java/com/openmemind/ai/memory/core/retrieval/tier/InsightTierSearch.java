@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.core.retrieval.tier;
 
-import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import reactor.core.publisher.Mono;
@@ -22,6 +21,4 @@ import reactor.core.publisher.Mono;
 public interface InsightTierSearch {
 
     Mono<TierResult> retrieve(QueryContext context, RetrievalConfig config);
-
-    void invalidateCache(MemoryId memoryId);
 }
