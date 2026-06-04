@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 48" fill="none" role="img" aria-label="LoCoMo: 86.88%">
+  <rect x="0" y="0" width="140" height="48" rx="10" fill="#111827"/>
+  <rect x="0.5" y="0.5" width="139" height="47" rx="9.5" stroke="url(#border)" stroke-opacity="0.92"/>
+  <rect x="1" y="1" width="138" height="46" rx="9" fill="url(#shine)" opacity="0.62"/>
+  <text x="70" y="24" fill="#22C55E" font-family="ui-sans-serif, -apple-system, Segoe UI, Inter, system-ui, Arial, sans-serif" font-size="18" font-weight="900" text-anchor="middle" letter-spacing="-0.2">86.88%</text>
+  <text x="70" y="38" fill="#CBD5E1" font-family="ui-sans-serif, -apple-system, Segoe UI, Inter, system-ui, Arial, sans-serif" font-size="9" font-weight="700" text-anchor="middle" letter-spacing="1.45">LOCOMO</text>
+  <defs>
+    <linearGradient id="border" x1="0" y1="0" x2="140" y2="48">
+      <stop stop-color="#22C55E"/>
+      <stop offset="0.55" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#A78BFA"/>
+    </linearGradient>
+    <radialGradient id="shine" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(70 0) rotate(90) scale(52 112)">
+      <stop stop-color="#22C55E" stop-opacity="0.22"/>
+      <stop offset="0.45" stop-color="#38BDF8" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#111827" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+</svg>

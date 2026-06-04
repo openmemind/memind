@@ -2,30 +2,47 @@
   <img src="./docs/images/memind-banner.png" alt="Memind banner">
 </p>
 
+<h1 align="center">Memind</h1>
+
 <p align="center">
   <strong>Memory that thinks. Context that evolves.</strong>
 </p>
 
 <p align="center">
-  <a href="#highlights">Highlights</a> ·
-  <a href="#overview">Overview</a> ·
-  <a href="#quick-start">Quick Start</a> ·
-  <a href="#examples">Examples</a> ·
-  <a href="#benchmark">Benchmark</a>
+  The memory layer that lets AI systems learn from every conversation,
+  tool call, document, and resolved task.
+</p>
+
+<p align="center">
+  Memind turns raw context into structured memory and reusable experience,
+  continuously organizes it into memory graphs, threads, and evolving Insight Trees,
+  then recalls the right context through REST, MCP, SDKs, and first-party plugins
+  for popular agents.
 </p>
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-orange" alt="License"></a>
-  <a href="./README.md"><img src="https://img.shields.io/badge/English-Click-yellow" alt="English"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Version-0.2.0-0A7AFF" alt="Version 0.2.0"></a>
+  <a href="#"><img src="https://img.shields.io/badge/Java-21-blue" alt="Java 21"></a>
   <a href="./README_zh.md"><img src="https://img.shields.io/badge/简体中文-点击查看-orange" alt="简体中文"></a>
   <a href="https://github.com/openmemind/memind"><img src="https://img.shields.io/github/stars/openmemind/memind?style=social" alt="GitHub Stars"></a>
 </p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/memind-0.1.0-0A7AFF" alt="memind 0.1.0"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Java-21-blue" alt="Java 21"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Spring%20Boot-4.0-brightgreen" alt="Spring Boot 4.0"></a>
-  <a href="#"><img src="https://img.shields.io/badge/Spring%20AI-2.0-green" alt="Spring AI 2.0"></a>
+  <a href="#benchmark"><img src="./docs/images/badges/locomo.svg" alt="LoCoMo 86.88%" height="38"></a>
+  <a href="#benchmark"><img src="./docs/images/badges/longmemeval.svg" alt="LongMemEval 84.20%" height="38"></a>
+  <a href="#benchmark"><img src="./docs/images/badges/personamem.svg" alt="PersonaMem 67.91%" height="38"></a>
+  <a href="#mcp-server"><img src="./docs/images/badges/mcp-tools.svg" alt="11+ MCP tools" height="38"></a>
+  <a href="#official-api-clients"><img src="./docs/images/badges/sdks.svg" alt="5 SDKs" height="38"></a>
+  <a href="#agent-integrations"><img src="./docs/images/badges/agent-plugins.svg" alt="4 agent plugins" height="38"></a>
+</p>
+
+<p align="center">
+  <a href="#highlights">Highlights</a> ·
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#mcp-server">MCP Server</a> ·
+  <a href="#agent-integrations">Agent Integrations</a> ·
+  <a href="#benchmark">Benchmark</a>
 </p>
 
 ---
@@ -102,7 +119,7 @@ Retrieval admission is always enabled: blank queries, pure punctuation/symbol in
 | Category | Capability | Description |
 |----------|-----------|-------------|
 | **Extraction** | Conversation Segmentation | Automatic boundary detection and segmentation for streaming messages |
-| | Memory Item Extraction | Extract structured facts with deduplication across 5 categories |
+| | Memory Item Extraction | Extract structured facts with deduplication across 7 user and agent categories |
 | | Insight Tree Construction | Hierarchical knowledge building: Leaf → Branch → Root |
 | | Foresight Prediction | Predict future user needs based on conversation patterns |
 | | Tool Call Statistics | Track tool usage patterns and success rates |
@@ -173,6 +190,8 @@ After the images are built and the containers start:
 The UI container proxies `/open/*` and `/admin/*` to `memind-server`, so the browser can use
 the UI as a same-origin local admin console.
 
+<a id="mcp-server"></a>
+
 ### HTTP MCP server
 
 `memind-server` includes a stateless HTTP MCP server at `/mcp`, enabled by default. It exposes
@@ -207,13 +226,21 @@ To disable the MCP endpoint, set `MEMIND_MCP_ENABLED=false` before starting `mem
 Do not expose `/mcp` directly to public networks without an authentication gateway or equivalent
 network controls. MCP tools can read and write scoped memory.
 
-### Hermes Agent
+<a id="agent-integrations"></a>
 
-Memind also provides a Hermes Agent memory-provider integration under
-`memind-integrations/hermes`. It retrieves relevant Memind context before Hermes turns,
-captures user/assistant turns after responses, and can expose `memind_retrieve` and
-`memind_extract_text` as Hermes-native tools. See
-[`memind-integrations/hermes/README.md`](./memind-integrations/hermes/README.md).
+### Agent integrations
+
+Memind provides first-party integrations for popular agents:
+
+- [`Claude Code`](./memind-integrations/claude-code): persistent project memory,
+  session-start continuity context, tool-aware context injection, and coding-agent timeline
+  ingestion.
+- [`Codex`](./memind-integrations/codex): persistent project memory, prompt/tool context
+  injection, retry-backed timeline ingestion, and source tagging for Codex sessions.
+- [`OpenClaw`](./memind-integrations/openclaw): prompt-time Memind recall plus completed
+  OpenClaw agent activity ingestion as `agent_timeline` raw data.
+- [`Hermes`](./memind-integrations/hermes): a native Hermes memory provider that retrieves
+  relevant context before turns and captures completed Hermes activity after responses.
 
 ### Common commands
 
@@ -270,7 +297,7 @@ dialect plugin. For the default SQLite setup:
     <dependency>
       <groupId>com.openmemind.ai</groupId>
       <artifactId>memind-dependencies</artifactId>
-      <version>0.1.0</version>
+      <version>0.2.0</version>
       <type>pom</type>
       <scope>import</scope>
     </dependency>
@@ -354,8 +381,9 @@ var retrieval = memory.retrieve(
 ```
 
 For a runnable version with centralized configuration defaults, start with
-`memind-examples/memind-example-java/README.md` and
-`memind-examples/memind-example-java/src/main/java/com/openmemind/ai/memory/example/java/support/ExampleSettings.java`.
+[`ExampleSettings.java`](./memind-examples/memind-example-java/src/main/java/com/openmemind/ai/memory/example/java/support/ExampleSettings.java)
+and the maintained examples under
+[`memind-examples/memind-example-java`](./memind-examples/memind-example-java).
 
 ### Open API ingestion semantics
 
@@ -366,6 +394,8 @@ and clear their local retry state only when the returned extraction status is `S
 
 `/open/v1/memory/sync/add-message` and `/open/v1/memory/sync/commit` report immediate server-buffer success or
 failure, but they are not durable replay boundaries because the server owns the buffered conversation state.
+
+<a id="official-api-clients"></a>
 
 Official API clients:
 
@@ -399,9 +429,7 @@ mvn -pl memind-examples/memind-example-java -am -DskipTests \
   exec:java
 ```
 
-For full setup, all runnable Maven commands, configuration knobs, and runtime data details, see
-[`memind-examples/memind-example-java/README.md`](./memind-examples/memind-example-java/README.md)
-and
+For full setup, configuration knobs, and runtime data details, see
 [`ExampleSettings.java`](./memind-examples/memind-example-java/src/main/java/com/openmemind/ai/memory/example/java/support/ExampleSettings.java).
 
 ---
