@@ -9,17 +9,15 @@
 </h3>
 
 <p align="center">
-  <strong>The memory layer that lets AI systems learn from every conversation,<br>
-  tool call, document, and resolved task.</strong>
+  The memory layer that lets AI systems learn from every conversation,
+  tool call, document, and resolved task.
 </p>
 
 <p align="center">
-  <sub>
-    Memind turns raw context into <strong>structured memory</strong> and <strong>reusable experience</strong>,
-    continuously organizes it into <strong>memory graphs</strong>, <strong>threads</strong>, and evolving
-    <strong>Insight Trees</strong>, then recalls the right context through <strong>REST</strong>,
-    <strong>MCP</strong>, <strong>SDKs</strong>, and first-party plugins for popular agents.
-  </sub>
+  Memind turns raw context into structured memory and reusable experience,
+  continuously organizes it into memory graphs, threads, and evolving Insight Trees,
+  then recalls the right context through REST, MCP, SDKs, and first-party plugins
+  for popular agents.
 </p>
 
 <p align="center">

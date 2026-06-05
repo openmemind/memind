@@ -9,16 +9,14 @@
 </h3>
 
 <p align="center">
-  <strong>让 AI 系统从每一次对话、工具调用、文档和已解决任务中持续学习的记忆层。</strong>
+  让 AI 系统从每一次对话、工具调用、文档和已解决任务中持续学习的记忆层。
 </p>
 
 <p align="center">
-  <sub>
-    Memind 将原始上下文沉淀为 <strong>结构化记忆</strong> 和 <strong>可复用经验</strong>，
-    持续组织成 <strong>Memory Graph</strong>、<strong>Memory Thread</strong> 和不断演化的
-    <strong>Insight Tree</strong>，再通过 <strong>REST</strong>、<strong>MCP</strong>、
-    <strong>多语言 SDK</strong> 以及面向主流 Agent 的官方插件召回正确上下文。
-  </sub>
+  Memind 将原始上下文沉淀为结构化记忆和可复用经验，
+  持续组织成 Memory Graph、Memory Thread 和不断演化的 Insight Tree，
+  再通过 REST、MCP、多语言 SDK，以及面向主流 Agent 的官方插件，
+  召回正确上下文。
 </p>
 
 <p align="center">
