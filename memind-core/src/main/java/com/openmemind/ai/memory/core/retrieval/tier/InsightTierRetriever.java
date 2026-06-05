@@ -13,9 +13,6 @@
  */
 package com.openmemind.ai.memory.core.retrieval.tier;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
@@ -27,7 +24,6 @@ import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -62,7 +58,6 @@ public class InsightTierRetriever implements InsightTierSearch {
     private final MemoryVector memoryVector;
     private final InsightTypeRouter router;
     private final int maxExpandedLeafsPerBranch;
-    private final Cache<String, List<MemoryInsight>> insightCache;
 
     public InsightTierRetriever(
             MemoryStore memoryStore, MemoryVector memoryVector, InsightTypeRouter router) {
@@ -78,18 +73,6 @@ public class InsightTierRetriever implements InsightTierSearch {
         this.memoryVector = Objects.requireNonNull(memoryVector, "memoryVector must not be null");
         this.router = Objects.requireNonNull(router, "router must not be null");
         this.maxExpandedLeafsPerBranch = maxExpandedLeafsPerBranch;
-        this.insightCache =
-                Caffeine.newBuilder()
-                        .maximumSize(50)
-                        .expireAfterWrite(Duration.ofMinutes(5))
-                        .build();
-    }
-
-    /** Invalidate the insight cache for the specified memoryId */
-    public void invalidateCache(MemoryId memoryId) {
-        if (memoryId != null) {
-            insightCache.invalidate(memoryId.toIdentifier());
-        }
     }
 
     /**
@@ -108,11 +91,9 @@ public class InsightTierRetriever implements InsightTierSearch {
     }
 
     private Mono<TierResult> executeRouting(QueryContext context, RetrievalConfig config) {
-        // ① Load all insights (cache)
+        // ① Load all insights from the store so retrieval observes the latest committed state.
         List<MemoryInsight> allInsights =
-                insightCache.get(
-                        context.memoryId().toIdentifier(),
-                        key -> memoryStore.insightOperations().listInsights(context.memoryId()));
+                memoryStore.insightOperations().listInsights(context.memoryId());
 
         var candidateInsights =
                 allInsights.stream()

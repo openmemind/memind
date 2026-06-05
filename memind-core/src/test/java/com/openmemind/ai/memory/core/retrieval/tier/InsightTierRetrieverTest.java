@@ -78,8 +78,7 @@ class InsightTierRetrieverTest {
                         .withTier1(RetrievalConfig.TierConfig.enabled(5))
                         .withTier2(RetrievalConfig.TierConfig.enabled(10))
                         .withTier3(RetrievalConfig.TierConfig.enabled(5))
-                        .withTimeout(Duration.ofSeconds(30))
-                        .withoutCache();
+                        .withTimeout(Duration.ofSeconds(30));
     }
 
     private MemoryInsight buildInsight(
@@ -521,17 +520,31 @@ class InsightTierRetrieverTest {
     }
 
     @Nested
-    @DisplayName("Caffeine Cache Test")
-    class CacheTests {
+    @DisplayName("Freshness Test")
+    class FreshnessTests {
 
         @Test
-        @DisplayName("Consecutive two retrieves should only call getAllInsights once")
-        void shouldCacheInsightsOnSecondCall() {
-            var rootInsight =
+        @DisplayName("Consecutive retrieves should re-read insights from the store")
+        void shouldReadFreshInsightsOnConsecutiveRetrieves() {
+            var firstRootInsight =
                     buildInsight(
-                            100L, "profile", "User portrait", InsightTier.ROOT, null, List.of());
+                            100L,
+                            "profile",
+                            "Initial user portrait",
+                            InsightTier.ROOT,
+                            null,
+                            List.of());
+            var secondRootInsight =
+                    buildInsight(
+                            200L,
+                            "profile",
+                            "Updated user portrait",
+                            InsightTier.ROOT,
+                            null,
+                            List.of());
 
-            when(insightOperations.listInsights(memoryId)).thenReturn(List.of(rootInsight));
+            when(insightOperations.listInsights(memoryId))
+                    .thenReturn(List.of(firstRootInsight), List.of(secondRootInsight));
             when(insightOperations.listInsightTypes())
                     .thenReturn(
                             List.of(
@@ -542,50 +555,26 @@ class InsightTierRetrieverTest {
                     new QueryContext(memoryId, "Query", "Query", List.of(), Map.of(), null, null);
 
             StepVerifier.create(retriever.retrieve(context, config))
-                    .assertNext(result -> assertThat(result.results()).isNotEmpty())
+                    .assertNext(
+                            result -> {
+                                assertThat(result.results()).hasSize(1);
+                                assertThat(result.results().getFirst().sourceId()).isEqualTo("100");
+                                assertThat(result.results().getFirst().text())
+                                        .isEqualTo("Initial user portrait");
+                            })
                     .verifyComplete();
 
             StepVerifier.create(retriever.retrieve(context, config))
-                    .assertNext(result -> assertThat(result.results()).isNotEmpty())
-                    .verifyComplete();
-
-            verify(insightOperations, times(1)).listInsights(memoryId);
-        }
-
-        @Test
-        @DisplayName("After invalidateCache, should re-query")
-        void shouldReQueryAfterCacheInvalidation() {
-            var rootInsight =
-                    buildInsight(
-                            100L, "profile", "User portrait", InsightTier.ROOT, null, List.of());
-
-            when(insightOperations.listInsights(memoryId)).thenReturn(List.of(rootInsight));
-            when(insightOperations.listInsightTypes())
-                    .thenReturn(
-                            List.of(
-                                    buildType(
-                                            "profile", "User portrait", InsightAnalysisMode.ROOT)));
-
-            var context =
-                    new QueryContext(memoryId, "Query", "Query", List.of(), Map.of(), null, null);
-
-            StepVerifier.create(retriever.retrieve(context, config))
-                    .assertNext(result -> assertThat(result.results()).isNotEmpty())
-                    .verifyComplete();
-
-            retriever.invalidateCache(memoryId);
-
-            StepVerifier.create(retriever.retrieve(context, config))
-                    .assertNext(result -> assertThat(result.results()).isNotEmpty())
+                    .assertNext(
+                            result -> {
+                                assertThat(result.results()).hasSize(1);
+                                assertThat(result.results().getFirst().sourceId()).isEqualTo("200");
+                                assertThat(result.results().getFirst().text())
+                                        .isEqualTo("Updated user portrait");
+                            })
                     .verifyComplete();
 
             verify(insightOperations, times(2)).listInsights(memoryId);
-        }
-
-        @Test
-        @DisplayName("invalidateCache(null) should not throw an exception")
-        void shouldHandleNullMemoryIdGracefully() {
-            retriever.invalidateCache(null);
         }
     }
 

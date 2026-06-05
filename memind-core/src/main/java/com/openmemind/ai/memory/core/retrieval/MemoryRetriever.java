@@ -39,7 +39,7 @@ public interface MemoryRetriever {
     void registerStrategy(RetrievalStrategy strategy);
 
     /**
-     * Data change notification (used for cache invalidation)
+     * Data change notification.
      *
      * @param memoryId Memory identifier that has changed
      */

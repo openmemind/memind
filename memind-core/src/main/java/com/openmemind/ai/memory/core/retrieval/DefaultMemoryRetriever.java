@@ -19,14 +19,12 @@ import com.openmemind.ai.memory.core.retrieval.admission.RetrievalAdmissionDecis
 import com.openmemind.ai.memory.core.retrieval.admission.RetrievalAdmissionOptions;
 import com.openmemind.ai.memory.core.retrieval.admission.RetrievalAdmissionPolicy;
 import com.openmemind.ai.memory.core.retrieval.admission.RetrievalAdmissionResult;
-import com.openmemind.ai.memory.core.retrieval.cache.RetrievalCache;
 import com.openmemind.ai.memory.core.retrieval.query.LongQueryCondenser;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.query.QueryRewriter;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategy;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
-import com.openmemind.ai.memory.core.utils.HashUtils;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -40,7 +38,7 @@ import reactor.core.publisher.Mono;
  * Default Memory Retriever
  *
  * <p>Orchestration process:
- * Cache check → Query rewriting → Strategy dispatch → Cache writing → Timeout protection → Error fallback
+ * Query rewriting -> Strategy dispatch -> Timeout protection -> Error fallback
  *
  */
 public class DefaultMemoryRetriever implements MemoryRetriever {
@@ -48,7 +46,6 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
     private static final Logger log = LoggerFactory.getLogger(DefaultMemoryRetriever.class);
 
     private final Map<String, RetrievalStrategy> strategies;
-    private final RetrievalCache cache;
     private final MemoryStore memoryStore;
     private final MemoryTextSearch textSearch; // nullable
     private final QueryRewriter queryRewriter; // nullable
@@ -56,22 +53,17 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
     private final RetrievalAdmissionOptions admissionOptions;
     private final LongQueryCondenser longQueryCondenser; // nullable for legacy constructors
 
-    public DefaultMemoryRetriever(RetrievalCache cache, MemoryStore memoryStore) {
-        this(cache, memoryStore, null, null);
+    public DefaultMemoryRetriever(MemoryStore memoryStore) {
+        this(memoryStore, null, null);
+    }
+
+    public DefaultMemoryRetriever(MemoryStore memoryStore, MemoryTextSearch textSearch) {
+        this(memoryStore, textSearch, null);
     }
 
     public DefaultMemoryRetriever(
-            RetrievalCache cache, MemoryStore memoryStore, MemoryTextSearch textSearch) {
-        this(cache, memoryStore, textSearch, null);
-    }
-
-    public DefaultMemoryRetriever(
-            RetrievalCache cache,
-            MemoryStore memoryStore,
-            MemoryTextSearch textSearch,
-            QueryRewriter queryRewriter) {
+            MemoryStore memoryStore, MemoryTextSearch textSearch, QueryRewriter queryRewriter) {
         this(
-                cache,
                 memoryStore,
                 textSearch,
                 queryRewriter,
@@ -81,13 +73,11 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
     }
 
     public DefaultMemoryRetriever(
-            RetrievalCache cache,
             MemoryStore memoryStore,
             MemoryTextSearch textSearch,
             QueryRewriter queryRewriter,
             LongQueryCondenser longQueryCondenser) {
         this(
-                cache,
                 memoryStore,
                 textSearch,
                 queryRewriter,
@@ -97,14 +87,12 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
     }
 
     public DefaultMemoryRetriever(
-            RetrievalCache cache,
             MemoryStore memoryStore,
             MemoryTextSearch textSearch,
             QueryRewriter queryRewriter,
             RetrievalAdmissionPolicy admissionPolicy,
             RetrievalAdmissionOptions admissionOptions,
             LongQueryCondenser longQueryCondenser) {
-        this.cache = Objects.requireNonNull(cache, "cache must not be null");
         this.memoryStore = Objects.requireNonNull(memoryStore, "memoryStore must not be null");
         this.textSearch = textSearch; // nullable
         this.queryRewriter = queryRewriter; // nullable
@@ -157,29 +145,12 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
             return Mono.just(RetrievalResult.empty(config.strategyName(), request.query()));
         }
 
-        String queryHash = HashUtils.sha256(request.query());
-        String configHash = HashUtils.sha256(config.toString());
-
-        // 1. Cache check (using original query hash)
-        if (config.enableCache()) {
-            var cached = cache.get(request.memoryId(), queryHash, configHash);
-            if (cached.isPresent()) {
-                log.debug("Cache hit: query={}", request.query());
-                return Mono.just(cached.get());
-            }
-        }
-
         return condenseAdmittedQuery(request, admission)
                 .flatMap(
                         outcome ->
                                 outcome.<Mono<RetrievalResult>>map(
                                                 admitted ->
-                                                        retrieveAdmitted(
-                                                                request,
-                                                                config,
-                                                                queryHash,
-                                                                configHash,
-                                                                admitted))
+                                                        retrieveAdmitted(request, config, admitted))
                                         .orElseGet(
                                                 () ->
                                                         Mono.just(
@@ -251,11 +222,7 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
     }
 
     private Mono<RetrievalResult> retrieveAdmitted(
-            RetrievalRequest request,
-            RetrievalConfig config,
-            String queryHash,
-            String configHash,
-            AdmissionOutcome outcome) {
+            RetrievalRequest request, RetrievalConfig config, AdmissionOutcome outcome) {
         String effectiveQuery = outcome.effectiveQuery();
         // 2. Query rewriting
         Mono<String> rewrittenMono;
@@ -303,22 +270,7 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
                     }
 
                     return strategy.retrieve(context, config)
-                            // 5. Cache writing
-                            .doOnSuccess(
-                                    result -> {
-                                        if (config.enableCache()
-                                                && result != null
-                                                && !result.isEmpty()) {
-                                            cache.put(
-                                                    request.memoryId(),
-                                                    queryHash,
-                                                    configHash,
-                                                    result);
-                                        }
-                                    })
-                            // 6. Timeout protection
                             .timeout(config.timeout())
-                            // 7. Error fallback
                             .onErrorResume(
                                     e -> {
                                         log.warn(
@@ -351,13 +303,11 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
     @Override
     public void onDataChanged(MemoryId memoryId) {
         if (memoryId != null) {
-            cache.invalidate(memoryId);
             if (textSearch != null) {
                 textSearch.invalidate(memoryId);
             }
-            // Notify strategy of internal cache invalidation
             strategies.values().forEach(s -> s.onDataChanged(memoryId));
-            log.debug("Cache and index invalidated: memoryId={}", memoryId.toIdentifier());
+            log.debug("Retrieval data change notification handled: memoryId={}", memoryId);
         }
     }
 }

@@ -19,8 +19,6 @@ import com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder;
 import com.openmemind.ai.memory.core.metrics.NoopMemoryMetricsRecorder;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.admission.DefaultRetrievalAdmissionPolicy;
-import com.openmemind.ai.memory.core.retrieval.cache.CaffeineRetrievalCache;
-import com.openmemind.ai.memory.core.retrieval.cache.RetrievalCache;
 import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.deep.TypedQueryExpander;
 import com.openmemind.ai.memory.core.retrieval.graph.DefaultGraphItemChannel;
@@ -135,7 +133,6 @@ final class MemoryRetrievalAssembler {
                         resultMerger,
                         java.time.Clock.systemDefaultZone());
 
-        RetrievalCache retrievalCache = new CaffeineRetrievalCache();
         var admissionOptions = context.options().retrieval().common().admission();
         var admissionPolicy = new DefaultRetrievalAdmissionPolicy(admissionOptions);
         LongQueryCondenser longQueryCondenser =
@@ -144,7 +141,6 @@ final class MemoryRetrievalAssembler {
                         context.promptRegistry());
         DefaultMemoryRetriever memoryRetriever =
                 new DefaultMemoryRetriever(
-                        retrievalCache,
                         context.memoryStore(),
                         context.textSearch(),
                         null,

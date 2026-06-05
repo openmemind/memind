@@ -29,7 +29,6 @@ import java.time.Duration;
  * @param rerank         Rerank configuration
  * @param scoring        Scoring parameters
  * @param timeout        Timeout duration
- * @param enableCache    Whether to enable cache
  * @param strategyConfig Strategy-specific configuration
  */
 public record RetrievalConfig(
@@ -39,7 +38,6 @@ public record RetrievalConfig(
         RerankConfig rerank,
         ScoringConfig scoring,
         Duration timeout,
-        boolean enableCache,
         StrategyConfig strategyConfig) {
 
     // ── TierConfig ──
@@ -110,7 +108,6 @@ public record RetrievalConfig(
                 RerankConfig.disabled(),
                 ScoringConfig.defaults(),
                 Duration.ofSeconds(10),
-                true,
                 config);
     }
 
@@ -128,7 +125,6 @@ public record RetrievalConfig(
                 RerankConfig.pure(10),
                 ScoringConfig.defaults(),
                 Duration.ofSeconds(120),
-                true,
                 config);
     }
 
@@ -142,42 +138,30 @@ public record RetrievalConfig(
     // ── with* methods ──
 
     public RetrievalConfig withTier1(TierConfig tier1) {
-        return new RetrievalConfig(
-                tier1, tier2, tier3, rerank, scoring, timeout, enableCache, strategyConfig);
+        return new RetrievalConfig(tier1, tier2, tier3, rerank, scoring, timeout, strategyConfig);
     }
 
     public RetrievalConfig withTier2(TierConfig tier2) {
-        return new RetrievalConfig(
-                tier1, tier2, tier3, rerank, scoring, timeout, enableCache, strategyConfig);
+        return new RetrievalConfig(tier1, tier2, tier3, rerank, scoring, timeout, strategyConfig);
     }
 
     public RetrievalConfig withTier3(TierConfig tier3) {
-        return new RetrievalConfig(
-                tier1, tier2, tier3, rerank, scoring, timeout, enableCache, strategyConfig);
+        return new RetrievalConfig(tier1, tier2, tier3, rerank, scoring, timeout, strategyConfig);
     }
 
     public RetrievalConfig withRerank(RerankConfig rerank) {
-        return new RetrievalConfig(
-                tier1, tier2, tier3, rerank, scoring, timeout, enableCache, strategyConfig);
+        return new RetrievalConfig(tier1, tier2, tier3, rerank, scoring, timeout, strategyConfig);
     }
 
     public RetrievalConfig withScoring(ScoringConfig scoring) {
-        return new RetrievalConfig(
-                tier1, tier2, tier3, rerank, scoring, timeout, enableCache, strategyConfig);
+        return new RetrievalConfig(tier1, tier2, tier3, rerank, scoring, timeout, strategyConfig);
     }
 
     public RetrievalConfig withTimeout(Duration timeout) {
-        return new RetrievalConfig(
-                tier1, tier2, tier3, rerank, scoring, timeout, enableCache, strategyConfig);
-    }
-
-    public RetrievalConfig withoutCache() {
-        return new RetrievalConfig(
-                tier1, tier2, tier3, rerank, scoring, timeout, false, strategyConfig);
+        return new RetrievalConfig(tier1, tier2, tier3, rerank, scoring, timeout, strategyConfig);
     }
 
     public RetrievalConfig withStrategyConfig(StrategyConfig strategyConfig) {
-        return new RetrievalConfig(
-                tier1, tier2, tier3, rerank, scoring, timeout, enableCache, strategyConfig);
+        return new RetrievalConfig(tier1, tier2, tier3, rerank, scoring, timeout, strategyConfig);
     }
 }

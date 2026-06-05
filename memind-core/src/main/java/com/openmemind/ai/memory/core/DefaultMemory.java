@@ -358,13 +358,11 @@ public class DefaultMemory implements Memory {
                                                 graph.timeout()),
                                         MemoryThreadAssistConfigMapper.toSimpleConfig(
                                                 buildOptions)));
-                yield applyCache(
-                        base.withTier1(copyTier(base.tier1(), retrieval.simple().insightTopK()))
-                                .withTier2(copyTier(base.tier2(), retrieval.simple().itemTopK()))
-                                .withTier3(copyTier(base.tier3(), retrieval.simple().rawDataTopK()))
-                                .withScoring(retrieval.advanced().scoring())
-                                .withTimeout(retrieval.simple().timeout()),
-                        retrieval.common().cacheEnabled());
+                yield base.withTier1(copyTier(base.tier1(), retrieval.simple().insightTopK()))
+                        .withTier2(copyTier(base.tier2(), retrieval.simple().itemTopK()))
+                        .withTier3(copyTier(base.tier3(), retrieval.simple().rawDataTopK()))
+                        .withScoring(retrieval.advanced().scoring())
+                        .withTimeout(retrieval.simple().timeout());
             }
             case DEEP -> {
                 var base = RetrievalConfig.deep();
@@ -404,21 +402,15 @@ public class DefaultMemory implements Memory {
                                         base.tier3().minScore(),
                                         base.tier3().truncation())
                                 : RetrievalConfig.TierConfig.disabled();
-                yield applyCache(
-                        RetrievalConfig.deep(strategyConfig)
-                                .withTier1(copyTier(base.tier1(), retrieval.deep().insightTopK()))
-                                .withTier2(copyTier(base.tier2(), retrieval.deep().itemTopK()))
-                                .withTier3(tier3)
-                                .withRerank(toRerankConfig(retrieval.advanced().rerank()))
-                                .withScoring(retrieval.advanced().scoring())
-                                .withTimeout(retrieval.deep().timeout()),
-                        retrieval.common().cacheEnabled());
+                yield RetrievalConfig.deep(strategyConfig)
+                        .withTier1(copyTier(base.tier1(), retrieval.deep().insightTopK()))
+                        .withTier2(copyTier(base.tier2(), retrieval.deep().itemTopK()))
+                        .withTier3(tier3)
+                        .withRerank(toRerankConfig(retrieval.advanced().rerank()))
+                        .withScoring(retrieval.advanced().scoring())
+                        .withTimeout(retrieval.deep().timeout());
             }
         };
-    }
-
-    private RetrievalConfig applyCache(RetrievalConfig config, boolean enabled) {
-        return enabled ? config : config.withoutCache();
     }
 
     private RetrievalConfig.TierConfig copyTier(RetrievalConfig.TierConfig base, int topK) {

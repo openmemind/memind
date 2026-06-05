@@ -17,7 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -25,7 +24,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.openmemind.ai.memory.core.retrieval.cache.RetrievalCache;
 import com.openmemind.ai.memory.core.retrieval.query.LongQueryCondenser;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.query.QueryRewriter;
@@ -37,7 +35,6 @@ import com.openmemind.ai.memory.core.support.TestMemoryIds;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
@@ -51,18 +48,16 @@ class DefaultMemoryRetrieverTest {
     @Test
     @DisplayName("strategy error should return DEGRADED status instead of EMPTY")
     void strategyErrorShouldReturnDegradedStatus() {
-        var cache = mock(RetrievalCache.class);
         var store = mock(MemoryStore.class);
         var itemOperations = mock(ItemOperations.class);
         var strategy = mock(RetrievalStrategy.class);
         when(store.itemOperations()).thenReturn(itemOperations);
         when(itemOperations.hasItems(memoryId)).thenReturn(true);
-        when(cache.get(eq(memoryId), anyString(), anyString())).thenReturn(Optional.empty());
         when(strategy.name()).thenReturn("simple");
         when(strategy.retrieve(any(), any()))
                 .thenReturn(Mono.error(new RuntimeException("vector store unavailable")));
 
-        var retriever = new DefaultMemoryRetriever(cache, store);
+        var retriever = new DefaultMemoryRetriever(store);
         retriever.registerStrategy(strategy);
 
         var result =
@@ -80,13 +75,11 @@ class DefaultMemoryRetrieverTest {
     @Test
     @DisplayName("successful retrieval with results should have SUCCESS status")
     void successfulRetrievalWithResultsShouldHaveSuccessStatus() {
-        var cache = mock(RetrievalCache.class);
         var store = mock(MemoryStore.class);
         var itemOperations = mock(ItemOperations.class);
         var strategy = mock(RetrievalStrategy.class);
         when(store.itemOperations()).thenReturn(itemOperations);
         when(itemOperations.hasItems(memoryId)).thenReturn(true);
-        when(cache.get(eq(memoryId), anyString(), anyString())).thenReturn(Optional.empty());
         when(strategy.name()).thenReturn("simple");
         when(strategy.retrieve(any(), any()))
                 .thenReturn(
@@ -106,7 +99,7 @@ class DefaultMemoryRetrieverTest {
                                         "simple",
                                         "hello")));
 
-        var retriever = new DefaultMemoryRetriever(cache, store);
+        var retriever = new DefaultMemoryRetriever(store);
         retriever.registerStrategy(strategy);
 
         var result =
@@ -123,13 +116,11 @@ class DefaultMemoryRetrieverTest {
     @Test
     @DisplayName("successful retrieval with no results should have EMPTY status")
     void successfulRetrievalWithNoResultsShouldHaveEmptyStatus() {
-        var cache = mock(RetrievalCache.class);
         var store = mock(MemoryStore.class);
         var itemOperations = mock(ItemOperations.class);
         var strategy = mock(RetrievalStrategy.class);
         when(store.itemOperations()).thenReturn(itemOperations);
         when(itemOperations.hasItems(memoryId)).thenReturn(true);
-        when(cache.get(eq(memoryId), anyString(), anyString())).thenReturn(Optional.empty());
         when(strategy.name()).thenReturn("simple");
         when(strategy.retrieve(any(), any()))
                 .thenReturn(
@@ -138,7 +129,7 @@ class DefaultMemoryRetrieverTest {
                                         List.of(), List.of(), List.of(), List.of(), "simple",
                                         "hello")));
 
-        var retriever = new DefaultMemoryRetriever(cache, store);
+        var retriever = new DefaultMemoryRetriever(store);
         retriever.registerStrategy(strategy);
 
         var result =
@@ -153,11 +144,10 @@ class DefaultMemoryRetrieverTest {
     }
 
     @Test
-    @DisplayName("admission skip should return empty result before store/cache/strategy")
-    void admissionSkipShouldReturnEmptyBeforeStoreCacheAndStrategy() {
-        var cache = mock(RetrievalCache.class);
+    @DisplayName("admission skip should return empty result before store and strategy")
+    void admissionSkipShouldReturnEmptyBeforeStoreAndStrategy() {
         var store = mock(MemoryStore.class);
-        var retriever = new DefaultMemoryRetriever(cache, store);
+        var retriever = new DefaultMemoryRetriever(store);
 
         var result =
                 retriever
@@ -170,15 +160,14 @@ class DefaultMemoryRetrieverTest {
         assertThat(result.isEmpty()).isTrue();
         assertThat(result.strategy()).isEqualTo("simple");
         assertThat(result.query()).isEqualTo("!!!");
-        verifyNoInteractions(store, cache);
+        verifyNoInteractions(store);
     }
 
     @Test
-    @DisplayName("admission reject should return empty result before store/cache/strategy")
-    void admissionRejectShouldReturnEmptyBeforeStoreCacheAndStrategy() {
-        var cache = mock(RetrievalCache.class);
+    @DisplayName("admission reject should return empty result before store and strategy")
+    void admissionRejectShouldReturnEmptyBeforeStoreAndStrategy() {
         var store = mock(MemoryStore.class);
-        var retriever = new DefaultMemoryRetriever(cache, store);
+        var retriever = new DefaultMemoryRetriever(store);
 
         var result =
                 retriever
@@ -192,17 +181,16 @@ class DefaultMemoryRetrieverTest {
         assertThat(result).isNotNull();
         assertThat(result.isEmpty()).isTrue();
         assertThat(result.strategy()).isEqualTo("simple");
-        verifyNoInteractions(store, cache);
+        verifyNoInteractions(store);
     }
 
     @Test
     @DisplayName("too long query with no items should not call condenser")
     void tooLongQueryWithNoItemsShouldNotCallCondenser() {
-        var cache = mock(RetrievalCache.class);
         var store = mock(MemoryStore.class);
         var itemOperations = mock(ItemOperations.class);
         var condenser = mock(LongQueryCondenser.class);
-        var retriever = new DefaultMemoryRetriever(cache, store, null, null, condenser);
+        var retriever = new DefaultMemoryRetriever(store, null, null, condenser);
         var longQuery = "word ".repeat(600);
 
         when(store.itemOperations()).thenReturn(itemOperations);
@@ -218,50 +206,20 @@ class DefaultMemoryRetrieverTest {
         assertThat(result).isNotNull();
         assertThat(result.isEmpty()).isTrue();
         assertThat(result.query()).isEqualTo(longQuery);
-        verifyNoInteractions(cache, condenser);
-    }
-
-    @Test
-    @DisplayName("too long query with cache hit should not call condenser")
-    void tooLongQueryWithCacheHitShouldNotCallCondenser() {
-        var cache = mock(RetrievalCache.class);
-        var store = mock(MemoryStore.class);
-        var itemOperations = mock(ItemOperations.class);
-        var condenser = mock(LongQueryCondenser.class);
-        var retriever = new DefaultMemoryRetriever(cache, store, null, null, condenser);
-        var longQuery = "word ".repeat(600);
-        var cached = RetrievalResult.empty("simple", longQuery);
-
-        when(store.itemOperations()).thenReturn(itemOperations);
-        when(itemOperations.hasItems(memoryId)).thenReturn(true);
-        when(cache.get(eq(memoryId), anyString(), anyString())).thenReturn(Optional.of(cached));
-
-        var result =
-                retriever
-                        .retrieve(
-                                RetrievalRequest.of(
-                                        memoryId, longQuery, RetrievalConfig.Strategy.SIMPLE))
-                        .block();
-
-        assertThat(result).isSameAs(cached);
         verifyNoInteractions(condenser);
     }
 
     @Test
-    @DisplayName(
-            "too long query with cache miss and condenser failure should return empty before"
-                    + " strategy")
-    void tooLongQueryWithCacheMissAndCondenserFailureShouldReturnEmptyBeforeStrategy() {
-        var cache = mock(RetrievalCache.class);
+    @DisplayName("too long query with condenser failure should return empty before strategy")
+    void tooLongQueryWithCondenserFailureShouldReturnEmptyBeforeStrategy() {
         var store = mock(MemoryStore.class);
         var itemOperations = mock(ItemOperations.class);
         var condenser = mock(LongQueryCondenser.class);
-        var retriever = new DefaultMemoryRetriever(cache, store, null, null, condenser);
+        var retriever = new DefaultMemoryRetriever(store, null, null, condenser);
         var longQuery = "word ".repeat(600);
 
         when(store.itemOperations()).thenReturn(itemOperations);
         when(itemOperations.hasItems(memoryId)).thenReturn(true);
-        when(cache.get(eq(memoryId), anyString(), anyString())).thenReturn(Optional.empty());
         when(condenser.condense(eq(memoryId), eq(longQuery), eq(List.of()), eq(512)))
                 .thenReturn(Mono.empty());
 
@@ -282,7 +240,6 @@ class DefaultMemoryRetrieverTest {
     @Test
     @DisplayName("too long query with condenser should retrieve using condensed query")
     void tooLongQueryWithCondenserShouldRetrieveUsingCondensedQuery() {
-        var cache = mock(RetrievalCache.class);
         var store = mock(MemoryStore.class);
         var itemOperations = mock(ItemOperations.class);
         var strategy = mock(RetrievalStrategy.class);
@@ -293,7 +250,6 @@ class DefaultMemoryRetrieverTest {
 
         when(store.itemOperations()).thenReturn(itemOperations);
         when(itemOperations.hasItems(memoryId)).thenReturn(true);
-        when(cache.get(eq(memoryId), anyString(), anyString())).thenReturn(Optional.empty());
         when(condenser.condense(eq(memoryId), eq(longQuery), eq(List.of("history")), eq(512)))
                 .thenReturn(Mono.just(condensedQuery));
         when(strategy.name()).thenReturn("simple");
@@ -305,7 +261,7 @@ class DefaultMemoryRetrieverTest {
                                     RetrievalResult.empty("simple", context.searchQuery()));
                         });
 
-        var retriever = new DefaultMemoryRetriever(cache, store, null, rewriter, condenser);
+        var retriever = new DefaultMemoryRetriever(store, null, rewriter, condenser);
         retriever.registerStrategy(strategy);
 
         var result =
@@ -333,14 +289,12 @@ class DefaultMemoryRetrieverTest {
     @Test
     @DisplayName("Should fail fast when requested retrieval strategy is not registered")
     void shouldFailFastWhenStrategyIsMissing() {
-        var cache = mock(RetrievalCache.class);
         var store = mock(MemoryStore.class);
         var itemOperations = mock(ItemOperations.class);
         when(store.itemOperations()).thenReturn(itemOperations);
         when(itemOperations.hasItems(memoryId)).thenReturn(true);
-        when(cache.get(eq(memoryId), anyString(), anyString())).thenReturn(Optional.empty());
 
-        var retriever = new DefaultMemoryRetriever(cache, store);
+        var retriever = new DefaultMemoryRetriever(store);
         var request = RetrievalRequest.of(memoryId, "query", RetrievalConfig.Strategy.SIMPLE);
 
         assertThatThrownBy(() -> retriever.retrieve(request).block())
@@ -350,67 +304,21 @@ class DefaultMemoryRetrieverTest {
     }
 
     @Test
-    @DisplayName("cache hit short-circuits strategy dispatch and query rewrite")
-    void cacheHitShortCircuitsStrategyAndQueryRewrite() {
-        var cache = mock(RetrievalCache.class);
-        var store = mock(MemoryStore.class);
-        var itemOperations = mock(ItemOperations.class);
-        var rewriter = mock(QueryRewriter.class);
-        when(store.itemOperations()).thenReturn(itemOperations);
-        when(itemOperations.hasItems(memoryId)).thenReturn(true);
-        var cached = RetrievalResult.empty("simple", "query");
-        when(cache.get(eq(memoryId), anyString(), anyString())).thenReturn(Optional.of(cached));
-
-        var retriever = new DefaultMemoryRetriever(cache, store, null, rewriter);
-        retriever.registerStrategy(
-                new RetrievalStrategy() {
-                    @Override
-                    public String name() {
-                        return "simple";
-                    }
-
-                    @Override
-                    public Mono<RetrievalResult> retrieve(
-                            QueryContext context, RetrievalConfig config) {
-                        return Mono.error(new AssertionError("should not run"));
-                    }
-                });
-
-        var result =
-                retriever
-                        .retrieve(
-                                new RetrievalRequest(
-                                        memoryId,
-                                        "query",
-                                        List.of("history"),
-                                        RetrievalConfig.simple(),
-                                        Map.of(),
-                                        null,
-                                        null))
-                        .block();
-
-        assertThat(result).isEqualTo(cached);
-        verifyNoInteractions(rewriter);
-    }
-
-    @Test
     @DisplayName("query rewrite failure falls back to original query")
     void queryRewriteFailureFallsBackToOriginalQuery() {
-        var cache = mock(RetrievalCache.class);
         var store = mock(MemoryStore.class);
         var itemOperations = mock(ItemOperations.class);
         var rewriter = mock(QueryRewriter.class);
         var strategy = mock(RetrievalStrategy.class);
         when(store.itemOperations()).thenReturn(itemOperations);
         when(itemOperations.hasItems(memoryId)).thenReturn(true);
-        when(cache.get(eq(memoryId), anyString(), anyString())).thenReturn(Optional.empty());
         when(rewriter.rewrite(memoryId, "query", List.of("history")))
                 .thenReturn(Mono.error(new RuntimeException("boom")));
         when(strategy.name()).thenReturn("simple");
         when(strategy.retrieve(any(), any()))
                 .thenReturn(Mono.just(RetrievalResult.empty("simple", "query")));
 
-        var retriever = new DefaultMemoryRetriever(cache, store, null, rewriter);
+        var retriever = new DefaultMemoryRetriever(store, null, rewriter);
         retriever.registerStrategy(strategy);
 
         StepVerifier.create(
@@ -438,10 +346,9 @@ class DefaultMemoryRetrieverTest {
     @Test
     @DisplayName("onDataChanged should tolerate strategy registration during iteration")
     void onDataChangedShouldTolerateStrategyRegistrationDuringIteration() {
-        var cache = mock(RetrievalCache.class);
         var store = mock(MemoryStore.class);
         var textSearch = mock(MemoryTextSearch.class);
-        var retriever = new DefaultMemoryRetriever(cache, store, textSearch);
+        var retriever = new DefaultMemoryRetriever(store, textSearch);
 
         RetrievalStrategy strategyB =
                 new RetrievalStrategy() {
@@ -481,7 +388,6 @@ class DefaultMemoryRetrieverTest {
 
         assertThatCode(() -> retriever.onDataChanged(memoryId)).doesNotThrowAnyException();
 
-        verify(cache).invalidate(memoryId);
         verify(textSearch).invalidate(memoryId);
     }
 }

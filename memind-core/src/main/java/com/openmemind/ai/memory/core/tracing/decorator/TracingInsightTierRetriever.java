@@ -18,7 +18,6 @@ import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.RETRIEVAL_R
 import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.RETRIEVAL_TIER_NAME;
 import static com.openmemind.ai.memory.core.tracing.MemoryAttributes.RETRIEVAL_TOP_K;
 
-import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder;
 import com.openmemind.ai.memory.core.metrics.NoopMemoryMetricsRecorder;
 import com.openmemind.ai.memory.core.metrics.RetrievalMetricsSupport;
@@ -86,11 +85,6 @@ public class TracingInsightTierRetriever extends TracingSupport implements Insig
                                                                 : result.results().size(),
                                                         "success"))
                                 .doOnError(ignored -> recordStage(0, "error")));
-    }
-
-    @Override
-    public void invalidateCache(MemoryId memoryId) {
-        delegate.invalidateCache(memoryId);
     }
 
     private void recordStage(int resultCount, String status) {

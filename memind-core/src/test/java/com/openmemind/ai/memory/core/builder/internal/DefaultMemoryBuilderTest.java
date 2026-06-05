@@ -169,7 +169,7 @@ class DefaultMemoryBuilderTest {
                                         InsightExtractionOptions.defaults()))
                         .retrieval(
                                 new RetrievalOptions(
-                                        new RetrievalCommonOptions(false),
+                                        RetrievalCommonOptions.defaults(),
                                         SimpleRetrievalOptions.defaults(),
                                         DeepRetrievalOptions.defaults(),
                                         RetrievalAdvancedOptions.defaults()))

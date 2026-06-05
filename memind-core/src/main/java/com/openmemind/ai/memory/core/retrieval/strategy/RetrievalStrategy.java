@@ -44,7 +44,7 @@ public interface RetrievalStrategy {
     Mono<RetrievalResult> retrieve(QueryContext context, RetrievalConfig config);
 
     /**
-     * Data change notification (used for invalidating internal caches, etc.)
+     * Data change notification.
      *
      * @param memoryId Changed memory identifier
      */

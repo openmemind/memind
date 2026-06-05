@@ -184,7 +184,6 @@ public final class MemoryAttributes {
     public static final String RETRIEVAL_TIER_NAME = "memind.retrieval.tier";
     public static final String RETRIEVAL_CHANNEL = "memind.retrieval.channel";
     public static final String RETRIEVAL_SUFFICIENT = "memind.retrieval.sufficient";
-    public static final String RETRIEVAL_CACHE_HIT = "memind.retrieval.cache_hit";
     public static final String RETRIEVAL_TOP_K = "memind.retrieval.top_k";
     public static final String RETRIEVAL_MEMORY_THREAD_ENABLED =
             "memind.retrieval.memory_thread.enabled";

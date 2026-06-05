@@ -207,7 +207,7 @@ class DefaultMemoryContextTest {
                             MemoryBuildOptions.builder()
                                     .retrieval(
                                             new RetrievalOptions(
-                                                    new RetrievalCommonOptions(false),
+                                                    RetrievalCommonOptions.defaults(),
                                                     new SimpleRetrievalOptions(
                                                             Duration.ofSeconds(15), 5, 9, 3, true),
                                                     DeepRetrievalOptions.defaults(),
@@ -230,7 +230,6 @@ class DefaultMemoryContextTest {
                                             request.config()
                                                             .timeout()
                                                             .equals(Duration.ofSeconds(15))
-                                                    && !request.config().enableCache()
                                                     && request.config().tier2().topK() == 9));
         }
 
