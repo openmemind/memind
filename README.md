@@ -4,20 +4,22 @@
 
 <h1 align="center">Memind</h1>
 
+<h3 align="center">
+  <em>Memory that thinks. Context that evolves.</em>
+</h3>
+
 <p align="center">
-  <strong>Memory that thinks. Context that evolves.</strong>
+  <strong>The memory layer that lets AI systems learn from every conversation,<br>
+  tool call, document, and resolved task.</strong>
 </p>
 
 <p align="center">
-  The memory layer that lets AI systems learn from every conversation,
-  tool call, document, and resolved task.
-</p>
-
-<p align="center">
-  Memind turns raw context into structured memory and reusable experience,
-  continuously organizes it into memory graphs, threads, and evolving Insight Trees,
-  then recalls the right context through REST, MCP, SDKs, and first-party plugins
-  for popular agents.
+  <sub>
+    Memind turns raw context into <strong>structured memory</strong> and <strong>reusable experience</strong>,
+    continuously organizes it into <strong>memory graphs</strong>, <strong>threads</strong>, and evolving
+    <strong>Insight Trees</strong>, then recalls the right context through <strong>REST</strong>,
+    <strong>MCP</strong>, <strong>SDKs</strong>, and first-party plugins for popular agents.
+  </sub>
 </p>
 
 <p align="center">
@@ -29,9 +31,9 @@
 </p>
 
 <p align="center">
-  <a href="#benchmark"><img src="./docs/images/badges/locomo.svg" alt="LoCoMo 86.88%" height="38"></a>
-  <a href="#benchmark"><img src="./docs/images/badges/longmemeval.svg" alt="LongMemEval 84.20%" height="38"></a>
-  <a href="#benchmark"><img src="./docs/images/badges/personamem.svg" alt="PersonaMem 67.91%" height="38"></a>
+  <a href="#benchmark"><img src="./docs/images/badges/locomo.svg" alt="LoCoMo rank #1 among listed baselines" height="38"></a>
+  <a href="#benchmark"><img src="./docs/images/badges/longmemeval.svg" alt="LongMemEval rank #1 among listed baselines" height="38"></a>
+  <a href="#benchmark"><img src="./docs/images/badges/personamem.svg" alt="PersonaMem rank #1 among listed baselines" height="38"></a>
   <a href="#mcp-server"><img src="./docs/images/badges/mcp-tools.svg" alt="11+ MCP tools" height="38"></a>
   <a href="#official-api-clients"><img src="./docs/images/badges/sdks.svg" alt="5 SDKs" height="38"></a>
   <a href="#agent-integrations"><img src="./docs/images/badges/agent-plugins.svg" alt="4 agent plugins" height="38"></a>
