@@ -55,7 +55,7 @@
 - ☕ **首个达到 SOTA 水平的 Java 原生记忆与上下文引擎：** memind 基于 Java 原生构建，让 Java 生态也拥有可验证、可落地的长记忆能力。
 - 🚀 **三项 benchmark 的已公开最高结果：** 在与 **MemOS / EverMemOS** 对齐的评测口径下，memind 在 **LoCoMo**、**LongMemEval** 和 **PersonaMem** 的已列出基线中均排名 **#1**，其中在 **LoCoMo** 和 **LongMemEval** 上超过 **EverMemOS**，在 **PersonaMem** 上超过 **MemOS**。完整分数、分项对比、上下文 Token 和评测协议见 [基准测试](#benchmark)。
 - 🧩 **一套引擎，同时记住用户和 Agent：** memind 区分 USER memory 和 AGENT memory，既能记住用户画像、偏好与生活上下文，也能沉淀 Agent 指令、工具经验、可复用 playbook 和已解决任务知识，可覆盖 coding agent、本地 harness agent、chatbot、陪伴型应用、copilot 和工作流 Agent 等场景。
-- 🌳 **Insight Tree 让记忆进化成理解：** memind 不只是保存孤立事实，而是持续将原始记忆提炼为 Leaf → Branch → Root 洞察，发现扁平记忆无法捕捉的模式、偏好、因果信号和高层理解。详见 [Insight Tree](#insight-tree)。
+- 🌳 **Insight Tree 让记忆进化成理解：** memind 不只是保存孤立事实，而是持续将原始记忆提炼为 Leaf → Branch → Root 洞察，发现扁平记忆无法捕捉的模式、偏好、因果信号和高层理解。详见 [docs.openmemind.com](https://docs.openmemind.com)。
 - 🔎 **多层检索召回正确上下文：** memind 会跨 Insight Tree、Memory Item、原始 source data、Memory Graph、Memory Thread、向量检索、BM25 关键词检索、时间信号，以及可选的 Deep Retrieval 查询扩展、充分性检查和重排序来召回上下文。
 - 📥 **记住各种类型的上下文：** memind 不只支持对话，还可以摄取文档、图片、音频、工具调用和 Agent 时间线，并通过类型化 processor、parser、chunker、captioner 和插件专属提取策略，将它们转化为可检索记忆。
 - 🕸️ **Memory Graph 连接分散上下文：** memind 会从提取出的记忆中构建实体、mention、语义链接、时间链接、因果链接、别名和共现信号，并在检索时通过 graph expansion 找回单纯向量相似度可能漏掉的相关上下文。
@@ -67,77 +67,34 @@
 
 ### Memind 是什么？
 
-Memind 是一个面向 AI Agent 的层级认知记忆与上下文引擎，基于 Java 原生构建。
+Memind 是一个开源的自进化记忆与上下文引擎，面向各种 AI 应用和 Agent。
 
-它不把记忆看作一堆彼此孤立的事实，而是持续从对话中提取、组织并演化知识，最终沉淀为结构化的 **Insight Tree**。
+它不是向量库封装。Memind 可以从对话、文档、图片、音频、工具调用、Agent 时间线和已解决任务中捕获原始上下文，并将其转化为结构化用户记忆、可复用 Agent 经验、持续演化的 Insight、互相关联的 Memory Graph，以及具备任务脉络的 Memory Thread。
 
-它要解决的是 Agent 记忆里最常见的两个问题：一是**存储扁平、缺少结构**，二是**知识只会累积、不会生长**。
+在检索阶段，Memind 会跨这些记忆层编排正确上下文，并通过 REST API、HTTP MCP tools、SDK、Java runtime API 和官方 Agent 集成暴露给上层 AI 系统。
 
-最终，memind 提供的是一层长期记忆与上下文基础设施，让 Agent 能持续保留上下文、逐步形成理解，并按不同抽象层级召回知识。
+### Memind 如何工作？
 
-### 核心设计
+<p align="center">
+  <img src="./docs/images/memind-work-pipeline.png" alt="Memind 记忆与上下文引擎工作流程">
+</p>
 
-<a id="insight-tree"></a>
+Memind 会把原始来源、提取出的记忆、结构化理解、图关系和任务时间线连接起来。这样 AI 系统召回的不只是扁平片段，而是同时包含精确证据和高层上下文。
 
-#### Insight Tree
+### Memind 适合用来做什么？
 
-Insight Tree 是 memind 的核心机制。传统记忆系统往往只保存零散事实；memind 则把记忆逐级提炼为三层结构，而每一层都能看见上一层无法直接得出的模式。
+Memind 是一层通用的长期记忆与上下文引擎，几乎适用于任何需要长期上下文的 AI 系统。常见场景包括：
 
-| 层级 | 输入 | 产出 |
-|------|------|------|
-| 🍃 **Leaf** | 分组后的记忆条目 | 单个语义组内的洞察 |
-| 🌿 **Branch** | 多个 Leaf | 同一维度内的跨组模式 |
-| 🌳 **Root** | 多个 Branch | 低层级无法看见的跨维度洞察 |
+| 场景 | Memind 记住什么 |
+|------|----------------|
+| Coding Agent | 项目上下文、工具经验、已解决任务、持久指令 |
+| 本地个人 Agent | 用户偏好、长期时间线、本地工作流 |
+| Chatbot 与陪伴型应用 | 用户画像、关系、行为模式、生活事件 |
+| 工作流 Agent | 指令、playbook、业务上下文、任务历史 |
 
-**示例：通过对话理解一位名叫李伟的用户**
+这些只是典型示例。Memind 同样可以用于 copilot、企业助手、客服自动化、研究工具、知识工作助手，以及任何需要跨会话记住用户、任务、文档、决策、工具、时间线和历史结果的 AI 应用。
 
-> 🍃 **Leaf**（来自 `career_background` 分组）  
-> “李伟有 8 年后端经验，先在阿里巴巴工作 3 年，之后在一家金融科技公司带领 8 人团队，设计基于 Java 17 + Spring Cloud + Kafka 的核心交易系统。”
->
-> 🌿 **Branch**（整合 career + education + certifications）  
-> “李伟是一位资深后端架构师，具备深厚的分布式系统能力，结合了浙江大学计算机科学背景、阿里巴巴大规模系统经验，以及金融科技系统设计实战，技术深度与广度兼备。”
->
-> 🌳 **Root**（跨维度：identity × preferences × behavior）  
-> “李伟偏好函数式编程和高代码质量（80% 测试覆盖率），同时在技术采纳上较为保守（要求至少 2 年生产验证）。这说明他更关注长期可维护性，而不是追逐短期的新技术热点。因此，给他的建议应优先强调稳定性和成熟方案，而非前沿工具。”
-
-Leaf 知道事实，Branch 看到模式，Root 才开始理解这个人。
-
-#### 双作用域记忆
-
-memind 将记忆划分为两个彼此独立的作用域，让 Agent 同时具备“理解用户”和“沉淀自身经验”的能力：
-
-| 作用域 | 类别 | 作用 |
-|-------|------|------|
-| **USER** | Profile, Behavior, Event | 用户身份、偏好、关系与经历 |
-| **AGENT** | Tool, Directive, Playbook, Resolution | 工具使用经验、持久指令、可复用工作流、已解决问题的经验沉淀 |
-
-#### 双检索策略
-
-memind 提供两种检索策略，分别覆盖“低延迟、低成本”和“更强推理能力”这两类场景：
-
-| 策略 | 工作方式 | 适用场景 |
-|------|----------|----------|
-| **Simple** | 向量检索 + BM25 关键词匹配，通过 RRF（Reciprocal Rank Fusion）融合，并做自适应截断 | 低延迟、成本敏感场景 |
-| **Deep** | LLM 辅助的查询扩展、充分性检查与重排序 | 需要推理的复杂查询 |
-
-检索准入始终启用：空 query、纯标点/符号输入、纯 emoji 输入会在进入检索前返回空结果。在标准 `Memory.builder()` 路径中，超长 query 会先通过 LLM 长查询压缩器压缩后再检索；如果压缩失败或压缩后仍不合法，则返回空结果。
-
-#### 核心能力
-
-| 类别 | 能力 | 说明 |
-|------|------|------|
-| **Extraction** | Conversation Segmentation | 自动识别流式消息边界并完成分段 |
-| | Memory Item Extraction | 在 7 个 user 和 agent 类别上提取结构化事实，并自动去重 |
-| | Insight Tree Construction | 执行 Leaf → Branch → Root 的层级知识构建 |
-| | Foresight Prediction | 基于对话模式预测用户未来需求 |
-| | Tool Call Statistics | 跟踪工具使用模式与成功率 |
-| **Retrieval** | Simple Strategy | 基于向量 + BM25 的混合检索，配合 RRF 融合与自适应截断 |
-| | Deep Strategy | LLM 辅助的查询扩展、充分性检查与重排序 |
-| | Intent Routing | 自动判断当前查询是否需要触发检索 |
-| | Multi-granularity | 按查询需求从 Insight Tree 的不同层级召回信息 |
-| **Integration** | Pure Java Runtime | 通过 `memind-core` 与插件，使用 `Memory.builder()` 进行装配 |
-| | Spring Boot Infrastructure Starters | 通过 `memind-plugin-ai-spring-ai-starter` 与 `memind-plugin-jdbc-starter` 提供可选基础设施接入 |
-| | Plugin Architecture | 支持可插拔的存储（SQLite、MySQL）与 tracing（OpenTelemetry） |
+更深入的架构、配置、rawdata 插件、MCP tools、SDK 和 Agent 集成说明，请查看 [docs.openmemind.com](https://docs.openmemind.com)。
 
 <a id="quick-start"></a>
 

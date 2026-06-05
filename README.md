@@ -56,7 +56,7 @@
 - ☕ **The first Java-native SOTA memory and context engine for AI agents:** built natively in Java, memind brings benchmark-leading long-memory performance into the Java ecosystem.
 - 🚀 **Highest reported results across all three benchmarks:** under aligned **MemOS / EverMemOS-style evaluation**, memind ranks **#1 among the listed baselines** on **LoCoMo**, **LongMemEval**, and **PersonaMem**, surpassing **EverMemOS** on **LoCoMo** and **LongMemEval** and exceeding **MemOS** on **PersonaMem**. See [Benchmark](#benchmark) for full scores, category-level comparisons, context tokens, and evaluation protocol.
 - 🧩 **One memory engine for users and agents:** memind separates USER memory from AGENT memory, letting the same system remember user profiles, preferences, and life context while also preserving agent directives, tool experience, playbooks, and resolved-task knowledge across coding agents, local harness agents, chatbots, companions, copilots, and workflow agents.
-- 🌳 **Insight Tree turns memory into evolving intelligence:** instead of storing isolated facts, memind continuously distills raw memories into Leaf → Branch → Root insights, revealing patterns, preferences, causal signals, and high-level understanding that flat memory cannot capture. See [Insight Tree](#insight-tree).
+- 🌳 **Insight Tree turns memory into evolving intelligence:** instead of storing isolated facts, memind continuously distills raw memories into Leaf → Branch → Root insights, revealing patterns, preferences, causal signals, and high-level understanding that flat memory cannot capture. See [docs.openmemind.com](https://docs.openmemind.com).
 - 🔎 **Multi-layer retrieval recalls the right context:** memind retrieves across Insight Trees, Memory Items, raw source data, Memory Graphs, Memory Threads, vector search, BM25 keyword search, temporal signals, and optional Deep Retrieval with query expansion, sufficiency checking, and reranking.
 - 📥 **Memory for every kind of context:** memind can ingest conversations, documents, images, audio, tool calls, and agent timelines, then uses typed processors, parsers, chunkers, captioners, and plugin-specific extraction strategies to turn them into searchable memory.
 - 🕸️ **Memory Graph connects scattered context:** memind materializes entities, mentions, semantic links, temporal links, causal links, aliases, and co-occurrence signals from extracted memories, then uses graph expansion to recover related context that pure vector similarity can miss.
@@ -66,73 +66,34 @@
 
 ### What is Memind?
 
-Memind is a hierarchical cognitive memory and context engine for AI agents, built natively in Java.
+Memind is an open-source, self-evolving memory and context engine for AI applications and agents.
 
-Instead of treating memory as a flat collection of isolated facts, Memind continuously extracts, organizes, and evolves knowledge from conversations into a structured **Insight Tree**.
+It is not a vector-store wrapper. Memind captures raw context from conversations, documents, images, audio, tool calls, agent timelines, and resolved tasks, then turns it into structured user memory, reusable agent experience, evolving insights, connected memory graphs, and task-aware memory threads.
 
-It tackles two core problems of agent memory: **flat, unstructured storage** (memories remain disconnected facts with no higher-level organization) and **no knowledge evolution** (memories accumulate, but never consolidate into deeper understanding).
+At retrieval time, Memind assembles the right context across these memory layers and exposes it through REST APIs, HTTP MCP tools, SDKs, Java runtime APIs, and first-party agent integrations.
 
-The result is a long-term memory and context layer that helps agents retain context, build structured understanding over time, and recall knowledge at multiple levels of abstraction.
+### How Memind Works
 
-### Core Design
+<p align="center">
+  <img src="./docs/images/memind-work-pipeline.png" alt="Memind memory and context engine pipeline">
+</p>
 
-#### Insight Tree
+Memind keeps the raw source, extracted memory, structured understanding, graph relationships, and task timelines connected. This lets AI systems retrieve both precise evidence and higher-level context instead of relying on flat snippets alone.
 
-The Insight Tree is memind's core innovation. Unlike traditional memory systems that store isolated facts, memind **progressively distills knowledge** through three tiers — each tier sees patterns the previous one cannot:
+### Use Memind for
 
-| Tier | Input | What it produces |
-|------|-------|-----------------|
-| 🍃 **Leaf** | Grouped memory items | Insights within a single semantic group |
-| 🌿 **Branch** | Multiple leaves | Cross-group patterns within one dimension |
-| 🌳 **Root** | Multiple branches | Cross-dimensional insights invisible at lower levels |
+Memind is a general memory and context layer for almost any AI system that needs long-term context. Common use cases include:
 
-**Example — understanding a user named Li Wei through conversations:**
+| Scenario | What Memind remembers |
+|----------|-----------------------|
+| Coding agents | Project context, tool experience, resolved tasks, durable instructions |
+| Local personal agents | User preferences, long-running timelines, local workflows |
+| Chatbots and companions | User profiles, relationships, behavior patterns, life events |
+| Workflow agents | Directives, playbooks, operational context, task history |
 
-> 🍃 **Leaf** (from career_background group):
-> "Li Wei has 8 years of backend experience — 3 years at Alibaba, then led an 8-person team at a fintech company, designing a core trading system with Java 17 + Spring Cloud + Kafka."
->
-> 🌿 **Branch** (integrating career + education + certifications):
-> "Li Wei is a senior backend architect with deep distributed systems expertise, combining Zhejiang University CS training, large-scale Alibaba experience, and hands-on fintech system design — a well-rounded technical profile with both depth and breadth."
->
-> 🌳 **Root** (cross-dimensional — identity × preferences × behavior):
-> "Li Wei's preference for functional programming and high code quality (80% test coverage), combined with conservative tech adoption (requires 2+ years production validation), reveals a personality oriented toward long-term code maintainability over rapid innovation — suggesting recommendations should emphasize stability and proven patterns over cutting-edge tools."
+These are only examples. Memind can also support copilots, enterprise assistants, support automation, research tools, knowledge workers, and any AI application that needs to remember users, tasks, documents, decisions, tools, timelines, and previous outcomes across sessions.
 
-Each tier reveals something the previous one couldn't see. Leaves know facts. Branches see patterns. Roots understand the person.
-
-#### Two-Scope Memory
-
-memind maintains separate memory scopes for comprehensive agent cognition:
-
-| Scope | Categories | Purpose |
-|-------|-----------|---------|
-| **USER** | Profile, Behavior, Event | User identity, preferences, relationships, experiences |
-| **AGENT** | Tool, Directive, Playbook, Resolution | Tool usage experience, durable instructions, reusable workflows, resolved problem knowledge |
-
-#### Dual Retrieval Strategies
-
-| Strategy | How it works | Best for |
-|----------|-------------|----------|
-| **Simple** | Vector search + BM25 keyword matching, merged via RRF (Reciprocal Rank Fusion), with adaptive truncation | Low-latency, cost-sensitive scenarios |
-| **Deep** | LLM-assisted query expansion, sufficiency checking, and reranking | Complex queries requiring reasoning |
-
-Retrieval admission is always enabled: blank queries, pure punctuation/symbol inputs, and pure emoji inputs return empty retrieval results before search. In the standard `Memory.builder()` path, oversized queries are handled by LLM long-query condensation; if condensation fails or remains invalid, retrieval returns an empty result.
-
-#### Core Capabilities
-
-| Category | Capability | Description |
-|----------|-----------|-------------|
-| **Extraction** | Conversation Segmentation | Automatic boundary detection and segmentation for streaming messages |
-| | Memory Item Extraction | Extract structured facts with deduplication across 7 user and agent categories |
-| | Insight Tree Construction | Hierarchical knowledge building: Leaf → Branch → Root |
-| | Foresight Prediction | Predict future user needs based on conversation patterns |
-| | Tool Call Statistics | Track tool usage patterns and success rates |
-| **Retrieval** | Simple Strategy | Vector + BM25 hybrid search with RRF fusion and adaptive truncation |
-| | Deep Strategy | LLM-assisted query expansion, sufficiency checking, and reranking |
-| | Intent Routing | Automatically determine whether retrieval is needed |
-| | Multi-granularity | Retrieve from any Insight Tree tier based on query needs |
-| **Integration** | Pure Java Runtime | `memind-core` plus plugins assembled through `Memory.builder()` |
-| | Spring Boot Infrastructure Starters | Optional infrastructure wiring with `memind-plugin-ai-spring-ai-starter` and `memind-plugin-jdbc-starter` |
-| | Plugin Architecture | Pluggable store (SQLite, MySQL) and tracing (OpenTelemetry) |
+For deeper architecture, configuration, rawdata plugins, MCP tools, SDKs, and agent integrations, see [docs.openmemind.com](https://docs.openmemind.com).
 
 ---
 
