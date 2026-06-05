@@ -4,19 +4,21 @@
 
 <h1 align="center">Memind</h1>
 
+<h3 align="center">
+  <em>让记忆形成理解，让上下文持续进化。</em>
+</h3>
+
 <p align="center">
-  <strong>能思考的记忆，能进化的上下文。</strong>
+  <strong>让 AI 系统从每一次对话、工具调用、文档和已解决任务中持续学习的记忆层。</strong>
 </p>
 
 <p align="center">
-  让 AI 系统从每一次对话、工具调用、文档和已解决任务中持续学习的记忆层。
-</p>
-
-<p align="center">
-  Memind 将原始上下文沉淀为结构化记忆和可复用经验，
-  持续组织成 Memory Graph、Memory Thread 和不断演化的 Insight Tree，
-  再通过 REST、MCP、多语言 SDK，以及面向主流 Agent 的官方插件，
-  召回正确上下文。
+  <sub>
+    Memind 将原始上下文沉淀为 <strong>结构化记忆</strong> 和 <strong>可复用经验</strong>，
+    持续组织成 <strong>Memory Graph</strong>、<strong>Memory Thread</strong> 和不断演化的
+    <strong>Insight Tree</strong>，再通过 <strong>REST</strong>、<strong>MCP</strong>、
+    <strong>多语言 SDK</strong> 以及面向主流 Agent 的官方插件召回正确上下文。
+  </sub>
 </p>
 
 <p align="center">
@@ -28,9 +30,9 @@
 </p>
 
 <p align="center">
-  <a href="#benchmark"><img src="./docs/images/badges/locomo.svg" alt="LoCoMo 86.88%" height="38"></a>
-  <a href="#benchmark"><img src="./docs/images/badges/longmemeval.svg" alt="LongMemEval 84.20%" height="38"></a>
-  <a href="#benchmark"><img src="./docs/images/badges/personamem.svg" alt="PersonaMem 67.91%" height="38"></a>
+  <a href="#benchmark"><img src="./docs/images/badges/locomo.svg" alt="LoCoMo rank #1 among listed baselines" height="38"></a>
+  <a href="#benchmark"><img src="./docs/images/badges/longmemeval.svg" alt="LongMemEval rank #1 among listed baselines" height="38"></a>
+  <a href="#benchmark"><img src="./docs/images/badges/personamem.svg" alt="PersonaMem rank #1 among listed baselines" height="38"></a>
   <a href="#mcp-server"><img src="./docs/images/badges/mcp-tools.svg" alt="11+ MCP tools" height="38"></a>
   <a href="#official-api-clients"><img src="./docs/images/badges/sdks.svg" alt="5 SDKs" height="38"></a>
   <a href="#agent-integrations"><img src="./docs/images/badges/agent-plugins.svg" alt="4 agent plugins" height="38"></a>
