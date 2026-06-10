@@ -108,37 +108,47 @@ React 管理 UI，不需要在宿主机安装 Java、Maven、Node.js 或 pnpm。
 ### 前置要求
 
 - Docker，并已启用 Compose 插件
-- 一个 chat model 密钥和一个 embedding model 密钥。默认配置会把同一个 `OPENAI_API_KEY`
-  用于兼容 OpenAI 协议的 chat 和 embedding endpoint。
+- 你准备使用的 chat 和 embedding 模型凭据。默认配置使用一个兼容 OpenAI 协议的 provider
+  同时处理 chat 和 embedding。
 
 ### 配置凭据
 
-在仓库根目录创建本地 `.env` 文件。`docker-compose.yml` 会自动读取这些变量：
+从示例文件创建本地 `.env`。Docker Compose 会自动读取这个文件：
 
 ```bash
-# 默认 application.yml 必填。
-OPENAI_API_KEY=your-key
-
-# 可选。只需要填写 application.yml 中实际引用的 client key。
-DEEPSEEK_API_KEY=
-GLM_API_KEY=
-ANTHROPIC_API_KEY=
-GEMINI_API_KEY=
-SILICONFLOW_API_KEY=
-
-# 可选。只有 Deep Retrieval 需要外部 rerank 服务时才需要配置。
-MEMIND_RERANK_API_KEY=
+cp .env.example .env
 ```
 
-模型 provider、base URL、具体模型和 chat-client slot routing 都在
-[`memind-server/src/main/resources/application.yml`](./memind-server/src/main/resources/application.yml)
-里配置。默认配置使用一个兼容 OpenAI 协议的 chat client 处理所有 chat slot，并使用一个
-embedding client。没有单独配置的 slot 会自动回退到 `default-client`。
+示例文件里的 `OPENAI_API_KEY=your-api-key` 是为了保证服务可以启动的占位值。真正执行 memory
+extraction、retrieval 或 embedding 调用前，需要替换成真实 key。
+
+AI 配置分成两层：
+
+- `spring.ai.*` 定义 provider 默认参数和模型 options，尽量沿用 Spring AI 原生配置结构。
+- `memind.ai.*` 定义 Memind 的 named client、embedding client 和 chat-client slot routing。
+
+默认 [`application.yml`](./memind-server/src/main/resources/application.yml) 定义了一个 `openai`
+chat client 和一个 `openai` embedding client。它们会从 `spring.ai.openai.*` 继承 base URL、
+API key、模型和常用 options。没有单独配置的 chat slot 会自动回退到 `default-client`。
 
 示例：大多数阶段使用 DeepSeek，Insight 生成使用 DeepSeek Reasoner，分组分类使用 GLM，
 线程 enrichment 使用 Claude：
 
 ```yaml
+spring:
+  ai:
+    openai:
+      base-url: ${OPENAI_BASE_URL:https://openrouter.ai/api}
+      api-key: ${OPENAI_API_KEY:your-api-key}
+      chat:
+        options:
+          model: ${OPENAI_CHAT_MODEL:openai/gpt-4o-mini}
+      embedding:
+        base-url: ${EMBEDDING_BASE_URL:${OPENAI_BASE_URL:https://openrouter.ai/api}}
+        api-key: ${EMBEDDING_API_KEY:${OPENAI_API_KEY:your-api-key}}
+        options:
+          model: ${OPENAI_EMBEDDING_MODEL:openai/text-embedding-3-small}
+
 memind:
   ai:
     chat:

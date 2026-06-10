@@ -106,38 +106,49 @@ Maven, Node.js, or pnpm on the host.
 ### Prerequisites
 
 - Docker with the Compose plugin
-- A chat model key and an embedding model key. The default config uses the same `OPENAI_API_KEY`
-  for an OpenAI-compatible chat and embedding endpoint.
+- Provider credentials for the chat and embedding models you want to use. The default
+  configuration uses one OpenAI-compatible provider for both chat and embeddings.
 
 ### Configure credentials
 
-Create a local `.env` file in the repository root. `docker-compose.yml` reads these values
-automatically:
+Create a local `.env` file from the example. Docker Compose reads it automatically:
 
 ```bash
-# Required by the default application.yml.
-OPENAI_API_KEY=your-key
-
-# Optional. Add only the keys referenced by your application.yml clients.
-DEEPSEEK_API_KEY=
-GLM_API_KEY=
-ANTHROPIC_API_KEY=
-GEMINI_API_KEY=
-SILICONFLOW_API_KEY=
-
-# Optional. Required only when you want an external rerank provider for deep retrieval.
-MEMIND_RERANK_API_KEY=
+cp .env.example .env
 ```
 
-Model providers, base URLs, models, and slot routing are configured in
-[`memind-server/src/main/resources/application.yml`](./memind-server/src/main/resources/application.yml).
-The default config uses one OpenAI-compatible client for all chat slots and one embedding client.
-Unconfigured slots automatically fall back to `default-client`.
+The example uses `OPENAI_API_KEY=your-api-key` as a startup-safe placeholder. Replace it with a
+real key before running memory extraction, retrieval, or embedding calls.
+
+AI configuration has two layers:
+
+- `spring.ai.*` defines provider defaults and model options, using Spring AI's native property
+  structure where available.
+- `memind.ai.*` defines Memind's named clients, embedding client, and chat-client slot routing.
+
+The default [`application.yml`](./memind-server/src/main/resources/application.yml) defines one
+`openai` chat client and one `openai` embedding client. Both inherit base URL, API key, model, and
+common options from `spring.ai.openai.*`. Unconfigured chat slots automatically fall back to
+`default-client`.
 
 Example: route most stages to DeepSeek, Insight generation to DeepSeek Reasoner, group
 classification to GLM, and thread enrichment to Claude:
 
 ```yaml
+spring:
+  ai:
+    openai:
+      base-url: ${OPENAI_BASE_URL:https://openrouter.ai/api}
+      api-key: ${OPENAI_API_KEY:your-api-key}
+      chat:
+        options:
+          model: ${OPENAI_CHAT_MODEL:openai/gpt-4o-mini}
+      embedding:
+        base-url: ${EMBEDDING_BASE_URL:${OPENAI_BASE_URL:https://openrouter.ai/api}}
+        api-key: ${EMBEDDING_API_KEY:${OPENAI_API_KEY:your-api-key}}
+        options:
+          model: ${OPENAI_EMBEDDING_MODEL:openai/text-embedding-3-small}
+
 memind:
   ai:
     chat:

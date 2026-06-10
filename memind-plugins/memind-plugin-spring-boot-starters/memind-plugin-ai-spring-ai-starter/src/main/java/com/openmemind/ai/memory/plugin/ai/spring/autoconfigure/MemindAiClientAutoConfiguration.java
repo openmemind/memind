@@ -15,12 +15,18 @@ package com.openmemind.ai.memory.plugin.ai.spring.autoconfigure;
 
 import io.micrometer.observation.ObservationRegistry;
 import org.springframework.ai.model.tool.ToolCallingManager;
+import org.springframework.ai.model.tool.ToolExecutionEligibilityPredicate;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.env.Environment;
 import org.springframework.core.retry.RetryTemplate;
+import org.springframework.web.client.ResponseErrorHandler;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.reactive.function.client.WebClient;
 
 @AutoConfiguration
 @AutoConfigureBefore({SpringAiLlmAutoConfiguration.class, SpringAiVectorAutoConfiguration.class})
@@ -30,11 +36,15 @@ public class MemindAiClientAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public MemindAiClientFactory memindAiClientFactory(
-            org.springframework.beans.factory.ObjectProvider<RetryTemplate> retryTemplateProvider,
-            org.springframework.beans.factory.ObjectProvider<ObservationRegistry>
-                    observationRegistryProvider,
-            org.springframework.beans.factory.ObjectProvider<ToolCallingManager>
-                    toolCallingManagerProvider) {
+            ObjectProvider<RetryTemplate> retryTemplateProvider,
+            ObjectProvider<ObservationRegistry> observationRegistryProvider,
+            ObjectProvider<ToolCallingManager> toolCallingManagerProvider,
+            ObjectProvider<ToolExecutionEligibilityPredicate>
+                    toolExecutionEligibilityPredicateProvider,
+            ObjectProvider<RestClient.Builder> restClientBuilderProvider,
+            ObjectProvider<WebClient.Builder> webClientBuilderProvider,
+            ObjectProvider<ResponseErrorHandler> responseErrorHandlerProvider,
+            Environment environment) {
         ObservationRegistry observationRegistry =
                 observationRegistryProvider.getIfAvailable(
                         MemindAiClientFactory::defaultObservationRegistry);
@@ -42,8 +52,14 @@ public class MemindAiClientAutoConfiguration {
                 retryTemplateProvider.getIfAvailable(MemindAiClientFactory::defaultRetryTemplate),
                 observationRegistry,
                 toolCallingManagerProvider.getIfAvailable(
-                        () ->
-                                MemindAiClientFactory.defaultToolCallingManager(
-                                        observationRegistry)));
+                        () -> MemindAiClientFactory.defaultToolCallingManager(observationRegistry)),
+                toolExecutionEligibilityPredicateProvider.getIfUnique(),
+                restClientBuilderProvider.getIfAvailable(
+                        MemindAiClientFactory::defaultRestClientBuilder),
+                webClientBuilderProvider.getIfAvailable(
+                        MemindAiClientFactory::defaultWebClientBuilder),
+                responseErrorHandlerProvider.getIfAvailable(
+                        MemindAiClientFactory::defaultResponseErrorHandler),
+                environment);
     }
 }

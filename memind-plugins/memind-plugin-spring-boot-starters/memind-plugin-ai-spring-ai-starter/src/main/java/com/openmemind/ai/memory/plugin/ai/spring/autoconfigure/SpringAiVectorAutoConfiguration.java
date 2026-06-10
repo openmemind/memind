@@ -27,6 +27,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
+import org.springframework.context.annotation.Primary;
 
 @AutoConfiguration
 @AutoConfigureAfter(
@@ -42,7 +43,7 @@ public class SpringAiVectorAutoConfiguration {
 
     @Bean
     @Conditional(ConfiguredEmbeddingClientsCondition.class)
-    @ConditionalOnMissingBean(EmbeddingModel.class)
+    @Primary
     public EmbeddingModel memindEmbeddingModel(
             MemindAiProperties properties, MemindAiClientFactory clientFactory) {
         return clientFactory.createEmbeddingModel(properties.getEmbedding());

@@ -73,6 +73,44 @@ class MemindAiConfigurationTest {
     }
 
     @Test
+    @DisplayName("creates OpenAI chat client from Spring AI defaults")
+    void createsOpenAiChatClientFromSpringAiDefaults() {
+        contextRunner
+                .withPropertyValues(
+                        "spring.ai.openai.base-url=https://openrouter.ai/api",
+                        "spring.ai.openai.api-key=test-key",
+                        "spring.ai.openai.chat.options.model=openai/gpt-4o-mini",
+                        "memind.ai.chat.default-client=openai",
+                        "memind.ai.chat.clients.openai.provider=openai")
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+                            assertThat(context).hasSingleBean(MemindChatClients.class);
+                            assertThat(context.getBean(MemindChatClients.class).defaultClientId())
+                                    .isEqualTo("openai");
+                        });
+    }
+
+    @Test
+    @DisplayName("does not create or validate unreferenced chat clients")
+    void doesNotCreateOrValidateUnreferencedChatClients() {
+        contextRunner
+                .withPropertyValues(
+                        "memind.ai.chat.default-client=ds",
+                        "memind.ai.chat.clients.ds.provider=openai",
+                        "memind.ai.chat.clients.ds.base-url=https://api.deepseek.com",
+                        "memind.ai.chat.clients.ds.api-key=test-key",
+                        "memind.ai.chat.clients.ds.model=deepseek-chat",
+                        "memind.ai.chat.clients.unused.provider=openai")
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+                            assertThat(context.getBean(MemindChatClients.class).clientIds())
+                                    .containsExactly("ds");
+                        });
+    }
+
+    @Test
     @DisplayName("fails fast when default client is not configured")
     void failsWhenDefaultClientIsMissing() {
         contextRunner
@@ -122,6 +160,23 @@ class MemindAiConfigurationTest {
                         "memind.ai.embedding.clients.embedding.api-key=test-key",
                         "memind.ai.embedding.clients.embedding.model=BAAI/bge-m3",
                         "memind.ai.embedding.clients.embedding.dimensions=1024")
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+                            assertThat(context).hasSingleBean(EmbeddingModel.class);
+                        });
+    }
+
+    @Test
+    @DisplayName("creates OpenAI embedding model from Spring AI defaults")
+    void createsOpenAiEmbeddingModelFromSpringAiDefaults() {
+        vectorContextRunner
+                .withPropertyValues(
+                        "spring.ai.openai.base-url=https://openrouter.ai/api",
+                        "spring.ai.openai.api-key=test-key",
+                        "spring.ai.openai.embedding.options.model=openai/text-embedding-3-small",
+                        "memind.ai.embedding.client=openai",
+                        "memind.ai.embedding.clients.openai.provider=openai")
                 .run(
                         context -> {
                             assertThat(context).hasNotFailed();
