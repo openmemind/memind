@@ -21,10 +21,12 @@ services:
     container_name: memind-server
     environment:
       SERVER_PORT: 8366
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://openrouter.ai/api}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-123}
-      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-openai/gpt-4o-mini}
-      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-openai/text-embedding-3-small}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      GLM_API_KEY: ${GLM_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
       MEMIND_DATASOURCE_URL: jdbc:sqlite:/app/data/memind-server.db
       MEMIND_VECTOR_STORE_PATH: /app/data/vector-store.json
       MEMIND_RERANK_BASE_URL: ${MEMIND_RERANK_BASE_URL:-https://aihubmix.com}

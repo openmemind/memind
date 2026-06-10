@@ -106,7 +106,8 @@ Maven, Node.js, or pnpm on the host.
 ### Prerequisites
 
 - Docker with the Compose plugin
-- An OpenAI-compatible chat and embedding provider key
+- A chat model key and an embedding model key. The default config uses the same `OPENAI_API_KEY`
+  for an OpenAI-compatible chat and embedding endpoint.
 
 ### Configure credentials
 
@@ -114,28 +115,71 @@ Create a local `.env` file in the repository root. `docker-compose.yml` reads th
 automatically:
 
 ```bash
-# Required.
+# Required by the default application.yml.
 OPENAI_API_KEY=your-key
 
-# Optional provider and model overrides.
-OPENAI_BASE_URL=https://openrouter.ai/api
-OPENAI_CHAT_MODEL=openai/gpt-4o-mini
-OPENAI_EMBEDDING_MODEL=openai/text-embedding-3-small
+# Optional. Add only the keys referenced by your application.yml clients.
+DEEPSEEK_API_KEY=
+GLM_API_KEY=
+ANTHROPIC_API_KEY=
+GEMINI_API_KEY=
+SILICONFLOW_API_KEY=
 
 # Optional. Required only when you want an external rerank provider for deep retrieval.
-MEMIND_RERANK_BASE_URL=https://aihubmix.com
 MEMIND_RERANK_API_KEY=
-MEMIND_RERANK_MODEL=jina-reranker-v3
-
-# Optional host ports.
-MEMIND_SERVER_PORT=8366
-MEMIND_UI_PORT=8080
 ```
 
-`OPENAI_BASE_URL`, `OPENAI_CHAT_MODEL`, and `OPENAI_EMBEDDING_MODEL` are optional.
-The chat and embedding model choices directly affect memory extraction, insight quality,
-and retrieval quality. If your embedding provider uses a different endpoint or key from chat,
-also set `EMBEDDING_BASE_URL` and `EMBEDDING_API_KEY`.
+Model providers, base URLs, models, and slot routing are configured in
+[`memind-server/src/main/resources/application.yml`](./memind-server/src/main/resources/application.yml).
+The default config uses one OpenAI-compatible client for all chat slots and one embedding client.
+Unconfigured slots automatically fall back to `default-client`.
+
+Example: route most stages to DeepSeek, Insight generation to DeepSeek Reasoner, group
+classification to GLM, and thread enrichment to Claude:
+
+```yaml
+memind:
+  ai:
+    chat:
+      default-client: ds
+      clients:
+        ds:
+          provider: openai
+          base-url: https://api.deepseek.com
+          api-key: ${DEEPSEEK_API_KEY}
+          model: deepseek-chat
+        ds_reasoner:
+          provider: openai
+          base-url: https://api.deepseek.com
+          api-key: ${DEEPSEEK_API_KEY}
+          model: deepseek-reasoner
+        glm:
+          provider: openai
+          base-url: https://open.bigmodel.cn/api/paas/v4
+          api-key: ${GLM_API_KEY}
+          model: glm-4.5
+        claude:
+          provider: anthropic
+          api-key: ${ANTHROPIC_API_KEY}
+          model: claude-sonnet-4-5
+      slots:
+        ITEM_EXTRACTION: ds
+        INSIGHT_GENERATOR: ds_reasoner
+        INSIGHT_GROUP_CLASSIFIER: glm
+        THREAD_ENRICHMENT: claude
+    embedding:
+      client: embedding
+      clients:
+        embedding:
+          provider: openai
+          base-url: https://api.siliconflow.cn/v1
+          api-key: ${SILICONFLOW_API_KEY}
+          model: BAAI/bge-m3
+```
+
+Supported chat providers are `openai` for OpenAI-compatible endpoints, `anthropic`,
+`gemini`, and `ollama`. Supported embedding providers are `openai`, `gemini`, and `ollama`.
+For full configuration guidance, see [docs.openmemind.com](https://docs.openmemind.com).
 
 ### Start the stack
 

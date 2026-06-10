@@ -31,6 +31,7 @@ import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
+import com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.MemindChatClients;
 import com.openmemind.ai.memory.server.domain.config.model.ServerRuntimeConfigDO;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeFactory;
 import com.openmemind.ai.memory.server.runtime.MemoryRuntimeManager;
@@ -70,6 +71,7 @@ public class MemindServerRuntimeConfiguration {
 
     @Bean
     MemoryRuntimeFactory memoryRuntimeFactory(
+            ObjectProvider<MemindChatClients> memindChatClientsProvider,
             ObjectProvider<StructuredChatClient> structuredChatClientProvider,
             ObjectProvider<MemoryStore> memoryStoreProvider,
             ObjectProvider<MemoryBuffer> memoryBufferProvider,
@@ -83,8 +85,11 @@ public class MemindServerRuntimeConfiguration {
             ObjectProvider<MemoryObserver> memoryObserverProvider,
             ObjectProvider<MemoryMetricsRecorder> memoryMetricsRecorderProvider) {
         return options -> {
+            MemindChatClients memindChatClients = memindChatClientsProvider.getIfAvailable();
             StructuredChatClient structuredChatClient =
-                    requireRuntimeDependency(structuredChatClientProvider);
+                    memindChatClients == null
+                            ? requireRuntimeDependency(structuredChatClientProvider)
+                            : memindChatClients.defaultClient();
             MemoryStore memoryStore = requireRuntimeDependency(memoryStoreProvider);
             MemoryBuffer memoryBuffer = requireRuntimeDependency(memoryBufferProvider);
             MemoryVector memoryVector = requireRuntimeDependency(memoryVectorProvider);
@@ -108,6 +113,9 @@ public class MemindServerRuntimeConfiguration {
                             .vector(memoryVector)
                             .options(effectiveOptions)
                             .externallyManaged(true);
+            if (memindChatClients != null) {
+                memindChatClients.slotClients().forEach(builder::chatClient);
+            }
             if (bubbleTrackerStore != null) {
                 builder.bubbleTrackerStore(bubbleTrackerStore);
             }
@@ -149,6 +157,7 @@ public class MemindServerRuntimeConfiguration {
             ObjectProvider<BubbleTrackerStore> bubbleTrackerStoreProvider,
             ObjectProvider<MemoryObserver> memoryObserverProvider) {
         return memoryRuntimeFactory(
+                emptyProvider(MemindChatClients.class),
                 structuredChatClientProvider,
                 memoryStoreProvider,
                 memoryBufferProvider,
@@ -161,6 +170,11 @@ public class MemindServerRuntimeConfiguration {
                 bubbleTrackerStoreProvider,
                 memoryObserverProvider,
                 null);
+    }
+
+    private static <T> ObjectProvider<T> emptyProvider(Class<T> type) {
+        return new org.springframework.beans.factory.support.StaticListableBeanFactory()
+                .getBeanProvider(type);
     }
 
     private static List<ContentParser> resolveContentParsers(

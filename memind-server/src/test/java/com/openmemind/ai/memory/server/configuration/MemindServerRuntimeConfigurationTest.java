@@ -33,6 +33,8 @@ import com.openmemind.ai.memory.core.builder.RawDataExtractionOptions;
 import com.openmemind.ai.memory.core.extraction.DefaultMemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.MemoryExtractor;
 import com.openmemind.ai.memory.core.extraction.insight.InsightLayer;
+import com.openmemind.ai.memory.core.extraction.insight.generator.InsightGenerator;
+import com.openmemind.ai.memory.core.extraction.insight.generator.LlmInsightGenerator;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
@@ -41,6 +43,7 @@ import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
@@ -62,6 +65,7 @@ import com.openmemind.ai.memory.core.tracing.ObservationContext;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingItemGraphMaterializer;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryExtractor;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
+import com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.MemindChatClients;
 import com.openmemind.ai.memory.plugin.rawdata.audio.content.AudioContent;
 import com.openmemind.ai.memory.plugin.rawdata.audio.parser.TranscriptionAudioContentParser;
 import com.openmemind.ai.memory.plugin.rawdata.document.DocumentSemantics;
@@ -151,6 +155,47 @@ class MemindServerRuntimeConfigurationTest {
 
         assertThat(readField(reorganizer, "bubbleTracker", BubbleTrackerStore.class))
                 .isSameAs(customBubbleTracker);
+    }
+
+    @Test
+    void runtimeFactoryAppliesConfiguredChatClientsToBuilderSlots() {
+        var defaultClient = proxy(StructuredChatClient.class);
+        var insightClient = proxy(StructuredChatClient.class);
+        var configuredClients =
+                new MemindChatClients(
+                        "default",
+                        defaultClient,
+                        Map.of("default", defaultClient, "insight", insightClient),
+                        Map.of(ChatClientSlot.INSIGHT_GENERATOR, "insight"),
+                        Map.of(ChatClientSlot.INSIGHT_GENERATOR, insightClient));
+        var configuration = new MemindServerRuntimeConfiguration();
+
+        MemoryRuntimeFactory factory =
+                configuration.memoryRuntimeFactory(
+                        provider(MemindChatClients.class, configuredClients),
+                        emptyProvider(StructuredChatClient.class),
+                        provider(MemoryStore.class, memoryStore()),
+                        provider(MemoryBuffer.class, memoryBuffer()),
+                        provider(MemoryVector.class, proxy(MemoryVector.class)),
+                        emptyProvider(MemoryTextSearch.class),
+                        provider(Reranker.class, new NoopReranker()),
+                        emptyProvider(ContentParser.class),
+                        emptyProvider(RawDataPlugin.class),
+                        emptyProvider(ResourceFetcher.class),
+                        emptyProvider(BubbleTrackerStore.class),
+                        emptyProvider(MemoryObserver.class),
+                        emptyProvider(
+                                com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder.class));
+
+        Memory memory = factory.create(MemoryBuildOptions.defaults()).memory();
+        var extractor = underlyingExtractor((DefaultMemory) memory);
+        var insightLayer = readField(extractor, "insightStep", InsightLayer.class);
+        var scheduler = readField(insightLayer, "scheduler", InsightBuildScheduler.class);
+        var generator = readField(scheduler, "generator", InsightGenerator.class);
+
+        assertThat(generator).isInstanceOf(LlmInsightGenerator.class);
+        assertThat(readField(generator, "structuredChatClient", StructuredChatClient.class))
+                .isSameAs(insightClient);
     }
 
     @Test

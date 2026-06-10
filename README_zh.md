@@ -108,35 +108,79 @@ React 管理 UI，不需要在宿主机安装 Java、Maven、Node.js 或 pnpm。
 ### 前置要求
 
 - Docker，并已启用 Compose 插件
-- 一个兼容 OpenAI 协议的 chat 和 embedding 服务密钥
+- 一个 chat model 密钥和一个 embedding model 密钥。默认配置会把同一个 `OPENAI_API_KEY`
+  用于兼容 OpenAI 协议的 chat 和 embedding endpoint。
 
 ### 配置凭据
 
 在仓库根目录创建本地 `.env` 文件。`docker-compose.yml` 会自动读取这些变量：
 
 ```bash
-# 必填。
+# 默认 application.yml 必填。
 OPENAI_API_KEY=your-key
 
-# 可选的服务地址和模型覆盖项。
-OPENAI_BASE_URL=https://openrouter.ai/api
-OPENAI_CHAT_MODEL=openai/gpt-4o-mini
-OPENAI_EMBEDDING_MODEL=openai/text-embedding-3-small
+# 可选。只需要填写 application.yml 中实际引用的 client key。
+DEEPSEEK_API_KEY=
+GLM_API_KEY=
+ANTHROPIC_API_KEY=
+GEMINI_API_KEY=
+SILICONFLOW_API_KEY=
 
-# 可选。只有 deep retrieval 需要外部 rerank 服务时才需要配置。
-MEMIND_RERANK_BASE_URL=https://aihubmix.com
+# 可选。只有 Deep Retrieval 需要外部 rerank 服务时才需要配置。
 MEMIND_RERANK_API_KEY=
-MEMIND_RERANK_MODEL=jina-reranker-v3
-
-# 可选的宿主机端口。
-MEMIND_SERVER_PORT=8366
-MEMIND_UI_PORT=8080
 ```
 
-`OPENAI_BASE_URL`、`OPENAI_CHAT_MODEL` 和 `OPENAI_EMBEDDING_MODEL` 都是可选项。
-其中 chat model 和 embedding model 的选择会直接影响 Memory 的提取质量、洞察质量和检索质量。
-如果你的 embedding 服务使用了和 chat 不同的地址或密钥，请额外设置
-`EMBEDDING_BASE_URL` 和 `EMBEDDING_API_KEY`。
+模型 provider、base URL、具体模型和 chat-client slot routing 都在
+[`memind-server/src/main/resources/application.yml`](./memind-server/src/main/resources/application.yml)
+里配置。默认配置使用一个兼容 OpenAI 协议的 chat client 处理所有 chat slot，并使用一个
+embedding client。没有单独配置的 slot 会自动回退到 `default-client`。
+
+示例：大多数阶段使用 DeepSeek，Insight 生成使用 DeepSeek Reasoner，分组分类使用 GLM，
+线程 enrichment 使用 Claude：
+
+```yaml
+memind:
+  ai:
+    chat:
+      default-client: ds
+      clients:
+        ds:
+          provider: openai
+          base-url: https://api.deepseek.com
+          api-key: ${DEEPSEEK_API_KEY}
+          model: deepseek-chat
+        ds_reasoner:
+          provider: openai
+          base-url: https://api.deepseek.com
+          api-key: ${DEEPSEEK_API_KEY}
+          model: deepseek-reasoner
+        glm:
+          provider: openai
+          base-url: https://open.bigmodel.cn/api/paas/v4
+          api-key: ${GLM_API_KEY}
+          model: glm-4.5
+        claude:
+          provider: anthropic
+          api-key: ${ANTHROPIC_API_KEY}
+          model: claude-sonnet-4-5
+      slots:
+        ITEM_EXTRACTION: ds
+        INSIGHT_GENERATOR: ds_reasoner
+        INSIGHT_GROUP_CLASSIFIER: glm
+        THREAD_ENRICHMENT: claude
+    embedding:
+      client: embedding
+      clients:
+        embedding:
+          provider: openai
+          base-url: https://api.siliconflow.cn/v1
+          api-key: ${SILICONFLOW_API_KEY}
+          model: BAAI/bge-m3
+```
+
+chat provider 支持 `openai`（兼容 OpenAI 协议的 endpoint）、`anthropic`、`gemini`
+和 `ollama`。embedding provider 支持 `openai`、`gemini` 和 `ollama`。完整配置说明见
+[docs.openmemind.com](https://docs.openmemind.com)。
 
 ### 启动服务
 

@@ -15,7 +15,7 @@
 # Local development defaults:
 # - SQLite is used by default and can be overridden through MEMIND_DATASOURCE_* env vars.
 # - The fallback vector store is a local JSON file.
-# - Spring AI OpenAI-compatible settings are read from OPENAI_* env vars.
+# - Memind AI chat and embedding clients are configured under memind.ai.
 # - Optional rerank provider settings are read from MEMIND_RERANK_* env vars.
 # - To switch to MySQL or Qdrant, replace/merge the commented examples at the bottom of this file.
 
@@ -57,22 +57,45 @@ spring:
           resource: false
           prompt: false
           completion: false
-    openai:
-      base-url: ${OPENAI_BASE_URL:https://openrouter.ai/api}
-      api-key: ${OPENAI_API_KEY:}
-      chat:
-        options:
-          model: ${OPENAI_CHAT_MODEL:openai/gpt-4o-mini}
-      embedding:
-        base-url: ${EMBEDDING_BASE_URL:${OPENAI_BASE_URL:}}
-        api-key: ${EMBEDDING_API_KEY:${OPENAI_API_KEY:}}
-        options:
-          model: ${OPENAI_EMBEDDING_MODEL:openai/text-embedding-3-small}
 
 server:
   port: ${SERVER_PORT:8366}
 
 memind:
+  ai:
+    chat:
+      # Client ids are local names. Each client can target OpenAI-compatible endpoints
+      # such as OpenAI, DeepSeek, GLM, OpenRouter, SiliconFlow, or any compatible gateway.
+      default-client: openai
+      clients:
+        openai:
+          provider: openai
+          base-url: https://openrouter.ai/api
+          api-key: ${OPENAI_API_KEY:}
+          model: openai/gpt-4o-mini
+          temperature: 0.2
+      # Optional slot routing. Unconfigured slots use default-client.
+      # Add or change entries when some memory pipeline stages should use another client.
+      slots:
+        ITEM_EXTRACTION: openai
+        CONVERSATION_CHUNKER: openai
+        CAPTION_GENERATOR: openai
+        CONTEXT_COMMIT_DETECTOR: openai
+        INSIGHT_GENERATOR: openai
+        INSIGHT_GROUP_CLASSIFIER: openai
+        QUERY_EXPANDER: openai
+        LONG_QUERY_CONDENSER: openai
+        SUFFICIENCY_GATE: openai
+        INSIGHT_TYPE_ROUTER: openai
+        THREAD_ENRICHMENT: openai
+    embedding:
+      client: openai
+      clients:
+        openai:
+          provider: openai
+          base-url: https://openrouter.ai/api
+          api-key: ${OPENAI_API_KEY:}
+          model: openai/text-embedding-3-small
   mcp:
     governance-enabled: ${MEMIND_MCP_GOVERNANCE_ENABLED:false}
     default-token-budget: ${MEMIND_MCP_DEFAULT_TOKEN_BUDGET:1800}

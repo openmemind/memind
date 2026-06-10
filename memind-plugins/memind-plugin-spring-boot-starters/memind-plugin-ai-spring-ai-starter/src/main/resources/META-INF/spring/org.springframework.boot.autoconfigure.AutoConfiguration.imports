@@ -1,2 +1,3 @@
+com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.MemindAiClientAutoConfiguration
 com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.SpringAiLlmAutoConfiguration
 com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.SpringAiVectorAutoConfiguration
