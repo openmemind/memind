@@ -19,8 +19,6 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.core.convert.converter.Converter;
-import org.springframework.util.StringUtils;
 
 @ConfigurationProperties(prefix = "memind.ai")
 public class MemindAiProperties {
@@ -33,29 +31,6 @@ public class MemindAiProperties {
 
         String propertyValue() {
             return name().toLowerCase(Locale.ROOT);
-        }
-    }
-
-    static final class AiProviderConverter implements Converter<String, AiProvider> {
-
-        @Override
-        public AiProvider convert(String source) {
-            if (!StringUtils.hasText(source)) {
-                return null;
-            }
-            String normalized = source.trim().toLowerCase(Locale.ROOT).replace("_", "-");
-            return switch (normalized) {
-                case "openai", "openai-compatible" -> AiProvider.OPENAI;
-                case "anthropic", "claude" -> AiProvider.ANTHROPIC;
-                case "google", "google-genai", "gemini" -> AiProvider.GOOGLE;
-                case "ollama" -> AiProvider.OLLAMA;
-                default ->
-                        throw new IllegalArgumentException(
-                                "Unsupported memind AI provider '"
-                                        + source
-                                        + "'. Supported providers are openai, anthropic, google,"
-                                        + " and ollama.");
-            };
         }
     }
 

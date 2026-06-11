@@ -93,38 +93,51 @@ class MemindAiConfigurationTest {
     }
 
     @Test
-    @DisplayName("binds provider aliases to canonical providers")
-    void bindsProviderAliasesToCanonicalProviders() {
+    @DisplayName("binds canonical providers to enum values")
+    void bindsCanonicalProvidersToEnumValues() {
         contextRunner
                 .withPropertyValues(
-                        "memind.ai.chat.default-client=ds",
-                        "memind.ai.chat.clients.ds.provider=openai-compatible",
-                        "memind.ai.chat.clients.ds.base-url=https://api.deepseek.com",
-                        "memind.ai.chat.clients.ds.api-key=test-key",
-                        "memind.ai.chat.clients.ds.model=deepseek-chat",
-                        "memind.ai.chat.clients.claude.provider=claude",
-                        "memind.ai.chat.clients.gemini.provider=gemini")
+                        "memind.ai.chat.default-client=openai",
+                        "memind.ai.chat.clients.openai.provider=openai",
+                        "memind.ai.chat.clients.openai.base-url=https://api.openai.com",
+                        "memind.ai.chat.clients.openai.api-key=test-key",
+                        "memind.ai.chat.clients.openai.model=gpt-4o-mini",
+                        "memind.ai.chat.clients.anthropic.provider=anthropic",
+                        "memind.ai.chat.clients.google.provider=google",
+                        "memind.ai.chat.clients.ollama.provider=ollama")
                 .run(
                         context -> {
                             assertThat(context).hasNotFailed();
                             MemindAiProperties properties =
                                     context.getBean(MemindAiProperties.class);
-                            assertThat(properties.getChat().getClients().get("ds").getProvider())
+                            assertThat(
+                                            properties
+                                                    .getChat()
+                                                    .getClients()
+                                                    .get("openai")
+                                                    .getProvider())
                                     .isEqualTo(AiProvider.OPENAI);
                             assertThat(
                                             properties
                                                     .getChat()
                                                     .getClients()
-                                                    .get("claude")
+                                                    .get("anthropic")
                                                     .getProvider())
                                     .isEqualTo(AiProvider.ANTHROPIC);
                             assertThat(
                                             properties
                                                     .getChat()
                                                     .getClients()
-                                                    .get("gemini")
+                                                    .get("google")
                                                     .getProvider())
                                     .isEqualTo(AiProvider.GOOGLE);
+                            assertThat(
+                                            properties
+                                                    .getChat()
+                                                    .getClients()
+                                                    .get("ollama")
+                                                    .getProvider())
+                                    .isEqualTo(AiProvider.OLLAMA);
                         });
     }
 
