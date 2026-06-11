@@ -15,7 +15,8 @@
 # Local development defaults:
 # - SQLite is used by default and can be overridden through MEMIND_DATASOURCE_* env vars.
 # - The fallback vector store is a local JSON file.
-# - Spring AI OpenAI-compatible settings are read from OPENAI_* env vars.
+# - Spring AI provider defaults are configured under spring.ai.
+# - Memind AI client routing is configured under memind.ai.
 # - Optional rerank provider settings are read from MEMIND_RERANK_* env vars.
 # - To switch to MySQL or Qdrant, replace/merge the commented examples at the bottom of this file.
 
@@ -36,6 +37,21 @@ spring:
   jackson:
     default-property-inclusion: non_null
   ai:
+    model:
+      chat: openai
+      embedding: openai
+    openai:
+      base-url: ${OPENAI_BASE_URL:https://openrouter.ai/api}
+      api-key: ${OPENAI_API_KEY:your-api-key}
+      chat:
+        options:
+          model: ${OPENAI_CHAT_MODEL:openai/gpt-4o-mini}
+          temperature: ${OPENAI_CHAT_TEMPERATURE:0.2}
+      embedding:
+        base-url: ${EMBEDDING_BASE_URL:${OPENAI_BASE_URL:https://openrouter.ai/api}}
+        api-key: ${EMBEDDING_API_KEY:${OPENAI_API_KEY:your-api-key}}
+        options:
+          model: ${OPENAI_EMBEDDING_MODEL:openai/text-embedding-3-small}
     # Keeps external Spring AI vector stores dormant by default.
     # Switch this to qdrant in the commented example below when enabling Qdrant.
     vectorstore:
@@ -57,22 +73,28 @@ spring:
           resource: false
           prompt: false
           completion: false
-    openai:
-      base-url: ${OPENAI_BASE_URL:https://openrouter.ai/api}
-      api-key: ${OPENAI_API_KEY:}
-      chat:
-        options:
-          model: ${OPENAI_CHAT_MODEL:openai/gpt-4o-mini}
-      embedding:
-        base-url: ${EMBEDDING_BASE_URL:${OPENAI_BASE_URL:}}
-        api-key: ${EMBEDDING_API_KEY:${OPENAI_API_KEY:}}
-        options:
-          model: ${OPENAI_EMBEDDING_MODEL:openai/text-embedding-3-small}
 
 server:
   port: ${SERVER_PORT:8366}
 
 memind:
+  ai:
+    chat:
+      # Client ids are local routing names. This default client inherits provider defaults
+      # from spring.ai.openai above. Add more clients here to route individual slots to
+      # different providers, endpoints, or models.
+      default-client: openai
+      clients:
+        openai:
+          provider: openai
+      # Optional slot routing. Unconfigured slots use default-client.
+      # Add or change entries when some memory pipeline stages should use another client.
+      slots: {}
+    embedding:
+      client: openai
+      clients:
+        openai:
+          provider: openai
   mcp:
     governance-enabled: ${MEMIND_MCP_GOVERNANCE_ENABLED:false}
     default-token-budget: ${MEMIND_MCP_DEFAULT_TOKEN_BUDGET:1800}

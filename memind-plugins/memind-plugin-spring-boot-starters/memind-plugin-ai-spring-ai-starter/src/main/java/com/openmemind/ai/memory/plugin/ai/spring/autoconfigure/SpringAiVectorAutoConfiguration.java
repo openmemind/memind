@@ -26,6 +26,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
+import org.springframework.context.annotation.Primary;
 
 @AutoConfiguration
 @AutoConfigureAfter(
@@ -36,11 +38,19 @@ import org.springframework.context.annotation.Bean;
             "org.springframework.ai.model.vertexai.autoconfigure.embedding.VertexAiMultiModalEmbeddingAutoConfiguration"
         })
 @ConditionalOnClass(EmbeddingModel.class)
-@ConditionalOnBean(EmbeddingModel.class)
-@EnableConfigurationProperties(SpringAiVectorProperties.class)
+@EnableConfigurationProperties({SpringAiVectorProperties.class, MemindAiProperties.class})
 public class SpringAiVectorAutoConfiguration {
 
+    @Bean
+    @Conditional(ConfiguredEmbeddingClientsCondition.class)
+    @Primary
+    public EmbeddingModel memindEmbeddingModel(
+            MemindAiProperties properties, MemindAiClientFactory clientFactory) {
+        return clientFactory.createEmbeddingModel(properties.getEmbedding());
+    }
+
     @Bean(destroyMethod = "")
+    @ConditionalOnBean(EmbeddingModel.class)
     @ConditionalOnMissingBean({VectorStore.class, MemoryVector.class})
     public VectorStore vectorStore(
             EmbeddingModel embeddingModel, SpringAiVectorProperties properties) {
@@ -48,6 +58,7 @@ public class SpringAiVectorAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(EmbeddingModel.class)
     @ConditionalOnMissingBean(MemoryVector.class)
     public MemoryVector memoryVector(VectorStore vectorStore, EmbeddingModel embeddingModel) {
         return new SpringAiMemoryVector(vectorStore, embeddingModel);

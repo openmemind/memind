@@ -35,7 +35,9 @@ class MemoryVectorAutoConfigurationTest {
     private final ApplicationContextRunner contextRunner =
             new ApplicationContextRunner()
                     .withConfiguration(
-                            AutoConfigurations.of(SpringAiVectorAutoConfiguration.class));
+                            AutoConfigurations.of(
+                                    MemindAiClientAutoConfiguration.class,
+                                    SpringAiVectorAutoConfiguration.class));
 
     @Nested
     @DisplayName("Default Configuration")
@@ -67,6 +69,28 @@ class MemoryVectorAutoConfigurationTest {
                                         .isInstanceOf(FileSimpleVectorStore.class);
                                 assertThat(context.getBean(MemoryVector.class))
                                         .isInstanceOf(SpringAiMemoryVector.class);
+                            });
+        }
+
+        @Test
+        @DisplayName("Memind configured EmbeddingModel is primary when another one exists")
+        void memindConfiguredEmbeddingModelIsPrimaryWhenAnotherOneExists() {
+            contextRunner
+                    .withUserConfiguration(EmbeddingModelConfig.class)
+                    .withPropertyValues(
+                            "memind.ai.embedding.client=memind",
+                            "memind.ai.embedding.clients.memind.provider=openai",
+                            "memind.ai.embedding.clients.memind.base-url=https://api.siliconflow.cn/v1",
+                            "memind.ai.embedding.clients.memind.api-key=test-key",
+                            "memind.ai.embedding.clients.memind.model=BAAI/bge-m3")
+                    .run(
+                            context -> {
+                                assertThat(context).hasNotFailed();
+                                assertThat(context).hasBean("memindEmbeddingModel");
+                                assertThat(context.getBeanNamesForType(EmbeddingModel.class))
+                                        .hasSize(2);
+                                assertThat(context.getBean(EmbeddingModel.class))
+                                        .isSameAs(context.getBean("memindEmbeddingModel"));
                             });
         }
     }

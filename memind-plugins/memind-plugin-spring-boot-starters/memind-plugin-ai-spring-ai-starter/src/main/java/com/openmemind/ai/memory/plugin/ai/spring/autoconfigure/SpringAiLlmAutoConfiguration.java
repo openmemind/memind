@@ -21,16 +21,37 @@ import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 
 @AutoConfiguration
 @AutoConfigureAfter(
-        name = "org.springframework.ai.model.chat.client.autoconfigure.ChatClientAutoConfiguration")
+        name = {
+            "com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.MemindAiClientAutoConfiguration",
+            "org.springframework.ai.model.chat.client.autoconfigure.ChatClientAutoConfiguration"
+        })
 @ConditionalOnClass(ChatClient.class)
-@ConditionalOnBean(ChatClient.Builder.class)
+@EnableConfigurationProperties(MemindAiProperties.class)
 public class SpringAiLlmAutoConfiguration {
 
     @Bean
+    @Conditional(ConfiguredChatClientsCondition.class)
+    @ConditionalOnMissingBean
+    public MemindChatClients memindChatClients(
+            MemindAiProperties properties, MemindAiClientFactory clientFactory) {
+        return clientFactory.createChatClients(properties.getChat());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(StructuredChatClient.class)
+    @ConditionalOnBean(MemindChatClients.class)
+    public StructuredChatClient memindConfiguredStructuredLlmClient(MemindChatClients clients) {
+        return clients.defaultClient();
+    }
+
+    @Bean
+    @ConditionalOnBean(ChatClient.Builder.class)
     @ConditionalOnMissingBean(StructuredChatClient.class)
     public StructuredChatClient structuredLlmClient(ChatClient.Builder chatClientBuilder) {
         return new SpringAiStructuredChatClient(chatClientBuilder.build());
