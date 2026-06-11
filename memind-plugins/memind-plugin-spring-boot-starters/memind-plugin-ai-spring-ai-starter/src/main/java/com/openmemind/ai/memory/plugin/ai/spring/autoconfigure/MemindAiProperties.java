@@ -16,11 +16,48 @@ package com.openmemind.ai.memory.plugin.ai.spring.autoconfigure;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.util.StringUtils;
 
 @ConfigurationProperties(prefix = "memind.ai")
 public class MemindAiProperties {
+
+    public enum AiProvider {
+        OPENAI,
+        ANTHROPIC,
+        GOOGLE,
+        OLLAMA;
+
+        String propertyValue() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+    }
+
+    static final class AiProviderConverter implements Converter<String, AiProvider> {
+
+        @Override
+        public AiProvider convert(String source) {
+            if (!StringUtils.hasText(source)) {
+                return null;
+            }
+            String normalized = source.trim().toLowerCase(Locale.ROOT).replace("_", "-");
+            return switch (normalized) {
+                case "openai", "openai-compatible" -> AiProvider.OPENAI;
+                case "anthropic", "claude" -> AiProvider.ANTHROPIC;
+                case "google", "google-genai", "gemini" -> AiProvider.GOOGLE;
+                case "ollama" -> AiProvider.OLLAMA;
+                default ->
+                        throw new IllegalArgumentException(
+                                "Unsupported memind AI provider '"
+                                        + source
+                                        + "'. Supported providers are openai, anthropic, google,"
+                                        + " and ollama.");
+            };
+        }
+    }
 
     private ChatProperties chat = new ChatProperties();
     private EmbeddingProperties embedding = new EmbeddingProperties();
@@ -96,7 +133,7 @@ public class MemindAiProperties {
 
     public static class ClientProperties {
 
-        private String provider;
+        private AiProvider provider;
         private String baseUrl;
         private String apiKey;
         private String model;
@@ -109,11 +146,11 @@ public class MemindAiProperties {
         private String projectId;
         private String location;
 
-        public String getProvider() {
+        public AiProvider getProvider() {
             return provider;
         }
 
-        public void setProvider(String provider) {
+        public void setProvider(AiProvider provider) {
             this.provider = provider;
         }
 

@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.MemindAiProperties.AiProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -88,6 +89,42 @@ class MemindAiConfigurationTest {
                             assertThat(context).hasSingleBean(MemindChatClients.class);
                             assertThat(context.getBean(MemindChatClients.class).defaultClientId())
                                     .isEqualTo("openai");
+                        });
+    }
+
+    @Test
+    @DisplayName("binds provider aliases to canonical providers")
+    void bindsProviderAliasesToCanonicalProviders() {
+        contextRunner
+                .withPropertyValues(
+                        "memind.ai.chat.default-client=ds",
+                        "memind.ai.chat.clients.ds.provider=openai-compatible",
+                        "memind.ai.chat.clients.ds.base-url=https://api.deepseek.com",
+                        "memind.ai.chat.clients.ds.api-key=test-key",
+                        "memind.ai.chat.clients.ds.model=deepseek-chat",
+                        "memind.ai.chat.clients.claude.provider=claude",
+                        "memind.ai.chat.clients.gemini.provider=gemini")
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+                            MemindAiProperties properties =
+                                    context.getBean(MemindAiProperties.class);
+                            assertThat(properties.getChat().getClients().get("ds").getProvider())
+                                    .isEqualTo(AiProvider.OPENAI);
+                            assertThat(
+                                            properties
+                                                    .getChat()
+                                                    .getClients()
+                                                    .get("claude")
+                                                    .getProvider())
+                                    .isEqualTo(AiProvider.ANTHROPIC);
+                            assertThat(
+                                            properties
+                                                    .getChat()
+                                                    .getClients()
+                                                    .get("gemini")
+                                                    .getProvider())
+                                    .isEqualTo(AiProvider.GOOGLE);
                         });
     }
 

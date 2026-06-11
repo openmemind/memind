@@ -18,10 +18,10 @@ import com.google.genai.types.HttpOptions;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.plugin.ai.spring.SpringAiStructuredChatClient;
+import com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.MemindAiProperties.AiProvider;
 import io.micrometer.observation.ObservationRegistry;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.ai.anthropic.AnthropicChatModel;
@@ -66,15 +66,6 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 
 public final class MemindAiClientFactory {
-
-    private static final String PROVIDER_OPENAI = "openai";
-    private static final String PROVIDER_OPENAI_COMPATIBLE = "openai-compatible";
-    private static final String PROVIDER_ANTHROPIC = "anthropic";
-    private static final String PROVIDER_CLAUDE = "claude";
-    private static final String PROVIDER_GEMINI = "gemini";
-    private static final String PROVIDER_GOOGLE = "google";
-    private static final String PROVIDER_GOOGLE_GENAI = "google-genai";
-    private static final String PROVIDER_OLLAMA = "ollama";
 
     private final RetryTemplate retryTemplate;
     private final ObservationRegistry observationRegistry;
@@ -190,41 +181,27 @@ public final class MemindAiClientFactory {
 
     private ChatModel createChatModel(
             String propertyPath, MemindAiProperties.ClientProperties properties) {
-        String provider =
-                normalizeProvider(
-                        requireText(
-                                properties.getProvider(), propertyPath + ".provider is required"));
+        AiProvider provider = requireProvider(properties.getProvider(), propertyPath + ".provider");
         return switch (provider) {
-            case PROVIDER_OPENAI, PROVIDER_OPENAI_COMPATIBLE ->
-                    openAiChatModel(propertyPath, properties);
-            case PROVIDER_ANTHROPIC, PROVIDER_CLAUDE ->
-                    anthropicChatModel(propertyPath, properties);
-            case PROVIDER_GEMINI, PROVIDER_GOOGLE, PROVIDER_GOOGLE_GENAI ->
-                    googleGenAiChatModel(propertyPath, properties);
-            case PROVIDER_OLLAMA -> ollamaChatModel(propertyPath, properties);
-            default ->
-                    throw new MemindAiConfigurationException(
-                            propertyPath + ".provider '" + provider + "' is not supported");
+            case OPENAI -> openAiChatModel(propertyPath, properties);
+            case ANTHROPIC -> anthropicChatModel(propertyPath, properties);
+            case GOOGLE -> googleGenAiChatModel(propertyPath, properties);
+            case OLLAMA -> ollamaChatModel(propertyPath, properties);
         };
     }
 
     private EmbeddingModel createEmbeddingModel(
             String propertyPath, MemindAiProperties.ClientProperties properties) {
-        String provider =
-                normalizeProvider(
-                        requireText(
-                                properties.getProvider(), propertyPath + ".provider is required"));
+        AiProvider provider = requireProvider(properties.getProvider(), propertyPath + ".provider");
         return switch (provider) {
-            case PROVIDER_OPENAI, PROVIDER_OPENAI_COMPATIBLE ->
-                    openAiEmbeddingModel(propertyPath, properties);
-            case PROVIDER_GEMINI, PROVIDER_GOOGLE, PROVIDER_GOOGLE_GENAI ->
-                    googleGenAiEmbeddingModel(propertyPath, properties);
-            case PROVIDER_OLLAMA -> ollamaEmbeddingModel(propertyPath, properties);
-            default ->
+            case OPENAI -> openAiEmbeddingModel(propertyPath, properties);
+            case GOOGLE -> googleGenAiEmbeddingModel(propertyPath, properties);
+            case OLLAMA -> ollamaEmbeddingModel(propertyPath, properties);
+            case ANTHROPIC ->
                     throw new MemindAiConfigurationException(
                             propertyPath
                                     + ".provider '"
-                                    + provider
+                                    + provider.propertyValue()
                                     + "' does not support embeddings");
         };
     }
@@ -658,8 +635,11 @@ public final class MemindAiClientFactory {
         }
     }
 
-    private static String normalizeProvider(String provider) {
-        return provider.trim().toLowerCase(Locale.ROOT);
+    private static AiProvider requireProvider(AiProvider provider, String propertyPath) {
+        if (provider == null) {
+            throw new MemindAiConfigurationException(propertyPath + " is required");
+        }
+        return provider;
     }
 
     private static String requireText(String value, String propertyPath) {

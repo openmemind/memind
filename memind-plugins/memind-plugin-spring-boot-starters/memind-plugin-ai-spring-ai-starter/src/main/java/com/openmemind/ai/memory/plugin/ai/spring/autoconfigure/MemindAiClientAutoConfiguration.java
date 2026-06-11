@@ -20,8 +20,10 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.context.properties.ConfigurationPropertiesBinding;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.convert.converter.Converter;
 import org.springframework.core.env.Environment;
 import org.springframework.core.retry.RetryTemplate;
 import org.springframework.web.client.ResponseErrorHandler;
@@ -32,6 +34,12 @@ import org.springframework.web.reactive.function.client.WebClient;
 @AutoConfigureBefore({SpringAiLlmAutoConfiguration.class, SpringAiVectorAutoConfiguration.class})
 @EnableConfigurationProperties(MemindAiProperties.class)
 public class MemindAiClientAutoConfiguration {
+
+    @Bean
+    @ConfigurationPropertiesBinding
+    public Converter<String, MemindAiProperties.AiProvider> memindAiProviderConverter() {
+        return new MemindAiProperties.AiProviderConverter();
+    }
 
     @Bean
     @ConditionalOnMissingBean
