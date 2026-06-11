@@ -99,56 +99,131 @@ For deeper architecture, configuration, rawdata plugins, MCP tools, SDKs, and ag
 
 ## Quick Start
 
-The fastest way to try Memind is Docker Compose. It starts the local
-`memind-server` API together with the React admin UI without requiring Java,
-Maven, Node.js, or pnpm on the host.
+Memind can be started in two ways:
 
-### Prerequisites
+- **Docker Compose (Recommended):** start `memind-server` and the admin UI with one command.
+- **Local development:** run `memind-server` and `memind-ui` directly from source.
+
+### Option 1: Docker Compose (Recommended)
+
+#### Prerequisites
 
 - Docker with the Compose plugin
-- Provider credentials for the chat and embedding models you want to use. The default
-  configuration uses one OpenAI-compatible provider for both chat and embeddings.
+- A model provider key for the chat and embedding models you want to use
 
-### Configure credentials
+#### Configure `.env`
 
-Create a local `.env` file from the example. Docker Compose reads it automatically:
+Create a local `.env` file:
 
 ```bash
 cp .env.example .env
 ```
 
-The example uses `OPENAI_API_KEY=your-api-key` as a startup-safe placeholder. Replace it with a
-real key before running memory extraction, retrieval, or embedding calls.
+For the default setup, edit these values first:
 
-AI configuration has two layers:
+```env
+OPENAI_API_KEY=your-api-key
+OPENAI_BASE_URL=https://openrouter.ai/api
+OPENAI_CHAT_MODEL=openai/gpt-4o-mini
+OPENAI_EMBEDDING_MODEL=openai/text-embedding-3-small
+```
 
-- `spring.ai.*` defines provider defaults and model options, using Spring AI's native property
-  structure where available.
-- `memind.ai.*` defines Memind's named clients, embedding client, and chat-client slot routing.
+The default `openai` client can point to OpenAI or any OpenAI-compatible endpoint by changing
+`OPENAI_BASE_URL` and the model names. OpenRouter, DeepSeek, GLM, SiliconFlow, and similar
+providers can be used through the same `openai` provider path when they expose an
+OpenAI-compatible API.
 
-The default [`application.yml`](./memind-server/src/main/resources/application.yml) defines one
-`openai` chat client and one `openai` embedding client. Both inherit base URL, API key, model, and
-common options from `spring.ai.openai.*`. Unconfigured chat slots automatically fall back to
-`default-client`.
+Model names are provider-specific. The default values use OpenRouter-style model names. If you use
+OpenAI directly, use OpenAI model names such as `gpt-4o-mini` and `text-embedding-3-small`.
 
-Example: route most stages to DeepSeek, Insight generation to DeepSeek Reasoner, group
-classification to GLM, and thread enrichment to Claude:
+#### Start Memind
+
+```bash
+docker compose up -d --build
+```
+
+After the containers start:
+
+- Admin UI: `http://localhost:8080`
+- Server health check: `http://localhost:8366/open/v1/health`
+- Open API base path: `http://localhost:8366/open/v1`
+- Admin API base path: `http://localhost:8366/admin/v1`
+- HTTP MCP endpoint: `http://localhost:8366/mcp`
+
+#### Verify
+
+```bash
+curl http://localhost:8366/open/v1/health
+```
+
+The health endpoint verifies that the server is running. Model credentials are validated when
+Memind performs extraction, retrieval, embedding, or rerank calls.
+
+The UI container proxies `/open/*` and `/admin/*` to `memind-server`, so the browser can use the
+UI as a same-origin local admin console.
+
+#### Common commands
+
+```bash
+# View logs
+docker compose logs -f memind-server
+docker compose logs -f memind-ui
+
+# Stop containers but keep persisted memory data
+docker compose down
+
+# Stop containers and remove persisted memory data
+docker compose down -v
+```
+
+By default, `memind-server` stores SQLite data and the fallback file vector store in the Docker
+volume `memind-data`, mounted at `/app/data` inside the container.
+
+The Compose setup is intended for local development and inspection. The admin UI has no built-in
+authentication, so do not expose it directly to public networks.
+
+<details>
+<summary>Advanced: configure model routing</summary>
+
+Memind has two AI configuration layers:
+
+| Layer | Purpose |
+|-------|---------|
+| `spring.ai.*` | Provider defaults, API keys, base URLs, and model options |
+| `memind.ai.*` | Named chat/embedding clients and slot routing inside the memory pipeline |
+
+The default server configuration defines one chat client and one embedding client:
 
 ```yaml
-spring:
+memind:
   ai:
-    openai:
-      base-url: ${OPENAI_BASE_URL:https://openrouter.ai/api}
-      api-key: ${OPENAI_API_KEY:your-api-key}
-      chat:
-        options:
-          model: ${OPENAI_CHAT_MODEL:openai/gpt-4o-mini}
-      embedding:
-        base-url: ${EMBEDDING_BASE_URL:${OPENAI_BASE_URL:https://openrouter.ai/api}}
-        api-key: ${EMBEDDING_API_KEY:${OPENAI_API_KEY:your-api-key}}
-        options:
-          model: ${OPENAI_EMBEDDING_MODEL:openai/text-embedding-3-small}
+    chat:
+      default-client: openai
+      clients:
+        openai:
+          provider: openai
+    embedding:
+      client: openai
+      clients:
+        openai:
+          provider: openai
+```
 
+Supported `memind.ai` providers:
+
+| Usage | Providers |
+|-------|-----------|
+| Chat | `openai`, `anthropic`, `google`, `ollama` |
+| Embedding | `openai`, `google`, `ollama` |
+
+Use `provider: openai` for OpenAI-compatible providers such as DeepSeek, GLM, OpenRouter, or
+SiliconFlow.
+
+For advanced routing, add named clients in
+[`application.yml`](./memind-server/src/main/resources/application.yml), then assign specific
+memory pipeline slots to those clients:
+
+```yaml
 memind:
   ai:
     chat:
@@ -164,11 +239,6 @@ memind:
           base-url: https://api.deepseek.com
           api-key: ${DEEPSEEK_API_KEY}
           model: deepseek-reasoner
-        glm:
-          provider: openai
-          base-url: https://open.bigmodel.cn/api/paas/v4
-          api-key: ${GLM_API_KEY}
-          model: glm-4.5
         claude:
           provider: anthropic
           api-key: ${ANTHROPIC_API_KEY}
@@ -176,38 +246,62 @@ memind:
       slots:
         ITEM_EXTRACTION: ds
         INSIGHT_GENERATOR: ds_reasoner
-        INSIGHT_GROUP_CLASSIFIER: glm
         THREAD_ENRICHMENT: claude
-    embedding:
-      client: embedding
-      clients:
-        embedding:
-          provider: openai
-          base-url: https://api.siliconflow.cn/v1
-          api-key: ${SILICONFLOW_API_KEY}
-          model: BAAI/bge-m3
 ```
 
-Supported chat providers are `openai` for OpenAI-compatible endpoints, `anthropic`,
-`gemini`, and `ollama`. Supported embedding providers are `openai`, `gemini`, and `ollama`.
-For full configuration guidance, see [docs.openmemind.com](https://docs.openmemind.com).
+Unconfigured slots automatically use `default-client`.
 
-### Start the stack
+When using Docker Compose, rebuild the image after changing `application.yml`:
 
 ```bash
 docker compose up -d --build
 ```
 
-After the images are built and the containers start:
+Full configuration details are available at [docs.openmemind.com](https://docs.openmemind.com).
 
-- Admin UI: `http://localhost:8080`
+</details>
+
+### Option 2: Local Development
+
+Use this path when you want to develop Memind itself or run the server and UI directly from source.
+
+#### Prerequisites
+
+- Java 21
+- Maven
+- Node.js 20.19+ or 22+
+- pnpm
+- A valid model provider key
+
+#### Start `memind-server`
+
+```bash
+OPENAI_API_KEY=your-key \
+mvn -pl memind-server -am spring-boot:run
+```
+
+The server starts at:
+
 - Server health check: `http://localhost:8366/open/v1/health`
 - Open API base path: `http://localhost:8366/open/v1`
 - Admin API base path: `http://localhost:8366/admin/v1`
 - HTTP MCP endpoint: `http://localhost:8366/mcp`
 
-The UI container proxies `/open/*` and `/admin/*` to `memind-server`, so the browser can use
-the UI as a same-origin local admin console.
+#### Start `memind-ui`
+
+In another terminal:
+
+```bash
+cd memind-ui
+pnpm install
+pnpm dev
+```
+
+The Vite dev server starts at `http://localhost:5173` and proxies `/admin/*` requests to
+`memind-server` on port `8366`.
+
+For Java runtime examples, SDK usage, and additional runnable scenarios, see the
+[Examples](#examples) section.
 
 <a id="mcp-server"></a>
 
@@ -260,50 +354,6 @@ Memind provides first-party integrations for popular agents:
   OpenClaw agent activity ingestion as `agent_timeline` raw data.
 - [`Hermes`](./memind-integrations/hermes): a native Hermes memory provider that retrieves
   relevant context before turns and captures completed Hermes activity after responses.
-
-### Common commands
-
-```bash
-# View logs
-docker compose logs -f memind-server
-docker compose logs -f memind-ui
-
-# Stop containers but keep persisted memory data
-docker compose down
-
-# Stop containers and remove persisted memory data
-docker compose down -v
-```
-
-By default, `memind-server` stores SQLite data and the fallback file vector store in the
-named Docker volume `memind-data`, mounted at `/app/data` inside the container. The Compose
-setup is intended for local development and inspection; the admin UI has no authentication,
-so do not expose it directly to public networks.
-
-### Java quickstart example
-
-If you prefer to run from source, use the default **pure Java + OpenAI + SQLite** path.
-
-#### Java prerequisites
-
-- Java 21
-- Maven
-- `OPENAI_API_KEY`
-
-#### Run the quickstart example
-
-Clone the repository, set your API key, and run the maintained Java quickstart example:
-
-```bash
-git clone https://github.com/openmemind/memind.git
-cd memind
-OPENAI_API_KEY=your-key \
-mvn -pl memind-examples/memind-example-java -am -DskipTests exec:java \
-  -Dexec.mainClass=com.openmemind.ai.memory.example.java.quickstart.QuickStartExample
-```
-
-This gives you the fastest path to a working end-to-end setup. For additional runnable scenarios,
-see the [Examples](#examples) section.
 
 ### Embed Memind in your app
 
