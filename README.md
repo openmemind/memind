@@ -40,8 +40,7 @@
 <p align="center">
   <a href="#highlights">Highlights</a> ·
   <a href="#quick-start">Quick Start</a> ·
-  <a href="#mcp-server">MCP Server</a> ·
-  <a href="#agent-integrations">Agent Integrations</a> ·
+  <a href="#integrations">Integrations</a> ·
   <a href="#benchmark">Benchmark</a>
 </p>
 
@@ -303,9 +302,64 @@ The Vite dev server starts at `http://localhost:5173` and proxies `/admin/*` req
 For Java runtime examples, SDK usage, and additional runnable scenarios, see the
 [Examples](#examples) section.
 
+<a id="integrations"></a>
+
+## Integrations
+
+Memind can be integrated through first-party agent plugins, SDKs, REST APIs, or the built-in HTTP MCP server.
+Choose the path that matches where your AI system runs.
+
+<a id="agent-integrations"></a>
+
+### Connect Memind to Any Agent
+
+Use first-party integrations when you want Memind to automatically recall context, inject memory,
+and capture agent activity across sessions.
+
+Memind provides official integrations for popular agents:
+
+- [`Claude Code`](./memind-integrations/claude-code): persistent project memory, session-start continuity context, tool-aware context injection, and coding-agent timeline ingestion.
+- [`Codex`](./memind-integrations/codex): persistent project memory, prompt/tool context injection, retry-backed timeline ingestion, and source tagging for Codex sessions.
+- [`OpenClaw`](./memind-integrations/openclaw): prompt-time Memind recall plus completed OpenClaw agent activity ingestion as `agent_timeline` raw data.
+- [`Hermes`](./memind-integrations/hermes): a native Hermes memory provider that retrieves relevant context before turns and captures completed Hermes activity after responses.
+
+<a id="official-api-clients"></a>
+
+### SDKs and REST APIs
+
+Use SDKs and REST APIs when you want to connect Memind to an application, backend service, chatbot, workflow system, or custom agent.
+
+Open API base path:
+
+```text
+http://localhost:8366/open/v1
+```
+
+Official API clients:
+
+- TypeScript: [`memind-clients/typescript`](./memind-clients/typescript)
+- Python: [`memind-clients/python`](./memind-clients/python)
+- Java: [`memind-clients/java`](./memind-clients/java)
+- Go: [`github.com/openmemind/memind/memind-clients/go`](./memind-clients/go)
+- Rust: [`memind-clients/rust`](./memind-clients/rust)
+
+Use REST or SDK clients when your system already runs its own application process and wants Memind as a memory service.
+
+### Open API ingestion semantics
+
+The default ingestion endpoints (`/open/v1/memory/extract`, `/open/v1/memory/add-message`, and `/open/v1/memory/commit`) are
+fire-and-forget: a successful HTTP response means Memind accepted and dispatched the work, not that extraction
+completed. Retry-aware clients should use `/open/v1/memory/sync/extract` with a caller-owned raw-content payload
+and clear their local retry state only when the returned extraction status is `SUCCESS`.
+
+`/open/v1/memory/sync/add-message` and `/open/v1/memory/sync/commit` report immediate server-buffer success or
+failure, but they are not durable replay boundaries because the server owns the buffered conversation state.
+
 <a id="mcp-server"></a>
 
-### HTTP MCP server
+### HTTP MCP Server
+
+Use MCP when your agent supports Model Context Protocol and should call Memind as a tool server.
 
 `memind-server` includes a stateless HTTP MCP server at `/mcp`, enabled by default. It exposes
 Memind memory tools for MCP-compatible agents and uses the same runtime, database, configuration,
@@ -320,8 +374,7 @@ claude mcp add --transport http memind http://localhost:8366/mcp
 Default MCP tools:
 
 - Retrieval and context: `memind_compile_context`, `memind_retrieve`, `memind_recent`.
-- Write flows: `memind_extract_text`, `memind_extract_rawdata`, `memind_add_message`,
-  `memind_commit`.
+- Write flows: `memind_extract_text`, `memind_extract_rawdata`, `memind_add_message`, `memind_commit`.
 - Memory item inspection: `memind_items_search`, `memind_items_get`, `memind_items_sources`.
 - Rawdata inspection: `memind_rawdata_search`, `memind_rawdata_get`.
 
@@ -339,23 +392,9 @@ To disable the MCP endpoint, set `MEMIND_MCP_ENABLED=false` before starting `mem
 Do not expose `/mcp` directly to public networks without an authentication gateway or equivalent
 network controls. MCP tools can read and write scoped memory.
 
-<a id="agent-integrations"></a>
+---
 
-### Agent integrations
-
-Memind provides first-party integrations for popular agents:
-
-- [`Claude Code`](./memind-integrations/claude-code): persistent project memory,
-  session-start continuity context, tool-aware context injection, and coding-agent timeline
-  ingestion.
-- [`Codex`](./memind-integrations/codex): persistent project memory, prompt/tool context
-  injection, retry-backed timeline ingestion, and source tagging for Codex sessions.
-- [`OpenClaw`](./memind-integrations/openclaw): prompt-time Memind recall plus completed
-  OpenClaw agent activity ingestion as `agent_timeline` raw data.
-- [`Hermes`](./memind-integrations/hermes): a native Hermes memory provider that retrieves
-  relevant context before turns and captures completed Hermes activity after responses.
-
-### Embed Memind in your app
+## Embed Memind in Your App
 
 Import the memind BOM first, then add the core runtime, the Spring AI plugin, and one JDBC
 dialect plugin. For the default SQLite setup:
@@ -454,25 +493,6 @@ For a runnable version with centralized configuration defaults, start with
 and the maintained examples under
 [`memind-examples/memind-example-java`](./memind-examples/memind-example-java).
 
-### Open API ingestion semantics
-
-The default ingestion endpoints (`/open/v1/memory/extract`, `/open/v1/memory/add-message`, and `/open/v1/memory/commit`) are
-fire-and-forget: a successful HTTP response means Memind accepted and dispatched the work, not that extraction
-completed. Retry-aware clients should use `/open/v1/memory/sync/extract` with a caller-owned raw-content payload
-and clear their local retry state only when the returned extraction status is `SUCCESS`.
-
-`/open/v1/memory/sync/add-message` and `/open/v1/memory/sync/commit` report immediate server-buffer success or
-failure, but they are not durable replay boundaries because the server owns the buffered conversation state.
-
-<a id="official-api-clients"></a>
-
-Official API clients:
-
-- TypeScript: [`memind-clients/typescript`](./memind-clients/typescript)
-- Python: [`memind-clients/python`](./memind-clients/python)
-- Java: [`memind-clients/java`](./memind-clients/java)
-- Go: [`github.com/openmemind/memind/memind-clients/go`](./memind-clients/go)
-- Rust: [`memind-clients/rust`](./memind-clients/rust)
 
 ---
 
