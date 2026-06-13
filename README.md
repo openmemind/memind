@@ -98,10 +98,11 @@ For deeper architecture, configuration, rawdata plugins, MCP tools, SDKs, and ag
 
 ## Quick Start
 
-Memind can be started in two ways:
+Choose the path that matches how you want to use Memind:
 
 - **Docker Compose (Recommended):** start `memind-server` and the admin UI with one command.
 - **Local development:** run `memind-server` and `memind-ui` directly from source.
+- **Embedded Java runtime:** run Memind inside your own Java or Spring Boot application.
 
 ### Option 1: Docker Compose (Recommended)
 
@@ -299,8 +300,99 @@ pnpm dev
 The Vite dev server starts at `http://localhost:5173` and proxies `/admin/*` requests to
 `memind-server` on port `8366`.
 
-For Java runtime examples, SDK usage, and additional runnable scenarios, see the
-[Examples](#examples) section.
+### Option 3: Embedded Java Runtime
+
+Use this path when you want Memind as an in-process Java memory engine instead of calling a separate
+`memind-server`.
+
+| Runtime style | Best for |
+|---------------|----------|
+| Spring Boot starter | Using Spring configuration and auto-configured AI/JDBC beans in a Boot application |
+| Plain Java | Full control over `Memory.builder()`, model clients, storage, vector search, and runtime options |
+
+#### Add dependencies
+
+Import the Memind BOM first, then add the core runtime, the Spring AI plugin, and one JDBC dialect
+plugin.
+
+The dependency snippet below shows the plain-Java path. For Spring Boot, use
+`memind-plugin-ai-spring-ai-starter`, `memind-plugin-jdbc-starter`, and Spring configuration.
+
+For the default SQLite setup:
+
+```xml
+<dependencyManagement>
+  <dependencies>
+    <dependency>
+      <groupId>com.openmemind.ai</groupId>
+      <artifactId>memind-dependencies</artifactId>
+      <version>0.2.0</version>
+      <type>pom</type>
+      <scope>import</scope>
+    </dependency>
+  </dependencies>
+</dependencyManagement>
+
+<dependencies>
+  <dependency>
+    <groupId>com.openmemind.ai</groupId>
+    <artifactId>memind-core</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>com.openmemind.ai</groupId>
+    <artifactId>memind-plugin-ai-spring-ai</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>com.openmemind.ai</groupId>
+    <artifactId>memind-plugin-jdbc-sqlite</artifactId>
+  </dependency>
+</dependencies>
+```
+
+If you use MySQL or PostgreSQL, replace `memind-plugin-jdbc-sqlite` with
+`memind-plugin-jdbc-mysql` or `memind-plugin-jdbc-postgresql`.
+
+#### Minimal usage
+
+Once the `Memory` runtime is assembled, the core API is small:
+
+```java
+var memoryId = DefaultMemoryId.of("user-1", "my-agent");
+
+// messages = your conversation history
+memory.addMessages(memoryId, messages).block();
+
+var retrieval = memory.retrieve(
+        memoryId,
+        "What does the user prefer?",
+        RetrievalConfig.Strategy.SIMPLE).block();
+```
+
+For a complete plain-Java runtime assembly with centralized defaults, start with
+[`ExampleSettings.java`](./memind-examples/memind-example-java/src/main/java/com/openmemind/ai/memory/example/java/support/ExampleSettings.java).
+
+#### Full runnable Java examples
+
+The maintained Java examples live in
+[`memind-examples/memind-example-java`](./memind-examples/memind-example-java).
+
+| Example | What it shows |
+|---------|---------------|
+| `quickstart` | Basic `addMessages` and retrieval flow |
+| `agent` | Agent-scoped memory, reusable task experience, and agent retrieval |
+| `insight` | Multi-batch extraction and Insight Tree retrieval |
+| `document` | Document rawdata ingestion and searchable document memory |
+| `foresight` | Foresight extraction and forward-looking context retrieval |
+| `tool` | Tool-call reporting, tool memory, and tool statistics |
+
+Run the default quickstart example:
+
+```bash
+OPENAI_API_KEY=your-key \
+mvn -pl memind-examples/memind-example-java -am -DskipTests \
+  -Dexec.mainClass=com.openmemind.ai.memory.example.java.quickstart.QuickStartExample \
+  exec:java
+```
 
 <a id="integrations"></a>
 
@@ -391,135 +483,6 @@ To disable the MCP endpoint, set `MEMIND_MCP_ENABLED=false` before starting `mem
 
 Do not expose `/mcp` directly to public networks without an authentication gateway or equivalent
 network controls. MCP tools can read and write scoped memory.
-
----
-
-## Embed Memind in Your App
-
-Import the memind BOM first, then add the core runtime, the Spring AI plugin, and one JDBC
-dialect plugin. For the default SQLite setup:
-
-```xml
-<dependencyManagement>
-  <dependencies>
-    <dependency>
-      <groupId>com.openmemind.ai</groupId>
-      <artifactId>memind-dependencies</artifactId>
-      <version>0.2.0</version>
-      <type>pom</type>
-      <scope>import</scope>
-    </dependency>
-  </dependencies>
-</dependencyManagement>
-
-<dependencies>
-  <dependency>
-    <groupId>com.openmemind.ai</groupId>
-    <artifactId>memind-core</artifactId>
-  </dependency>
-  <dependency>
-    <groupId>com.openmemind.ai</groupId>
-    <artifactId>memind-plugin-ai-spring-ai</artifactId>
-  </dependency>
-  <dependency>
-    <groupId>com.openmemind.ai</groupId>
-    <artifactId>memind-plugin-jdbc-sqlite</artifactId>
-  </dependency>
-</dependencies>
-```
-
-If you use MySQL or PostgreSQL instead, replace the SQLite module with
-`memind-plugin-jdbc-mysql` or `memind-plugin-jdbc-postgresql`, then use the matching factory.
-The factories create a `HikariDataSource` directly for plain Java usage. In Spring Boot, use
-`memind-plugin-jdbc-starter` and configure `spring.datasource.*` plus optional
-`spring.datasource.hikari.*`; Boot creates the `HikariDataSource` and the starter consumes it.
-
-Outside Spring Boot, assemble the runtime objects directly and pass them into
-`Memory.builder()`:
-
-```java
-OpenAiApi openAiApi = OpenAiApi.builder()
-        .apiKey(System.getenv("OPENAI_API_KEY"))
-        .baseUrl(System.getenv().getOrDefault("OPENAI_BASE_URL", "https://api.openai.com"))
-        .build();
-
-OpenAiChatModel chatModel = OpenAiChatModel.builder()
-        .openAiApi(openAiApi)
-        .defaultOptions(OpenAiChatOptions.builder().model("gpt-4o-mini").build())
-        .observationRegistry(ObservationRegistry.NOOP)
-        .build();
-
-EmbeddingModel embeddingModel = new OpenAiEmbeddingModel(
-        openAiApi,
-        MetadataMode.NONE,
-        OpenAiEmbeddingOptions.builder().model("text-embedding-3-small").build());
-
-JdbcMemoryAccess jdbc = SqliteJdbcPlugin.create("./data/memind.db");
-
-Memory memory = Memory.builder()
-        .chatClient(new SpringAiStructuredChatClient(ChatClient.builder(chatModel).build()))
-        .store(jdbc.store())
-        .buffer(jdbc.buffer())
-        .textSearch(jdbc.textSearch())
-        .bubbleTrackerStore(jdbc.bubbleTrackerStore())
-        .vector(SpringAiFileVector.file("./data/vector-store.json", embeddingModel))
-        .options(MemoryBuildOptions.builder()
-                .extraction(new ExtractionOptions(
-                        ExtractionCommonOptions.defaults(),
-                        RawDataExtractionOptions.defaults(),
-                        ItemExtractionOptions.defaults(),
-                        new InsightExtractionOptions(true, new InsightBuildConfig(2, 2, 8, 2))))
-                .retrieval(RetrievalOptions.defaults())
-                .build())
-        .build();
-```
-
-Once the runtime is assembled, use it like this:
-
-```java
-var memoryId = DefaultMemoryId.of("user-1", "my-agent");
-
-// messages = your conversation history
-memory.addMessages(memoryId, messages).block();
-
-var retrieval = memory.retrieve(
-        memoryId,
-        "What does the user prefer?",
-        RetrievalConfig.Strategy.SIMPLE).block();
-```
-
-For a runnable version with centralized configuration defaults, start with
-[`ExampleSettings.java`](./memind-examples/memind-example-java/src/main/java/com/openmemind/ai/memory/example/java/support/ExampleSettings.java)
-and the maintained examples under
-[`memind-examples/memind-example-java`](./memind-examples/memind-example-java).
-
-
----
-
-## Examples
-
-The maintained Java examples live in
-[`memind-examples/memind-example-java`](./memind-examples/memind-example-java).
-
-Available scenarios:
-
-- `quickstart`: basic `addMessages` + `retrieve`
-- `agent`: agent-only extraction, insight flushing, and agent-scoped retrieval
-- `insight`: multi-batch extraction with deeper synthesized retrieval
-- `foresight`: foresight extraction and retrieval
-- `tool`: tool call reporting and tool statistics
-
-Run the default quickstart example:
-
-```bash
-OPENAI_API_KEY=your-key \
-mvn -pl memind-examples/memind-example-java -am -DskipTests \
-  -Dexec.mainClass=com.openmemind.ai.memory.example.java.quickstart.QuickStartExample \
-  exec:java
-```
-
-For full setup, configuration knobs, and runtime data details, see
-[`ExampleSettings.java`](./memind-examples/memind-example-java/src/main/java/com/openmemind/ai/memory/example/java/support/ExampleSettings.java).
 
 ---
 
