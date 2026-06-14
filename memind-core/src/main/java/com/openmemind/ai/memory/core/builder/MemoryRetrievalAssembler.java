@@ -49,6 +49,7 @@ import com.openmemind.ai.memory.core.retrieval.tier.InsightTypeRouter;
 import com.openmemind.ai.memory.core.retrieval.tier.ItemTierRetriever;
 import com.openmemind.ai.memory.core.retrieval.tier.ItemTierSearch;
 import com.openmemind.ai.memory.core.retrieval.tier.LlmInsightTypeRouter;
+import com.openmemind.ai.memory.core.retrieval.tier.NoOpInsightTypeRouter;
 import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.tracing.NoopMemoryObserver;
 import com.openmemind.ai.memory.core.tracing.decorator.TracingGraphItemChannel;
@@ -64,9 +65,11 @@ final class MemoryRetrievalAssembler {
     DefaultMemoryRetriever assemble(MemoryAssemblyContext context) {
         ChatClientRegistry registry = context.chatClientRegistry();
         InsightTypeRouter insightTypeRouter =
-                new LlmInsightTypeRouter(
-                        registry.resolve(ChatClientSlot.INSIGHT_TYPE_ROUTER),
-                        context.promptRegistry());
+                Boolean.parseBoolean(System.getenv("LLM_INSIGHT_DISABLED"))
+                        ? NoOpInsightTypeRouter.INSTANCE
+                        : new LlmInsightTypeRouter(
+                                registry.resolve(ChatClientSlot.INSIGHT_TYPE_ROUTER),
+                                context.promptRegistry());
         InsightTierSearch insightTierRetriever =
                 tracingInsightTierRetriever(
                         new InsightTierRetriever(
