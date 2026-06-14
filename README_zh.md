@@ -485,34 +485,46 @@ claude mcp add --transport http memind http://localhost:8366/mcp
 
 ## 基准测试
 
-Memind 在三项长记忆 benchmark 上进行了评测：**LoCoMo**、**LongMemEval** 和 **PersonaMem**。
+Memind 在三项主流长记忆 benchmark 上进行了评测：**LoCoMo**、**LongMemEval** 和 **PersonaMem**。
 
-**评测协议：** 回答结果使用 **GPT-4o-mini**，并按照 **MemOS** 与 **EverMemOS** 所采用的 **LLM-as-a-Judge** 方式进行评估。
+**评测协议：** 回答结果使用 **GPT-4o-mini**，并按照 **MemOS** 与 **EverMemOS** 所采用的 **LLM-as-a-Judge** 方式进行评估。基线结果在条件允许时采用对齐设置下的复现结果或公开结果。
 
-基线结果在条件允许时采用对齐设置下的复现结果或公开结果。
+### 总览
 
-### LoCoMo
+| Benchmark | 评测重点 | Memind 结果 | 排名 | 最强已列出基线 | Context Tokens |
+|-----------|----------|------------:|------|----------------|---------------:|
+| LoCoMo | 多轮多会话对话记忆 | **86.88%** | **#1** | EverMemOS 86.76% | 1616.68 |
+| LongMemEval | 长期 assistant memory | **84.20%** | **#1** | EverMemOS 83.00% | 1615.11 |
+| PersonaMem | 用户画像与偏好记忆 | **67.91%** | **#1** | MemOS 61.17% | 1665.33 |
+
+在对齐 **MemOS / EverMemOS** 风格的评测口径下，Memind 在三项 benchmark 的已列出基线中均排名 **#1**，同时保持了适合生产 Agent 工作流的上下文召回规模。
+
+Memind 行中的括号表示相对同一指标列里最强非 Memind 分数的变化。Context Tokens 表示每个已回答问题平均召回的上下文 Token 数。
+
+### 详细结果
+
+#### LoCoMo
 
 | Model | Single Hop | Multi Hop | Temporal | Open Domain | Overall | Context Tokens |
 |-------|-----------:|----------:|---------:|------------:|--------:|---------------:|
-| MIRIX | 68.22% | 54.26% | 68.54% | 46.88% | 64.33% | — |
+| MIRIX | 68.22% | 54.26% | 68.54% | 46.88% | 64.33% | - |
 | Mem0 | 73.33% | 58.75% | 52.34% | 45.83% | 64.57% | 1.17k |
 | Zep | 66.23% | 52.12% | 54.82% | 33.33% | 59.22% | 2.7k |
 | MemoBase | 73.12% | 64.65% | 81.20% | 53.12% | 72.01% | 2102 |
 | Supermemory | 67.30% | 51.12% | 31.77% | 42.67% | 55.34% | 500 |
 | MemU | 66.34% | 63.12% | 27.10% | 50.00% | 56.55% | 617 |
 | MemOS | 81.09% | 67.49% | 75.18% | 55.90% | 75.80% | 2640 |
-| ReMe | 89.89% | 82.98% | 83.80% | 71.88% | 86.23% | — |
+| ReMe | 89.89% | 82.98% | 83.80% | 71.88% | 86.23% | - |
 | EverMemOS | 91.08% | 86.17% | 81.93% | 66.67% | 86.76% | 2.5k |
-| **Memind** | **91.56% (+0.48%)** | **83.33% (-2.84%)** | **82.24% (+0.31%)** | **71.88% (+5.21%)** | **86.88% (+0.12%)** | **1616.68** |
+| **Memind** | **91.56% (+0.48%)** | **83.33% (-2.84%)** | **82.24% (-1.56%)** | **71.88% (+0.00%)** | **86.88% (+0.12%)** | **1616.68** |
 
-> 在这组对比中，Memind 拿到了最高的 LoCoMo 总分，整体比最强基线高 **0.12%**，其中 open-domain QA 提升 **5.21%**，每题平均消耗 **1616.68** 个上下文 Token。
+**结论：** Memind 在这组对比中取得了最高 LoCoMo 总分，open-domain QA 表现突出，并且 Context Tokens 低于 EverMemOS。
 
-### LongMemEval
+#### LongMemEval
 
 | Model | single-session-preference | single-session-assistant | temporal-reasoning | multi-session | knowledge-update | single-session-user | overall | Context Tokens |
-|-------|--------------------------:|-------------------------:|-------------------:|--------------:|-----------------:|--------------------:|--------:|---------------------:|
-| MIRIX | 53.33% | 63.63% | 25.56% | 30.07% | 52.56% | 72.85% | 43.49% | — |
+|-------|--------------------------:|-------------------------:|-------------------:|--------------:|-----------------:|--------------------:|--------:|---------------:|
+| MIRIX | 53.33% | 63.63% | 25.56% | 30.07% | 52.56% | 72.85% | 43.49% | - |
 | Mem0 | 90.00% | 26.78% | 72.18% | 63.15% | 66.67% | 82.86% | 66.40% | 1066 |
 | Zep | 53.30% | 75.00% | 54.10% | 47.40% | 74.40% | 92.90% | 63.80% | 1.6k |
 | MemoBase | 80.00% | 23.21% | 75.93% | 66.91% | 89.74% | 92.85% | 72.40% | 1541 |
@@ -522,20 +534,20 @@ Memind 在三项长记忆 benchmark 上进行了评测：**LoCoMo**、**LongMemE
 | EverMemOS | 93.33% | 85.71% | 77.44% | 73.68% | 89.74% | 97.14% | 83.00% | 2.8k |
 | **Memind** | **95.56% (-1.11%)** | **87.50% (+1.79%)** | **79.45% (+2.01%)** | **77.44% (+3.76%)** | **88.46% (-1.28%)** | **93.81% (-3.33%)** | **84.20% (+1.20%)** | **1615.11** |
 
-> 在这组对比中，Memind 拿到了最高的 LongMemEval 总分，整体比最强基线高 **1.20%**；其中提升最明显的是 **multi-session (+3.76%)** 和 **temporal-reasoning (+2.01%)**，每题平均消耗 **1615.11** 个上下文 Token。
+**结论：** Memind 在这组对比中取得了最高 LongMemEval 总分，其中 multi-session 和 temporal-reasoning 两类任务提升最明显。
 
-### PersonaMem
+#### PersonaMem
 
 | Model | 4-Option Accuracy | Context Tokens |
-|-------|------------------:|---------------------:|
-| MIRIX | 38.30% | — |
+|-------|------------------:|---------------:|
+| MIRIX | 38.30% | - |
 | Mem0 | 43.12% | 140 |
 | Zep | 57.83% | 1657 |
 | MemoBase | 58.89% | 2092 |
 | MemU | 56.83% | 496 |
 | Supermemory | 53.88% | 204 |
 | MemOS | 61.17% | 1423.93 |
-| **Memind** | **67.91%** | **2665.33** |
+| **Memind** | **67.91% (+6.74%)** | **1665.33** |
 
 #### Memind 在 PersonaMem 上的分项结果
 
@@ -549,15 +561,14 @@ Memind 在三项长记忆 benchmark 上进行了评测：**LoCoMo**、**LongMemE
 | suggest_new_ideas | 38.71% | 36 / 93 |
 | track_full_preference_evolution | 60.43% | 84 / 139 |
 
-> 在这组对比中，Memind 拿到了最高的 PersonaMem 成绩，在 preference-aligned recommendations、user-shared facts recall 和对历史更新原因的推理上表现尤其突出，同时每题平均消耗 **2665.33** 个上下文 Token。
+**结论：** Memind 在这组对比中取得了最高 PersonaMem 成绩，在 preference-aligned recommendations、user-shared facts recall 和对历史更新原因的推理上表现尤其突出。
 
-### 如何复现这些 benchmark
+<details>
+<summary>复现 benchmark 结果</summary>
 
-如果你想复现这里展示的 benchmark 结果，可以使用仓库中的 `memind-evaluation` 模块。
+### 1. 先准备数据集
 
-#### 1. 先准备数据集
-
-这些 benchmark 的原始数据集 **不随仓库一起分发**。请先下载，并按下面的默认路径放好文件。若使用默认路径，后续命令无需额外指定数据集路径。
+这些 benchmark 的原始数据集 **不随仓库一起分发**。请先下载，并按下面的默认路径放好文件。
 
 | Benchmark | 下载地址 | 默认本地路径 |
 |-----------|----------|--------------|
@@ -567,13 +578,7 @@ Memind 在三项长记忆 benchmark 上进行了评测：**LoCoMo**、**LongMemE
 
 LongMemEval 和 PersonaMem 会在运行时自动转换为内部评测格式。
 
-如果你希望使用自定义路径，可以通过以下参数覆盖：
-
-- `--evaluation.datasets.locomo.path=...`
-- `--evaluation.datasets.longmemeval.path=...`
-- `--evaluation.datasets.personamem.path=...`
-
-#### 2. 导出环境变量
+### 2. 导出环境变量
 
 ```bash
 export OPENAI_API_KEY=your-key
@@ -584,7 +589,6 @@ export EMBEDDING_API_KEY=your-key
 export EMBEDDING_BASE_URL=your-base-url
 export OPENAI_EMBEDDING_MODEL=openai/text-embedding-3-small
 
-# 如果你想尽量对齐 README 中的已发布结果，建议同时配置 rerank
 export RERANK_BASE_URL=your-rerank-base-url
 export RERANK_API_KEY=your-rerank-key
 export RERANK_MODEL=jina-reranker-v3
@@ -592,28 +596,23 @@ export RERANK_MODEL=jina-reranker-v3
 
 如果你只是想先跑通最小链路，可以在下面的命令后面追加 `--evaluation.system.memind.retrieval.rerank.enabled=false`。这适合做 dry run，但不会与 README 中展示的结果完全一致。
 
-#### 3. 运行完整 benchmark
-
-`application.yml` 默认阶段是 `search,answer,evaluate`。如果你要从头完整复现，请显式指定全流程：`add,search,answer,evaluate`。
+### 3. 运行完整 benchmark
 
 ```bash
-# LoCoMo
 mvn -pl memind-evaluation -am -DskipTests spring-boot:run \
   -Dspring-boot.run.profiles=locomo \
   -Dspring-boot.run.arguments="--evaluation.run-name=locomo-readme --evaluation.stages=add,search,answer,evaluate --evaluation.clean-groups=true"
 
-# LongMemEval
 mvn -pl memind-evaluation -am -DskipTests spring-boot:run \
   -Dspring-boot.run.profiles=longmemeval \
   -Dspring-boot.run.arguments="--evaluation.run-name=longmemeval-readme --evaluation.stages=add,search,answer,evaluate --evaluation.clean-groups=true"
 
-# PersonaMem
 mvn -pl memind-evaluation -am -DskipTests spring-boot:run \
   -Dspring-boot.run.profiles=personamem \
   -Dspring-boot.run.arguments="--evaluation.run-name=personamem-readme --evaluation.stages=add,search,answer,evaluate --evaluation.clean-groups=true"
 ```
 
-#### 4. 先跑一次 smoke check
+### 4. 先跑一次 smoke check
 
 ```bash
 mvn -pl memind-evaluation -am -DskipTests spring-boot:run \
@@ -621,7 +620,7 @@ mvn -pl memind-evaluation -am -DskipTests spring-boot:run \
   -Dspring-boot.run.arguments="--evaluation.run-name=locomo-smoke --evaluation.stages=add,search,answer,evaluate --evaluation.smoke=true --evaluation.from-conv=0 --evaluation.to-conv=1 --evaluation.clean-groups=true"
 ```
 
-#### 5. 查看输出结果
+### 5. 查看输出结果
 
 每次运行都会把产物写到 `eval-data/results/<dataset>-<run-name>/`：
 
@@ -631,6 +630,8 @@ mvn -pl memind-evaluation -am -DskipTests spring-boot:run \
 - `eval_results.json`
 
 如果重复使用同一个 `run-name`，评测会从 checkpoint 恢复。想要重新跑一轮独立实验，请换一个新的 `run-name`。
+
+</details>
 
 ---
 
