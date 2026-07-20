@@ -26,7 +26,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.SimpleVectorStore;
-import org.springframework.ai.vectorstore.SimpleVectorStoreContent;
 import tools.jackson.databind.ObjectWriter;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -66,26 +65,8 @@ public class FileSimpleVectorStore extends SimpleVectorStore {
             return;
         }
 
-        List<String> texts =
-                documents.stream()
-                        .map(doc -> Objects.requireNonNullElse(doc.getText(), ""))
-                        .toList();
-
-        log.info("Batch vectorizing {} documents", texts.size());
-        List<float[]> embeddings = this.embeddingModel.embed(texts);
-
         synchronized (persistLock) {
-            for (int i = 0; i < documents.size(); i++) {
-                Document doc = documents.get(i);
-                var content =
-                        new SimpleVectorStoreContent(
-                                doc.getId(),
-                                Objects.requireNonNullElse(doc.getText(), ""),
-                                doc.getMetadata(),
-                                embeddings.get(i));
-                this.store.put(doc.getId(), content);
-            }
-
+            super.doAdd(documents);
             persistLocked();
         }
     }
