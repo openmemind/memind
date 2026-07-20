@@ -17,12 +17,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.plugin.ai.spring.SpringAiStructuredChatClient;
 import com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.MemindAiProperties.AiProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.anthropic.AnthropicChatModel;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.google.genai.GoogleGenAiChatModel;
+import org.springframework.ai.google.genai.text.GoogleGenAiTextEmbeddingModel;
+import org.springframework.ai.google.genai.text.GoogleGenAiTextEmbeddingOptions;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @DisplayName("Memind AI configuration")
 class MemindAiConfigurationTest {
@@ -89,6 +97,59 @@ class MemindAiConfigurationTest {
                             assertThat(context).hasSingleBean(MemindChatClients.class);
                             assertThat(context.getBean(MemindChatClients.class).defaultClientId())
                                     .isEqualTo("openai");
+                        });
+    }
+
+    @Test
+    @DisplayName("preserves Spring AI Anthropic chat options")
+    void preservesSpringAiAnthropicChatOptions() {
+        contextRunner
+                .withPropertyValues(
+                        "spring.ai.anthropic.api-key=test-key",
+                        "spring.ai.anthropic.chat.model=claude-test",
+                        "spring.ai.anthropic.chat.stop-sequences[0]=HALT",
+                        "memind.ai.chat.default-client=anthropic",
+                        "memind.ai.chat.clients.anthropic.provider=anthropic")
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+
+                            AnthropicChatModel model =
+                                    chatModel(
+                                            context.getBean(MemindChatClients.class)
+                                                    .defaultClient(),
+                                            AnthropicChatModel.class);
+
+                            assertThat(model.getOptions().getStopSequences())
+                                    .containsExactly("HALT");
+                        });
+    }
+
+    @Test
+    @DisplayName("preserves Spring AI Google chat options")
+    void preservesSpringAiGoogleChatOptions() {
+        contextRunner
+                .withPropertyValues(
+                        "spring.ai.google.genai.api-key=test-key",
+                        "spring.ai.google.genai.chat.model=gemini-test",
+                        "spring.ai.google.genai.chat.response-mime-type=application/json",
+                        "spring.ai.google.genai.chat.response-schema={\"type\":\"object\"}",
+                        "memind.ai.chat.default-client=google",
+                        "memind.ai.chat.clients.google.provider=google")
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+
+                            GoogleGenAiChatModel model =
+                                    chatModel(
+                                            context.getBean(MemindChatClients.class)
+                                                    .defaultClient(),
+                                            GoogleGenAiChatModel.class);
+
+                            assertThat(model.getOptions().getResponseMimeType())
+                                    .isEqualTo("application/json");
+                            assertThat(model.getOptions().getResponseSchema())
+                                    .isEqualTo("{\"type\":\"object\"}");
                         });
     }
 
@@ -218,6 +279,32 @@ class MemindAiConfigurationTest {
     }
 
     @Test
+    @DisplayName("preserves Spring AI Google embedding options")
+    void preservesSpringAiGoogleEmbeddingOptions() {
+        vectorContextRunner
+                .withPropertyValues(
+                        "spring.ai.google.genai.embedding.api-key=test-key",
+                        "spring.ai.google.genai.embedding.text.model=text-embedding-test",
+                        "spring.ai.google.genai.embedding.text.task-type=RETRIEVAL_DOCUMENT",
+                        "spring.ai.google.genai.embedding.text.title=Document title",
+                        "memind.ai.embedding.client=google",
+                        "memind.ai.embedding.clients.google.provider=google")
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+
+                            GoogleGenAiTextEmbeddingModel model =
+                                    context.getBean(GoogleGenAiTextEmbeddingModel.class);
+
+                            assertThat(model.options.getTaskType())
+                                    .isEqualTo(
+                                            GoogleGenAiTextEmbeddingOptions.TaskType
+                                                    .RETRIEVAL_DOCUMENT);
+                            assertThat(model.options.getTitle()).isEqualTo("Document title");
+                        });
+    }
+
+    @Test
     @DisplayName("creates OpenAI embedding model from Spring AI defaults")
     void createsOpenAiEmbeddingModelFromSpringAiDefaults() {
         vectorContextRunner
@@ -232,5 +319,17 @@ class MemindAiConfigurationTest {
                             assertThat(context).hasNotFailed();
                             assertThat(context).hasSingleBean(EmbeddingModel.class);
                         });
+    }
+
+    private static <T extends ChatModel> T chatModel(
+            StructuredChatClient structuredChatClient, Class<T> modelType) {
+        assertThat(structuredChatClient).isInstanceOf(SpringAiStructuredChatClient.class);
+        Object chatClient = ReflectionTestUtils.getField(structuredChatClient, "chatClient");
+        assertThat(chatClient).isInstanceOf(ChatClient.class);
+        Object defaultChatClientRequest =
+                ReflectionTestUtils.getField(chatClient, "defaultChatClientRequest");
+        Object chatModel = ReflectionTestUtils.getField(defaultChatClientRequest, "chatModel");
+        assertThat(chatModel).isInstanceOf(modelType);
+        return modelType.cast(chatModel);
     }
 }

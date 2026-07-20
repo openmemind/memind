@@ -15,10 +15,12 @@ package com.openmemind.ai.memory.plugin.ai.spring;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
@@ -42,6 +44,8 @@ public class FileSimpleVectorStore extends SimpleVectorStore {
     private static final ConcurrentHashMap<Path, Object> FILE_LOCKS = new ConcurrentHashMap<>();
     private static final ObjectWriter VECTOR_STORE_WRITER =
             JsonMapper.builder().findAndAddModules().build().writerWithDefaultPrettyPrinter();
+    private static final Constructor<?> SIMPLE_VECTOR_STORE_CONTENT_CONSTRUCTOR =
+            simpleVectorStoreContentConstructor();
 
     private final Path filePath;
     private final Object persistLock;
@@ -61,12 +65,31 @@ public class FileSimpleVectorStore extends SimpleVectorStore {
 
     @Override
     public void doAdd(List<Document> documents) {
+        Objects.requireNonNull(documents, "Documents list cannot be null");
         if (documents.isEmpty()) {
             return;
         }
 
+        List<String> texts =
+                documents.stream()
+                        .map(this.embeddingModel::getEmbeddingContent)
+                        .map(text -> Objects.requireNonNullElse(text, ""))
+                        .toList();
+        List<float[]> embeddings = this.embeddingModel.embed(texts);
+        if (embeddings.size() != documents.size()) {
+            throw new IllegalStateException(
+                    "EmbeddingModel returned "
+                            + embeddings.size()
+                            + " embeddings for "
+                            + documents.size()
+                            + " documents");
+        }
+
         synchronized (persistLock) {
-            super.doAdd(documents);
+            for (int i = 0; i < documents.size(); i++) {
+                Document document = documents.get(i);
+                putStoreContent(document.getId(), newStoreContent(document, embeddings.get(i)));
+            }
             persistLocked();
         }
     }
@@ -133,5 +156,37 @@ public class FileSimpleVectorStore extends SimpleVectorStore {
         } catch (java.nio.file.AtomicMoveNotSupportedException ignored) {
             Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
         }
+    }
+
+    private static Constructor<?> simpleVectorStoreContentConstructor() {
+        try {
+            Class<?> type =
+                    Class.forName("org.springframework.ai.vectorstore.SimpleVectorStoreContent");
+            Constructor<?> constructor =
+                    type.getDeclaredConstructor(
+                            String.class, String.class, Map.class, float[].class);
+            constructor.setAccessible(true);
+            return constructor;
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(
+                    "Spring AI SimpleVectorStoreContent constructor is incompatible", e);
+        }
+    }
+
+    private static Object newStoreContent(Document document, float[] embedding) {
+        try {
+            return SIMPLE_VECTOR_STORE_CONTENT_CONSTRUCTOR.newInstance(
+                    document.getId(),
+                    Objects.requireNonNullElse(document.getText(), ""),
+                    document.getMetadata(),
+                    embedding);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Failed to create Spring AI vector store content", e);
+        }
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void putStoreContent(String id, Object storeContent) {
+        ((Map) this.store).put(id, storeContent);
     }
 }

@@ -13,9 +13,13 @@
  */
 package com.openmemind.ai.memory.plugin.ai.spring.autoconfigure;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
+import org.springframework.ai.anthropic.http.okhttp.AnthropicHttpClientBuilderCustomizer;
+import org.springframework.ai.chat.observation.ChatModelObservationConvention;
+import org.springframework.ai.embedding.observation.EmbeddingModelObservationConvention;
 import org.springframework.ai.model.tool.ToolCallingManager;
-import org.springframework.ai.model.tool.ToolExecutionEligibilityPredicate;
+import org.springframework.ai.openai.http.okhttp.OpenAiHttpClientBuilderCustomizer;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
@@ -24,9 +28,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.env.Environment;
 import org.springframework.core.retry.RetryTemplate;
-import org.springframework.web.client.ResponseErrorHandler;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.reactive.function.client.WebClient;
 
 @AutoConfiguration
 @AutoConfigureBefore({SpringAiLlmAutoConfiguration.class, SpringAiVectorAutoConfiguration.class})
@@ -39,11 +40,13 @@ public class MemindAiClientAutoConfiguration {
             ObjectProvider<RetryTemplate> retryTemplateProvider,
             ObjectProvider<ObservationRegistry> observationRegistryProvider,
             ObjectProvider<ToolCallingManager> toolCallingManagerProvider,
-            ObjectProvider<ToolExecutionEligibilityPredicate>
-                    toolExecutionEligibilityPredicateProvider,
-            ObjectProvider<RestClient.Builder> restClientBuilderProvider,
-            ObjectProvider<WebClient.Builder> webClientBuilderProvider,
-            ObjectProvider<ResponseErrorHandler> responseErrorHandlerProvider,
+            ObjectProvider<MeterRegistry> meterRegistryProvider,
+            ObjectProvider<ChatModelObservationConvention> chatModelObservationConventionProvider,
+            ObjectProvider<EmbeddingModelObservationConvention>
+                    embeddingModelObservationConventionProvider,
+            ObjectProvider<OpenAiHttpClientBuilderCustomizer> openAiHttpClientBuilderCustomizers,
+            ObjectProvider<AnthropicHttpClientBuilderCustomizer>
+                    anthropicHttpClientBuilderCustomizers,
             Environment environment) {
         ObservationRegistry observationRegistry =
                 observationRegistryProvider.getIfAvailable(
@@ -53,13 +56,11 @@ public class MemindAiClientAutoConfiguration {
                 observationRegistry,
                 toolCallingManagerProvider.getIfAvailable(
                         () -> MemindAiClientFactory.defaultToolCallingManager(observationRegistry)),
-                toolExecutionEligibilityPredicateProvider.getIfUnique(),
-                restClientBuilderProvider.getIfAvailable(
-                        MemindAiClientFactory::defaultRestClientBuilder),
-                webClientBuilderProvider.getIfAvailable(
-                        MemindAiClientFactory::defaultWebClientBuilder),
-                responseErrorHandlerProvider.getIfAvailable(
-                        MemindAiClientFactory::defaultResponseErrorHandler),
+                meterRegistryProvider.getIfAvailable(),
+                chatModelObservationConventionProvider.getIfAvailable(),
+                embeddingModelObservationConventionProvider.getIfAvailable(),
+                openAiHttpClientBuilderCustomizers.orderedStream().toList(),
+                anthropicHttpClientBuilderCustomizers.orderedStream().toList(),
                 environment);
     }
 }

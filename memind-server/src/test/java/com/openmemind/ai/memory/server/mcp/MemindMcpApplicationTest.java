@@ -127,25 +127,27 @@ class MemindMcpApplicationTest {
                             spec -> {
                                 var inputSchema = spec.tool().inputSchema();
                                 var toolName = spec.tool().name();
+                                var schemaProperties = schemaProperties(inputSchema);
+                                var requiredFields = schemaRequiredFields(inputSchema);
 
                                 assertThat(requiredFieldsByTool).containsKey(toolName);
                                 var expectedRequiredFields = requiredFieldsByTool.get(toolName);
                                 var expectedOptionalFields = optionalFieldsByTool.get(toolName);
 
-                                assertThat(inputSchema.properties())
+                                assertThat(schemaProperties)
                                         .containsKeys(
                                                 expectedRequiredFields.toArray(String[]::new));
                                 if (!expectedOptionalFields.isEmpty()) {
-                                    assertThat(inputSchema.properties())
+                                    assertThat(schemaProperties)
                                             .containsKeys(
                                                     expectedOptionalFields.toArray(String[]::new));
                                 }
-                                assertThat(inputSchema.properties()).doesNotContainKey("request");
-                                assertThat(inputSchema.required())
+                                assertThat(schemaProperties).doesNotContainKey("request");
+                                assertThat(requiredFields)
                                         .containsExactlyInAnyOrderElementsOf(
                                                 expectedRequiredFields);
                                 if (!expectedOptionalFields.isEmpty()) {
-                                    assertThat(inputSchema.required())
+                                    assertThat(requiredFields)
                                             .doesNotContainAnyElementsOf(expectedOptionalFields);
                                 }
                             });
@@ -375,6 +377,22 @@ class MemindMcpApplicationTest {
                                 "cursor")),
                 entry("memind_recent", List.of("types", "limit", "cursor", "metadataFilter")),
                 entry("memind_retrieve", List.of("strategy", "trace")));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> schemaProperties(Map<String, Object> inputSchema) {
+        Object properties = inputSchema.get("properties");
+        assertThat(properties).isInstanceOf(Map.class);
+        return (Map<String, Object>) properties;
+    }
+
+    private static List<String> schemaRequiredFields(Map<String, Object> inputSchema) {
+        Object required = inputSchema.get("required");
+        if (required == null) {
+            return List.of();
+        }
+        assertThat(required).isInstanceOf(List.class);
+        return ((List<?>) required).stream().map(String.class::cast).toList();
     }
 
     private static void prepareDatabasePath(Path dbPath) {

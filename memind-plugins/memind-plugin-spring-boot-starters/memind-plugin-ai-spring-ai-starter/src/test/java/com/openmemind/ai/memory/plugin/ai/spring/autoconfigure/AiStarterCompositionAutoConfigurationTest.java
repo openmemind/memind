@@ -50,7 +50,14 @@ class AiStarterCompositionAutoConfigurationTest {
                 + "org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration,"
                 + "org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration,"
                 + "org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration,"
-                + "org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration";
+                + "org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration,"
+                + "org.springframework.ai.model.anthropic.autoconfigure.AnthropicChatAutoConfiguration,"
+                + "org.springframework.ai.model.google.genai.autoconfigure.chat."
+                + "GoogleGenAiChatAutoConfiguration,"
+                + "org.springframework.ai.model.google.genai.autoconfigure.embedding."
+                + "GoogleGenAiEmbeddingConnectionAutoConfiguration,"
+                + "org.springframework.ai.model.google.genai.autoconfigure.embedding."
+                + "GoogleGenAiTextEmbeddingAutoConfiguration";
 
     private final ApplicationContextRunner contextRunner =
             new ApplicationContextRunner()
@@ -174,7 +181,14 @@ class AiStarterCompositionAutoConfigurationTest {
                 "org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration",
                 "com.openmemind.ai.memory.plugin.store.mybatis.MemoryMybatisPlusAutoConfiguration",
                 "org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration",
-                "org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration"
+                "org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration",
+                "org.springframework.ai.model.anthropic.autoconfigure.AnthropicChatAutoConfiguration",
+                "org.springframework.ai.model.google.genai.autoconfigure.chat."
+                        + "GoogleGenAiChatAutoConfiguration",
+                "org.springframework.ai.model.google.genai.autoconfigure.embedding."
+                        + "GoogleGenAiEmbeddingConnectionAutoConfiguration",
+                "org.springframework.ai.model.google.genai.autoconfigure.embedding."
+                        + "GoogleGenAiTextEmbeddingAutoConfiguration"
             })
     static class AiStarterApplication {}
 }

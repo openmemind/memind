@@ -38,7 +38,6 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.SearchRequest;
-import org.springframework.ai.vectorstore.SimpleVectorStoreContent;
 
 @DisplayName("FileSimpleVectorStore")
 class FileSimpleVectorStoreTest {
@@ -226,13 +225,14 @@ class FileSimpleVectorStoreTest {
             super(embeddingModel, filePath);
         }
 
+        @SuppressWarnings("unchecked")
         private void installStore(MutationTrackingMap store) {
             this.store = store;
         }
     }
 
-    private static final class MutationTrackingMap
-            extends java.util.concurrent.ConcurrentHashMap<String, SimpleVectorStoreContent> {
+    @SuppressWarnings({"rawtypes", "serial", "unchecked"})
+    private static final class MutationTrackingMap extends java.util.concurrent.ConcurrentHashMap {
 
         private final CountDownLatch serializationStarted = new CountDownLatch(1);
         private final CountDownLatch serializationReleased = new CountDownLatch(1);
@@ -241,7 +241,7 @@ class FileSimpleVectorStoreTest {
         private final AtomicBoolean mutatedDuringSerialization = new AtomicBoolean(false);
 
         @Override
-        public SimpleVectorStoreContent put(String key, SimpleVectorStoreContent value) {
+        public Object put(Object key, Object value) {
             if (serializing.get()) {
                 mutatedDuringSerialization.set(true);
                 concurrentMutation.countDown();
@@ -250,11 +250,11 @@ class FileSimpleVectorStoreTest {
         }
 
         @Override
-        public java.util.Set<Entry<String, SimpleVectorStoreContent>> entrySet() {
+        public java.util.Set entrySet() {
             var delegate = super.entrySet();
             return new AbstractSet<>() {
                 @Override
-                public Iterator<Entry<String, SimpleVectorStoreContent>> iterator() {
+                public Iterator iterator() {
                     var iterator = delegate.iterator();
                     return new Iterator<>() {
                         private boolean started;
@@ -266,7 +266,7 @@ class FileSimpleVectorStoreTest {
                         }
 
                         @Override
-                        public Entry<String, SimpleVectorStoreContent> next() {
+                        public Object next() {
                             blockSerializationOnce();
                             return iterator.next();
                         }

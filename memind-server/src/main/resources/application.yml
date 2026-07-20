@@ -89,7 +89,8 @@ memind:
           provider: openai
       # Optional slot routing. Unconfigured slots use default-client.
       # Add or change entries when some memory pipeline stages should use another client.
-      slots: {}
+      # slots:
+      #   INSIGHT_GENERATOR: openai
     embedding:
       client: openai
       clients:

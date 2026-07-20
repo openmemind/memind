@@ -140,8 +140,7 @@ public class LlmJudgeEvaluator implements AnswerEvaluator {
                                             .options(
                                                     OpenAiChatOptions.builder()
                                                             .model(evalModel)
-                                                            .temperature(0.0)
-                                                            .build())
+                                                            .temperature(0.0))
                                             .call()
                                             .content();
                             return parseLabel(response);

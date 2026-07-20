@@ -18,4 +18,8 @@ public class MemindAiConfigurationException extends IllegalStateException {
     public MemindAiConfigurationException(String message) {
         super(message);
     }
+
+    public MemindAiConfigurationException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }
