@@ -16,29 +16,33 @@ package com.openmemind.ai.memory.plugin.ai.spring.autoconfigure;
 import org.springframework.boot.autoconfigure.condition.ConditionMessage;
 import org.springframework.boot.autoconfigure.condition.ConditionOutcome;
 import org.springframework.boot.autoconfigure.condition.SpringBootCondition;
-import org.springframework.boot.context.properties.bind.Bindable;
-import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.ConditionContext;
 import org.springframework.core.type.AnnotatedTypeMetadata;
+import org.springframework.util.StringUtils;
 
+/**
+ * Matches only when Memind-specific embedding selection is configured.
+ *
+ * <p>Without {@code memind.ai.embedding.default}, Memind does not create the primary
+ * {@code memindEmbeddingModel} alias. The vector auto-configuration therefore uses the default
+ * {@code EmbeddingModel} bean already provided by Spring AI.
+ */
 final class ConfiguredEmbeddingClientsCondition extends SpringBootCondition {
 
     @Override
     public ConditionOutcome getMatchOutcome(
             ConditionContext context, AnnotatedTypeMetadata metadata) {
         boolean configured =
-                Binder.get(context.getEnvironment())
-                        .bind(
-                                "memind.ai.embedding.clients",
-                                Bindable.mapOf(String.class, Object.class))
-                        .map(clients -> !clients.isEmpty())
-                        .orElse(false);
+                StringUtils.hasText(
+                                context.getEnvironment().getProperty("memind.ai.embedding.default"))
+                        || StringUtils.hasText(
+                                context.getEnvironment().getProperty("memind.ai.embedding.client"));
         ConditionMessage message =
-                ConditionMessage.forCondition("configured memind AI embedding clients")
+                ConditionMessage.forCondition("configured memind AI embedding default")
                         .because(
                                 configured
-                                        ? "memind.ai.embedding.clients is configured"
-                                        : "memind.ai.embedding.clients is not configured");
+                                        ? "memind.ai.embedding.default is configured"
+                                        : "memind.ai.embedding.default is not configured");
         return configured ? ConditionOutcome.match(message) : ConditionOutcome.noMatch(message);
     }
 }

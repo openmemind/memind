@@ -14,22 +14,20 @@
 package com.openmemind.ai.memory.plugin.ai.spring.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.plugin.ai.spring.SpringAiStructuredChatClient;
-import com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.MemindAiProperties.AiProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.ai.google.genai.GoogleGenAiChatModel;
-import org.springframework.ai.google.genai.text.GoogleGenAiTextEmbeddingModel;
-import org.springframework.ai.google.genai.text.GoogleGenAiTextEmbeddingOptions;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @DisplayName("Memind AI configuration")
@@ -50,20 +48,14 @@ class MemindAiConfigurationTest {
                                     SpringAiVectorAutoConfiguration.class));
 
     @Test
-    @DisplayName("creates configured chat clients and slot routing")
-    void createsConfiguredChatClientsAndSlotRouting() {
+    @DisplayName("creates configured chat clients and slot routing from Spring AI beans")
+    void createsConfiguredChatClientsAndSlotRoutingFromSpringAiBeans() {
         contextRunner
+                .withUserConfiguration(ChatBeansConfig.class)
                 .withPropertyValues(
-                        "memind.ai.chat.default-client=ds",
-                        "memind.ai.chat.clients.ds.provider=openai",
-                        "memind.ai.chat.clients.ds.base-url=https://api.deepseek.com",
-                        "memind.ai.chat.clients.ds.api-key=test-key",
-                        "memind.ai.chat.clients.ds.model=deepseek-chat",
-                        "memind.ai.chat.clients.ds-reasoner.provider=openai",
-                        "memind.ai.chat.clients.ds-reasoner.base-url=https://api.deepseek.com",
-                        "memind.ai.chat.clients.ds-reasoner.api-key=test-key",
-                        "memind.ai.chat.clients.ds-reasoner.model=deepseek-reasoner",
-                        "memind.ai.chat.slots.INSIGHT_GENERATOR=ds-reasoner")
+                        "memind.ai.chat.default=defaultChatClient",
+                        "memind.ai.chat.slots.ITEM_EXTRACTION=extractionChatClient",
+                        "memind.ai.chat.slots.INSIGHT_GENERATOR=reasoningChatModel")
                 .run(
                         context -> {
                             assertThat(context).hasNotFailed();
@@ -71,265 +63,218 @@ class MemindAiConfigurationTest {
                             assertThat(context).hasSingleBean(StructuredChatClient.class);
 
                             MemindChatClients clients = context.getBean(MemindChatClients.class);
-                            assertThat(clients.defaultClientId()).isEqualTo("ds");
+                            assertThat(clients.defaultClientId()).isEqualTo("defaultChatClient");
                             assertThat(clients.clientIds())
-                                    .containsExactlyInAnyOrder("ds", "ds-reasoner");
+                                    .containsExactlyInAnyOrder(
+                                            "defaultChatClient",
+                                            "extractionChatClient",
+                                            "reasoningChatModel");
                             assertThat(clients.slotClientIds())
-                                    .containsEntry(ChatClientSlot.INSIGHT_GENERATOR, "ds-reasoner");
+                                    .containsEntry(
+                                            ChatClientSlot.ITEM_EXTRACTION, "extractionChatClient")
+                                    .containsEntry(
+                                            ChatClientSlot.INSIGHT_GENERATOR, "reasoningChatModel");
                             assertThat(clients.slotClients())
+                                    .containsKey(ChatClientSlot.ITEM_EXTRACTION)
                                     .containsKey(ChatClientSlot.INSIGHT_GENERATOR);
-                        });
-    }
-
-    @Test
-    @DisplayName("creates OpenAI chat client from Spring AI defaults")
-    void createsOpenAiChatClientFromSpringAiDefaults() {
-        contextRunner
-                .withPropertyValues(
-                        "spring.ai.openai.base-url=https://openrouter.ai/api",
-                        "spring.ai.openai.api-key=test-key",
-                        "spring.ai.openai.chat.options.model=openai/gpt-4o-mini",
-                        "memind.ai.chat.default-client=openai",
-                        "memind.ai.chat.clients.openai.provider=openai")
-                .run(
-                        context -> {
-                            assertThat(context).hasNotFailed();
-                            assertThat(context).hasSingleBean(MemindChatClients.class);
-                            assertThat(context.getBean(MemindChatClients.class).defaultClientId())
-                                    .isEqualTo("openai");
-                        });
-    }
-
-    @Test
-    @DisplayName("preserves Spring AI Anthropic chat options")
-    void preservesSpringAiAnthropicChatOptions() {
-        contextRunner
-                .withPropertyValues(
-                        "spring.ai.anthropic.api-key=test-key",
-                        "spring.ai.anthropic.chat.model=claude-test",
-                        "spring.ai.anthropic.chat.stop-sequences[0]=HALT",
-                        "memind.ai.chat.default-client=anthropic",
-                        "memind.ai.chat.clients.anthropic.provider=anthropic")
-                .run(
-                        context -> {
-                            assertThat(context).hasNotFailed();
-
-                            AnthropicChatModel model =
-                                    chatModel(
-                                            context.getBean(MemindChatClients.class)
-                                                    .defaultClient(),
-                                            AnthropicChatModel.class);
-
-                            assertThat(model.getOptions().getStopSequences())
-                                    .containsExactly("HALT");
-                        });
-    }
-
-    @Test
-    @DisplayName("preserves Spring AI Google chat options")
-    void preservesSpringAiGoogleChatOptions() {
-        contextRunner
-                .withPropertyValues(
-                        "spring.ai.google.genai.api-key=test-key",
-                        "spring.ai.google.genai.chat.model=gemini-test",
-                        "spring.ai.google.genai.chat.response-mime-type=application/json",
-                        "spring.ai.google.genai.chat.response-schema={\"type\":\"object\"}",
-                        "memind.ai.chat.default-client=google",
-                        "memind.ai.chat.clients.google.provider=google")
-                .run(
-                        context -> {
-                            assertThat(context).hasNotFailed();
-
-                            GoogleGenAiChatModel model =
-                                    chatModel(
-                                            context.getBean(MemindChatClients.class)
-                                                    .defaultClient(),
-                                            GoogleGenAiChatModel.class);
-
-                            assertThat(model.getOptions().getResponseMimeType())
-                                    .isEqualTo("application/json");
-                            assertThat(model.getOptions().getResponseSchema())
-                                    .isEqualTo("{\"type\":\"object\"}");
-                        });
-    }
-
-    @Test
-    @DisplayName("binds canonical providers to enum values")
-    void bindsCanonicalProvidersToEnumValues() {
-        contextRunner
-                .withPropertyValues(
-                        "memind.ai.chat.default-client=openai",
-                        "memind.ai.chat.clients.openai.provider=openai",
-                        "memind.ai.chat.clients.openai.base-url=https://api.openai.com",
-                        "memind.ai.chat.clients.openai.api-key=test-key",
-                        "memind.ai.chat.clients.openai.model=gpt-4o-mini",
-                        "memind.ai.chat.clients.anthropic.provider=anthropic",
-                        "memind.ai.chat.clients.google.provider=google",
-                        "memind.ai.chat.clients.ollama.provider=ollama")
-                .run(
-                        context -> {
-                            assertThat(context).hasNotFailed();
-                            MemindAiProperties properties =
-                                    context.getBean(MemindAiProperties.class);
+                            assertThat(chatClient(clients.defaultClient()))
+                                    .isSameAs(context.getBean("defaultChatClient"));
                             assertThat(
-                                            properties
-                                                    .getChat()
-                                                    .getClients()
-                                                    .get("openai")
-                                                    .getProvider())
-                                    .isEqualTo(AiProvider.OPENAI);
-                            assertThat(
-                                            properties
-                                                    .getChat()
-                                                    .getClients()
-                                                    .get("anthropic")
-                                                    .getProvider())
-                                    .isEqualTo(AiProvider.ANTHROPIC);
-                            assertThat(
-                                            properties
-                                                    .getChat()
-                                                    .getClients()
-                                                    .get("google")
-                                                    .getProvider())
-                                    .isEqualTo(AiProvider.GOOGLE);
-                            assertThat(
-                                            properties
-                                                    .getChat()
-                                                    .getClients()
-                                                    .get("ollama")
-                                                    .getProvider())
-                                    .isEqualTo(AiProvider.OLLAMA);
+                                            chatClient(
+                                                    clients.slotClients()
+                                                            .get(ChatClientSlot.ITEM_EXTRACTION)))
+                                    .isSameAs(context.getBean("extractionChatClient"));
                         });
     }
 
     @Test
-    @DisplayName("does not create or validate unreferenced chat clients")
-    void doesNotCreateOrValidateUnreferencedChatClients() {
+    @DisplayName("creates configured chat clients from legacy default-client alias")
+    void createsConfiguredChatClientsFromLegacyDefaultClientAlias() {
         contextRunner
-                .withPropertyValues(
-                        "memind.ai.chat.default-client=ds",
-                        "memind.ai.chat.clients.ds.provider=openai",
-                        "memind.ai.chat.clients.ds.base-url=https://api.deepseek.com",
-                        "memind.ai.chat.clients.ds.api-key=test-key",
-                        "memind.ai.chat.clients.ds.model=deepseek-chat",
-                        "memind.ai.chat.clients.unused.provider=openai")
+                .withUserConfiguration(ChatBeansConfig.class)
+                .withPropertyValues("memind.ai.chat.default-client=defaultChatClient")
                 .run(
                         context -> {
                             assertThat(context).hasNotFailed();
-                            assertThat(context.getBean(MemindChatClients.class).clientIds())
-                                    .containsExactly("ds");
+                            MemindChatClients clients = context.getBean(MemindChatClients.class);
+                            assertThat(clients.defaultClientId()).isEqualTo("defaultChatClient");
+                            assertThat(chatClient(clients.defaultClient()))
+                                    .isSameAs(context.getBean("defaultChatClient"));
                         });
     }
 
     @Test
-    @DisplayName("fails fast when default client is not configured")
-    void failsWhenDefaultClientIsMissing() {
+    @DisplayName("fails clearly when configured default chat bean is missing")
+    void failsWhenConfiguredDefaultChatBeanIsMissing() {
         contextRunner
-                .withPropertyValues(
-                        "memind.ai.chat.default-client=missing",
-                        "memind.ai.chat.clients.ds.provider=openai",
-                        "memind.ai.chat.clients.ds.base-url=https://api.deepseek.com",
-                        "memind.ai.chat.clients.ds.api-key=test-key",
-                        "memind.ai.chat.clients.ds.model=deepseek-chat")
+                .withPropertyValues("memind.ai.chat.default=missingChatClient")
                 .run(
                         context ->
                                 assertThat(context)
                                         .hasFailed()
                                         .getFailure()
                                         .hasMessageContaining(
-                                                "memind.ai.chat.default-client 'missing'"));
+                                                "memind.ai.chat.default references missing Spring"
+                                                        + " AI ChatClient or ChatModel bean"
+                                                        + " 'missingChatClient'"));
     }
 
     @Test
-    @DisplayName("fails fast when a slot references an unknown client")
-    void failsWhenSlotReferencesUnknownClient() {
+    @DisplayName("fails clearly when configured slot chat bean is missing")
+    void failsWhenConfiguredSlotChatBeanIsMissing() {
         contextRunner
+                .withUserConfiguration(ChatBeansConfig.class)
                 .withPropertyValues(
-                        "memind.ai.chat.default-client=ds",
-                        "memind.ai.chat.clients.ds.provider=openai",
-                        "memind.ai.chat.clients.ds.base-url=https://api.deepseek.com",
-                        "memind.ai.chat.clients.ds.api-key=test-key",
-                        "memind.ai.chat.clients.ds.model=deepseek-chat",
-                        "memind.ai.chat.slots.INSIGHT_GENERATOR=missing")
+                        "memind.ai.chat.default=defaultChatClient",
+                        "memind.ai.chat.slots.INSIGHT_GENERATOR=missingChatClient")
                 .run(
                         context ->
                                 assertThat(context)
                                         .hasFailed()
                                         .getFailure()
                                         .hasMessageContaining(
-                                                "memind.ai.chat.slots.INSIGHT_GENERATOR"));
+                                                "memind.ai.chat.slots.INSIGHT_GENERATOR"
+                                                        + " references missing Spring AI"
+                                                        + " ChatClient or ChatModel bean"
+                                                        + " 'missingChatClient'"));
     }
 
     @Test
-    @DisplayName("creates configured embedding model")
-    void createsConfiguredEmbeddingModel() {
+    @DisplayName("fails clearly when configured chat bean has an unsupported type")
+    void failsWhenConfiguredChatBeanHasUnsupportedType() {
+        contextRunner
+                .withUserConfiguration(InvalidChatBeanConfig.class)
+                .withPropertyValues("memind.ai.chat.default=notAChatClient")
+                .run(
+                        context ->
+                                assertThat(context)
+                                        .hasFailed()
+                                        .getFailure()
+                                        .hasMessageContaining(
+                                                "memind.ai.chat.default references bean"
+                                                        + " 'notAChatClient' that is not a Spring"
+                                                        + " AI ChatClient or ChatModel"));
+    }
+
+    @Test
+    @DisplayName("creates configured embedding model from Spring AI bean")
+    void createsConfiguredEmbeddingModelFromSpringAiBean() {
         vectorContextRunner
-                .withPropertyValues(
-                        "memind.ai.embedding.client=embedding",
-                        "memind.ai.embedding.clients.embedding.provider=openai",
-                        "memind.ai.embedding.clients.embedding.base-url=https://api.siliconflow.cn/v1",
-                        "memind.ai.embedding.clients.embedding.api-key=test-key",
-                        "memind.ai.embedding.clients.embedding.model=BAAI/bge-m3",
-                        "memind.ai.embedding.clients.embedding.dimensions=1024")
+                .withUserConfiguration(EmbeddingBeansConfig.class)
+                .withPropertyValues("memind.ai.embedding.default=configuredEmbeddingModel")
                 .run(
                         context -> {
                             assertThat(context).hasNotFailed();
-                            assertThat(context).hasSingleBean(EmbeddingModel.class);
+                            assertThat(context).hasBean("memindEmbeddingModel");
+                            assertThat(context.getBean("memindEmbeddingModel"))
+                                    .isSameAs(context.getBean("configuredEmbeddingModel"));
+                            assertThat(context.getBean(EmbeddingModel.class))
+                                    .isSameAs(context.getBean("memindEmbeddingModel"));
                         });
     }
 
     @Test
-    @DisplayName("preserves Spring AI Google embedding options")
-    void preservesSpringAiGoogleEmbeddingOptions() {
+    @DisplayName("creates configured embedding model from legacy client alias")
+    void createsConfiguredEmbeddingModelFromLegacyClientAlias() {
         vectorContextRunner
-                .withPropertyValues(
-                        "spring.ai.google.genai.embedding.api-key=test-key",
-                        "spring.ai.google.genai.embedding.text.model=text-embedding-test",
-                        "spring.ai.google.genai.embedding.text.task-type=RETRIEVAL_DOCUMENT",
-                        "spring.ai.google.genai.embedding.text.title=Document title",
-                        "memind.ai.embedding.client=google",
-                        "memind.ai.embedding.clients.google.provider=google")
+                .withUserConfiguration(EmbeddingBeansConfig.class)
+                .withPropertyValues("memind.ai.embedding.client=configuredEmbeddingModel")
                 .run(
                         context -> {
                             assertThat(context).hasNotFailed();
-
-                            GoogleGenAiTextEmbeddingModel model =
-                                    context.getBean(GoogleGenAiTextEmbeddingModel.class);
-
-                            assertThat(model.options.getTaskType())
-                                    .isEqualTo(
-                                            GoogleGenAiTextEmbeddingOptions.TaskType
-                                                    .RETRIEVAL_DOCUMENT);
-                            assertThat(model.options.getTitle()).isEqualTo("Document title");
+                            assertThat(context.getBean("memindEmbeddingModel"))
+                                    .isSameAs(context.getBean("configuredEmbeddingModel"));
                         });
     }
 
     @Test
-    @DisplayName("creates OpenAI embedding model from Spring AI defaults")
-    void createsOpenAiEmbeddingModelFromSpringAiDefaults() {
+    @DisplayName("fails clearly when configured embedding bean is missing")
+    void failsWhenConfiguredEmbeddingBeanIsMissing() {
         vectorContextRunner
-                .withPropertyValues(
-                        "spring.ai.openai.base-url=https://openrouter.ai/api",
-                        "spring.ai.openai.api-key=test-key",
-                        "spring.ai.openai.embedding.options.model=openai/text-embedding-3-small",
-                        "memind.ai.embedding.client=openai",
-                        "memind.ai.embedding.clients.openai.provider=openai")
+                .withPropertyValues("memind.ai.embedding.default=missingEmbeddingModel")
                 .run(
-                        context -> {
-                            assertThat(context).hasNotFailed();
-                            assertThat(context).hasSingleBean(EmbeddingModel.class);
-                        });
+                        context ->
+                                assertThat(context)
+                                        .hasFailed()
+                                        .getFailure()
+                                        .hasMessageContaining(
+                                                "memind.ai.embedding.default references missing"
+                                                        + " Spring AI EmbeddingModel bean"
+                                                        + " 'missingEmbeddingModel'"));
     }
 
-    private static <T extends ChatModel> T chatModel(
-            StructuredChatClient structuredChatClient, Class<T> modelType) {
+    @Test
+    @DisplayName("fails clearly when configured embedding bean has an unsupported type")
+    void failsWhenConfiguredEmbeddingBeanHasUnsupportedType() {
+        vectorContextRunner
+                .withUserConfiguration(InvalidEmbeddingBeanConfig.class)
+                .withPropertyValues("memind.ai.embedding.default=notAnEmbeddingModel")
+                .run(
+                        context ->
+                                assertThat(context)
+                                        .hasFailed()
+                                        .getFailure()
+                                        .hasMessageContaining(
+                                                "memind.ai.embedding.default references bean"
+                                                        + " 'notAnEmbeddingModel' that is not a"
+                                                        + " Spring AI EmbeddingModel"));
+    }
+
+    private static ChatClient chatClient(StructuredChatClient structuredChatClient) {
         assertThat(structuredChatClient).isInstanceOf(SpringAiStructuredChatClient.class);
         Object chatClient = ReflectionTestUtils.getField(structuredChatClient, "chatClient");
         assertThat(chatClient).isInstanceOf(ChatClient.class);
-        Object defaultChatClientRequest =
-                ReflectionTestUtils.getField(chatClient, "defaultChatClientRequest");
-        Object chatModel = ReflectionTestUtils.getField(defaultChatClientRequest, "chatModel");
-        assertThat(chatModel).isInstanceOf(modelType);
-        return modelType.cast(chatModel);
+        return (ChatClient) chatClient;
+    }
+
+    @Configuration
+    static class ChatBeansConfig {
+
+        @Bean
+        ChatClient defaultChatClient() {
+            return mock(ChatClient.class);
+        }
+
+        @Bean
+        ChatClient extractionChatClient() {
+            return mock(ChatClient.class);
+        }
+
+        @Bean
+        ChatModel reasoningChatModel() {
+            return mock(ChatModel.class);
+        }
+    }
+
+    @Configuration
+    static class InvalidChatBeanConfig {
+
+        @Bean
+        String notAChatClient() {
+            return "not-a-chat-client";
+        }
+    }
+
+    @Configuration
+    static class EmbeddingBeansConfig {
+
+        @Bean
+        EmbeddingModel configuredEmbeddingModel() {
+            return mock(EmbeddingModel.class);
+        }
+
+        @Bean
+        EmbeddingModel otherEmbeddingModel() {
+            return mock(EmbeddingModel.class);
+        }
+    }
+
+    @Configuration
+    static class InvalidEmbeddingBeanConfig {
+
+        @Bean
+        String notAnEmbeddingModel() {
+            return "not-an-embedding-model";
+        }
     }
 }

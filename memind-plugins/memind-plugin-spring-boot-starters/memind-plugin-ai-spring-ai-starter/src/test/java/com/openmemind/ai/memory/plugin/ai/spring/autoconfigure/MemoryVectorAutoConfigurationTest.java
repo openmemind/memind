@@ -76,21 +76,18 @@ class MemoryVectorAutoConfigurationTest {
         @DisplayName("Memind configured EmbeddingModel is primary when another one exists")
         void memindConfiguredEmbeddingModelIsPrimaryWhenAnotherOneExists() {
             contextRunner
-                    .withUserConfiguration(EmbeddingModelConfig.class)
-                    .withPropertyValues(
-                            "memind.ai.embedding.client=memind",
-                            "memind.ai.embedding.clients.memind.provider=openai",
-                            "memind.ai.embedding.clients.memind.base-url=https://api.siliconflow.cn/v1",
-                            "memind.ai.embedding.clients.memind.api-key=test-key",
-                            "memind.ai.embedding.clients.memind.model=BAAI/bge-m3")
+                    .withUserConfiguration(MultipleEmbeddingModelConfig.class)
+                    .withPropertyValues("memind.ai.embedding.default=memindEmbeddingSource")
                     .run(
                             context -> {
                                 assertThat(context).hasNotFailed();
                                 assertThat(context).hasBean("memindEmbeddingModel");
                                 assertThat(context.getBeanNamesForType(EmbeddingModel.class))
-                                        .hasSize(2);
+                                        .hasSize(3);
                                 assertThat(context.getBean(EmbeddingModel.class))
                                         .isSameAs(context.getBean("memindEmbeddingModel"));
+                                assertThat(context.getBean("memindEmbeddingModel"))
+                                        .isSameAs(context.getBean("memindEmbeddingSource"));
                             });
         }
     }
@@ -139,6 +136,19 @@ class MemoryVectorAutoConfigurationTest {
     static class EmbeddingModelConfig {
         @Bean
         EmbeddingModel embeddingModel() {
+            return Mockito.mock(EmbeddingModel.class);
+        }
+    }
+
+    @Configuration
+    static class MultipleEmbeddingModelConfig {
+        @Bean
+        EmbeddingModel memindEmbeddingSource() {
+            return Mockito.mock(EmbeddingModel.class);
+        }
+
+        @Bean
+        EmbeddingModel otherEmbeddingModel() {
             return Mockito.mock(EmbeddingModel.class);
         }
     }

@@ -16,27 +16,33 @@ package com.openmemind.ai.memory.plugin.ai.spring.autoconfigure;
 import org.springframework.boot.autoconfigure.condition.ConditionMessage;
 import org.springframework.boot.autoconfigure.condition.ConditionOutcome;
 import org.springframework.boot.autoconfigure.condition.SpringBootCondition;
-import org.springframework.boot.context.properties.bind.Bindable;
-import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.ConditionContext;
 import org.springframework.core.type.AnnotatedTypeMetadata;
+import org.springframework.util.StringUtils;
 
+/**
+ * Matches only when Memind-specific chat routing is configured.
+ *
+ * <p>Without {@code memind.ai.chat.default}, Memind backs off and lets the normal Spring AI
+ * {@code ChatClient.Builder} path create the default {@code StructuredChatClient}. This condition
+ * gates only the extra {@code MemindChatClients} routing bean used by slot-specific configuration.
+ */
 final class ConfiguredChatClientsCondition extends SpringBootCondition {
 
     @Override
     public ConditionOutcome getMatchOutcome(
             ConditionContext context, AnnotatedTypeMetadata metadata) {
         boolean configured =
-                Binder.get(context.getEnvironment())
-                        .bind("memind.ai.chat.clients", Bindable.mapOf(String.class, Object.class))
-                        .map(clients -> !clients.isEmpty())
-                        .orElse(false);
+                StringUtils.hasText(context.getEnvironment().getProperty("memind.ai.chat.default"))
+                        || StringUtils.hasText(
+                                context.getEnvironment()
+                                        .getProperty("memind.ai.chat.default-client"));
         ConditionMessage message =
-                ConditionMessage.forCondition("configured memind AI chat clients")
+                ConditionMessage.forCondition("configured memind AI chat default")
                         .because(
                                 configured
-                                        ? "memind.ai.chat.clients is configured"
-                                        : "memind.ai.chat.clients is not configured");
+                                        ? "memind.ai.chat.default is configured"
+                                        : "memind.ai.chat.default is not configured");
         return configured ? ConditionOutcome.match(message) : ConditionOutcome.noMatch(message);
     }
 }

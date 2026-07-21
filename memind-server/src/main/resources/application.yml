@@ -56,6 +56,7 @@ spring:
     # Switch this to qdrant in the commented example below when enabling Qdrant.
     vectorstore:
       type: simple
+
     mcp:
       server:
         enabled: ${MEMIND_MCP_ENABLED:true}
@@ -80,22 +81,14 @@ server:
 memind:
   ai:
     chat:
-      # Client ids are local routing names. This default client inherits provider defaults
-      # from spring.ai.openai above. Add more clients here to route individual slots to
-      # different providers, endpoints, or models.
-      default-client: openai
-      clients:
-        openai:
-          provider: openai
-      # Optional slot routing. Unconfigured slots use default-client.
-      # Add or change entries when some memory pipeline stages should use another client.
+      # Spring AI ChatClient or ChatModel bean name used by default.
+      default: openAiChatModel
+      # Optional slot routing. Unconfigured slots use default.
       # slots:
-      #   INSIGHT_GENERATOR: openai
+      #   INSIGHT_GENERATOR: openAiChatModel
     embedding:
-      client: openai
-      clients:
-        openai:
-          provider: openai
+      # Spring AI EmbeddingModel bean name.
+      default: openAiEmbeddingModel
   mcp:
     governance-enabled: ${MEMIND_MCP_GOVERNANCE_ENABLED:false}
     default-token-budget: ${MEMIND_MCP_DEFAULT_TOKEN_BUDGET:1800}
