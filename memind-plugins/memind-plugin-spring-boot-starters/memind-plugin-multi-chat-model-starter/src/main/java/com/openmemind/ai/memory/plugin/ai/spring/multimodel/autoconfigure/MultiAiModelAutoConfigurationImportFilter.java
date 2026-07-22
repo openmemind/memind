@@ -14,7 +14,6 @@
 package com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure;
 
 import java.util.Set;
-
 import org.jspecify.annotations.NonNull;
 import org.springframework.boot.autoconfigure.AutoConfigurationImportFilter;
 import org.springframework.boot.autoconfigure.AutoConfigurationMetadata;

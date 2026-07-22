@@ -16,7 +16,7 @@
 # - SQLite is used by default and can be overridden through MEMIND_DATASOURCE_* env vars.
 # - The fallback vector store is a local JSON file.
 # - Spring AI provider defaults are configured under spring.ai.
-# - Memind AI client routing is configured under memind.ai.
+# - Optional Memind AI client slot routing can be configured under memind.ai.chat.slots.
 # - Optional rerank provider settings are read from MEMIND_RERANK_* env vars.
 # - To switch to MySQL or Qdrant, replace/merge the commented examples at the bottom of this file.
 
@@ -65,7 +65,7 @@ spring:
         request-timeout: ${MEMIND_MCP_REQUEST_TIMEOUT:30s}
         instructions: "Memind memory tools for AI agents."
         annotation-scanner:
-          enabled: true
+          enabled: false
         capabilities:
           tool: true
           resource: false
@@ -76,7 +76,6 @@ server:
   port: ${SERVER_PORT:8366}
 
 memind:
-  ai.chat.slots: { }
   mcp:
     governance-enabled: ${MEMIND_MCP_GOVERNANCE_ENABLED:false}
     default-token-budget: ${MEMIND_MCP_DEFAULT_TOKEN_BUDGET:1800}

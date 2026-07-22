@@ -16,17 +16,14 @@ package com.openmemind.ai.memory.plugin.ai.spring;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
-
 import java.util.List;
 import java.util.Objects;
 import java.util.regex.Pattern;
-
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.prompt.ChatOptions;
 import reactor.core.publisher.Mono;
 
 /**
@@ -50,7 +47,10 @@ public class SpringAiStructuredChatClient implements StructuredChatClient {
     @Override
     public <T> Mono<T> call(List<ChatMessage> messages, Class<T> responseType) {
         Objects.requireNonNull(responseType, "responseType must not be null");
-        return Mono.fromCallable(() -> applyMessages(messages).call().entity(responseType));
+        return Mono.fromCallable(
+                () ->
+                        parseStructuredContent(
+                                applyMessages(messages).call().content(), responseType));
     }
 
     private ChatClient.ChatClientRequestSpec applyMessages(List<ChatMessage> messages) {
