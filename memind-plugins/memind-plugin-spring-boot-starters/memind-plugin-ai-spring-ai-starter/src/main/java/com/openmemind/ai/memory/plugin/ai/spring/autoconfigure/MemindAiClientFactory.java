@@ -16,110 +16,96 @@ package com.openmemind.ai.memory.plugin.ai.spring.autoconfigure;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.plugin.ai.spring.SpringAiStructuredChatClient;
+import com.openmemind.ai.memory.plugin.ai.spring.multimodel.chat.MultiChatModel;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.beans.factory.NoSuchBeanDefinitionException;
-import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.util.StringUtils;
 
 public final class MemindAiClientFactory {
 
-    private final ConfigurableListableBeanFactory beanFactory;
+    private static final String FALLBACK_DEFAULT_CLIENT_ID = "default";
 
-    public MemindAiClientFactory(ConfigurableListableBeanFactory beanFactory) {
-        this.beanFactory = Objects.requireNonNull(beanFactory, "beanFactory");
+    private final ObjectProvider<ChatModel> chatModelProvider;
+
+    private final ObjectProvider<MultiChatModel> multiChatModelProvider;
+
+    public MemindAiClientFactory(
+            ObjectProvider<ChatModel> chatModelProvider,
+            ObjectProvider<MultiChatModel> multiChatModelProvider) {
+        this.chatModelProvider = Objects.requireNonNull(chatModelProvider, "chatModelProvider");
+        this.multiChatModelProvider =
+                Objects.requireNonNull(multiChatModelProvider, "multiChatModelProvider");
     }
 
     public MemindChatClients createChatClients(MemindAiProperties.ChatProperties properties) {
-        String defaultBeanName = requireText(properties.getDefault(), "memind.ai.chat.default");
-
+        ChatModel defaultChatModel = requireDefaultChatModel();
+        MultiChatModel multiChatModel = requireMultiChatModel();
+        String defaultClientId = defaultClientId(defaultChatModel);
+        StructuredChatClient defaultClient = structuredChatClient(defaultChatModel);
         Map<ChatClientSlot, String> slotClientIds = new EnumMap<>(ChatClientSlot.class);
         Map<String, StructuredChatClient> clients = new LinkedHashMap<>();
-        clients.put(
-                defaultBeanName, structuredChatClient(defaultBeanName, "memind.ai.chat.default"));
+        clients.put(defaultClientId, defaultClient);
 
         emptySafe(properties.getSlots())
                 .forEach(
-                        (slot, beanName) -> {
-                            String resolvedBeanName =
+                        (slot, modelId) -> {
+                            String resolvedModelId =
                                     requireText(
-                                            beanName,
+                                            modelId,
                                             "memind.ai.chat.slots." + slot + " must not be blank");
-                            slotClientIds.put(slot, resolvedBeanName);
-                            clients.computeIfAbsent(
-                                    resolvedBeanName,
-                                    ignored ->
-                                            structuredChatClient(
-                                                    resolvedBeanName,
-                                                    "memind.ai.chat.slots." + slot));
+                            slotClientIds.put(slot, resolvedModelId);
+                            clients.put(
+                                    resolvedModelId,
+                                    structuredChatClient(
+                                            multiChatModel,
+                                            resolvedModelId,
+                                            "memind.ai.chat.slots." + slot));
                         });
 
-        StructuredChatClient defaultClient = clients.get(defaultBeanName);
         Map<ChatClientSlot, StructuredChatClient> slotClients = new EnumMap<>(ChatClientSlot.class);
-        slotClientIds.forEach((slot, beanName) -> slotClients.put(slot, clients.get(beanName)));
+        slotClientIds.forEach((slot, modelId) -> slotClients.put(slot, clients.get(modelId)));
 
         return new MemindChatClients(
-                defaultBeanName, defaultClient, clients, slotClientIds, slotClients);
+                defaultClientId, defaultClient, clients, slotClientIds, slotClients);
     }
 
-    public EmbeddingModel createEmbeddingModel(MemindAiProperties.EmbeddingProperties properties) {
-        String beanName = requireText(properties.getDefault(), "memind.ai.embedding.default");
-        Object bean = bean(beanName, "memind.ai.embedding.default");
-        if (bean instanceof EmbeddingModel embeddingModel) {
-            return embeddingModel;
-        }
-        throw new MemindAiConfigurationException(
-                "memind.ai.embedding.default references bean '"
-                        + beanName
-                        + "' that is not a Spring AI EmbeddingModel");
-    }
-
-    private StructuredChatClient structuredChatClient(String beanName, String propertyPath) {
-        Object bean = bean(beanName, propertyPath);
-        if (bean instanceof StructuredChatClient structuredChatClient) {
-            return structuredChatClient;
-        }
-        if (bean instanceof ChatClient chatClient) {
-            return new SpringAiStructuredChatClient(chatClient);
-        }
-        if (bean instanceof ChatModel chatModel) {
-            return new SpringAiStructuredChatClient(ChatClient.create(chatModel));
-        }
-        throw new MemindAiConfigurationException(
-                propertyPath
-                        + " references bean '"
-                        + beanName
-                        + "' that is not a Spring AI ChatClient or ChatModel");
-    }
-
-    private Object bean(String beanName, String propertyPath) {
+    private StructuredChatClient structuredChatClient(
+            MultiChatModel multiChatModel, String modelId, String propertyPath) {
         try {
-            return beanFactory.getBean(beanName);
-        } catch (NoSuchBeanDefinitionException e) {
-            throw missingBeanException(beanName, propertyPath, e);
+            ChatModel chatModel = multiChatModel.getChatModel(modelId);
+            return structuredChatClient(chatModel);
+        } catch (IllegalArgumentException exception) {
+            throw new MemindAiConfigurationException(
+                    propertyPath + " references missing chat model id '" + modelId + "'",
+                    exception);
         }
     }
 
-    private MemindAiConfigurationException missingBeanException(
-            String beanName, String propertyPath, NoSuchBeanDefinitionException cause) {
-        if (propertyPath.startsWith("memind.ai.embedding")) {
-            return new MemindAiConfigurationException(
-                    propertyPath
-                            + " references missing Spring AI EmbeddingModel bean '"
-                            + beanName
-                            + "'",
-                    cause);
+    private StructuredChatClient structuredChatClient(ChatModel chatModel) {
+        return new SpringAiStructuredChatClient(ChatClient.create(chatModel));
+    }
+
+    private ChatModel requireDefaultChatModel() {
+        ChatModel chatModel = chatModelProvider.getIfAvailable();
+        if (chatModel == null) {
+            throw new MemindAiConfigurationException(
+                    "memind.ai.chat.slots requires a ChatModel bean");
         }
-        return new MemindAiConfigurationException(
-                propertyPath
-                        + " references missing Spring AI ChatClient or ChatModel bean '"
-                        + beanName
-                        + "'",
-                cause);
+        return chatModel;
+    }
+
+    private MultiChatModel requireMultiChatModel() {
+        MultiChatModel multiChatModel = multiChatModelProvider.getIfAvailable();
+        if (multiChatModel == null) {
+            throw new MemindAiConfigurationException(
+                    "memind.ai.chat.slots requires a MultiChatModel bean");
+        }
+        return multiChatModel;
     }
 
     private static String requireText(String value, String propertyPath) {
@@ -131,5 +117,16 @@ public final class MemindAiClientFactory {
 
     private static <K, V> Map<K, V> emptySafe(Map<K, V> map) {
         return map == null ? Map.of() : map;
+    }
+
+    private static String defaultClientId(ChatModel chatModel) {
+        if (chatModel instanceof MultiChatModel multiChatModel) {
+            return multiChatModel.getDefaultChatModelId();
+        }
+        if (chatModel.getOptions() != null
+                && StringUtils.hasText(chatModel.getOptions().getModel())) {
+            return chatModel.getOptions().getModel();
+        }
+        return FALLBACK_DEFAULT_CLIENT_ID;
     }
 }

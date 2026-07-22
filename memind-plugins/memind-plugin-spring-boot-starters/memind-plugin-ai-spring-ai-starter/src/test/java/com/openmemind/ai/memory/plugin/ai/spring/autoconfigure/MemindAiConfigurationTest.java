@@ -17,18 +17,28 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
+import com.openmemind.ai.memory.core.llm.ChatMessage;
+import com.openmemind.ai.memory.core.llm.ChatRole;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
-import com.openmemind.ai.memory.plugin.ai.spring.SpringAiStructuredChatClient;
+import com.openmemind.ai.memory.plugin.ai.spring.multimodel.chat.MultiChatModel;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.context.annotation.Primary;
+import reactor.core.publisher.Flux;
 
 @DisplayName("Memind AI configuration")
 class MemindAiConfigurationTest {
@@ -48,14 +58,13 @@ class MemindAiConfigurationTest {
                                     SpringAiVectorAutoConfiguration.class));
 
     @Test
-    @DisplayName("creates configured chat clients and slot routing from Spring AI beans")
-    void createsConfiguredChatClientsAndSlotRoutingFromSpringAiBeans() {
+    @DisplayName("creates configured chat clients with the default chat model and slot model ids")
+    void createsConfiguredChatClientsWithDefaultChatModelAndSlotModelIds() {
         contextRunner
-                .withUserConfiguration(ChatBeansConfig.class)
+                .withUserConfiguration(DefaultChatModelAndMultiChatModelConfig.class)
                 .withPropertyValues(
-                        "memind.ai.chat.default=defaultChatClient",
-                        "memind.ai.chat.slots.ITEM_EXTRACTION=extractionChatClient",
-                        "memind.ai.chat.slots.INSIGHT_GENERATOR=reasoningChatModel")
+                        "memind.ai.chat.slots.ITEM_EXTRACTION=default",
+                        "memind.ai.chat.slots.INSIGHT_GENERATOR=reasoning")
                 .run(
                         context -> {
                             assertThat(context).hasNotFailed();
@@ -63,70 +72,42 @@ class MemindAiConfigurationTest {
                             assertThat(context).hasSingleBean(StructuredChatClient.class);
 
                             MemindChatClients clients = context.getBean(MemindChatClients.class);
-                            assertThat(clients.defaultClientId()).isEqualTo("defaultChatClient");
+                            assertThat(clients.defaultClientId()).isEqualTo("primary");
                             assertThat(clients.clientIds())
-                                    .containsExactlyInAnyOrder(
-                                            "defaultChatClient",
-                                            "extractionChatClient",
-                                            "reasoningChatModel");
+                                    .containsExactlyInAnyOrder("primary", "default", "reasoning");
                             assertThat(clients.slotClientIds())
-                                    .containsEntry(
-                                            ChatClientSlot.ITEM_EXTRACTION, "extractionChatClient")
-                                    .containsEntry(
-                                            ChatClientSlot.INSIGHT_GENERATOR, "reasoningChatModel");
-                            assertThat(clients.slotClients())
-                                    .containsKey(ChatClientSlot.ITEM_EXTRACTION)
-                                    .containsKey(ChatClientSlot.INSIGHT_GENERATOR);
-                            assertThat(chatClient(clients.defaultClient()))
-                                    .isSameAs(context.getBean("defaultChatClient"));
+                                    .containsEntry(ChatClientSlot.ITEM_EXTRACTION, "default")
+                                    .containsEntry(ChatClientSlot.INSIGHT_GENERATOR, "reasoning");
+                            assertThat(clients.defaultClient().call(userMessage()).block())
+                                    .isEqualTo("primary-call");
                             assertThat(
-                                            chatClient(
-                                                    clients.slotClients()
-                                                            .get(ChatClientSlot.ITEM_EXTRACTION)))
-                                    .isSameAs(context.getBean("extractionChatClient"));
+                                            clients.slotClients()
+                                                    .get(ChatClientSlot.INSIGHT_GENERATOR)
+                                                    .call(userMessage())
+                                                    .block())
+                                    .isEqualTo("reasoning-call");
                         });
     }
 
     @Test
-    @DisplayName("creates configured chat clients from legacy default-client alias")
-    void createsConfiguredChatClientsFromLegacyDefaultClientAlias() {
+    @DisplayName("does not create configured chat clients from the removed default property")
+    void doesNotCreateConfiguredChatClientsFromRemovedDefaultProperty() {
         contextRunner
-                .withUserConfiguration(ChatBeansConfig.class)
-                .withPropertyValues("memind.ai.chat.default-client=defaultChatClient")
+                .withUserConfiguration(MultiChatModelConfig.class)
+                .withPropertyValues("memind.ai.chat.default=missing")
                 .run(
                         context -> {
                             assertThat(context).hasNotFailed();
-                            MemindChatClients clients = context.getBean(MemindChatClients.class);
-                            assertThat(clients.defaultClientId()).isEqualTo("defaultChatClient");
-                            assertThat(chatClient(clients.defaultClient()))
-                                    .isSameAs(context.getBean("defaultChatClient"));
+                            assertThat(context).doesNotHaveBean(MemindChatClients.class);
                         });
     }
 
     @Test
-    @DisplayName("fails clearly when configured default chat bean is missing")
-    void failsWhenConfiguredDefaultChatBeanIsMissing() {
+    @DisplayName("fails clearly when configured slot chat model id is missing")
+    void failsWhenConfiguredSlotChatModelIdIsMissing() {
         contextRunner
-                .withPropertyValues("memind.ai.chat.default=missingChatClient")
-                .run(
-                        context ->
-                                assertThat(context)
-                                        .hasFailed()
-                                        .getFailure()
-                                        .hasMessageContaining(
-                                                "memind.ai.chat.default references missing Spring"
-                                                        + " AI ChatClient or ChatModel bean"
-                                                        + " 'missingChatClient'"));
-    }
-
-    @Test
-    @DisplayName("fails clearly when configured slot chat bean is missing")
-    void failsWhenConfiguredSlotChatBeanIsMissing() {
-        contextRunner
-                .withUserConfiguration(ChatBeansConfig.class)
-                .withPropertyValues(
-                        "memind.ai.chat.default=defaultChatClient",
-                        "memind.ai.chat.slots.INSIGHT_GENERATOR=missingChatClient")
+                .withUserConfiguration(DefaultChatModelAndMultiChatModelConfig.class)
+                .withPropertyValues("memind.ai.chat.slots.INSIGHT_GENERATOR=missing")
                 .run(
                         context ->
                                 assertThat(context)
@@ -134,147 +115,158 @@ class MemindAiConfigurationTest {
                                         .getFailure()
                                         .hasMessageContaining(
                                                 "memind.ai.chat.slots.INSIGHT_GENERATOR"
-                                                        + " references missing Spring AI"
-                                                        + " ChatClient or ChatModel bean"
-                                                        + " 'missingChatClient'"));
+                                                        + " references missing chat model id"
+                                                        + " 'missing'"));
     }
 
     @Test
-    @DisplayName("fails clearly when configured chat bean has an unsupported type")
-    void failsWhenConfiguredChatBeanHasUnsupportedType() {
+    @DisplayName("fails clearly when configured chat routing has no multi chat model")
+    void failsWhenConfiguredChatRoutingHasNoMultiChatModel() {
         contextRunner
-                .withUserConfiguration(InvalidChatBeanConfig.class)
-                .withPropertyValues("memind.ai.chat.default=notAChatClient")
+                .withUserConfiguration(DefaultChatModelConfig.class)
+                .withPropertyValues("memind.ai.chat.slots.INSIGHT_GENERATOR=reasoning")
                 .run(
                         context ->
                                 assertThat(context)
                                         .hasFailed()
                                         .getFailure()
                                         .hasMessageContaining(
-                                                "memind.ai.chat.default references bean"
-                                                        + " 'notAChatClient' that is not a Spring"
-                                                        + " AI ChatClient or ChatModel"));
+                                                "memind.ai.chat.slots requires a MultiChatModel"
+                                                        + " bean"));
     }
 
     @Test
-    @DisplayName("creates configured embedding model from Spring AI bean")
-    void createsConfiguredEmbeddingModelFromSpringAiBean() {
-        vectorContextRunner
-                .withUserConfiguration(EmbeddingBeansConfig.class)
-                .withPropertyValues("memind.ai.embedding.default=configuredEmbeddingModel")
+    @DisplayName("does not create configured chat clients from the old default-client alias")
+    void doesNotCreateConfiguredChatClientsFromOldDefaultClientAlias() {
+        contextRunner
+                .withUserConfiguration(MultiChatModelConfig.class)
+                .withPropertyValues("memind.ai.chat.default-client=default")
                 .run(
                         context -> {
                             assertThat(context).hasNotFailed();
-                            assertThat(context).hasBean("memindEmbeddingModel");
-                            assertThat(context.getBean("memindEmbeddingModel"))
-                                    .isSameAs(context.getBean("configuredEmbeddingModel"));
+                            assertThat(context).doesNotHaveBean(MemindChatClients.class);
+                        });
+    }
+
+    @Test
+    @DisplayName("does not create configured embedding model from the removed default property")
+    void doesNotCreateConfiguredEmbeddingModelFromRemovedDefaultProperty() {
+        vectorContextRunner
+                .withUserConfiguration(DefaultEmbeddingModelConfig.class)
+                .withPropertyValues("memind.ai.embedding.default=missing")
+                .run(
+                        context -> {
+                            assertThat(context).hasNotFailed();
+                            assertThat(context).doesNotHaveBean("memindEmbeddingModel");
                             assertThat(context.getBean(EmbeddingModel.class))
-                                    .isSameAs(context.getBean("memindEmbeddingModel"));
+                                    .isSameAs(
+                                            context.getBean(DefaultEmbeddingModelConfig.class)
+                                                    .embeddingModel);
                         });
     }
 
     @Test
-    @DisplayName("creates configured embedding model from legacy client alias")
-    void createsConfiguredEmbeddingModelFromLegacyClientAlias() {
+    @DisplayName("does not create configured embedding model from the old client alias")
+    void doesNotCreateConfiguredEmbeddingModelFromOldClientAlias() {
         vectorContextRunner
-                .withUserConfiguration(EmbeddingBeansConfig.class)
-                .withPropertyValues("memind.ai.embedding.client=configuredEmbeddingModel")
+                .withUserConfiguration(DefaultEmbeddingModelConfig.class)
+                .withPropertyValues("memind.ai.embedding.client=semantic")
                 .run(
                         context -> {
                             assertThat(context).hasNotFailed();
-                            assertThat(context.getBean("memindEmbeddingModel"))
-                                    .isSameAs(context.getBean("configuredEmbeddingModel"));
+                            assertThat(context).doesNotHaveBean("memindEmbeddingModel");
                         });
     }
 
-    @Test
-    @DisplayName("fails clearly when configured embedding bean is missing")
-    void failsWhenConfiguredEmbeddingBeanIsMissing() {
-        vectorContextRunner
-                .withPropertyValues("memind.ai.embedding.default=missingEmbeddingModel")
-                .run(
-                        context ->
-                                assertThat(context)
-                                        .hasFailed()
-                                        .getFailure()
-                                        .hasMessageContaining(
-                                                "memind.ai.embedding.default references missing"
-                                                        + " Spring AI EmbeddingModel bean"
-                                                        + " 'missingEmbeddingModel'"));
+    private static List<ChatMessage> userMessage() {
+        return List.of(new ChatMessage(ChatRole.USER, "hello"));
     }
 
-    @Test
-    @DisplayName("fails clearly when configured embedding bean has an unsupported type")
-    void failsWhenConfiguredEmbeddingBeanHasUnsupportedType() {
-        vectorContextRunner
-                .withUserConfiguration(InvalidEmbeddingBeanConfig.class)
-                .withPropertyValues("memind.ai.embedding.default=notAnEmbeddingModel")
-                .run(
-                        context ->
-                                assertThat(context)
-                                        .hasFailed()
-                                        .getFailure()
-                                        .hasMessageContaining(
-                                                "memind.ai.embedding.default references bean"
-                                                        + " 'notAnEmbeddingModel' that is not a"
-                                                        + " Spring AI EmbeddingModel"));
-    }
-
-    private static ChatClient chatClient(StructuredChatClient structuredChatClient) {
-        assertThat(structuredChatClient).isInstanceOf(SpringAiStructuredChatClient.class);
-        Object chatClient = ReflectionTestUtils.getField(structuredChatClient, "chatClient");
-        assertThat(chatClient).isInstanceOf(ChatClient.class);
-        return (ChatClient) chatClient;
+    private static ChatResponse response(String content) {
+        return new ChatResponse(List.of(new Generation(new AssistantMessage(content))));
     }
 
     @Configuration
-    static class ChatBeansConfig {
+    static class DefaultChatModelConfig {
 
         @Bean
-        ChatClient defaultChatClient() {
-            return mock(ChatClient.class);
-        }
-
-        @Bean
-        ChatClient extractionChatClient() {
-            return mock(ChatClient.class);
-        }
-
-        @Bean
-        ChatModel reasoningChatModel() {
-            return mock(ChatModel.class);
+        @Primary
+        ChatModel chatModel() {
+            return new RecordingChatModel("primary");
         }
     }
 
     @Configuration
-    static class InvalidChatBeanConfig {
+    static class DefaultChatModelAndMultiChatModelConfig {
 
         @Bean
-        String notAChatClient() {
-            return "not-a-chat-client";
+        @Primary
+        ChatModel chatModel() {
+            return new RecordingChatModel("primary");
+        }
+
+        @Bean
+        MultiChatModel multiChatModel() {
+            return new MultiChatModel(
+                    "default",
+                    Map.of(
+                            "default",
+                            new RecordingChatModel("default"),
+                            "reasoning",
+                            new RecordingChatModel("reasoning")));
         }
     }
 
     @Configuration
-    static class EmbeddingBeansConfig {
+    static class MultiChatModelConfig {
 
         @Bean
-        EmbeddingModel configuredEmbeddingModel() {
-            return mock(EmbeddingModel.class);
-        }
-
-        @Bean
-        EmbeddingModel otherEmbeddingModel() {
-            return mock(EmbeddingModel.class);
+        MultiChatModel multiChatModel() {
+            return new MultiChatModel(
+                    "default",
+                    Map.of(
+                            "default",
+                            new RecordingChatModel("default"),
+                            "reasoning",
+                            new RecordingChatModel("reasoning")));
         }
     }
 
     @Configuration
-    static class InvalidEmbeddingBeanConfig {
+    static class DefaultEmbeddingModelConfig {
+
+        private final EmbeddingModel embeddingModel = mock(EmbeddingModel.class);
 
         @Bean
-        String notAnEmbeddingModel() {
-            return "not-an-embedding-model";
+        EmbeddingModel embeddingModel() {
+            return embeddingModel;
+        }
+    }
+
+    private static final class RecordingChatModel implements ChatModel {
+
+        private final String modelId;
+
+        private final List<Prompt> callPrompts = new ArrayList<>();
+
+        private RecordingChatModel(String modelId) {
+            this.modelId = modelId;
+        }
+
+        @Override
+        public ChatResponse call(Prompt prompt) {
+            callPrompts.add(prompt);
+            return response(modelId + "-call");
+        }
+
+        @Override
+        public Flux<ChatResponse> stream(Prompt prompt) {
+            return Flux.just(response(modelId + "-stream"));
+        }
+
+        @Override
+        public ChatOptions getOptions() {
+            return ChatOptions.builder().model(modelId).build();
         }
     }
 }

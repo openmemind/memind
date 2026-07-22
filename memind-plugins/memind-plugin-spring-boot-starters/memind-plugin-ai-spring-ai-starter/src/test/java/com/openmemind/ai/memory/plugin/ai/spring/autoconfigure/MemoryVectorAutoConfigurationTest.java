@@ -28,6 +28,7 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 @DisplayName("MemoryVectorAutoConfiguration Test")
 class MemoryVectorAutoConfigurationTest {
@@ -73,21 +74,28 @@ class MemoryVectorAutoConfigurationTest {
         }
 
         @Test
-        @DisplayName("Memind configured EmbeddingModel is primary when another one exists")
-        void memindConfiguredEmbeddingModelIsPrimaryWhenAnotherOneExists() {
+        @DisplayName(
+                "Use the primary EmbeddingModel directly when the removed Memind default property"
+                        + " is set")
+        void removedMemindEmbeddingDefaultDoesNotCreatePrimaryAlias() {
             contextRunner
-                    .withUserConfiguration(MultipleEmbeddingModelConfig.class)
-                    .withPropertyValues("memind.ai.embedding.default=memindEmbeddingSource")
+                    .withUserConfiguration(PrimaryAndSecondaryEmbeddingModelConfig.class)
+                    .withPropertyValues("memind.ai.embedding.default=missing")
                     .run(
                             context -> {
                                 assertThat(context).hasNotFailed();
-                                assertThat(context).hasBean("memindEmbeddingModel");
+                                assertThat(context).doesNotHaveBean("memindEmbeddingModel");
                                 assertThat(context.getBeanNamesForType(EmbeddingModel.class))
-                                        .hasSize(3);
+                                        .containsExactlyInAnyOrder(
+                                                "defaultEmbeddingModel", "secondaryEmbeddingModel");
                                 assertThat(context.getBean(EmbeddingModel.class))
-                                        .isSameAs(context.getBean("memindEmbeddingModel"));
-                                assertThat(context.getBean("memindEmbeddingModel"))
-                                        .isSameAs(context.getBean("memindEmbeddingSource"));
+                                        .isSameAs(
+                                                context.getBean(
+                                                                PrimaryAndSecondaryEmbeddingModelConfig
+                                                                        .class)
+                                                        .defaultEmbeddingModel);
+                                assertThat(context).hasSingleBean(VectorStore.class);
+                                assertThat(context).hasSingleBean(MemoryVector.class);
                             });
         }
     }
@@ -141,15 +149,21 @@ class MemoryVectorAutoConfigurationTest {
     }
 
     @Configuration
-    static class MultipleEmbeddingModelConfig {
+    static class PrimaryAndSecondaryEmbeddingModelConfig {
+
+        private final EmbeddingModel defaultEmbeddingModel = Mockito.mock(EmbeddingModel.class);
+
+        private final EmbeddingModel secondaryEmbeddingModel = Mockito.mock(EmbeddingModel.class);
+
         @Bean
-        EmbeddingModel memindEmbeddingSource() {
-            return Mockito.mock(EmbeddingModel.class);
+        @Primary
+        EmbeddingModel defaultEmbeddingModel() {
+            return defaultEmbeddingModel;
         }
 
         @Bean
-        EmbeddingModel otherEmbeddingModel() {
-            return Mockito.mock(EmbeddingModel.class);
+        EmbeddingModel secondaryEmbeddingModel() {
+            return secondaryEmbeddingModel;
         }
     }
 

@@ -22,7 +22,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class MemindAiProperties {
 
     private ChatProperties chat = new ChatProperties();
-    private EmbeddingProperties embedding = new EmbeddingProperties();
 
     public ChatProperties getChat() {
         return chat;
@@ -32,35 +31,9 @@ public class MemindAiProperties {
         this.chat = chat;
     }
 
-    public EmbeddingProperties getEmbedding() {
-        return embedding;
-    }
-
-    public void setEmbedding(EmbeddingProperties embedding) {
-        this.embedding = embedding;
-    }
-
     public static class ChatProperties {
 
-        private String defaultClient;
-        private String defaultBean;
         private Map<ChatClientSlot, String> slots = new EnumMap<>(ChatClientSlot.class);
-
-        public String getDefaultClient() {
-            return getDefault();
-        }
-
-        public void setDefaultClient(String defaultClient) {
-            this.defaultClient = defaultClient;
-        }
-
-        public String getDefault() {
-            return defaultBean != null ? defaultBean : defaultClient;
-        }
-
-        public void setDefault(String defaultBean) {
-            this.defaultBean = defaultBean;
-        }
 
         public Map<ChatClientSlot, String> getSlots() {
             return slots;
@@ -68,28 +41,6 @@ public class MemindAiProperties {
 
         public void setSlots(Map<ChatClientSlot, String> slots) {
             this.slots = slots;
-        }
-    }
-
-    public static class EmbeddingProperties {
-
-        private String client;
-        private String defaultBean;
-
-        public String getClient() {
-            return getDefault();
-        }
-
-        public void setClient(String client) {
-            this.client = client;
-        }
-
-        public String getDefault() {
-            return defaultBean != null ? defaultBean : client;
-        }
-
-        public void setDefault(String defaultBean) {
-            this.defaultBean = defaultBean;
         }
     }
 }

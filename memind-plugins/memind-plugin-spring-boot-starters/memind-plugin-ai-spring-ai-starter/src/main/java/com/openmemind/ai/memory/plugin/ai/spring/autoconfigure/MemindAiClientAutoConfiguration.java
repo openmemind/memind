@@ -13,7 +13,9 @@
  */
 package com.openmemind.ai.memory.plugin.ai.spring.autoconfigure;
 
-import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import com.openmemind.ai.memory.plugin.ai.spring.multimodel.chat.MultiChatModel;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -28,7 +30,8 @@ public class MemindAiClientAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public MemindAiClientFactory memindAiClientFactory(
-            ConfigurableListableBeanFactory beanFactory) {
-        return new MemindAiClientFactory(beanFactory);
+            ObjectProvider<ChatModel> chatModelProvider,
+            ObjectProvider<MultiChatModel> multiChatModelProvider) {
+        return new MemindAiClientFactory(chatModelProvider, multiChatModelProvider);
     }
 }

@@ -16,16 +16,17 @@ package com.openmemind.ai.memory.plugin.ai.spring.autoconfigure;
 import org.springframework.boot.autoconfigure.condition.ConditionMessage;
 import org.springframework.boot.autoconfigure.condition.ConditionOutcome;
 import org.springframework.boot.autoconfigure.condition.SpringBootCondition;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.ConditionContext;
 import org.springframework.core.type.AnnotatedTypeMetadata;
-import org.springframework.util.StringUtils;
 
 /**
- * Matches only when Memind-specific chat routing is configured.
+ * Matches only when Memind-specific slot routing is configured.
  *
- * <p>Without {@code memind.ai.chat.default}, Memind backs off and lets the normal Spring AI
- * {@code ChatClient.Builder} path create the default {@code StructuredChatClient}. This condition
- * gates only the extra {@code MemindChatClients} routing bean used by slot-specific configuration.
+ * <p>Without {@code memind.ai.chat.slots}, Memind backs off and lets the normal Spring AI chat
+ * client path create the default {@code StructuredChatClient}. This condition gates only the extra
+ * {@code MemindChatClients} routing bean used by model-id based slot configuration.
  */
 final class ConfiguredChatClientsCondition extends SpringBootCondition {
 
@@ -33,16 +34,16 @@ final class ConfiguredChatClientsCondition extends SpringBootCondition {
     public ConditionOutcome getMatchOutcome(
             ConditionContext context, AnnotatedTypeMetadata metadata) {
         boolean configured =
-                StringUtils.hasText(context.getEnvironment().getProperty("memind.ai.chat.default"))
-                        || StringUtils.hasText(
-                                context.getEnvironment()
-                                        .getProperty("memind.ai.chat.default-client"));
+                Binder.get(context.getEnvironment())
+                        .bind("memind.ai.chat.slots", Bindable.mapOf(String.class, String.class))
+                        .map(slots -> !slots.isEmpty())
+                        .orElse(false);
         ConditionMessage message =
-                ConditionMessage.forCondition("configured memind AI chat default")
+                ConditionMessage.forCondition("configured memind AI chat slots")
                         .because(
                                 configured
-                                        ? "memind.ai.chat.default is configured"
-                                        : "memind.ai.chat.default is not configured");
+                                        ? "memind.ai.chat.slots is configured"
+                                        : "memind.ai.chat.slots is not configured");
         return configured ? ConditionOutcome.match(message) : ConditionOutcome.noMatch(message);
     }
 }
