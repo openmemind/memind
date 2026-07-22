@@ -13,6 +13,8 @@
 #
 
 spring:
+  main:
+    web-application-type: none
   application:
     name: memind-evaluation
   profiles:
