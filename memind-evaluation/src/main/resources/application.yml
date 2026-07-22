@@ -18,16 +18,19 @@ spring:
   profiles:
     default: locomo
   ai:
-    openai:
-      base-url: ${OPENAI_BASE_URL:https://openrouter.ai/api}
-      api-key: ${OPENAI_API_KEY:}
-      chat:
-        options:
+    chat-models:
+      default:
+        type: openai
+        openai:
+          base-url: ${OPENAI_BASE_URL:https://openrouter.ai/api/v1}
+          api-key: ${OPENAI_API_KEY:}
           model: ${OPENAI_CHAT_MODEL:openai/gpt-4o-mini}
-      embedding:
-        base-url: ${EMBEDDING_BASE_URL:https://openrouter.ai/api}
-        api-key: ${EMBEDDING_API_KEY:}
-        options:
+    embedding-models:
+      default:
+        type: openai
+        openai:
+          base-url: ${EMBEDDING_BASE_URL:https://openrouter.ai/api/v1}
+          api-key: ${EMBEDDING_API_KEY:}
           model: ${OPENAI_EMBEDDING_MODEL:openai/text-embedding-3-small}
 
 memind:

@@ -37,23 +37,21 @@ spring:
   jackson:
     default-property-inclusion: non_null
   ai:
-    model:
-      chat: openai
-      embedding: openai
-    openai:
-      base-url: ${OPENAI_BASE_URL:https://openrouter.ai/api}
-      api-key: ${OPENAI_API_KEY:your-api-key}
-      chat:
-        options:
+    chat-models:
+      default:
+        type: openai
+        openai:
+          base-url: ${OPENAI_BASE_URL:https://openrouter.ai/api}
+          api-key: ${OPENAI_API_KEY:your-api-key}
           model: ${OPENAI_CHAT_MODEL:openai/gpt-4o-mini}
           temperature: ${OPENAI_CHAT_TEMPERATURE:0.2}
-      embedding:
-        base-url: ${EMBEDDING_BASE_URL:${OPENAI_BASE_URL:https://openrouter.ai/api}}
-        api-key: ${EMBEDDING_API_KEY:${OPENAI_API_KEY:your-api-key}}
-        options:
+    embedding-models:
+      default:
+        type: openai
+        openai:
+          base-url: ${EMBEDDING_BASE_URL:${OPENAI_BASE_URL:https://openrouter.ai/api}}
+          api-key: ${EMBEDDING_API_KEY:${OPENAI_API_KEY:your-api-key}}
           model: ${OPENAI_EMBEDDING_MODEL:openai/text-embedding-3-small}
-    # Keeps external Spring AI vector stores dormant by default.
-    # Switch this to qdrant in the commented example below when enabling Qdrant.
     vectorstore:
       type: simple
 
@@ -66,7 +64,6 @@ spring:
         protocol: STATELESS
         request-timeout: ${MEMIND_MCP_REQUEST_TIMEOUT:30s}
         instructions: "Memind memory tools for AI agents."
-        tool-callback-converter: false
         annotation-scanner:
           enabled: true
         capabilities:
@@ -79,16 +76,7 @@ server:
   port: ${SERVER_PORT:8366}
 
 memind:
-  ai:
-    chat:
-      # Spring AI ChatClient or ChatModel bean name used by default.
-      default: openAiChatModel
-      # Optional slot routing. Unconfigured slots use default.
-      # slots:
-      #   INSIGHT_GENERATOR: openAiChatModel
-    embedding:
-      # Spring AI EmbeddingModel bean name.
-      default: openAiEmbeddingModel
+  ai.chat.slots: { }
   mcp:
     governance-enabled: ${MEMIND_MCP_GOVERNANCE_ENABLED:false}
     default-token-budget: ${MEMIND_MCP_DEFAULT_TOKEN_BUDGET:1800}
