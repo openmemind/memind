@@ -327,25 +327,59 @@
                 <artifactId>license-maven-plugin</artifactId>
                 <version>${license.plugin.version}</version>
                 <configuration>
-                    <header>etc/APACHEV2.txt</header>
-                    <includes>
-                        <!-- JVM sources and checked configuration/resources -->
-                        <include>**/*.java</include>
-                        <include>**/*.xml</include>
-                        <include>**/*.yml</include>
-                        <include>**/*.yaml</include>
-                        <include>**/*.sql</include>
+                    <licenseSets>
+                        <licenseSet>
+                            <header>etc/APACHEV2.txt</header>
+                            <includes>
+                                <!-- JVM sources and checked configuration/resources -->
+                                <include>**/*.java</include>
+                                <include>**/*.xml</include>
+                                <include>**/*.yml</include>
+                                <include>**/*.yaml</include>
+                                <include>**/*.sql</include>
 
-                        <!-- Non-JVM Memind-owned source files -->
-                        <include>**/*.go</include>
-                        <include>**/*.py</include>
-                        <include>**/*.rs</include>
-                        <include>**/*.ts</include>
-                        <include>**/*.tsx</include>
-                        <include>**/*.js</include>
-                        <include>**/*.sh</include>
-                        <include>**/*.css</include>
-                    </includes>
+                                <!-- Non-JVM Memind-owned source files -->
+                                <include>**/*.go</include>
+                                <include>**/*.py</include>
+                                <include>**/*.rs</include>
+                                <include>**/*.ts</include>
+                                <include>**/*.tsx</include>
+                                <include>**/*.js</include>
+                                <include>**/*.sh</include>
+                                <include>**/*.css</include>
+                            </includes>
+                            <excludes>
+                                <exclude>LICENSE</exclude>
+                                <exclude>NOTICE</exclude>
+                                <exclude>.worktrees/**</exclude>
+                                <exclude>.agents/**</exclude>
+                                <exclude>**/.agents/**</exclude>
+                                <exclude>.codex/**</exclude>
+                                <exclude>**/.codex/**</exclude>
+                                <exclude>.corepack/**</exclude>
+                                <exclude>data/**</exclude>
+                                <exclude>etc/**</exclude>
+                                <exclude>eval-data/**</exclude>
+                                <exclude>memind-evaluation/data/**</exclude>
+                                <exclude>memind-ui/src/routeTree.gen.ts</exclude>
+                                <exclude>**/.coverage</exclude>
+                                <exclude>**/.mypy_cache/**</exclude>
+                                <exclude>**/.pytest_cache/**</exclude>
+                                <exclude>**/.ruff_cache/**</exclude>
+                                <exclude>**/.uv-cache/**</exclude>
+                                <exclude>**/.venv/**</exclude>
+                                <exclude>**/build/**</exclude>
+                                <exclude>**/coverage/**</exclude>
+                                <exclude>**/dist/**</exclude>
+                                <exclude>**/node_modules/**</exclude>
+                                <exclude>**/target/**</exclude>
+                                <exclude>**/*.egg-info/**</exclude>
+                                <exclude>**/__pycache__/**</exclude>
+                                <exclude>**/*.pyc</exclude>
+                                <exclude>**/pnpm-lock.yaml</exclude>
+                            </excludes>
+                        </licenseSet>
+                    </licenseSets>
                     <mapping>
                         <go>SLASHSTAR_STYLE</go>
                         <rs>SINGLE_LINE_DOUBLESLASH_STYLE</rs>
@@ -356,36 +390,6 @@
                         <css>SLASHSTAR_STYLE</css>
                         <sql>DOUBLEDASHES_STYLE</sql>
                     </mapping>
-                    <excludes>
-                        <exclude>LICENSE</exclude>
-                        <exclude>NOTICE</exclude>
-                        <exclude>.worktrees/**</exclude>
-                        <exclude>.agents/**</exclude>
-                        <exclude>**/.agents/**</exclude>
-                        <exclude>.codex/**</exclude>
-                        <exclude>**/.codex/**</exclude>
-                        <exclude>.corepack/**</exclude>
-                        <exclude>data/**</exclude>
-                        <exclude>etc/**</exclude>
-                        <exclude>eval-data/**</exclude>
-                        <exclude>memind-evaluation/data/**</exclude>
-                        <exclude>memind-ui/src/routeTree.gen.ts</exclude>
-                        <exclude>**/.coverage</exclude>
-                        <exclude>**/.mypy_cache/**</exclude>
-                        <exclude>**/.pytest_cache/**</exclude>
-                        <exclude>**/.ruff_cache/**</exclude>
-                        <exclude>**/.uv-cache/**</exclude>
-                        <exclude>**/.venv/**</exclude>
-                        <exclude>**/build/**</exclude>
-                        <exclude>**/coverage/**</exclude>
-                        <exclude>**/dist/**</exclude>
-                        <exclude>**/node_modules/**</exclude>
-                        <exclude>**/target/**</exclude>
-                        <exclude>**/*.egg-info/**</exclude>
-                        <exclude>**/__pycache__/**</exclude>
-                        <exclude>**/*.pyc</exclude>
-                        <exclude>**/pnpm-lock.yaml</exclude>
-                    </excludes>
                 </configuration>
                 <dependencies>
                     <dependency>

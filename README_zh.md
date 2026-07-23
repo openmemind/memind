@@ -186,71 +186,42 @@ docker compose down -v
 <details>
 <summary>高级配置：配置模型路由</summary>
 
-Memind 的 AI 配置分为两层：
+Memind 使用 Spring AI 初始化 provider，`memind.ai.*` 只保留 memory pipeline 的路由选择：
 
 | 配置层 | 作用 |
 |--------|------|
 | `spring.ai.*` | provider 默认参数、API key、base URL 和模型 options |
-| `memind.ai.*` | Memind 内部的 named chat/embedding client，以及 memory pipeline 的 slot routing |
+| `memind.ai.*` | 选择已有 Spring AI bean 作为默认 chat/embedding model，并配置 slot routing |
 
-默认服务配置定义了一个 chat client 和一个 embedding client：
+默认服务配置会让 Memind 指向 Spring AI OpenAI 自动配置出来的 bean：
 
 ```yaml
 memind:
   ai:
     chat:
-      default-client: openai
-      clients:
-        openai:
-          provider: openai
+      default: openAiChatModel
     embedding:
-      client: openai
-      clients:
-        openai:
-          provider: openai
+      default: openAiEmbeddingModel
 ```
 
-`memind.ai` 支持的 provider：
-
-| 用途 | Provider |
-|------|----------|
-| Chat | `openai`, `anthropic`, `google`, `ollama` |
-| Embedding | `openai`, `google`, `ollama` |
-
-DeepSeek、GLM、OpenRouter、SiliconFlow 这类兼容 OpenAI 协议的服务，都使用
-`provider: openai`。
-
-如果需要更细粒度的模型路由，可以在
-[`application.yml`](./memind-server/src/main/resources/application.yml) 中定义多个 named client，
-再把不同 memory pipeline slot 指向不同 client：
+如果需要更细粒度的模型路由，先用 Spring AI 定义 provider-specific 的 `ChatModel`、
+`ChatClient` 或 `EmbeddingModel` bean，再在
+[`application.yml`](./memind-server/src/main/resources/application.yml) 中引用这些 bean name：
 
 ```yaml
 memind:
   ai:
     chat:
-      default-client: ds
-      clients:
-        ds:
-          provider: openai
-          base-url: https://api.deepseek.com
-          api-key: ${DEEPSEEK_API_KEY}
-          model: deepseek-chat
-        ds_reasoner:
-          provider: openai
-          base-url: https://api.deepseek.com
-          api-key: ${DEEPSEEK_API_KEY}
-          model: deepseek-reasoner
-        claude:
-          provider: anthropic
-          api-key: ${ANTHROPIC_API_KEY}
-          model: claude-sonnet-4-5
+      default: defaultChatClient
       slots:
-        ITEM_EXTRACTION: ds
-        INSIGHT_GENERATOR: ds_reasoner
-        THREAD_ENRICHMENT: claude
+        ITEM_EXTRACTION: extractionChatClient
+        INSIGHT_GENERATOR: reasoningChatClient
+        THREAD_ENRICHMENT: threadEnrichmentChatClient
+    embedding:
+      default: openAiEmbeddingModel
 ```
 
-没有单独配置的 slot 会自动使用 `default-client`。
+没有单独配置的 slot 会自动使用 `chat.default`。
 
 如果使用 Docker Compose，修改 `application.yml` 后需要重新构建镜像：
 

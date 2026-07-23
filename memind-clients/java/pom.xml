@@ -76,9 +76,9 @@
         <flatten-maven-plugin.version>1.7.3</flatten-maven-plugin.version>
         <central-publishing-maven-plugin.version>0.10.0</central-publishing-maven-plugin.version>
         <license.plugin.version>4.1</license.plugin.version>
-        <jackson.version>2.18.3</jackson.version>
+        <jackson.version>3.2.1</jackson.version>
         <slf4j.version>2.0.17</slf4j.version>
-        <spring-boot.version>3.4.5</spring-boot.version>
+        <spring-boot.version>4.1.0</spring-boot.version>
 
         <junit.version>5.11.4</junit.version>
         <wiremock.version>3.12.1</wiremock.version>
@@ -93,7 +93,7 @@
     <dependencyManagement>
         <dependencies>
             <dependency>
-                <groupId>com.fasterxml.jackson</groupId>
+                <groupId>tools.jackson</groupId>
                 <artifactId>jackson-bom</artifactId>
                 <version>${jackson.version}</version>
                 <type>pom</type>
@@ -123,6 +123,14 @@
                 <version>${assertj.version}</version>
                 <scope>test</scope>
             </dependency>
+            <!-- Spring Boot -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -133,12 +141,16 @@
                 <artifactId>license-maven-plugin</artifactId>
                 <version>${license.plugin.version}</version>
                 <configuration>
-                    <header>${license.header.path}</header>
-                    <includes>
-                        <include>pom.xml</include>
-                        <include>**/*.java</include>
-                        <include>**/*.xml</include>
-                    </includes>
+                    <licenseSets>
+                        <licenseSet>
+                            <header>${license.header.path}</header>
+                            <includes>
+                                <include>pom.xml</include>
+                                <include>**/*.java</include>
+                                <include>**/*.xml</include>
+                            </includes>
+                        </licenseSet>
+                    </licenseSets>
                 </configuration>
                 <executions>
                     <execution>

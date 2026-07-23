@@ -23,8 +23,8 @@ import com.openmemind.ai.memory.server.service.item.ItemDeleteService;
 import com.openmemind.ai.memory.server.service.memory.OpenMemoryAssetQueryService;
 import com.openmemind.ai.memory.server.service.rawdata.RawDataDeleteService;
 import java.util.List;
-import org.springaicommunity.mcp.annotation.McpTool;
-import org.springaicommunity.mcp.annotation.McpToolParam;
+import org.springframework.ai.mcp.annotation.McpTool;
+import org.springframework.ai.mcp.annotation.McpToolParam;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 

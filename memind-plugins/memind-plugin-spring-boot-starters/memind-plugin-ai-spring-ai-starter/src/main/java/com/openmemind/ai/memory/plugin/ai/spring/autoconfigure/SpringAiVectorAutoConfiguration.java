@@ -16,38 +16,21 @@ package com.openmemind.ai.memory.plugin.ai.spring.autoconfigure;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import com.openmemind.ai.memory.plugin.ai.spring.FileSimpleVectorStore;
 import com.openmemind.ai.memory.plugin.ai.spring.SpringAiMemoryVector;
+import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.MultiAiModelAutoConfiguration;
 import java.nio.file.Path;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Conditional;
-import org.springframework.context.annotation.Primary;
 
-@AutoConfiguration
-@AutoConfigureAfter(
-        name = {
-            "org.springframework.ai.model.chat.client.autoconfigure.ChatClientAutoConfiguration",
-            "org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration",
-            "org.springframework.ai.model.vertexai.autoconfigure.embedding.VertexAiTextEmbeddingAutoConfiguration",
-            "org.springframework.ai.model.vertexai.autoconfigure.embedding.VertexAiMultiModalEmbeddingAutoConfiguration"
-        })
+@AutoConfiguration(after = MultiAiModelAutoConfiguration.class)
 @ConditionalOnClass(EmbeddingModel.class)
-@EnableConfigurationProperties({SpringAiVectorProperties.class, MemindAiProperties.class})
+@EnableConfigurationProperties(SpringAiVectorProperties.class)
 public class SpringAiVectorAutoConfiguration {
-
-    @Bean
-    @Conditional(ConfiguredEmbeddingClientsCondition.class)
-    @Primary
-    public EmbeddingModel memindEmbeddingModel(
-            MemindAiProperties properties, MemindAiClientFactory clientFactory) {
-        return clientFactory.createEmbeddingModel(properties.getEmbedding());
-    }
 
     @Bean(destroyMethod = "")
     @ConditionalOnBean(EmbeddingModel.class)

@@ -40,7 +40,6 @@ import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.OpenAiEmbeddingModel;
 import org.springframework.ai.openai.OpenAiEmbeddingOptions;
-import org.springframework.ai.openai.api.OpenAiApi;
 
 public final class ExampleRuntimeFactory {
 
@@ -129,23 +128,28 @@ public final class ExampleRuntimeFactory {
     private static StructuredChatClient createChatClient(ExampleSettings.OpenAiSettings settings) {
         OpenAiChatModel chatModel =
                 OpenAiChatModel.builder()
-                        .openAiApi(createOpenAiApi(settings))
-                        .defaultOptions(
-                                OpenAiChatOptions.builder().model(settings.chatModel()).build())
+                        .options(
+                                OpenAiChatOptions.builder()
+                                        .apiKey(settings.apiKey())
+                                        .baseUrl(settings.baseUrl())
+                                        .model(settings.chatModel())
+                                        .build())
                         .observationRegistry(ObservationRegistry.NOOP)
                         .build();
         return new SpringAiStructuredChatClient(ChatClient.builder(chatModel).build());
     }
 
     private static EmbeddingModel createEmbeddingModel(ExampleSettings.OpenAiSettings settings) {
-        return new OpenAiEmbeddingModel(
-                createOpenAiApi(settings),
-                MetadataMode.NONE,
-                OpenAiEmbeddingOptions.builder().model(settings.embeddingModel()).build());
-    }
-
-    private static OpenAiApi createOpenAiApi(ExampleSettings.OpenAiSettings settings) {
-        return OpenAiApi.builder().apiKey(settings.apiKey()).baseUrl(settings.baseUrl()).build();
+        return OpenAiEmbeddingModel.builder()
+                .metadataMode(MetadataMode.NONE)
+                .options(
+                        OpenAiEmbeddingOptions.builder()
+                                .apiKey(settings.apiKey())
+                                .baseUrl(settings.baseUrl())
+                                .model(settings.embeddingModel())
+                                .build())
+                .observationRegistry(ObservationRegistry.NOOP)
+                .build();
     }
 
     private static JdbcMemoryAccess createJdbcAccess(ExampleSettings.StoreSettings settings) {

@@ -47,6 +47,16 @@
         </dependency>
         <dependency>
             <groupId>com.openmemind.ai</groupId>
+            <artifactId>memind-plugin-multi-chat-model-starter</artifactId>
+            <version>${revision}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.openmemind.ai</groupId>
             <artifactId>memind-plugin-mybatis-plus-starter</artifactId>
             <version>${revision}</version>
         </dependency>

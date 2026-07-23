@@ -36,6 +36,13 @@ public class NoopRuntimeTestConfiguration {
                     "org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration",
                     "org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration",
                     "org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration",
+                    "org.springframework.ai.model.google.genai.autoconfigure.chat."
+                            + "GoogleGenAiChatAutoConfiguration",
+                    "org.springframework.ai.model.google.genai.autoconfigure.embedding."
+                            + "GoogleGenAiEmbeddingConnectionAutoConfiguration",
+                    "org.springframework.ai.model.google.genai.autoconfigure.embedding."
+                            + "GoogleGenAiTextEmbeddingAutoConfiguration",
+                    "org.springframework.ai.model.anthropic.autoconfigure.AnthropicChatAutoConfiguration",
                     "com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.SpringAiLlmAutoConfiguration",
                     "com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.SpringAiVectorAutoConfiguration");
 

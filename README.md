@@ -128,10 +128,10 @@ OPENAI_CHAT_MODEL=openai/gpt-4o-mini
 OPENAI_EMBEDDING_MODEL=openai/text-embedding-3-small
 ```
 
-The default `openai` client can point to OpenAI or any OpenAI-compatible endpoint by changing
-`OPENAI_BASE_URL` and the model names. OpenRouter, DeepSeek, GLM, SiliconFlow, and similar
-providers can be used through the same `openai` provider path when they expose an
-OpenAI-compatible API.
+The default Spring AI OpenAI configuration can point to OpenAI or any OpenAI-compatible endpoint by
+changing `OPENAI_BASE_URL` and the model names. OpenRouter, DeepSeek, GLM, SiliconFlow, and similar
+providers can be used through Spring AI's OpenAI provider path when they expose an OpenAI-compatible
+API.
 
 Model names are provider-specific. The default values use OpenRouter-style model names. If you use
 OpenAI directly, use OpenAI model names such as `gpt-4o-mini` and `text-embedding-3-small`.
@@ -185,71 +185,43 @@ authentication, so do not expose it directly to public networks.
 <details>
 <summary>Advanced: configure model routing</summary>
 
-Memind has two AI configuration layers:
+Memind uses Spring AI for provider initialization and keeps only memory-pipeline routing in
+`memind.ai.*`:
 
 | Layer | Purpose |
 |-------|---------|
 | `spring.ai.*` | Provider defaults, API keys, base URLs, and model options |
-| `memind.ai.*` | Named chat/embedding clients and slot routing inside the memory pipeline |
+| `memind.ai.*` | Select existing Spring AI beans for the default chat/embedding model and slot routing |
 
-The default server configuration defines one chat client and one embedding client:
+The default server configuration points memind at the Spring AI OpenAI beans:
 
 ```yaml
 memind:
   ai:
     chat:
-      default-client: openai
-      clients:
-        openai:
-          provider: openai
+      default: openAiChatModel
     embedding:
-      client: openai
-      clients:
-        openai:
-          provider: openai
+      default: openAiEmbeddingModel
 ```
 
-Supported `memind.ai` providers:
-
-| Usage | Providers |
-|-------|-----------|
-| Chat | `openai`, `anthropic`, `google`, `ollama` |
-| Embedding | `openai`, `google`, `ollama` |
-
-Use `provider: openai` for OpenAI-compatible providers such as DeepSeek, GLM, OpenRouter, or
-SiliconFlow.
-
-For advanced routing, add named clients in
-[`application.yml`](./memind-server/src/main/resources/application.yml), then assign specific
-memory pipeline slots to those clients:
+For advanced routing, define provider-specific `ChatModel`, `ChatClient`, or `EmbeddingModel`
+beans with Spring AI, then reference those bean names from
+[`application.yml`](./memind-server/src/main/resources/application.yml):
 
 ```yaml
 memind:
   ai:
     chat:
-      default-client: ds
-      clients:
-        ds:
-          provider: openai
-          base-url: https://api.deepseek.com
-          api-key: ${DEEPSEEK_API_KEY}
-          model: deepseek-chat
-        ds_reasoner:
-          provider: openai
-          base-url: https://api.deepseek.com
-          api-key: ${DEEPSEEK_API_KEY}
-          model: deepseek-reasoner
-        claude:
-          provider: anthropic
-          api-key: ${ANTHROPIC_API_KEY}
-          model: claude-sonnet-4-5
+      default: defaultChatClient
       slots:
-        ITEM_EXTRACTION: ds
-        INSIGHT_GENERATOR: ds_reasoner
-        THREAD_ENRICHMENT: claude
+        ITEM_EXTRACTION: extractionChatClient
+        INSIGHT_GENERATOR: reasoningChatClient
+        THREAD_ENRICHMENT: threadEnrichmentChatClient
+    embedding:
+      default: openAiEmbeddingModel
 ```
 
-Unconfigured slots automatically use `default-client`.
+Unconfigured slots automatically use `chat.default`.
 
 When using Docker Compose, rebuild the image after changing `application.yml`:
 

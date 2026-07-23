@@ -21,6 +21,13 @@ import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.ConditionContext;
 import org.springframework.core.type.AnnotatedTypeMetadata;
 
+/**
+ * Matches only when Memind-specific slot routing is configured.
+ *
+ * <p>Without {@code memind.ai.chat.slots}, Memind backs off and lets the normal Spring AI chat
+ * client path create the default {@code StructuredChatClient}. This condition gates only the extra
+ * {@code MemindChatClients} routing bean used by model-id based slot configuration.
+ */
 final class ConfiguredChatClientsCondition extends SpringBootCondition {
 
     @Override
@@ -28,15 +35,15 @@ final class ConfiguredChatClientsCondition extends SpringBootCondition {
             ConditionContext context, AnnotatedTypeMetadata metadata) {
         boolean configured =
                 Binder.get(context.getEnvironment())
-                        .bind("memind.ai.chat.clients", Bindable.mapOf(String.class, Object.class))
-                        .map(clients -> !clients.isEmpty())
+                        .bind("memind.ai.chat.slots", Bindable.mapOf(String.class, String.class))
+                        .map(slots -> !slots.isEmpty())
                         .orElse(false);
         ConditionMessage message =
-                ConditionMessage.forCondition("configured memind AI chat clients")
+                ConditionMessage.forCondition("configured memind AI chat slots")
                         .because(
                                 configured
-                                        ? "memind.ai.chat.clients is configured"
-                                        : "memind.ai.chat.clients is not configured");
+                                        ? "memind.ai.chat.slots is configured"
+                                        : "memind.ai.chat.slots is not configured");
         return configured ? ConditionOutcome.match(message) : ConditionOutcome.noMatch(message);
     }
 }
