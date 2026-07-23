@@ -13,30 +13,17 @@
  */
 package com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provider;
 
-import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.MultiAiModelConfigurationException;
 import io.micrometer.observation.ObservationRegistry;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
-import org.springframework.boot.context.properties.bind.Bindable;
-import org.springframework.boot.context.properties.bind.Binder;
-import org.springframework.core.env.Environment;
 
 public final class MultiAiModelProviderContext {
 
-    private final Environment environment;
     private final ConfigurableListableBeanFactory beanFactory;
 
-    public MultiAiModelProviderContext(
-            Environment environment, ConfigurableListableBeanFactory beanFactory) {
-        this.environment = environment;
+    public MultiAiModelProviderContext(ConfigurableListableBeanFactory beanFactory) {
         this.beanFactory = beanFactory;
-    }
-
-    public <T> T bind(String prefix, Class<T> type) {
-        return Binder.get(environment)
-                .bind(prefix, Bindable.of(type))
-                .orElseGet(() -> newInstance(type));
     }
 
     public <T> ObjectProvider<T> provider(Class<T> type) {
@@ -54,14 +41,5 @@ public final class MultiAiModelProviderContext {
                                 ToolCallingManager.builder()
                                         .observationRegistry(observationRegistry)
                                         .build());
-    }
-
-    private <T> T newInstance(Class<T> type) {
-        try {
-            return type.getDeclaredConstructor().newInstance();
-        } catch (ReflectiveOperationException exception) {
-            throw new MultiAiModelConfigurationException(
-                    "Failed to instantiate configuration properties " + type.getName(), exception);
-        }
     }
 }

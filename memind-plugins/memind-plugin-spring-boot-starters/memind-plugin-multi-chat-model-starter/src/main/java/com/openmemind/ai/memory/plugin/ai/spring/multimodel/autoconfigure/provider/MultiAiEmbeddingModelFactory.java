@@ -15,10 +15,10 @@ package com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provi
 
 import org.springframework.ai.embedding.EmbeddingModel;
 
-public interface MultiAiEmbeddingModelFactory {
+public interface MultiAiEmbeddingModelFactory<T> {
 
     MultiAiEmbeddingModelProviderType providerType();
 
     EmbeddingModel createEmbeddingModel(
-            String modelId, String providerPrefix, MultiAiModelProviderContext context);
+            String modelId, T properties, MultiAiModelProviderContext context);
 }

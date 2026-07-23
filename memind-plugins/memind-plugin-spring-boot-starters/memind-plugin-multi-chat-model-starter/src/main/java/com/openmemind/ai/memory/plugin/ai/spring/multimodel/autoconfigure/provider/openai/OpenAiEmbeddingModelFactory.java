@@ -13,19 +13,24 @@
  */
 package com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provider.openai;
 
+import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.properties.MultiAiOpenAiEmbeddingProperties;
 import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provider.MultiAiEmbeddingModelFactory;
 import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provider.MultiAiEmbeddingModelProviderType;
 import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provider.MultiAiModelProviderContext;
+import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provider.ProviderPropertyMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
+import org.springframework.ai.document.MetadataMode;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.observation.EmbeddingModelObservationConvention;
 import org.springframework.ai.model.openai.autoconfigure.OpenAiCommonProperties;
 import org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration;
 import org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingProperties;
+import org.springframework.ai.openai.OpenAiEmbeddingOptions.EncodingFormat;
 import org.springframework.ai.openai.http.okhttp.OpenAiHttpClientBuilderCustomizer;
 
-public final class OpenAiEmbeddingModelFactory implements MultiAiEmbeddingModelFactory {
+public final class OpenAiEmbeddingModelFactory
+        implements MultiAiEmbeddingModelFactory<MultiAiOpenAiEmbeddingProperties> {
 
     @Override
     public MultiAiEmbeddingModelProviderType providerType() {
@@ -34,11 +39,11 @@ public final class OpenAiEmbeddingModelFactory implements MultiAiEmbeddingModelF
 
     @Override
     public EmbeddingModel createEmbeddingModel(
-            String modelId, String providerPrefix, MultiAiModelProviderContext context) {
-        OpenAiCommonProperties commonProperties =
-                context.bind(providerPrefix, OpenAiCommonProperties.class);
-        OpenAiEmbeddingProperties embeddingProperties =
-                context.bind(providerPrefix, OpenAiEmbeddingProperties.class);
+            String modelId,
+            MultiAiOpenAiEmbeddingProperties properties,
+            MultiAiModelProviderContext context) {
+        OpenAiCommonProperties commonProperties = commonProperties(properties);
+        OpenAiEmbeddingProperties embeddingProperties = embeddingProperties(properties);
         return new OpenAiEmbeddingAutoConfiguration()
                 .openAiEmbeddingModel(
                         commonProperties,
@@ -47,5 +52,27 @@ public final class OpenAiEmbeddingModelFactory implements MultiAiEmbeddingModelF
                         context.provider(MeterRegistry.class),
                         context.provider(EmbeddingModelObservationConvention.class),
                         context.provider(OpenAiHttpClientBuilderCustomizer.class));
+    }
+
+    private static OpenAiCommonProperties commonProperties(
+            MultiAiOpenAiEmbeddingProperties properties) {
+        OpenAiCommonProperties target = new OpenAiCommonProperties();
+        ProviderPropertyMapper.copyProperties(properties, target);
+        return target;
+    }
+
+    private static OpenAiEmbeddingProperties embeddingProperties(
+            MultiAiOpenAiEmbeddingProperties properties) {
+        OpenAiEmbeddingProperties target = new OpenAiEmbeddingProperties();
+        ProviderPropertyMapper.copyProperties(properties, target, "metadataMode", "encodingFormat");
+        MetadataMode metadataMode =
+                ProviderPropertyMapper.convert(properties.getMetadataMode(), MetadataMode.class);
+        if (metadataMode != null) {
+            target.setMetadataMode(metadataMode);
+        }
+        target.setEncodingFormat(
+                ProviderPropertyMapper.convert(
+                        properties.getEncodingFormat(), EncodingFormat.class));
+        return target;
     }
 }

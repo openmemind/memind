@@ -14,21 +14,25 @@
 package com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provider.google;
 
 import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.MultiAiModelConfigurationException;
+import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.properties.MultiAiGoogleGenAiEmbeddingProperties;
 import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provider.MultiAiEmbeddingModelFactory;
 import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provider.MultiAiEmbeddingModelProviderType;
 import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provider.MultiAiModelProviderContext;
+import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provider.ProviderPropertyMapper;
 import io.micrometer.observation.ObservationRegistry;
 import java.io.IOException;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.observation.EmbeddingModelObservationConvention;
 import org.springframework.ai.google.genai.embedding.GoogleGenAiEmbeddingConnectionDetails;
+import org.springframework.ai.google.genai.text.GoogleGenAiTextEmbeddingOptions.TaskType;
 import org.springframework.ai.model.google.genai.autoconfigure.embedding.GoogleGenAiEmbeddingConnectionAutoConfiguration;
 import org.springframework.ai.model.google.genai.autoconfigure.embedding.GoogleGenAiEmbeddingConnectionProperties;
 import org.springframework.ai.model.google.genai.autoconfigure.embedding.GoogleGenAiTextEmbeddingAutoConfiguration;
 import org.springframework.ai.model.google.genai.autoconfigure.embedding.GoogleGenAiTextEmbeddingProperties;
 import org.springframework.core.retry.RetryTemplate;
 
-public final class GoogleGenAiEmbeddingModelFactory implements MultiAiEmbeddingModelFactory {
+public final class GoogleGenAiEmbeddingModelFactory
+        implements MultiAiEmbeddingModelFactory<MultiAiGoogleGenAiEmbeddingProperties> {
 
     @Override
     public MultiAiEmbeddingModelProviderType providerType() {
@@ -37,11 +41,12 @@ public final class GoogleGenAiEmbeddingModelFactory implements MultiAiEmbeddingM
 
     @Override
     public EmbeddingModel createEmbeddingModel(
-            String modelId, String providerPrefix, MultiAiModelProviderContext context) {
+            String modelId,
+            MultiAiGoogleGenAiEmbeddingProperties properties,
+            MultiAiModelProviderContext context) {
         GoogleGenAiEmbeddingConnectionProperties connectionProperties =
-                context.bind(providerPrefix, GoogleGenAiEmbeddingConnectionProperties.class);
-        GoogleGenAiTextEmbeddingProperties embeddingProperties =
-                context.bind(providerPrefix, GoogleGenAiTextEmbeddingProperties.class);
+                connectionProperties(properties);
+        GoogleGenAiTextEmbeddingProperties embeddingProperties = embeddingProperties(properties);
         GoogleGenAiEmbeddingConnectionDetails connectionDetails;
         try {
             connectionDetails =
@@ -58,5 +63,22 @@ public final class GoogleGenAiEmbeddingModelFactory implements MultiAiEmbeddingM
                         context.provider(RetryTemplate.class),
                         context.provider(ObservationRegistry.class),
                         context.provider(EmbeddingModelObservationConvention.class));
+    }
+
+    private static GoogleGenAiEmbeddingConnectionProperties connectionProperties(
+            MultiAiGoogleGenAiEmbeddingProperties properties) {
+        GoogleGenAiEmbeddingConnectionProperties target =
+                new GoogleGenAiEmbeddingConnectionProperties();
+        ProviderPropertyMapper.copyProperties(properties, target);
+        return target;
+    }
+
+    private static GoogleGenAiTextEmbeddingProperties embeddingProperties(
+            MultiAiGoogleGenAiEmbeddingProperties properties) {
+        GoogleGenAiTextEmbeddingProperties target = new GoogleGenAiTextEmbeddingProperties();
+        ProviderPropertyMapper.copyProperties(properties, target, "taskType");
+        target.setTaskType(
+                ProviderPropertyMapper.convert(properties.getTaskType(), TaskType.class));
+        return target;
     }
 }

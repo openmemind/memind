@@ -13,8 +13,15 @@
  */
 package com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure;
 
+import com.google.genai.Client;
 import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.properties.ChatModelProperties;
 import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.properties.EmbeddingModelProperties;
+import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.properties.MultiAiAnthropicChatProperties;
+import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.properties.MultiAiGoogleGenAiChatProperties;
+import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.properties.MultiAiGoogleGenAiEmbeddingProperties;
+import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.properties.MultiAiModelProperties;
+import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.properties.MultiAiOpenAiChatProperties;
+import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.properties.MultiAiOpenAiEmbeddingProperties;
 import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provider.MultiAiChatModelFactory;
 import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provider.MultiAiChatModelProviderType;
 import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provider.MultiAiEmbeddingModelFactory;
@@ -28,135 +35,142 @@ import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provid
 import com.openmemind.ai.memory.plugin.ai.spring.multimodel.chat.MultiChatModel;
 import com.openmemind.ai.memory.plugin.ai.spring.multimodel.embedding.MultiEmbeddingModel;
 import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
+import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.google.genai.GoogleGenAiChatModel;
+import org.springframework.ai.google.genai.text.GoogleGenAiTextEmbeddingModel;
+import org.springframework.ai.model.anthropic.autoconfigure.AnthropicChatAutoConfiguration;
+import org.springframework.ai.model.google.genai.autoconfigure.chat.GoogleGenAiChatAutoConfiguration;
+import org.springframework.ai.model.google.genai.autoconfigure.embedding.GoogleGenAiTextEmbeddingAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.ai.openai.OpenAiEmbeddingModel;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.context.properties.source.ConfigurationPropertyName;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
-import org.springframework.core.env.Environment;
 
 @AutoConfiguration
+@EnableConfigurationProperties(MultiAiModelProperties.class)
 public class MultiAiModelAutoConfiguration {
 
     private static final String CHAT_MODELS_PREFIX = "spring.ai.chat-models";
     private static final String EMBEDDING_MODELS_PREFIX = "spring.ai.embedding-models";
-    private static final String CHAT_PRIMARY_MODEL_PROPERTY = "spring.ai.model.chat";
-    private static final String EMBEDDING_PRIMARY_MODEL_PROPERTY = "spring.ai.model.embedding";
-    private static final String DEFAULT_PRIMARY_MODEL_ID = "default";
 
     @Bean
     @Primary
     @Conditional(MultiAiChatModelsConfiguredCondition.class)
     static MultiChatModel multiChatModel(
-            Environment environment,
+            MultiAiModelProperties properties,
             ConfigurableListableBeanFactory beanFactory,
-            ObjectProvider<MultiAiChatModelFactory> chatModelFactories) {
-        Map<String, ChatModelProperties> chatModels =
-                emptyIfNull(MultiAiModelPropertiesBinder.bind(environment).getChatModels());
+            ObjectProvider<MultiAiChatModelFactory<?>> chatModelFactories) {
         return new MultiChatModel(
-                primaryModelId(environment, CHAT_PRIMARY_MODEL_PROPERTY),
-                createChatModels(environment, beanFactory, chatModelFactories, chatModels));
+                properties.getModel().getChat(),
+                createChatModels(
+                        beanFactory, chatModelFactories, emptyIfNull(properties.getChatModels())));
     }
 
     @Bean
     @Primary
     @Conditional(MultiAiEmbeddingModelsConfiguredCondition.class)
     static MultiEmbeddingModel multiEmbeddingModel(
-            Environment environment,
+            MultiAiModelProperties properties,
             ConfigurableListableBeanFactory beanFactory,
-            ObjectProvider<MultiAiEmbeddingModelFactory> embeddingModelFactories) {
-        Map<String, EmbeddingModelProperties> embeddingModels =
-                emptyIfNull(MultiAiModelPropertiesBinder.bind(environment).getEmbeddingModels());
+            ObjectProvider<MultiAiEmbeddingModelFactory<?>> embeddingModelFactories) {
         return new MultiEmbeddingModel(
-                primaryModelId(environment, EMBEDDING_PRIMARY_MODEL_PROPERTY),
+                properties.getModel().getEmbedding(),
                 createEmbeddingModels(
-                        environment, beanFactory, embeddingModelFactories, embeddingModels));
+                        beanFactory,
+                        embeddingModelFactories,
+                        emptyIfNull(properties.getEmbeddingModels())));
     }
 
-    @Bean
-    @ConditionalOnClass(
-            name = {
-                "org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration",
-                "org.springframework.ai.openai.OpenAiChatModel"
-            })
-    MultiAiChatModelFactory openAiChatModelFactory() {
-        return new OpenAiChatModelFactory();
+    @Configuration
+    @ConditionalOnClass({OpenAiChatAutoConfiguration.class, OpenAiChatModel.class})
+    public static class OpenAiChatModelFactoryConfiguration {
+        @Bean
+        MultiAiChatModelFactory<MultiAiOpenAiChatProperties> openAiChatModelFactory() {
+            return new OpenAiChatModelFactory();
+        }
     }
 
-    @Bean
-    @ConditionalOnClass(
-            name = {
-                "org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration",
-                "org.springframework.ai.openai.OpenAiEmbeddingModel"
-            })
-    MultiAiEmbeddingModelFactory openAiEmbeddingModelFactory() {
-        return new OpenAiEmbeddingModelFactory();
+    @Configuration
+    @ConditionalOnClass({OpenAiEmbeddingAutoConfiguration.class, OpenAiEmbeddingModel.class})
+    public static class OpenAiEmbeddingModelFactoryConfiguration {
+        @Bean
+        MultiAiEmbeddingModelFactory<MultiAiOpenAiEmbeddingProperties>
+                openAiEmbeddingModelFactory() {
+            return new OpenAiEmbeddingModelFactory();
+        }
     }
 
-    @Bean
-    @ConditionalOnClass(
-            name = {
-                "org.springframework.ai.model.anthropic.autoconfigure.AnthropicChatAutoConfiguration",
-                "org.springframework.ai.anthropic.AnthropicChatModel"
-            })
-    MultiAiChatModelFactory anthropicChatModelFactory() {
-        return new AnthropicChatModelFactory();
+    @Configuration
+    @ConditionalOnClass({AnthropicChatAutoConfiguration.class, AnthropicChatModel.class})
+    public static class AnthropicChatModelFactoryConfiguration {
+        @Bean
+        MultiAiChatModelFactory<MultiAiAnthropicChatProperties> anthropicChatModelFactory() {
+            return new AnthropicChatModelFactory();
+        }
     }
 
-    @Bean
-    @ConditionalOnClass(
-            name = {
-                "com.google.genai.Client",
-                "org.springframework.ai.model.google.genai.autoconfigure.chat.GoogleGenAiChatAutoConfiguration",
-                "org.springframework.ai.google.genai.GoogleGenAiChatModel"
-            })
-    MultiAiChatModelFactory googleGenAiChatModelFactory() {
-        return new GoogleGenAiChatModelFactory();
+    @Configuration
+    @ConditionalOnClass({
+        Client.class,
+        GoogleGenAiChatAutoConfiguration.class,
+        GoogleGenAiChatModel.class
+    })
+    public static class GoogleGenAiChatModelFactoryConfiguration {
+
+        @Bean
+        MultiAiChatModelFactory<MultiAiGoogleGenAiChatProperties> googleGenAiChatModelFactory() {
+            return new GoogleGenAiChatModelFactory();
+        }
     }
 
-    @Bean
-    @ConditionalOnClass(
-            name = {
-                "org.springframework.ai.model.google.genai.autoconfigure.embedding."
-                        + "GoogleGenAiTextEmbeddingAutoConfiguration",
-                "org.springframework.ai.google.genai.text.GoogleGenAiTextEmbeddingModel"
-            })
-    MultiAiEmbeddingModelFactory googleGenAiEmbeddingModelFactory() {
-        return new GoogleGenAiEmbeddingModelFactory();
+    @ConditionalOnClass({
+        Client.class,
+        GoogleGenAiTextEmbeddingAutoConfiguration.class,
+        GoogleGenAiTextEmbeddingModel.class
+    })
+    @Configuration
+    public static class GoogleGenAiEmbeddingModelFactoryConfiguration {
+        @Bean
+        MultiAiEmbeddingModelFactory<MultiAiGoogleGenAiEmbeddingProperties>
+                googleGenAiEmbeddingModelFactory() {
+            return new GoogleGenAiEmbeddingModelFactory();
+        }
     }
 
     private static Map<String, ChatModel> createChatModels(
-            Environment environment,
             ConfigurableListableBeanFactory beanFactory,
-            ObjectProvider<MultiAiChatModelFactory> chatModelFactories,
+            ObjectProvider<MultiAiChatModelFactory<?>> chatModelFactories,
             Map<String, ChatModelProperties> models) {
         Map<String, ChatModel> chatModels = new LinkedHashMap<>();
-        MultiAiModelProviderContext providerContext =
-                new MultiAiModelProviderContext(environment, beanFactory);
+        MultiAiModelProviderContext providerContext = new MultiAiModelProviderContext(beanFactory);
         models.forEach(
                 (modelId, properties) -> {
-                    MultiAiChatModelProviderType provider =
-                            requiredProviderType(properties.getType(), CHAT_MODELS_PREFIX, modelId);
-                    String prefix =
-                            modelProviderPrefix(
-                                    CHAT_MODELS_PREFIX, modelId, provider.propertyValue());
+                    MultiAiChatModelProviderType provider = properties.requiredType(modelId);
                     chatModels.put(
                             modelId,
-                            chatModelFactory(chatModelFactories, provider, modelId)
-                                    .createChatModel(modelId, prefix, providerContext));
+                            createChatModel(
+                                    chatModelFactory(chatModelFactories, provider, modelId),
+                                    modelId,
+                                    chatProviderProperties(properties, provider),
+                                    providerContext));
                 });
         return chatModels;
     }
 
-    private static MultiAiChatModelFactory chatModelFactory(
-            ObjectProvider<MultiAiChatModelFactory> factories,
+    private static MultiAiChatModelFactory<?> chatModelFactory(
+            ObjectProvider<MultiAiChatModelFactory<?>> factories,
             MultiAiChatModelProviderType provider,
             String modelId) {
         return factories
@@ -166,32 +180,47 @@ public class MultiAiModelAutoConfiguration {
                 .orElseThrow(() -> missingChatFactoryException(provider, modelId));
     }
 
+    @SuppressWarnings("unchecked")
+    private static <T> ChatModel createChatModel(
+            MultiAiChatModelFactory<T> factory,
+            String modelId,
+            Object properties,
+            MultiAiModelProviderContext context) {
+        return factory.createChatModel(modelId, (T) properties, context);
+    }
+
+    private static Object chatProviderProperties(
+            ChatModelProperties properties, MultiAiChatModelProviderType provider) {
+        return switch (provider) {
+            case OPENAI -> properties.getOpenai();
+            case ANTHROPIC -> properties.getAnthropic();
+            case GOOGLE -> properties.getGoogle();
+        };
+    }
+
     private static Map<String, EmbeddingModel> createEmbeddingModels(
-            Environment environment,
             ConfigurableListableBeanFactory beanFactory,
-            ObjectProvider<MultiAiEmbeddingModelFactory> embeddingModelFactories,
+            ObjectProvider<MultiAiEmbeddingModelFactory<?>> embeddingModelFactories,
             Map<String, EmbeddingModelProperties> models) {
         Map<String, EmbeddingModel> embeddingModels = new LinkedHashMap<>();
-        MultiAiModelProviderContext providerContext =
-                new MultiAiModelProviderContext(environment, beanFactory);
+        MultiAiModelProviderContext providerContext = new MultiAiModelProviderContext(beanFactory);
         models.forEach(
                 (modelId, properties) -> {
-                    MultiAiEmbeddingModelProviderType provider =
-                            requiredProviderType(
-                                    properties.getType(), EMBEDDING_MODELS_PREFIX, modelId);
-                    String prefix =
-                            modelProviderPrefix(
-                                    EMBEDDING_MODELS_PREFIX, modelId, provider.propertyValue());
+                    MultiAiEmbeddingModelProviderType provider = properties.requiredType(modelId);
                     embeddingModels.put(
                             modelId,
-                            embeddingModelFactory(embeddingModelFactories, provider, modelId)
-                                    .createEmbeddingModel(modelId, prefix, providerContext));
+                            createEmbeddingModel(
+                                    embeddingModelFactory(
+                                            embeddingModelFactories, provider, modelId),
+                                    modelId,
+                                    embeddingProviderProperties(properties, provider),
+                                    providerContext));
                 });
         return embeddingModels;
     }
 
-    private static MultiAiEmbeddingModelFactory embeddingModelFactory(
-            ObjectProvider<MultiAiEmbeddingModelFactory> factories,
+    private static MultiAiEmbeddingModelFactory<?> embeddingModelFactory(
+            ObjectProvider<MultiAiEmbeddingModelFactory<?>> factories,
             MultiAiEmbeddingModelProviderType provider,
             String modelId) {
         return factories
@@ -199,6 +228,23 @@ public class MultiAiModelAutoConfiguration {
                 .filter(factory -> factory.providerType() == provider)
                 .findFirst()
                 .orElseThrow(() -> missingEmbeddingFactoryException(provider, modelId));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> EmbeddingModel createEmbeddingModel(
+            MultiAiEmbeddingModelFactory<T> factory,
+            String modelId,
+            Object properties,
+            MultiAiModelProviderContext context) {
+        return factory.createEmbeddingModel(modelId, (T) properties, context);
+    }
+
+    private static Object embeddingProviderProperties(
+            EmbeddingModelProperties properties, MultiAiEmbeddingModelProviderType provider) {
+        return switch (provider) {
+            case OPENAI -> properties.getOpenai();
+            case GOOGLE -> properties.getGoogle();
+        };
     }
 
     private static MultiAiModelConfigurationException missingChatFactoryException(
@@ -229,35 +275,5 @@ public class MultiAiModelAutoConfiguration {
 
     private static <T> Map<String, T> emptyIfNull(Map<String, T> models) {
         return models != null ? models : Map.of();
-    }
-
-    private static <T> T requiredProviderType(T provider, String collectionPrefix, String modelId) {
-        String propertyPath = collectionPrefix + "." + modelId + ".type";
-        if (provider == null) {
-            throw new MultiAiModelConfigurationException(propertyPath + " must not be blank");
-        }
-        return provider;
-    }
-
-    private static String primaryModelId(Environment environment, String propertyName) {
-        String configuredModelId = environment.getProperty(propertyName);
-        if (configuredModelId == null || configuredModelId.isBlank()) {
-            return DEFAULT_PRIMARY_MODEL_ID;
-        }
-        return configuredModelId.trim();
-    }
-
-    private static String modelProviderPrefix(
-            String collectionPrefix, String modelId, String providerValue) {
-        String dottedPrefix = collectionPrefix + "." + modelId + "." + providerValue;
-        if (ConfigurationPropertyName.isValid(dottedPrefix)) {
-            return dottedPrefix;
-        }
-        String canonicalModelId = modelId.toLowerCase(Locale.ROOT);
-        dottedPrefix = collectionPrefix + "." + canonicalModelId + "." + providerValue;
-        if (ConfigurationPropertyName.isValid(dottedPrefix)) {
-            return dottedPrefix;
-        }
-        return collectionPrefix + "[" + modelId + "]." + providerValue;
     }
 }

@@ -16,15 +16,27 @@ package com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.prope
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 @ConfigurationProperties(prefix = MultiAiModelProperties.PREFIX)
 public class MultiAiModelProperties {
 
     public static final String PREFIX = "spring.ai";
 
+    @NestedConfigurationProperty
+    private PrimaryModelProperties model = new PrimaryModelProperties();
+
     private Map<String, ChatModelProperties> chatModels = new LinkedHashMap<>();
 
     private Map<String, EmbeddingModelProperties> embeddingModels = new LinkedHashMap<>();
+
+    public PrimaryModelProperties getModel() {
+        return model;
+    }
+
+    public void setModel(PrimaryModelProperties model) {
+        this.model = model != null ? model : new PrimaryModelProperties();
+    }
 
     public Map<String, ChatModelProperties> getChatModels() {
         return chatModels;
@@ -40,5 +52,36 @@ public class MultiAiModelProperties {
 
     public void setEmbeddingModels(Map<String, EmbeddingModelProperties> embeddingModels) {
         this.embeddingModels = embeddingModels;
+    }
+
+    public static final class PrimaryModelProperties {
+
+        private static final String DEFAULT_MODEL_ID = "default";
+
+        /**
+         * Primary chat model id.
+         */
+        private String chat = DEFAULT_MODEL_ID;
+
+        /**
+         * Primary embedding model id.
+         */
+        private String embedding = DEFAULT_MODEL_ID;
+
+        public String getChat() {
+            return chat;
+        }
+
+        public void setChat(String chat) {
+            this.chat = chat;
+        }
+
+        public String getEmbedding() {
+            return embedding;
+        }
+
+        public void setEmbedding(String embedding) {
+            this.embedding = embedding;
+        }
     }
 }

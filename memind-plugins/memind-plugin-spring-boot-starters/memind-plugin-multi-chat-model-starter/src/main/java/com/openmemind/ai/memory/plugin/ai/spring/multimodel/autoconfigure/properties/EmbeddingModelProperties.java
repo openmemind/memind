@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.properties;
 
+import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.MultiAiModelConfigurationException;
 import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provider.MultiAiEmbeddingModelProviderType;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
@@ -36,6 +37,14 @@ public final class EmbeddingModelProperties {
 
     public void setType(MultiAiEmbeddingModelProviderType type) {
         this.type = type;
+    }
+
+    public MultiAiEmbeddingModelProviderType requiredType(String modelId) {
+        if (type == null) {
+            throw new MultiAiModelConfigurationException(
+                    "spring.ai.embedding-models." + modelId + ".type must not be blank");
+        }
+        return type;
     }
 
     public MultiAiOpenAiEmbeddingProperties getOpenai() {

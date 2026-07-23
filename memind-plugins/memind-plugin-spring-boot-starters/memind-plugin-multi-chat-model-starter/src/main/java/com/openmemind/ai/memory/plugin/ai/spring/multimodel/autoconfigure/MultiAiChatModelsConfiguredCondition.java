@@ -21,7 +21,7 @@ public final class MultiAiChatModelsConfiguredCondition implements Condition {
 
     @Override
     public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
-        return MultiAiModelPropertiesBinder.hasConfiguredModels(
+        return MultiAiModelConfigurationDetector.hasConfiguredModels(
                 context.getEnvironment(), "spring.ai.chat-models");
     }
 }

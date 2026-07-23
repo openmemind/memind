@@ -15,10 +15,9 @@ package com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provi
 
 import org.springframework.ai.chat.model.ChatModel;
 
-public interface MultiAiChatModelFactory {
+public interface MultiAiChatModelFactory<T> {
 
     MultiAiChatModelProviderType providerType();
 
-    ChatModel createChatModel(
-            String modelId, String providerPrefix, MultiAiModelProviderContext context);
+    ChatModel createChatModel(String modelId, T properties, MultiAiModelProviderContext context);
 }

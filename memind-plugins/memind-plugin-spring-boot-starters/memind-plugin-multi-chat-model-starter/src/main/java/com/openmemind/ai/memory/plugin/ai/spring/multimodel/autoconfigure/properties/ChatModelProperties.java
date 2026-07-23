@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.properties;
 
+import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.MultiAiModelConfigurationException;
 import com.openmemind.ai.memory.plugin.ai.spring.multimodel.autoconfigure.provider.MultiAiChatModelProviderType;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
@@ -38,6 +39,14 @@ public final class ChatModelProperties {
 
     public void setType(MultiAiChatModelProviderType type) {
         this.type = type;
+    }
+
+    public MultiAiChatModelProviderType requiredType(String modelId) {
+        if (type == null) {
+            throw new MultiAiModelConfigurationException(
+                    "spring.ai.chat-models." + modelId + ".type must not be blank");
+        }
+        return type;
     }
 
     public MultiAiOpenAiChatProperties getOpenai() {
