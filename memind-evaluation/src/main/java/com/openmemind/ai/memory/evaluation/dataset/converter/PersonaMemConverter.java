@@ -13,9 +13,6 @@
  */
 package com.openmemind.ai.memory.evaluation.dataset.converter;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -30,6 +27,9 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Convert raw PersonaMem files into the map-root LoCoMo-compatible shape that memind-evaluation
@@ -114,8 +114,8 @@ public class PersonaMemConverter implements DatasetConverter {
                     continue;
                 }
                 JsonNode root = objectMapper.readTree(line);
-                root.fields()
-                        .forEachRemaining(
+                root.properties()
+                        .forEach(
                                 entry ->
                                         contexts.put(
                                                 entry.getKey(),

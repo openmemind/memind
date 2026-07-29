@@ -13,7 +13,7 @@
  */
 package com.openmemind.ai.client;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import tools.jackson.core.type.TypeReference;
 import com.openmemind.ai.client.exception.MemindClientException;
 import com.openmemind.ai.client.internal.ApiResult;
 import com.openmemind.ai.client.internal.MemindHttpClient;

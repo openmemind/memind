@@ -14,7 +14,7 @@
 package com.openmemind.ai.client.internal;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 record ErrorResult(ApiError error) {

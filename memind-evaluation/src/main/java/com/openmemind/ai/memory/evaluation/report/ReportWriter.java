@@ -13,7 +13,6 @@
  */
 package com.openmemind.ai.memory.evaluation.report;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.evaluation.adapter.model.SearchResult;
 import com.openmemind.ai.memory.evaluation.pipeline.PipelineConfig;
 import com.openmemind.ai.memory.evaluation.pipeline.model.AnswerResult;
@@ -29,6 +28,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Write evaluation results to report.txt (human-readable) and eval_results.json (machine-readable).
