@@ -13,7 +13,7 @@
  */
 package com.openmemind.ai.client.model.common;
 
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import tools.jackson.databind.annotation.JsonSerialize;
 import com.openmemind.ai.client.internal.RawContentSerializer;
 
 @JsonSerialize(using = RawContentSerializer.class)

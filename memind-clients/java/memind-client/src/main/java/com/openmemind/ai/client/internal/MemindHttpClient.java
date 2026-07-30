@@ -14,14 +14,15 @@
 package com.openmemind.ai.client.internal;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.openmemind.ai.client.exception.MemindApiException;
 import com.openmemind.ai.client.exception.MemindConnectionException;
 import com.openmemind.ai.client.exception.MemindTimeoutException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.cfg.DateTimeFeature;
+import tools.jackson.databind.json.JsonMapper;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.URI;
@@ -56,12 +57,7 @@ public class MemindHttpClient implements AutoCloseable {
                 HttpClient.newBuilder()
                         .connectTimeout(Objects.requireNonNull(connectTimeout, "connectTimeout"))
                         .build();
-        this.objectMapper =
-                new ObjectMapper()
-                        .registerModule(new JavaTimeModule())
-                        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-                        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-                        .setSerializationInclusion(JsonInclude.Include.NON_NULL);
+        this.objectMapper = createObjectMapper();
     }
 
     public <T> CompletableFuture<T> get(String path, TypeReference<ApiResult<T>> responseType) {
@@ -80,7 +76,7 @@ public class MemindHttpClient implements AutoCloseable {
                             .build();
             log.debug("POST {}", request.uri());
             return sendAsync(request, responseType);
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             return CompletableFuture.failedFuture(
                     new MemindConnectionException("Failed to serialize request body", e));
         }
@@ -140,7 +136,7 @@ public class MemindHttpClient implements AutoCloseable {
             throw toApiException(status, body, requestId(response));
         } catch (MemindApiException e) {
             throw e;
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             throw new MemindApiException(
                     status,
                     "parse_error",
@@ -150,8 +146,7 @@ public class MemindHttpClient implements AutoCloseable {
         }
     }
 
-    private MemindApiException toApiException(int status, byte[] body, String requestId)
-            throws IOException {
+    private MemindApiException toApiException(int status, byte[] body, String requestId) {
         ErrorResult errorResult = objectMapper.readValue(body, ErrorResult.class);
         ErrorResult.ApiError error = errorResult.error();
         if (error == null) {
@@ -167,6 +162,19 @@ public class MemindHttpClient implements AutoCloseable {
 
     public ObjectMapper getObjectMapper() {
         return objectMapper;
+    }
+
+    private static ObjectMapper createObjectMapper() {
+        ObjectMapper mapper =
+                JsonMapper.builder()
+                        .disable(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS)
+                        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                        .changeDefaultPropertyInclusion(
+                                inclusion ->
+                                        inclusion.withValueInclusion(
+                                                JsonInclude.Include.NON_NULL))
+                        .build();
+        return mapper;
     }
 
     @Override

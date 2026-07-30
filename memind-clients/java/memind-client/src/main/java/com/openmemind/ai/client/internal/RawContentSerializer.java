@@ -13,27 +13,27 @@
  */
 package com.openmemind.ai.client.internal;
 
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.databind.JsonSerializer;
-import com.fasterxml.jackson.databind.SerializerProvider;
 import com.openmemind.ai.client.model.common.ConversationContent;
 import com.openmemind.ai.client.model.common.MapRawContent;
 import com.openmemind.ai.client.model.common.RawContent;
-import java.io.IOException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.JsonGenerator;
+import tools.jackson.databind.SerializationContext;
+import tools.jackson.databind.ValueSerializer;
 
-public class RawContentSerializer extends JsonSerializer<RawContent> {
+public class RawContentSerializer extends ValueSerializer<RawContent> {
 
     @Override
-    public void serialize(RawContent value, JsonGenerator gen, SerializerProvider provider)
-            throws IOException {
+    public void serialize(RawContent value, JsonGenerator gen, SerializationContext context)
+            throws JacksonException {
         gen.writeStartObject();
-        gen.writeStringField("type", value.type());
+        gen.writeStringProperty("type", value.type());
 
         if (value instanceof ConversationContent conv) {
-            gen.writeObjectField("messages", conv.getMessages());
+            context.defaultSerializeProperty("messages", conv.getMessages(), gen);
         } else if (value instanceof MapRawContent map) {
             for (var entry : map.getProperties().entrySet()) {
-                gen.writeObjectField(entry.getKey(), entry.getValue());
+                context.defaultSerializeProperty(entry.getKey(), entry.getValue(), gen);
             }
         }
 

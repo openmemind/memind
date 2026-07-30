@@ -13,8 +13,6 @@
  */
 package com.openmemind.ai.memory.evaluation.checkpoint;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.evaluation.adapter.model.SearchResult;
 import com.openmemind.ai.memory.evaluation.pipeline.Stage;
 import com.openmemind.ai.memory.evaluation.pipeline.model.AnswerResult;
@@ -28,6 +26,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Evaluation checkpoint persistence storage, responsible for reading and writing JSON files for checkpoint / search / answer stages
@@ -64,7 +65,7 @@ public class CheckpointStore {
                         state.completedAddConvIds().size(),
                         state.completedStages().size());
                 return state;
-            } catch (IOException e) {
+            } catch (JacksonException e) {
                 log.warn("Failed to read checkpoint, starting fresh: {}", e.getMessage());
             }
         }
@@ -86,7 +87,7 @@ public class CheckpointStore {
         try {
             CheckpointState state = mapper.readValue(path.toFile(), CheckpointState.class);
             return state.isStageCompleted(stage.name());
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             log.warn("Failed to read checkpoint: {}", e.getMessage());
             return false;
         }
@@ -98,7 +99,7 @@ public class CheckpointStore {
         if (Files.exists(path)) {
             try {
                 state = mapper.readValue(path.toFile(), CheckpointState.class);
-            } catch (IOException e) {
+            } catch (JacksonException e) {
                 log.warn("Failed to read checkpoint, creating new: {}", e.getMessage());
                 state = new CheckpointState();
             }
@@ -117,7 +118,7 @@ public class CheckpointStore {
             try {
                 return mapper.readValue(
                         path.toFile(), new TypeReference<Map<String, List<SearchResult>>>() {});
-            } catch (IOException e) {
+            } catch (JacksonException e) {
                 log.warn("Failed to read search checkpoint: {}", e.getMessage());
             }
         }
@@ -140,7 +141,7 @@ public class CheckpointStore {
             try {
                 return mapper.readValue(
                         path.toFile(), new TypeReference<Map<String, AnswerResult>>() {});
-            } catch (IOException e) {
+            } catch (JacksonException e) {
                 log.warn("Failed to read answer checkpoint: {}", e.getMessage());
             }
         }
@@ -162,7 +163,7 @@ public class CheckpointStore {
         if (Files.exists(path)) {
             try {
                 return mapper.readValue(path.toFile(), new TypeReference<List<SearchResult>>() {});
-            } catch (IOException e) {
+            } catch (JacksonException e) {
                 log.warn("Failed to read search results: {}", e.getMessage());
             }
         }
@@ -178,7 +179,7 @@ public class CheckpointStore {
         if (Files.exists(path)) {
             try {
                 return mapper.readValue(path.toFile(), new TypeReference<List<AnswerResult>>() {});
-            } catch (IOException e) {
+            } catch (JacksonException e) {
                 log.warn("Failed to read answer results: {}", e.getMessage());
             }
         }
@@ -204,7 +205,7 @@ public class CheckpointStore {
             mapper.writeValue(tmp.toFile(), data);
             Files.move(
                     tmp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (IOException e) {
+        } catch (IOException | JacksonException e) {
             log.error("Failed to save file {}: {}", path, e.getMessage());
         } finally {
             lock.unlock();
