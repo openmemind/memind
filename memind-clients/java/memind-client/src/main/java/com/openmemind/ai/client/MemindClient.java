@@ -26,6 +26,7 @@ import com.openmemind.ai.client.model.request.RetrieveMemoryRequest;
 import com.openmemind.ai.client.model.response.AddMessageResponse;
 import com.openmemind.ai.client.model.response.ExtractMemoryResponse;
 import com.openmemind.ai.client.model.response.HealthResponse;
+import com.openmemind.ai.client.model.response.OperationAccepted;
 import com.openmemind.ai.client.model.response.QueryMemoryItemsResponse;
 import com.openmemind.ai.client.model.response.QueryMemoryRawDataResponse;
 import com.openmemind.ai.client.model.response.RetrieveMemoryResponse;
@@ -132,6 +133,40 @@ public class MemindClient implements AutoCloseable {
                 "/open/v1/memory/raw-data/query",
                 Objects.requireNonNull(request, "request"),
                 new TypeReference<ApiResult<QueryMemoryRawDataResponse>>() {});
+    }
+
+    /**
+     * Fire-and-forget: submits a message to the async pipeline
+     * ({@code POST /open/v1/memory/async/add-message}).
+     *
+     * <p>The server buffers the message and returns 202 immediately; extraction is
+     * triggered asynchronously by the server's boundary detector. Unlike
+     * {@link #addMessageAsync(AddMessageRequest)}, this does not block waiting for the
+     * synchronous extraction path.
+     */
+    public CompletableFuture<Void> submitMessageAsync(AddMessageRequest request) {
+        ensureOpen();
+        return httpClient.post(
+                        "/open/v1/memory/async/add-message",
+                        Objects.requireNonNull(request, "request"),
+                        new TypeReference<ApiResult<OperationAccepted>>() {})
+                .thenApply(ignored -> null);
+    }
+
+    /**
+     * Fire-and-forget: submits a commit to the async pipeline
+     * ({@code POST /open/v1/memory/async/commit}).
+     *
+     * <p>Returns 202 immediately; extraction runs asynchronously server-side. Use this to
+     * avoid blocking on long LLM-driven extraction (the sync commit can exceed HTTP timeouts).
+     */
+    public CompletableFuture<Void> submitCommitAsync(CommitMemoryRequest request) {
+        ensureOpen();
+        return httpClient.post(
+                        "/open/v1/memory/async/commit",
+                        Objects.requireNonNull(request, "request"),
+                        new TypeReference<ApiResult<OperationAccepted>>() {})
+                .thenApply(ignored -> null);
     }
 
     public CompletableFuture<HealthResponse> healthAsync() {
