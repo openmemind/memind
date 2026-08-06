@@ -29,6 +29,7 @@ import com.openmemind.ai.memory.core.retrieval.scoring.ResultMerger;
 import com.openmemind.ai.memory.core.retrieval.scoring.RetrievalResultMerger;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.TimeDecay;
+import com.openmemind.ai.memory.core.retrieval.strategy.observation.DeepRetrievalStrategyObservation;
 import com.openmemind.ai.memory.core.retrieval.sufficiency.SufficiencyGate;
 import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistResult;
 import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistant;
@@ -40,6 +41,7 @@ import com.openmemind.ai.memory.core.retrieval.tier.TierResult;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.textsearch.TextSearchResult;
+import io.micrometer.observation.ObservationRegistry;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -84,6 +86,7 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
     private final RetrievalGraphAssistant graphAssistant;
     private final MemoryThreadAssistant memoryThreadAssistant;
     private final RetrievalResultMerger resultMerger;
+    private final ObservationRegistry observationRegistry;
 
     /** Tier2 initial retrieval result */
     private record Tier2InitResult(
@@ -184,6 +187,32 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
             RetrievalGraphAssistant graphAssistant,
             MemoryThreadAssistant memoryThreadAssistant,
             RetrievalResultMerger resultMerger) {
+        this(
+                insightRetriever,
+                itemRetriever,
+                sufficiencyGate,
+                typedQueryExpander,
+                reranker,
+                memoryStore,
+                defaultStrategyConfig,
+                graphAssistant,
+                memoryThreadAssistant,
+                resultMerger,
+                ObservationRegistry.NOOP);
+    }
+
+    public DeepRetrievalStrategy(
+            InsightTierSearch insightRetriever,
+            ItemTierSearch itemRetriever,
+            SufficiencyGate sufficiencyGate,
+            TypedQueryExpander typedQueryExpander,
+            Reranker reranker,
+            MemoryStore memoryStore,
+            DeepStrategyConfig defaultStrategyConfig,
+            RetrievalGraphAssistant graphAssistant,
+            MemoryThreadAssistant memoryThreadAssistant,
+            RetrievalResultMerger resultMerger,
+            ObservationRegistry observationRegistry) {
         this.insightRetriever =
                 Objects.requireNonNull(insightRetriever, "insightRetriever must not be null");
         this.itemRetriever =
@@ -207,6 +236,8 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
                         : NoOpMemoryThreadAssistant.INSTANCE;
         this.resultMerger =
                 resultMerger != null ? resultMerger : DefaultRetrievalResultMerger.INSTANCE;
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     @Override
@@ -218,7 +249,8 @@ public class DeepRetrievalStrategy implements RetrievalStrategy {
     public Mono<RetrievalResult> retrieve(QueryContext context, RetrievalConfig config) {
         log.debug("DeepRetrieval strategy started: query={}", context.searchQuery());
 
-        return executePipeline(context, config);
+        return DeepRetrievalStrategyObservation.observe(
+                observationRegistry, context, name(), () -> executePipeline(context, config));
     }
 
     private DeepStrategyConfig deepConfig(RetrievalConfig config) {

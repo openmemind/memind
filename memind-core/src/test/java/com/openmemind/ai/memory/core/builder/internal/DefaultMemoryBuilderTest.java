@@ -79,14 +79,9 @@ import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
-import com.openmemind.ai.memory.core.support.RecordingMemoryObserver;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
-import com.openmemind.ai.memory.core.tracing.MemoryObserver;
-import com.openmemind.ai.memory.core.tracing.NoopMemoryObserver;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingItemGraphMaterializer;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryExtractor;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryRetriever;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
+import io.micrometer.observation.ObservationRegistry;
 import java.lang.reflect.Proxy;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -229,34 +224,40 @@ class DefaultMemoryBuilderTest {
     }
 
     @Test
-    void builderWrapsExtractorWithTracingDecoratorWhenObserverConfigured() {
-        var observer = new RecordingMemoryObserver();
+    void builderInjectsObservationRegistryIntoDefaultExtractorWhenConfigured() {
+        var observationRegistry = ObservationRegistry.create();
 
-        var memory = buildMinimalMemory(observer);
+        var memory = buildMinimalMemory(observationRegistry);
 
         var extractor = readField(memory, "extractor", MemoryExtractor.class);
-        assertThat(extractor).isInstanceOf(TracingMemoryExtractor.class);
+        assertThat(extractor).isInstanceOf(DefaultMemoryExtractor.class);
+        assertThat(readField(extractor, "observationRegistry", ObservationRegistry.class))
+                .isSameAs(observationRegistry);
     }
 
     @Test
-    void builderWrapsRetrieverWithTracingDecoratorWhenObserverConfigured() {
-        var observer = new RecordingMemoryObserver();
+    void builderInjectsObservationRegistryIntoDefaultRetrieverWhenConfigured() {
+        var observationRegistry = ObservationRegistry.create();
 
-        var memory = buildMinimalMemory(observer);
+        var memory = buildMinimalMemory(observationRegistry);
 
         var retriever = readField(memory, "retriever", MemoryRetriever.class);
-        assertThat(retriever).isInstanceOf(TracingMemoryRetriever.class);
+        assertThat(retriever).isInstanceOf(DefaultMemoryRetriever.class);
+        assertThat(readField(retriever, "observationRegistry", ObservationRegistry.class))
+                .isSameAs(observationRegistry);
     }
 
     @Test
-    void builderKeepsTopLevelDelegatesUnwrappedForNoopObserver() {
-        var memory = buildMinimalMemory(new NoopMemoryObserver());
+    void builderInjectsNoopObservationRegistryIntoTopLevelComponentsByDefault() {
+        var memory = buildMinimalMemory(ObservationRegistry.NOOP);
 
         var extractor = readField(memory, "extractor", MemoryExtractor.class);
         var retriever = readField(memory, "retriever", MemoryRetriever.class);
 
-        assertThat(extractor).isNotInstanceOf(TracingMemoryExtractor.class);
-        assertThat(retriever).isNotInstanceOf(TracingMemoryRetriever.class);
+        assertThat(readField(extractor, "observationRegistry", ObservationRegistry.class))
+                .isSameAs(ObservationRegistry.NOOP);
+        assertThat(readField(retriever, "observationRegistry", ObservationRegistry.class))
+                .isSameAs(ObservationRegistry.NOOP);
     }
 
     @Test
@@ -510,8 +511,8 @@ class DefaultMemoryBuilderTest {
     }
 
     @Test
-    void builderManagedRuntimeShouldWrapGraphMaterializerWithTracingObserver() {
-        var observer = new RecordingMemoryObserver();
+    void builderManagedRuntimeShouldInjectObservationRegistryIntoGraphMaterializer() {
+        var observationRegistry = ObservationRegistry.create();
 
         var memory =
                 (DefaultMemory)
@@ -520,15 +521,18 @@ class DefaultMemoryBuilderTest {
                                 .store(new InMemoryMemoryStore())
                                 .buffer(MEMORY_BUFFER)
                                 .vector(MEMORY_VECTOR)
-                                .memoryObserver(observer)
+                                .observationRegistry(observationRegistry)
                                 .options(graphEnabledBuildOptions())
                                 .build();
 
         var extractor = underlyingExtractor(memory);
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+        var graphMaterializer =
+                readField(itemLayer, "graphMaterializer", ItemGraphMaterializer.class);
 
-        assertThat(readField(itemLayer, "graphMaterializer", ItemGraphMaterializer.class))
-                .isInstanceOf(TracingItemGraphMaterializer.class);
+        assertThat(graphMaterializer).isInstanceOf(DefaultItemGraphMaterializer.class);
+        assertThat(readField(graphMaterializer, "observationRegistry", ObservationRegistry.class))
+                .isSameAs(observationRegistry);
     }
 
     @Test
@@ -545,18 +549,17 @@ class DefaultMemoryBuilderTest {
 
         var extractor = underlyingExtractor(memory);
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
-        var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
-        var delegate = readField(tracing, "delegate", DefaultItemGraphMaterializer.class);
-
-        var planner = readField(delegate, "planner", DefaultItemGraphPlanner.class);
+        var graphMaterializer =
+                readField(itemLayer, "graphMaterializer", DefaultItemGraphMaterializer.class);
+        var planner = readField(graphMaterializer, "planner", DefaultItemGraphPlanner.class);
 
         assertThat(readField(planner, "resolutionStrategy", EntityResolutionStrategy.class))
                 .isInstanceOf(ExactCanonicalEntityResolutionStrategy.class);
     }
 
     @Test
-    void builderManagedRuntimeShouldKeepGraphMaterializerNoOpAndUntracedWhenGraphDisabled() {
-        var observer = new RecordingMemoryObserver();
+    void builderManagedRuntimeShouldKeepGraphMaterializerNoOpAndUnobservedWhenGraphDisabled() {
+        var observationRegistry = ObservationRegistry.create();
 
         var memory =
                 (DefaultMemory)
@@ -565,7 +568,7 @@ class DefaultMemoryBuilderTest {
                                 .store(MEMORY_STORE)
                                 .buffer(MEMORY_BUFFER)
                                 .vector(MEMORY_VECTOR)
-                                .memoryObserver(observer)
+                                .observationRegistry(observationRegistry)
                                 .options(MemoryBuildOptions.defaults())
                                 .build();
 
@@ -936,30 +939,24 @@ class DefaultMemoryBuilderTest {
                         });
     }
 
-    private DefaultMemory buildMinimalMemory(MemoryObserver observer) {
+    private DefaultMemory buildMinimalMemory(ObservationRegistry observationRegistry) {
         return (DefaultMemory)
                 Memory.builder()
                         .chatClient(CHAT_CLIENT)
                         .store(new InMemoryMemoryStore())
                         .buffer(MEMORY_BUFFER)
                         .vector(MEMORY_VECTOR)
-                        .memoryObserver(observer)
+                        .observationRegistry(observationRegistry)
                         .build();
     }
 
     private static DefaultMemoryExtractor underlyingExtractor(DefaultMemory memory) {
         MemoryExtractor extractor = readField(memory, "extractor", MemoryExtractor.class);
-        if (extractor instanceof TracingMemoryExtractor tracing) {
-            return readField(tracing, "delegate", DefaultMemoryExtractor.class);
-        }
         return DefaultMemoryExtractor.class.cast(extractor);
     }
 
     private static DefaultMemoryRetriever underlyingRetriever(DefaultMemory memory) {
         MemoryRetriever retriever = readField(memory, "retriever", MemoryRetriever.class);
-        if (retriever instanceof TracingMemoryRetriever tracing) {
-            return readField(tracing, "delegate", DefaultMemoryRetriever.class);
-        }
         return DefaultMemoryRetriever.class.cast(retriever);
     }
 

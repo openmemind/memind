@@ -17,7 +17,6 @@ import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
 import com.openmemind.ai.memory.core.store.MemoryStore;
-import com.openmemind.ai.memory.core.tracing.MemorySpanNames;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.util.ArrayList;
 import java.util.List;
@@ -104,11 +103,6 @@ public class SemanticDeduplicator implements MemoryItemDeduplicator {
                             return new DeduplicationResult(
                                     List.copyOf(keepNew), List.copyOf(reinforced));
                         });
-    }
-
-    @Override
-    public String spanName() {
-        return MemorySpanNames.EXTRACTION_ITEM_SEMANTIC_DEDUP;
     }
 
     private record EntryMatch(ExtractedMemoryEntry entry, String vectorId, float score) {}

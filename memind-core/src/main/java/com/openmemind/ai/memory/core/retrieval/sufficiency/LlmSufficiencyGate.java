@@ -19,6 +19,8 @@ import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.retrieval.SufficiencyGatePrompts;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
+import com.openmemind.ai.memory.core.retrieval.sufficiency.observation.LlmSufficiencyGateObservation;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
@@ -38,6 +40,7 @@ public class LlmSufficiencyGate implements SufficiencyGate {
 
     private final StructuredChatClient structuredChatClient;
     private final PromptRegistry promptRegistry;
+    private final ObservationRegistry observationRegistry;
 
     public LlmSufficiencyGate(StructuredChatClient structuredChatClient) {
         this(structuredChatClient, PromptRegistry.EMPTY);
@@ -45,15 +48,30 @@ public class LlmSufficiencyGate implements SufficiencyGate {
 
     public LlmSufficiencyGate(
             StructuredChatClient structuredChatClient, PromptRegistry promptRegistry) {
+        this(structuredChatClient, promptRegistry, ObservationRegistry.NOOP);
+    }
+
+    public LlmSufficiencyGate(
+            StructuredChatClient structuredChatClient,
+            PromptRegistry promptRegistry,
+            ObservationRegistry observationRegistry) {
         this.structuredChatClient =
                 Objects.requireNonNull(
                         structuredChatClient, "structuredChatClient must not be null");
         this.promptRegistry =
                 Objects.requireNonNull(promptRegistry, "promptRegistry must not be null");
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     @Override
     public Mono<SufficiencyResult> check(QueryContext context, List<ScoredResult> results) {
+        return LlmSufficiencyGateObservation.observe(
+                observationRegistry, context, results, () -> checkInternal(context, results));
+    }
+
+    private Mono<SufficiencyResult> checkInternal(
+            QueryContext context, List<ScoredResult> results) {
         if (results.isEmpty()) {
             return Mono.just(SufficiencyResult.fallbackInsufficient());
         }

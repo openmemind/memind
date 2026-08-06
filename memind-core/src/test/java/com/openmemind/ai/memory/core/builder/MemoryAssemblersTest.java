@@ -78,8 +78,6 @@ import com.openmemind.ai.memory.core.store.rawdata.InMemoryRawDataOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingItemGraphMaterializer;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryThreadAssistant;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.lang.reflect.Proxy;
 import java.time.Duration;
@@ -292,20 +290,8 @@ class MemoryAssemblersTest {
         var deep = strategies.get(RetrievalStrategies.DEEP_RETRIEVAL);
 
         assertThat(readField(simple, "memoryThreadAssistant", Object.class))
-                .isInstanceOf(TracingMemoryThreadAssistant.class);
-        assertThat(readField(deep, "memoryThreadAssistant", Object.class))
-                .isInstanceOf(TracingMemoryThreadAssistant.class);
-        assertThat(
-                        readField(
-                                readField(simple, "memoryThreadAssistant", Object.class),
-                                "delegate",
-                                Object.class))
                 .isInstanceOf(DefaultMemoryThreadAssistant.class);
-        assertThat(
-                        readField(
-                                readField(deep, "memoryThreadAssistant", Object.class),
-                                "delegate",
-                                Object.class))
+        assertThat(readField(deep, "memoryThreadAssistant", Object.class))
                 .isInstanceOf(DefaultMemoryThreadAssistant.class);
         assertThat(
                         readField(simple, "defaultStrategyConfig", SimpleStrategyConfig.class)
@@ -457,8 +443,8 @@ class MemoryAssemblersTest {
                                         new InMemoryMemoryStore()));
         var extractor = (DefaultMemoryExtractor) assembly.pipeline();
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
-        var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
-        var delegate = readField(tracing, "delegate", DefaultItemGraphMaterializer.class);
+        var delegate =
+                readField(itemLayer, "graphMaterializer", DefaultItemGraphMaterializer.class);
 
         assertThat(readResolutionStrategy(delegate))
                 .isInstanceOf(ExactCanonicalEntityResolutionStrategy.class);
@@ -532,8 +518,8 @@ class MemoryAssemblersTest {
                                 context(options, null, null, List.of(), new InMemoryMemoryStore()));
         var extractor = (DefaultMemoryExtractor) assembly.pipeline();
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
-        var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
-        var delegate = readField(tracing, "delegate", DefaultItemGraphMaterializer.class);
+        var delegate =
+                readField(itemLayer, "graphMaterializer", DefaultItemGraphMaterializer.class);
 
         assertThat(readResolutionStrategy(delegate))
                 .isInstanceOf(ConservativeHeuristicEntityResolutionStrategy.class);
@@ -563,8 +549,8 @@ class MemoryAssemblersTest {
                         .assemble(context(options, null, null, List.of(), store));
         var extractor = (DefaultMemoryExtractor) assembly.pipeline();
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
-        var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
-        var delegate = readField(tracing, "delegate", DefaultItemGraphMaterializer.class);
+        var delegate =
+                readField(itemLayer, "graphMaterializer", DefaultItemGraphMaterializer.class);
         var strategy = readResolutionStrategy(delegate);
 
         assertThat(strategy).isInstanceOf(ConservativeHeuristicEntityResolutionStrategy.class);
@@ -619,8 +605,8 @@ class MemoryAssemblersTest {
                         .assemble(context(options, null, null, List.of(), stageTwoOnlyStore));
         var extractor = (DefaultMemoryExtractor) assembly.pipeline();
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
-        var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
-        var delegate = readField(tracing, "delegate", DefaultItemGraphMaterializer.class);
+        var delegate =
+                readField(itemLayer, "graphMaterializer", DefaultItemGraphMaterializer.class);
         var strategy = readResolutionStrategy(delegate);
 
         assertThat(strategy).isInstanceOf(ConservativeHeuristicEntityResolutionStrategy.class);

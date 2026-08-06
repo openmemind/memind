@@ -18,9 +18,11 @@ import com.openmemind.ai.memory.core.retrieval.ItemRetrievalGuard;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
+import com.openmemind.ai.memory.core.retrieval.temporal.observation.DefaultTemporalItemChannelObservation;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.item.TemporalItemLookupMatch;
 import com.openmemind.ai.memory.core.store.item.TemporalItemLookupRequest;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Duration;
 import java.util.Comparator;
 import java.util.Optional;
@@ -36,13 +38,34 @@ public final class DefaultTemporalItemChannel implements TemporalItemChannel {
     private static final Logger log = LoggerFactory.getLogger(DefaultTemporalItemChannel.class);
 
     private final MemoryStore memoryStore;
+    private final ObservationRegistry observationRegistry;
 
     public DefaultTemporalItemChannel(MemoryStore memoryStore) {
+        this(memoryStore, ObservationRegistry.NOOP);
+    }
+
+    public DefaultTemporalItemChannel(
+            MemoryStore memoryStore, ObservationRegistry observationRegistry) {
         this.memoryStore = memoryStore;
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     @Override
     public Mono<TemporalItemChannelResult> retrieve(
+            QueryContext context,
+            RetrievalConfig config,
+            Optional<TemporalConstraint> temporalConstraint,
+            TemporalItemChannelSettings settings) {
+        return DefaultTemporalItemChannelObservation.observe(
+                observationRegistry,
+                context,
+                temporalConstraint,
+                settings,
+                () -> retrieveInternal(context, config, temporalConstraint, settings));
+    }
+
+    private Mono<TemporalItemChannelResult> retrieveInternal(
             QueryContext context,
             RetrievalConfig config,
             Optional<TemporalConstraint> temporalConstraint,

@@ -19,12 +19,14 @@ import com.openmemind.ai.memory.core.retrieval.admission.RetrievalAdmissionDecis
 import com.openmemind.ai.memory.core.retrieval.admission.RetrievalAdmissionOptions;
 import com.openmemind.ai.memory.core.retrieval.admission.RetrievalAdmissionPolicy;
 import com.openmemind.ai.memory.core.retrieval.admission.RetrievalAdmissionResult;
+import com.openmemind.ai.memory.core.retrieval.observation.DefaultMemoryRetrieverObservation;
 import com.openmemind.ai.memory.core.retrieval.query.LongQueryCondenser;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.query.QueryRewriter;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategy;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import io.micrometer.observation.ObservationRegistry;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -52,6 +54,7 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
     private final RetrievalAdmissionPolicy admissionPolicy;
     private final RetrievalAdmissionOptions admissionOptions;
     private final LongQueryCondenser longQueryCondenser; // nullable for legacy constructors
+    private final ObservationRegistry observationRegistry;
 
     public DefaultMemoryRetriever(MemoryStore memoryStore) {
         this(memoryStore, null, null);
@@ -93,6 +96,24 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
             RetrievalAdmissionPolicy admissionPolicy,
             RetrievalAdmissionOptions admissionOptions,
             LongQueryCondenser longQueryCondenser) {
+        this(
+                memoryStore,
+                textSearch,
+                queryRewriter,
+                admissionPolicy,
+                admissionOptions,
+                longQueryCondenser,
+                ObservationRegistry.NOOP);
+    }
+
+    public DefaultMemoryRetriever(
+            MemoryStore memoryStore,
+            MemoryTextSearch textSearch,
+            QueryRewriter queryRewriter,
+            RetrievalAdmissionPolicy admissionPolicy,
+            RetrievalAdmissionOptions admissionOptions,
+            LongQueryCondenser longQueryCondenser,
+            ObservationRegistry observationRegistry) {
         this.memoryStore = Objects.requireNonNull(memoryStore, "memoryStore must not be null");
         this.textSearch = textSearch; // nullable
         this.queryRewriter = queryRewriter; // nullable
@@ -101,6 +122,8 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
         this.admissionOptions =
                 Objects.requireNonNull(admissionOptions, "admissionOptions must not be null");
         this.longQueryCondenser = longQueryCondenser;
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
         this.strategies = new ConcurrentHashMap<>();
     }
 
@@ -131,6 +154,12 @@ public class DefaultMemoryRetriever implements MemoryRetriever {
                             + " query, strategy)");
         }
 
+        return DefaultMemoryRetrieverObservation.observe(
+                observationRegistry, request.memoryId(), () -> retrieveInternal(request, config));
+    }
+
+    private Mono<RetrievalResult> retrieveInternal(
+            RetrievalRequest request, RetrievalConfig config) {
         RetrievalAdmissionResult admission = admissionPolicy.evaluate(request);
         if (admission.decision() == RetrievalAdmissionDecision.SKIP
                 || admission.decision() == RetrievalAdmissionDecision.REJECT) {

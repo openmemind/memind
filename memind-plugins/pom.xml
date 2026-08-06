@@ -32,6 +32,6 @@
         <module>memind-plugin-jdbc</module>
         <module>memind-plugin-rawdatas</module>
         <module>memind-plugin-spring-boot-starters</module>
-        <module>memind-plugin-tracing-opentelemetry</module>
+        <module>memind-plugin-observability-micrometer</module>
     </modules>
 </project>

@@ -17,6 +17,8 @@ import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.retrieval.InsightTypeRoutingPrompts;
+import com.openmemind.ai.memory.core.retrieval.tier.observation.LlmInsightTypeRouterObservation;
+import io.micrometer.observation.ObservationRegistry;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +40,7 @@ public class LlmInsightTypeRouter implements InsightTypeRouter {
 
     private final StructuredChatClient structuredChatClient;
     private final PromptRegistry promptRegistry;
+    private final ObservationRegistry observationRegistry;
 
     public LlmInsightTypeRouter(StructuredChatClient structuredChatClient) {
         this(structuredChatClient, PromptRegistry.EMPTY);
@@ -45,42 +48,57 @@ public class LlmInsightTypeRouter implements InsightTypeRouter {
 
     public LlmInsightTypeRouter(
             StructuredChatClient structuredChatClient, PromptRegistry promptRegistry) {
+        this(structuredChatClient, promptRegistry, ObservationRegistry.NOOP);
+    }
+
+    public LlmInsightTypeRouter(
+            StructuredChatClient structuredChatClient,
+            PromptRegistry promptRegistry,
+            ObservationRegistry observationRegistry) {
         this.structuredChatClient =
                 Objects.requireNonNull(
                         structuredChatClient, "structuredChatClient must not be null");
         this.promptRegistry =
                 Objects.requireNonNull(promptRegistry, "promptRegistry must not be null");
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     @Override
     public Mono<List<String>> route(
             String query, List<String> conversationHistory, Map<String, String> availableTypes) {
         var typeNames = new ArrayList<>(availableTypes.keySet());
-        return Mono.defer(
-                        () -> {
-                            var promptResult =
-                                    InsightTypeRoutingPrompts.build(
-                                                    promptRegistry,
-                                                    query,
-                                                    typeNames,
-                                                    availableTypes,
-                                                    conversationHistory)
-                                            .render("English");
-                            var messages =
-                                    ChatMessages.systemUser(
-                                            promptResult.systemPrompt(), promptResult.userPrompt());
-                            return structuredChatClient
-                                    .call(messages, RoutingResponse.class)
-                                    .map(response -> sanitize(response, typeNames))
-                                    .switchIfEmpty(Mono.just(List.of()));
-                        })
-                .subscribeOn(Schedulers.boundedElastic())
-                .retry(1)
-                .onErrorResume(
-                        e -> {
-                            log.warn("Insight type routing failed, fallback returns all types", e);
-                            return Mono.just(typeNames);
-                        });
+        Mono<List<String>> operation =
+                Mono.defer(
+                                () -> {
+                                    var promptResult =
+                                            InsightTypeRoutingPrompts.build(
+                                                            promptRegistry,
+                                                            query,
+                                                            typeNames,
+                                                            availableTypes,
+                                                            conversationHistory)
+                                                    .render("English");
+                                    var messages =
+                                            ChatMessages.systemUser(
+                                                    promptResult.systemPrompt(),
+                                                    promptResult.userPrompt());
+                                    return structuredChatClient
+                                            .call(messages, RoutingResponse.class)
+                                            .map(response -> sanitize(response, typeNames))
+                                            .switchIfEmpty(Mono.just(List.of()));
+                                })
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .retry(1)
+                        .onErrorResume(
+                                e -> {
+                                    log.warn(
+                                            "Insight type routing failed, fallback returns all"
+                                                    + " types",
+                                            e);
+                                    return Mono.just(typeNames);
+                                });
+        return LlmInsightTypeRouterObservation.observe(observationRegistry, () -> operation);
     }
 
     private List<String> sanitize(RoutingResponse response, List<String> available) {

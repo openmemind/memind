@@ -25,6 +25,7 @@ import com.openmemind.ai.memory.core.extraction.context.CommitDetectionInput;
 import com.openmemind.ai.memory.core.extraction.context.ContextCommitDetector;
 import com.openmemind.ai.memory.core.extraction.item.ItemExtractionConfig;
 import com.openmemind.ai.memory.core.extraction.item.SegmentBudgetEnforcer;
+import com.openmemind.ai.memory.core.extraction.observation.DefaultMemoryExtractorObservation;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessor;
 import com.openmemind.ai.memory.core.extraction.rawdata.RawContentProcessorRegistry;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
@@ -46,6 +47,7 @@ import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.resource.ResourceRef;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
 import com.openmemind.ai.memory.core.utils.HashUtils;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -86,6 +88,7 @@ public class DefaultMemoryExtractor implements MemoryExtractor {
     private final ItemExtractionOptions itemExtractionOptions;
     private final RawContentProcessorRegistry rawContentProcessorRegistry;
     private final SegmentBudgetEnforcer segmentBudgetEnforcer;
+    private final ObservationRegistry observationRegistry;
 
     public DefaultMemoryExtractor(
             RawDataExtractStep rawDataStep,
@@ -110,7 +113,8 @@ public class DefaultMemoryExtractor implements MemoryExtractor {
                 null,
                 RawDataIngestionPolicyRegistry.empty(),
                 RawDataExtractionOptions.defaults(),
-                ItemExtractionOptions.defaults());
+                ItemExtractionOptions.defaults(),
+                ObservationRegistry.NOOP);
     }
 
     public DefaultMemoryExtractor(
@@ -140,10 +144,45 @@ public class DefaultMemoryExtractor implements MemoryExtractor {
                 contentParserRegistry,
                 resourceStore,
                 resourceFetcher,
+                ingestionPolicyRegistry,
+                rawDataExtractionOptions,
+                itemExtractionOptions,
+                ObservationRegistry.NOOP);
+    }
+
+    public DefaultMemoryExtractor(
+            RawDataExtractStep rawDataStep,
+            MemoryItemExtractStep memoryItemStep,
+            InsightExtractStep insightStep,
+            SegmentProcessor segmentProcessor,
+            ContextCommitDetector contextCommitDetector,
+            PendingConversationBuffer pendingConversationBuffer,
+            RecentConversationBuffer recentConversationBuffer,
+            RawContentProcessorRegistry rawContentProcessorRegistry,
+            ContentParserRegistry contentParserRegistry,
+            ResourceStore resourceStore,
+            ResourceFetcher resourceFetcher,
+            RawDataIngestionPolicyRegistry ingestionPolicyRegistry,
+            RawDataExtractionOptions rawDataExtractionOptions,
+            ItemExtractionOptions itemExtractionOptions,
+            ObservationRegistry observationRegistry) {
+        this(
+                rawDataStep,
+                memoryItemStep,
+                insightStep,
+                segmentProcessor,
+                contextCommitDetector,
+                pendingConversationBuffer,
+                recentConversationBuffer,
+                rawContentProcessorRegistry,
+                contentParserRegistry,
+                resourceStore,
+                resourceFetcher,
                 null,
                 ingestionPolicyRegistry,
                 rawDataExtractionOptions,
-                itemExtractionOptions);
+                itemExtractionOptions,
+                observationRegistry);
     }
 
     DefaultMemoryExtractor(
@@ -172,7 +211,8 @@ public class DefaultMemoryExtractor implements MemoryExtractor {
                 requestResolver,
                 RawDataIngestionPolicyRegistry.empty(),
                 rawDataExtractionOptions,
-                itemExtractionOptions);
+                itemExtractionOptions,
+                ObservationRegistry.NOOP);
     }
 
     private DefaultMemoryExtractor(
@@ -190,7 +230,8 @@ public class DefaultMemoryExtractor implements MemoryExtractor {
             ExtractionRequestResolver requestResolver,
             RawDataIngestionPolicyRegistry ingestionPolicyRegistry,
             RawDataExtractionOptions rawDataExtractionOptions,
-            ItemExtractionOptions itemExtractionOptions) {
+            ItemExtractionOptions itemExtractionOptions,
+            ObservationRegistry observationRegistry) {
         this.rawDataStep = Objects.requireNonNull(rawDataStep, "rawDataStep is required");
         this.memoryItemStep = Objects.requireNonNull(memoryItemStep, "memoryItemStep is required");
         this.insightStep = Objects.requireNonNull(insightStep, "insightStep is required");
@@ -208,6 +249,8 @@ public class DefaultMemoryExtractor implements MemoryExtractor {
         this.itemExtractionOptions =
                 Objects.requireNonNull(itemExtractionOptions, "itemExtractionOptions");
         this.rawContentProcessorRegistry = rawContentProcessorRegistry;
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
         this.requestResolver =
                 requestResolver != null
                         ? requestResolver
@@ -230,11 +273,15 @@ public class DefaultMemoryExtractor implements MemoryExtractor {
         Objects.requireNonNull(request, "request is required");
         Objects.requireNonNull(request.memoryId(), "memoryId is required");
 
-        var startTime = Instant.now();
-
-        return Mono.defer(() -> requestResolver.resolve(request))
-                .flatMap(resolved -> executeResolvedRequest(resolved, startTime))
-                .onErrorResume(e -> toErrorResult(request.memoryId(), e, startTime));
+        return DefaultMemoryExtractorObservation.observe(
+                observationRegistry,
+                request.memoryId(),
+                () -> {
+                    var startTime = Instant.now();
+                    return Mono.defer(() -> requestResolver.resolve(request))
+                            .flatMap(resolved -> executeResolvedRequest(resolved, startTime))
+                            .onErrorResume(e -> toErrorResult(request.memoryId(), e, startTime));
+                });
     }
 
     /**
@@ -337,66 +384,70 @@ public class DefaultMemoryExtractor implements MemoryExtractor {
 
         var bufferKey = memoryId.toIdentifier();
 
-        return Mono.fromCallable(
-                        () ->
-                                ConversationBufferLocks.withLock(
-                                        bufferKey,
-                                        () -> {
-                                            recentConversationBuffer.append(bufferKey, message);
-                                            if (message.role() == Message.Role.ASSISTANT) {
-                                                appendToPendingBuffer(bufferKey, message);
-                                                return Optional.<PendingExtraction>empty();
-                                            }
+        return DefaultMemoryExtractorObservation.observe(
+                observationRegistry,
+                memoryId,
+                () ->
+                        Mono.fromCallable(
+                                        () ->
+                                                ConversationBufferLocks.withLock(
+                                                        bufferKey,
+                                                        () ->
+                                                                pendingExtraction(
+                                                                        bufferKey, message)))
+                                .subscribeOn(Schedulers.boundedElastic())
+                                .flatMap(
+                                        pending ->
+                                                pending.map(
+                                                                extraction ->
+                                                                        extractConversationSegment(
+                                                                                memoryId,
+                                                                                extraction
+                                                                                        .messages(),
+                                                                                config,
+                                                                                extraction
+                                                                                        .sealMetadata()))
+                                                        .orElseGet(Mono::empty)));
+    }
 
-                                            var snapshot =
-                                                    pendingConversationBuffer.load(bufferKey);
-                                            if (snapshot.isEmpty()) {
-                                                appendToPendingBuffer(bufferKey, message);
-                                                return Optional.<PendingExtraction>empty();
-                                            }
+    private Optional<PendingExtraction> pendingExtraction(String bufferKey, Message message) {
+        recentConversationBuffer.append(bufferKey, message);
+        if (message.role() == Message.Role.ASSISTANT) {
+            appendToPendingBuffer(bufferKey, message);
+            return Optional.empty();
+        }
 
-                                            var detectionInput =
-                                                    new CommitDetectionInput(
-                                                            snapshot,
-                                                            List.of(message),
-                                                            CommitDetectionContext.empty());
-                                            var decision =
-                                                    contextCommitDetector
-                                                            .shouldCommit(detectionInput)
-                                                            .defaultIfEmpty(CommitDecision.hold())
-                                                            .block();
+        var snapshot = pendingConversationBuffer.load(bufferKey);
+        if (snapshot.isEmpty()) {
+            appendToPendingBuffer(bufferKey, message);
+            return Optional.empty();
+        }
 
-                                            if (decision == null || !decision.shouldSeal()) {
-                                                appendToPendingBuffer(bufferKey, message);
-                                                return Optional.<PendingExtraction>empty();
-                                            }
+        var detectionInput =
+                new CommitDetectionInput(
+                        snapshot, List.of(message), CommitDetectionContext.empty());
+        var decision =
+                contextCommitDetector
+                        .shouldCommit(detectionInput)
+                        .defaultIfEmpty(CommitDecision.hold())
+                        .block();
 
-                                            log.debug(
-                                                    "Boundary detection triggered sealing:"
-                                                        + " memoryId={}, reason={}, confidence={}",
-                                                    bufferKey,
-                                                    decision.reason(),
-                                                    decision.confidence());
+        if (decision == null || !decision.shouldSeal()) {
+            appendToPendingBuffer(bufferKey, message);
+            return Optional.empty();
+        }
 
-                                            var sealedMessages = List.copyOf(snapshot);
-                                            pendingConversationBuffer.clear(bufferKey);
-                                            pendingConversationBuffer.append(bufferKey, message);
+        log.debug(
+                "Boundary detection triggered sealing: memoryId={}, reason={}, confidence={}",
+                bufferKey,
+                decision.reason(),
+                decision.confidence());
 
-                                            return Optional.of(
-                                                    new PendingExtraction(
-                                                            sealedMessages, new HashMap<>()));
-                                        }))
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(
-                        pending ->
-                                pending.map(
-                                                extraction ->
-                                                        extractConversationSegment(
-                                                                memoryId,
-                                                                extraction.messages(),
-                                                                config,
-                                                                extraction.sealMetadata()))
-                                        .orElseGet(Mono::empty));
+        var sealedMessages = List.copyOf(snapshot);
+        pendingConversationBuffer.clear(bufferKey);
+        pendingConversationBuffer.append(bufferKey, message);
+
+        return Optional.of(new PendingExtraction(sealedMessages, new HashMap<>()));
     }
 
     private void appendToPendingBuffer(String bufferKey, Message message) {

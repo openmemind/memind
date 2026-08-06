@@ -20,17 +20,14 @@ import com.openmemind.ai.memory.core.buffer.RecentConversationBuffer;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
-import com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder;
-import com.openmemind.ai.memory.core.metrics.NoopMemoryMetricsRecorder;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
-import com.openmemind.ai.memory.core.tracing.MemoryObserver;
-import com.openmemind.ai.memory.core.tracing.NoopMemoryObserver;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
+import io.micrometer.observation.ObservationRegistry;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -48,8 +45,7 @@ record MemoryAssemblyContext(
         ResourceFetcher resourceFetcher,
         List<RawDataPlugin> rawDataPlugins,
         BubbleTrackerStore bubbleTrackerStore,
-        MemoryObserver memoryObserver,
-        MemoryMetricsRecorder memoryMetricsRecorder,
+        ObservationRegistry observationRegistry,
         Optional<String> memoryThreadForcedDisableReason) {
 
     MemoryAssemblyContext {
@@ -70,48 +66,12 @@ record MemoryAssemblyContext(
         Objects.requireNonNull(promptRegistry, "promptRegistry");
         Objects.requireNonNull(options, "options");
         rawDataPlugins = List.copyOf(Objects.requireNonNull(rawDataPlugins, "rawDataPlugins"));
-        memoryObserver = memoryObserver != null ? memoryObserver : new NoopMemoryObserver();
-        memoryMetricsRecorder =
-                memoryMetricsRecorder != null
-                        ? memoryMetricsRecorder
-                        : NoopMemoryMetricsRecorder.INSTANCE;
+        observationRegistry =
+                observationRegistry != null ? observationRegistry : ObservationRegistry.NOOP;
         memoryThreadForcedDisableReason =
                 memoryThreadForcedDisableReason != null
                         ? memoryThreadForcedDisableReason
                         : Optional.empty();
-    }
-
-    MemoryAssemblyContext(
-            ChatClientRegistry chatClientRegistry,
-            MemoryStore memoryStore,
-            MemoryBuffer memoryBuffer,
-            MemoryTextSearch textSearch,
-            MemoryVector memoryVector,
-            Reranker reranker,
-            PromptRegistry promptRegistry,
-            MemoryBuildOptions options,
-            ContentParserRegistry contentParserRegistry,
-            ResourceFetcher resourceFetcher,
-            List<RawDataPlugin> rawDataPlugins,
-            BubbleTrackerStore bubbleTrackerStore,
-            MemoryObserver memoryObserver,
-            Optional<String> memoryThreadForcedDisableReason) {
-        this(
-                chatClientRegistry,
-                memoryStore,
-                memoryBuffer,
-                textSearch,
-                memoryVector,
-                reranker,
-                promptRegistry,
-                options,
-                contentParserRegistry,
-                resourceFetcher,
-                rawDataPlugins,
-                bubbleTrackerStore,
-                memoryObserver,
-                NoopMemoryMetricsRecorder.INSTANCE,
-                memoryThreadForcedDisableReason);
     }
 
     InsightBuffer insightBuffer() {

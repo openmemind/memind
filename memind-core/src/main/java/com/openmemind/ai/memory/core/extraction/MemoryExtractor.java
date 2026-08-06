@@ -23,8 +23,8 @@ import reactor.core.publisher.Mono;
  * <p>Defines the memory extraction contract: batch extraction via {@link #extract(ExtractionRequest)}
  * and context single-message extraction via {@link #addMessage(MemoryId, Message, ExtractionConfig)}.
  *
- * <p>The primary implementation is {@link DefaultMemoryExtractor}. Decorators (e.g., tracing) wrap this
- * interface to add cross-cutting concerns.
+ * <p>The primary implementation is {@link DefaultMemoryExtractor}. Implementations publish observability signals at
+ * the relevant pipeline stages.
  */
 public interface MemoryExtractor {
 

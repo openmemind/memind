@@ -87,14 +87,6 @@
     <dependencyManagement>
         <dependencies>
 
-            <dependency>
-                <groupId>io.opentelemetry.instrumentation</groupId>
-                <artifactId>opentelemetry-instrumentation-bom</artifactId>
-                <version>2.29.0</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-
             <!-- Spring Boot -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
@@ -190,7 +182,7 @@
 
             <dependency>
                 <groupId>com.openmemind.ai</groupId>
-                <artifactId>memind-plugin-tracing-opentelemetry</artifactId>
+                <artifactId>memind-plugin-observability-micrometer</artifactId>
                 <version>${revision}</version>
             </dependency>
             <dependency>

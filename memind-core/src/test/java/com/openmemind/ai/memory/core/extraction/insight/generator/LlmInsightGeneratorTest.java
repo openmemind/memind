@@ -15,14 +15,17 @@ package com.openmemind.ai.memory.core.extraction.insight.generator;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
+import com.openmemind.ai.memory.core.data.PointOperation;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.llm.ChatMessage;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptType;
+import com.openmemind.ai.memory.core.support.RecordingObservationRegistry;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -300,6 +303,100 @@ class LlmInsightGeneratorTest {
         assertThat(client.lastMessages().getLast().content())
                 .contains("<AdditionalContext>")
                 .contains("GraphRootHints: weak bridge between branches");
+    }
+
+    @Test
+    @DisplayName("generatePoints should publish leaf generation observation")
+    void generatePointsShouldPublishLeafGenerationObservation() {
+        var registry = new RecordingObservationRegistry();
+        var client =
+                new FakeStructuredChatClient(
+                        new InsightPointGenerateResponse(
+                                List.of(
+                                        new InsightPoint(
+                                                InsightPoint.PointType.SUMMARY,
+                                                "summary",
+                                                List.of("1")))));
+        var generator =
+                new LlmInsightGenerator(client, InMemoryPromptRegistry.builder().build(), registry);
+
+        StepVerifier.create(
+                        generator.generatePoints(
+                                rootInsightType("profile"),
+                                "work",
+                                List.of(),
+                                List.of(),
+                                300,
+                                null,
+                                "English"))
+                .assertNext(response -> assertThat(response.points()).hasSize(1))
+                .verifyComplete();
+
+        assertThat(registry.observations()).hasSize(1);
+        var observation = registry.observations().getFirst();
+        assertThat(observation.observationName())
+                .isEqualTo("memind.extraction.insight.generate.leaf");
+        assertThat(observation.requestAttributes())
+                .containsEntry("memind.extraction.insight_type", "profile")
+                .containsEntry("memind.extraction.insight_group_name", "work");
+        assertThat(observation.resultAttributes())
+                .containsEntry("memind.extraction.insight_point_count", "1");
+    }
+
+    @Test
+    @DisplayName("generateBranchPointOps should publish operation counts")
+    void generateBranchPointOpsShouldPublishOperationCounts() {
+        var registry = new RecordingObservationRegistry();
+        var client =
+                new FakeStructuredChatClient(
+                        new InsightPointOpsResponse(
+                                List.of(
+                                        new PointOperation(
+                                                PointOperation.OpType.ADD,
+                                                null,
+                                                new InsightPoint(
+                                                        InsightPoint.PointType.SUMMARY,
+                                                        "new",
+                                                        List.of("1")),
+                                                null),
+                                        new PointOperation(
+                                                PointOperation.OpType.UPDATE,
+                                                "point-1",
+                                                new InsightPoint(
+                                                        "point-1",
+                                                        InsightPoint.PointType.SUMMARY,
+                                                        "updated",
+                                                        List.of("2")),
+                                                null),
+                                        new PointOperation(
+                                                PointOperation.OpType.DELETE,
+                                                "point-2",
+                                                null,
+                                                null))));
+        var generator =
+                new LlmInsightGenerator(client, InMemoryPromptRegistry.builder().build(), registry);
+
+        StepVerifier.create(
+                        generator.generateBranchPointOps(
+                                rootInsightType("profile"),
+                                List.of(),
+                                List.of(memoryInsight(), memoryInsight()),
+                                300,
+                                "English"))
+                .assertNext(response -> assertThat(response.operations()).hasSize(3))
+                .verifyComplete();
+
+        assertThat(registry.observations()).hasSize(1);
+        var observation = registry.observations().getFirst();
+        assertThat(observation.observationName())
+                .isEqualTo("memind.extraction.insight.generate.branch");
+        assertThat(observation.requestAttributes())
+                .containsEntry("memind.extraction.insight_type", "profile")
+                .containsEntry("memind.extraction.insight_leaf_count", "2");
+        assertThat(observation.resultAttributes())
+                .containsEntry("memind.extraction.insight_add_count", "1")
+                .containsEntry("memind.extraction.insight_update_count", "1")
+                .containsEntry("memind.extraction.insight_delete_count", "1");
     }
 
     private static MemoryInsightType rootInsightType(String name) {

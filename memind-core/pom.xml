@@ -27,6 +27,15 @@
     <name>Memind - Core</name>
 
     <dependencies>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-observation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-core-micrometer</artifactId>
+        </dependency>
+
         <!-- Reactor Core for Flux/Mono -->
         <dependency>
             <groupId>io.projectreactor</groupId>

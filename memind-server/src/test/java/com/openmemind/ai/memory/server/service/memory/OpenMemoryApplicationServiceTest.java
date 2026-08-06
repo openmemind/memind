@@ -43,8 +43,8 @@ import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
-import com.openmemind.ai.memory.core.retrieval.trace.RetrievalFinalTrace;
 import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceContext;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceEvent;
 import com.openmemind.ai.memory.server.configuration.MemindServerObservabilityProperties;
 import com.openmemind.ai.memory.server.domain.memory.request.AddMessageRequest;
 import com.openmemind.ai.memory.server.domain.memory.request.CommitMemoryRequest;
@@ -483,9 +483,7 @@ class OpenMemoryApplicationServiceTest {
             return Mono.deferContextual(
                     context -> {
                         if (recordTrace) {
-                            RetrievalTraceContext.collector(context)
-                                    .finalResults(
-                                            new RetrievalFinalTrace("SIMPLE", "empty", 0, 0, 0, 0));
+                            RetrievalTraceContext.recorder(context).record(finalTraceEvent());
                         }
                         return Mono.just(retrieveResult);
                     });
@@ -510,5 +508,19 @@ class OpenMemoryApplicationServiceTest {
 
         @Override
         public void close() {}
+
+        private RetrievalTraceEvent finalTraceEvent() {
+            Instant now = Instant.parse("2026-03-30T10:00:00Z");
+            return new RetrievalTraceEvent(
+                    "memind.retrieval.strategy",
+                    "memind.retrieval.strategy",
+                    "empty",
+                    now,
+                    now,
+                    0L,
+                    Map.of("operation", "retrieval", "strategy", "SIMPLE"),
+                    Map.of(),
+                    new RetrievalTraceEvent.FinalPayload("SIMPLE", 0, 0, 0, 0));
+        }
     }
 }

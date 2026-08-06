@@ -15,8 +15,6 @@ package com.openmemind.ai.memory.core.builder;
 
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
-import com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder;
-import com.openmemind.ai.memory.core.metrics.NoopMemoryMetricsRecorder;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.admission.DefaultRetrievalAdmissionPolicy;
 import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
@@ -38,7 +36,6 @@ import com.openmemind.ai.memory.core.retrieval.sufficiency.LlmSufficiencyGate;
 import com.openmemind.ai.memory.core.retrieval.sufficiency.SufficiencyGate;
 import com.openmemind.ai.memory.core.retrieval.temporal.DefaultTemporalConstraintExtractor;
 import com.openmemind.ai.memory.core.retrieval.temporal.DefaultTemporalItemChannel;
-import com.openmemind.ai.memory.core.retrieval.temporal.TemporalItemChannel;
 import com.openmemind.ai.memory.core.retrieval.thread.DefaultMemoryThreadAssistant;
 import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistConfigMapper;
 import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistant;
@@ -49,15 +46,6 @@ import com.openmemind.ai.memory.core.retrieval.tier.InsightTypeRouter;
 import com.openmemind.ai.memory.core.retrieval.tier.ItemTierRetriever;
 import com.openmemind.ai.memory.core.retrieval.tier.ItemTierSearch;
 import com.openmemind.ai.memory.core.retrieval.tier.LlmInsightTypeRouter;
-import com.openmemind.ai.memory.core.tracing.MemoryObserver;
-import com.openmemind.ai.memory.core.tracing.NoopMemoryObserver;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingGraphItemChannel;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingInsightTierRetriever;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingItemTierRetriever;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryThreadAssistant;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingRetrievalGraphAssistant;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingRetrievalResultMerger;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingTemporalItemChannel;
 
 final class MemoryRetrievalAssembler {
 
@@ -66,41 +54,37 @@ final class MemoryRetrievalAssembler {
         InsightTypeRouter insightTypeRouter =
                 new LlmInsightTypeRouter(
                         registry.resolve(ChatClientSlot.INSIGHT_TYPE_ROUTER),
-                        context.promptRegistry());
+                        context.promptRegistry(),
+                        context.observationRegistry());
         InsightTierSearch insightTierRetriever =
-                tracingInsightTierRetriever(
-                        new InsightTierRetriever(
-                                context.memoryStore(), context.memoryVector(), insightTypeRouter),
-                        context.memoryObserver(),
-                        context.memoryMetricsRecorder());
+                new InsightTierRetriever(
+                        context.memoryStore(),
+                        context.memoryVector(),
+                        insightTypeRouter,
+                        context.observationRegistry());
         ItemTierSearch itemTierRetriever =
-                tracingItemTierRetriever(
-                        new ItemTierRetriever(
-                                context.memoryStore(),
-                                context.memoryVector(),
-                                context.textSearch()),
-                        context.memoryObserver(),
-                        context.memoryMetricsRecorder());
+                new ItemTierRetriever(
+                        context.memoryStore(),
+                        context.memoryVector(),
+                        context.textSearch(),
+                        context.observationRegistry());
         SufficiencyGate sufficiencyGate =
                 new LlmSufficiencyGate(
                         registry.resolve(ChatClientSlot.SUFFICIENCY_GATE),
-                        context.promptRegistry());
+                        context.promptRegistry(),
+                        context.observationRegistry());
         TypedQueryExpander typedQueryExpander =
                 new LlmTypedQueryExpander(
-                        registry.resolve(ChatClientSlot.QUERY_EXPANDER), context.promptRegistry());
+                        registry.resolve(ChatClientSlot.QUERY_EXPANDER),
+                        context.promptRegistry(),
+                        context.observationRegistry());
         var graphExpansionEngine = new GraphExpansionEngine(context.memoryStore());
         RetrievalGraphAssistant graphAssistant = buildGraphAssistant(context, graphExpansionEngine);
         GraphItemChannel graphItemChannel =
-                tracingGraphItemChannel(
-                        new DefaultGraphItemChannel(graphExpansionEngine),
-                        context.memoryObserver(),
-                        context.memoryMetricsRecorder());
+                new DefaultGraphItemChannel(graphExpansionEngine, context.observationRegistry());
         MemoryThreadAssistant memoryThreadAssistant = buildMemoryThreadAssistant(context);
         RetrievalResultMerger resultMerger =
-                tracingRetrievalResultMerger(
-                        DefaultRetrievalResultMerger.INSTANCE,
-                        context.memoryObserver(),
-                        context.memoryMetricsRecorder());
+                new DefaultRetrievalResultMerger(context.observationRegistry());
         SimpleStrategyConfig simpleStrategyConfig = simpleStrategyConfig(context.options());
         DeepStrategyConfig deepStrategyConfig = deepStrategyConfig(context.options());
         DeepRetrievalStrategy deepRetrievalStrategy =
@@ -114,7 +98,8 @@ final class MemoryRetrievalAssembler {
                         deepStrategyConfig,
                         graphAssistant,
                         memoryThreadAssistant,
-                        resultMerger);
+                        resultMerger,
+                        context.observationRegistry());
         SimpleRetrievalStrategy simpleRetrievalStrategy =
                 new SimpleRetrievalStrategy(
                         insightTierRetriever,
@@ -125,13 +110,12 @@ final class MemoryRetrievalAssembler {
                         graphAssistant,
                         memoryThreadAssistant,
                         new DefaultTemporalConstraintExtractor(),
-                        tracingTemporalItemChannel(
-                                new DefaultTemporalItemChannel(context.memoryStore()),
-                                context.memoryObserver(),
-                                context.memoryMetricsRecorder()),
+                        new DefaultTemporalItemChannel(
+                                context.memoryStore(), context.observationRegistry()),
                         graphItemChannel,
                         resultMerger,
-                        java.time.Clock.systemDefaultZone());
+                        java.time.Clock.systemDefaultZone(),
+                        context.observationRegistry());
 
         var admissionOptions = context.options().retrieval().common().admission();
         var admissionPolicy = new DefaultRetrievalAdmissionPolicy(admissionOptions);
@@ -146,7 +130,8 @@ final class MemoryRetrievalAssembler {
                         null,
                         admissionPolicy,
                         admissionOptions,
-                        longQueryCondenser);
+                        longQueryCondenser,
+                        context.observationRegistry());
         memoryRetriever.registerStrategy(simpleRetrievalStrategy);
         memoryRetriever.registerStrategy(deepRetrievalStrategy);
         return memoryRetriever;
@@ -154,68 +139,18 @@ final class MemoryRetrievalAssembler {
 
     private RetrievalGraphAssistant buildGraphAssistant(
             MemoryAssemblyContext context, GraphExpansionEngine graphExpansionEngine) {
-        return new TracingRetrievalGraphAssistant(
-                new DefaultRetrievalGraphAssistant(graphExpansionEngine), context.memoryObserver());
-    }
-
-    private InsightTierSearch tracingInsightTierRetriever(
-            InsightTierSearch retriever, MemoryObserver observer, MemoryMetricsRecorder recorder) {
-        if (!hasObservability(observer, recorder)
-                || retriever instanceof TracingInsightTierRetriever) {
-            return retriever;
-        }
-        return new TracingInsightTierRetriever(retriever, observer, recorder);
-    }
-
-    private ItemTierSearch tracingItemTierRetriever(
-            ItemTierSearch retriever, MemoryObserver observer, MemoryMetricsRecorder recorder) {
-        if (!hasObservability(observer, recorder)
-                || retriever instanceof TracingItemTierRetriever) {
-            return retriever;
-        }
-        return new TracingItemTierRetriever(retriever, observer, recorder);
-    }
-
-    private GraphItemChannel tracingGraphItemChannel(
-            GraphItemChannel channel, MemoryObserver observer, MemoryMetricsRecorder recorder) {
-        if (!hasObservability(observer, recorder) || channel instanceof TracingGraphItemChannel) {
-            return channel;
-        }
-        return new TracingGraphItemChannel(channel, observer, recorder);
-    }
-
-    private TemporalItemChannel tracingTemporalItemChannel(
-            TemporalItemChannel channel, MemoryObserver observer, MemoryMetricsRecorder recorder) {
-        if (!hasObservability(observer, recorder)
-                || channel instanceof TracingTemporalItemChannel) {
-            return channel;
-        }
-        return new TracingTemporalItemChannel(channel, observer, recorder);
-    }
-
-    private RetrievalResultMerger tracingRetrievalResultMerger(
-            RetrievalResultMerger merger, MemoryObserver observer, MemoryMetricsRecorder recorder) {
-        if (!hasObservability(observer, recorder)
-                || merger instanceof TracingRetrievalResultMerger) {
-            return merger;
-        }
-        return new TracingRetrievalResultMerger(merger, observer, recorder);
-    }
-
-    private boolean hasObservability(MemoryObserver observer, MemoryMetricsRecorder recorder) {
-        return !(observer instanceof NoopMemoryObserver)
-                || !(recorder instanceof NoopMemoryMetricsRecorder);
+        return new DefaultRetrievalGraphAssistant(
+                graphExpansionEngine, context.observationRegistry());
     }
 
     private MemoryThreadAssistant buildMemoryThreadAssistant(MemoryAssemblyContext context) {
         if (!context.options().memoryThread().enabled()) {
             return NoOpMemoryThreadAssistant.INSTANCE;
         }
-        return new TracingMemoryThreadAssistant(
-                new DefaultMemoryThreadAssistant(
-                        context.memoryStore(),
-                        context.options().memoryThread().lifecycle().dormantAfter()),
-                context.memoryObserver());
+        return new DefaultMemoryThreadAssistant(
+                context.memoryStore(),
+                context.options().memoryThread().lifecycle().dormantAfter(),
+                context.observationRegistry());
     }
 
     private SimpleStrategyConfig simpleStrategyConfig(MemoryBuildOptions options) {

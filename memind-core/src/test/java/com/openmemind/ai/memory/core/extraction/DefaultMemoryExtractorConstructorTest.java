@@ -29,6 +29,7 @@ import com.openmemind.ai.memory.core.plugin.RawDataIngestionPolicyRegistry;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.resource.ResourceStore;
+import io.micrometer.observation.ObservationRegistry;
 import java.lang.reflect.Constructor;
 import java.util.Arrays;
 import java.util.List;
@@ -62,7 +63,23 @@ class DefaultMemoryExtractorConstructorTest {
                                 ResourceFetcher.class,
                                 RawDataIngestionPolicyRegistry.class,
                                 RawDataExtractionOptions.class,
-                                ItemExtractionOptions.class));
+                                ItemExtractionOptions.class),
+                        List.of(
+                                RawDataExtractStep.class,
+                                MemoryItemExtractStep.class,
+                                InsightExtractStep.class,
+                                SegmentProcessor.class,
+                                ContextCommitDetector.class,
+                                PendingConversationBuffer.class,
+                                RecentConversationBuffer.class,
+                                RawContentProcessorRegistry.class,
+                                ContentParserRegistry.class,
+                                ResourceStore.class,
+                                ResourceFetcher.class,
+                                RawDataIngestionPolicyRegistry.class,
+                                RawDataExtractionOptions.class,
+                                ItemExtractionOptions.class,
+                                ObservationRegistry.class));
     }
 
     private List<List<Class<?>>> publicConstructorSignatures() {

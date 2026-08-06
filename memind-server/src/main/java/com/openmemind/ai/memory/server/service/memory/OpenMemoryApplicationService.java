@@ -28,7 +28,7 @@ import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
-import com.openmemind.ai.memory.core.retrieval.trace.BoundedRetrievalTraceCollector;
+import com.openmemind.ai.memory.core.retrieval.trace.BoundedRetrievalTraceRecorder;
 import com.openmemind.ai.memory.core.retrieval.trace.RetrievalDebugTrace;
 import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceContext;
 import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceOptions;
@@ -165,20 +165,20 @@ public class OpenMemoryApplicationService {
 
     public RetrieveMemoryResponse retrieve(RetrieveMemoryRequest request) {
         try (var lease = runtimeManager.acquire()) {
-            BoundedRetrievalTraceCollector traceCollector = traceCollector(request);
+            BoundedRetrievalTraceRecorder traceRecorder = traceRecorder(request);
             RetrievalResult result =
                     Objects.requireNonNull(
-                            retrievalMono(lease.handle().memory(), request, traceCollector)
+                            retrievalMono(lease.handle().memory(), request, traceRecorder)
                                     .block(REQUEST_TIMEOUT),
                             "Memory retrieve returned no result");
-            return toRetrieveResponse(result, traceCollector);
+            return toRetrieveResponse(result, traceRecorder);
         }
     }
 
     private Mono<RetrievalResult> retrievalMono(
             Memory memory,
             RetrieveMemoryRequest request,
-            BoundedRetrievalTraceCollector traceCollector) {
+            BoundedRetrievalTraceRecorder traceRecorder) {
         Mono<RetrievalResult> operation =
                 shouldUseStructuredRetrieval(request)
                         ? memory.retrieve(toRetrievalRequest(request))
@@ -186,11 +186,11 @@ public class OpenMemoryApplicationService {
                                 DefaultMemoryId.of(request.userId(), request.agentId()),
                                 request.query(),
                                 request.strategy());
-        if (traceCollector == null) {
+        if (traceRecorder == null) {
             return operation;
         }
         return operation.contextWrite(
-                context -> RetrievalTraceContext.withCollector(context, traceCollector));
+                context -> RetrievalTraceContext.withRecorder(context, traceRecorder));
     }
 
     private static boolean shouldUseStructuredRetrieval(RetrieveMemoryRequest request) {
@@ -278,13 +278,13 @@ public class OpenMemoryApplicationService {
         return sourceClient.trim();
     }
 
-    private BoundedRetrievalTraceCollector traceCollector(RetrieveMemoryRequest request) {
+    private BoundedRetrievalTraceRecorder traceRecorder(RetrieveMemoryRequest request) {
         if (!Boolean.TRUE.equals(request.trace())
                 || !observabilityProperties.getRetrievalTrace().isEnabled()) {
             return null;
         }
         var properties = observabilityProperties.getRetrievalTrace();
-        return new BoundedRetrievalTraceCollector(
+        return new BoundedRetrievalTraceRecorder(
                 new RetrievalTraceOptions(
                         properties.getMaxStages(),
                         properties.getMaxCandidatesPerStage(),
@@ -344,7 +344,7 @@ public class OpenMemoryApplicationService {
     }
 
     private static RetrieveMemoryResponse toRetrieveResponse(
-            RetrievalResult result, BoundedRetrievalTraceCollector traceCollector) {
+            RetrievalResult result, BoundedRetrievalTraceRecorder traceRecorder) {
         return new RetrieveMemoryResponse(
                 result.status().name().toLowerCase(),
                 result.items() == null
@@ -384,9 +384,9 @@ public class OpenMemoryApplicationService {
                 result.evidences() == null ? List.of() : result.evidences(),
                 result.strategy(),
                 result.query(),
-                traceCollector == null
+                traceRecorder == null
                         ? null
-                        : traceCollector
+                        : traceRecorder
                                 .snapshot()
                                 .map(OpenMemoryApplicationService::toTraceView)
                                 .orElse(null));

@@ -40,7 +40,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class DialectConversationBufferAtomicOperationsTest {
 
     @Container private static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4");

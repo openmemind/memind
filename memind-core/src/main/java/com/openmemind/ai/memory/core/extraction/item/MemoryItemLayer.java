@@ -23,6 +23,7 @@ import com.openmemind.ai.memory.core.extraction.item.dedup.MemoryItemDeduplicato
 import com.openmemind.ai.memory.core.extraction.item.extractor.MemoryItemExtractor;
 import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.item.graph.NoOpItemGraphMaterializer;
+import com.openmemind.ai.memory.core.extraction.item.observation.MemoryItemLayerObservation;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
 import com.openmemind.ai.memory.core.extraction.item.support.ItemEmbeddingTextResolver;
 import com.openmemind.ai.memory.core.extraction.rawdata.ParsedSegment;
@@ -32,6 +33,7 @@ import com.openmemind.ai.memory.core.extraction.step.MemoryItemExtractStep;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.utils.IdUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -60,6 +62,7 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
     private final IdUtils.SnowflakeIdGenerator idGenerator;
     private final LlmSelfVerificationStep selfVerificationStep; // nullable
     private final ItemGraphMaterializer graphMaterializer;
+    private final ObservationRegistry observationRegistry;
 
     public MemoryItemLayer(
             MemoryItemExtractor extractor,
@@ -81,6 +84,23 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
             MemoryItemDeduplicator deduplicator,
             MemoryStore memoryStore,
             MemoryVector vector,
+            ObservationRegistry observationRegistry) {
+        this(
+                extractor,
+                deduplicator,
+                memoryStore,
+                vector,
+                IdUtils.snowflake(),
+                null,
+                NoOpItemGraphMaterializer.persistItemsOnly(memoryStore.itemOperations()),
+                observationRegistry);
+    }
+
+    public MemoryItemLayer(
+            MemoryItemExtractor extractor,
+            MemoryItemDeduplicator deduplicator,
+            MemoryStore memoryStore,
+            MemoryVector vector,
             LlmSelfVerificationStep selfVerificationStep) {
         this(
                 extractor,
@@ -89,7 +109,8 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 vector,
                 IdUtils.snowflake(),
                 selfVerificationStep,
-                NoOpItemGraphMaterializer.persistItemsOnly(memoryStore.itemOperations()));
+                NoOpItemGraphMaterializer.persistItemsOnly(memoryStore.itemOperations()),
+                ObservationRegistry.NOOP);
     }
 
     public MemoryItemLayer(
@@ -105,7 +126,8 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 vector,
                 IdUtils.snowflake(),
                 null,
-                graphMaterializer);
+                graphMaterializer,
+                ObservationRegistry.NOOP);
     }
 
     public MemoryItemLayer(
@@ -122,7 +144,8 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 vector,
                 idGenerator,
                 selfVerificationStep,
-                NoOpItemGraphMaterializer.persistItemsOnly(memoryStore.itemOperations()));
+                NoOpItemGraphMaterializer.persistItemsOnly(memoryStore.itemOperations()),
+                ObservationRegistry.NOOP);
     }
 
     public MemoryItemLayer(
@@ -133,6 +156,26 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
             IdUtils.SnowflakeIdGenerator idGenerator,
             LlmSelfVerificationStep selfVerificationStep,
             ItemGraphMaterializer graphMaterializer) {
+        this(
+                extractor,
+                deduplicator,
+                memoryStore,
+                vector,
+                idGenerator,
+                selfVerificationStep,
+                graphMaterializer,
+                ObservationRegistry.NOOP);
+    }
+
+    public MemoryItemLayer(
+            MemoryItemExtractor extractor,
+            MemoryItemDeduplicator deduplicator,
+            MemoryStore memoryStore,
+            MemoryVector vector,
+            IdUtils.SnowflakeIdGenerator idGenerator,
+            LlmSelfVerificationStep selfVerificationStep,
+            ItemGraphMaterializer graphMaterializer,
+            ObservationRegistry observationRegistry) {
         this.extractor = extractor;
         this.deduplicator = deduplicator;
         this.memoryStore = memoryStore;
@@ -143,10 +186,20 @@ public class MemoryItemLayer implements MemoryItemExtractStep {
                 graphMaterializer != null
                         ? graphMaterializer
                         : NoOpItemGraphMaterializer.persistItemsOnly(memoryStore.itemOperations());
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     @Override
     public Mono<MemoryItemResult> extract(
+            MemoryId memoryId, RawDataResult rawDataResult, ItemExtractionConfig config) {
+        return MemoryItemLayerObservation.observe(
+                observationRegistry,
+                memoryId,
+                () -> extractInternal(memoryId, rawDataResult, config));
+    }
+
+    private Mono<MemoryItemResult> extractInternal(
             MemoryId memoryId, RawDataResult rawDataResult, ItemExtractionConfig config) {
 
         List<MemoryInsightType> resolvedInsightTypes = resolveInsightTypes();

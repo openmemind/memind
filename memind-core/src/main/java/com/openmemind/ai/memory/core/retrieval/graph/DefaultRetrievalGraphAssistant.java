@@ -14,10 +14,12 @@
 package com.openmemind.ai.memory.core.retrieval.graph;
 
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
+import com.openmemind.ai.memory.core.retrieval.graph.observation.DefaultRetrievalGraphAssistantObservation;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.graph.GraphQueryBudgetContext;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -37,18 +39,39 @@ import reactor.core.scheduler.Schedulers;
 public final class DefaultRetrievalGraphAssistant implements RetrievalGraphAssistant {
 
     private final GraphExpansionEngine graphExpansionEngine;
+    private final ObservationRegistry observationRegistry;
 
     public DefaultRetrievalGraphAssistant(MemoryStore store) {
         this(new GraphExpansionEngine(store));
     }
 
     public DefaultRetrievalGraphAssistant(GraphExpansionEngine graphExpansionEngine) {
+        this(graphExpansionEngine, ObservationRegistry.NOOP);
+    }
+
+    public DefaultRetrievalGraphAssistant(
+            GraphExpansionEngine graphExpansionEngine, ObservationRegistry observationRegistry) {
         this.graphExpansionEngine =
                 Objects.requireNonNull(graphExpansionEngine, "graphExpansionEngine");
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     @Override
     public Mono<RetrievalGraphAssistResult> assist(
+            QueryContext context,
+            RetrievalConfig config,
+            RetrievalGraphSettings graphSettings,
+            List<ScoredResult> directItems) {
+        return DefaultRetrievalGraphAssistantObservation.observe(
+                observationRegistry,
+                context,
+                graphSettings,
+                directItems,
+                () -> assistInternal(context, config, graphSettings, directItems));
+    }
+
+    private Mono<RetrievalGraphAssistResult> assistInternal(
             QueryContext context,
             RetrievalConfig config,
             RetrievalGraphSettings graphSettings,

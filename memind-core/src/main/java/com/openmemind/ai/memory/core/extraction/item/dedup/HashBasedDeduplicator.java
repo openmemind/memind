@@ -17,7 +17,6 @@ import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
 import com.openmemind.ai.memory.core.store.MemoryStore;
-import com.openmemind.ai.memory.core.tracing.MemorySpanNames;
 import com.openmemind.ai.memory.core.utils.HashUtils;
 import java.util.ArrayList;
 import java.util.List;
@@ -94,10 +93,5 @@ public class HashBasedDeduplicator implements MemoryItemDeduplicator {
                     return new DeduplicationResult(
                             List.copyOf(newEntries), List.copyOf(matchedItems));
                 });
-    }
-
-    @Override
-    public String spanName() {
-        return MemorySpanNames.EXTRACTION_ITEM_DEDUP;
     }
 }

@@ -17,7 +17,9 @@ import com.openmemind.ai.memory.core.builder.MemoryThreadLifecycleOptions;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
+import com.openmemind.ai.memory.core.retrieval.thread.observation.DefaultMemoryThreadAssistantObservation;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.LinkedHashSet;
@@ -35,19 +37,26 @@ public final class DefaultMemoryThreadAssistant implements MemoryThreadAssistant
     private final ThreadAssistSeedResolver seedResolver;
     private final ThreadAssistThreadRanker threadRanker;
     private final ThreadAssistMemberRanker memberRanker;
+    private final ObservationRegistry observationRegistry;
 
     public DefaultMemoryThreadAssistant(MemoryStore store) {
         this(store, MemoryThreadLifecycleOptions.defaults().dormantAfter());
     }
 
     public DefaultMemoryThreadAssistant(MemoryStore store, Duration dormantAfter) {
+        this(store, dormantAfter, ObservationRegistry.NOOP);
+    }
+
+    public DefaultMemoryThreadAssistant(
+            MemoryStore store, Duration dormantAfter, ObservationRegistry observationRegistry) {
         this(
                 store,
                 dormantAfter,
                 Clock.systemUTC(),
                 new ThreadAssistSeedResolver(),
                 new ThreadAssistThreadRanker(store, dormantAfter, Clock.systemUTC()),
-                new ThreadAssistMemberRanker(store));
+                new ThreadAssistMemberRanker(store),
+                observationRegistry);
     }
 
     DefaultMemoryThreadAssistant(MemoryStore store, Duration dormantAfter, Clock clock) {
@@ -57,7 +66,8 @@ public final class DefaultMemoryThreadAssistant implements MemoryThreadAssistant
                 clock,
                 new ThreadAssistSeedResolver(),
                 new ThreadAssistThreadRanker(store, dormantAfter, clock),
-                new ThreadAssistMemberRanker(store));
+                new ThreadAssistMemberRanker(store),
+                ObservationRegistry.NOOP);
     }
 
     DefaultMemoryThreadAssistant(
@@ -67,16 +77,48 @@ public final class DefaultMemoryThreadAssistant implements MemoryThreadAssistant
             ThreadAssistSeedResolver seedResolver,
             ThreadAssistThreadRanker threadRanker,
             ThreadAssistMemberRanker memberRanker) {
+        this(
+                store,
+                dormantAfter,
+                clock,
+                seedResolver,
+                threadRanker,
+                memberRanker,
+                ObservationRegistry.NOOP);
+    }
+
+    DefaultMemoryThreadAssistant(
+            MemoryStore store,
+            Duration dormantAfter,
+            Clock clock,
+            ThreadAssistSeedResolver seedResolver,
+            ThreadAssistThreadRanker threadRanker,
+            ThreadAssistMemberRanker memberRanker,
+            ObservationRegistry observationRegistry) {
         Objects.requireNonNull(store, "store");
         Objects.requireNonNull(dormantAfter, "dormantAfter");
         Objects.requireNonNull(clock, "clock");
         this.seedResolver = Objects.requireNonNull(seedResolver, "seedResolver");
         this.threadRanker = Objects.requireNonNull(threadRanker, "threadRanker");
         this.memberRanker = Objects.requireNonNull(memberRanker, "memberRanker");
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     @Override
     public Mono<MemoryThreadAssistResult> assist(
+            QueryContext context,
+            RetrievalConfig config,
+            RetrievalMemoryThreadSettings settings,
+            List<ScoredResult> directWindow) {
+        return DefaultMemoryThreadAssistantObservation.observe(
+                observationRegistry,
+                context,
+                settings,
+                () -> assistInternal(context, config, settings, directWindow));
+    }
+
+    private Mono<MemoryThreadAssistResult> assistInternal(
             QueryContext context,
             RetrievalConfig config,
             RetrievalMemoryThreadSettings settings,

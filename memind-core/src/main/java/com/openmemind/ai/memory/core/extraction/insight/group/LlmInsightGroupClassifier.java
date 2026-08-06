@@ -15,10 +15,12 @@ package com.openmemind.ai.memory.core.extraction.insight.group;
 
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
+import com.openmemind.ai.memory.core.extraction.insight.group.observation.LlmInsightGroupClassifierObservation;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.extraction.insight.InsightGroupPrompts;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -81,18 +83,33 @@ public class LlmInsightGroupClassifier implements InsightGroupClassifier {
 
     private final StructuredChatClient structuredChatClient;
     private final PromptRegistry promptRegistry;
+    private final ObservationRegistry observationRegistry;
 
     public LlmInsightGroupClassifier(StructuredChatClient structuredChatClient) {
         this(structuredChatClient, PromptRegistry.EMPTY);
     }
 
     public LlmInsightGroupClassifier(
+            StructuredChatClient structuredChatClient, ObservationRegistry observationRegistry) {
+        this(structuredChatClient, PromptRegistry.EMPTY, observationRegistry);
+    }
+
+    public LlmInsightGroupClassifier(
             StructuredChatClient structuredChatClient, PromptRegistry promptRegistry) {
+        this(structuredChatClient, promptRegistry, ObservationRegistry.NOOP);
+    }
+
+    public LlmInsightGroupClassifier(
+            StructuredChatClient structuredChatClient,
+            PromptRegistry promptRegistry,
+            ObservationRegistry observationRegistry) {
         this.structuredChatClient =
                 Objects.requireNonNull(
                         structuredChatClient, "structuredChatClient must not be null");
         this.promptRegistry =
                 Objects.requireNonNull(promptRegistry, "promptRegistry must not be null");
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     @Override
@@ -114,6 +131,25 @@ public class LlmInsightGroupClassifier implements InsightGroupClassifier {
 
     @Override
     public Mono<Map<String, List<MemoryItem>>> classify(
+            MemoryInsightType insightType,
+            List<MemoryItem> items,
+            List<String> existingGroupNames,
+            String additionalContext,
+            String language) {
+        return LlmInsightGroupClassifierObservation.observe(
+                observationRegistry,
+                insightType,
+                items,
+                () ->
+                        classifyInternal(
+                                insightType,
+                                items,
+                                existingGroupNames,
+                                additionalContext,
+                                language));
+    }
+
+    private Mono<Map<String, List<MemoryItem>>> classifyInternal(
             MemoryInsightType insightType,
             List<MemoryItem> items,
             List<String> existingGroupNames,

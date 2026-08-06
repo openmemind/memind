@@ -18,20 +18,20 @@ import reactor.util.context.ContextView;
 
 public final class RetrievalTraceContext {
 
-    private static final Class<RetrievalTraceCollector> KEY = RetrievalTraceCollector.class;
+    private static final Class<RetrievalTraceRecorder> KEY = RetrievalTraceRecorder.class;
 
     private RetrievalTraceContext() {}
 
-    public static Context withCollector(Context context, RetrievalTraceCollector collector) {
-        if (collector == null || collector instanceof NoopRetrievalTraceCollector) {
+    public static Context withRecorder(Context context, RetrievalTraceRecorder recorder) {
+        if (recorder == null || recorder instanceof NoopRetrievalTraceRecorder) {
             return context;
         }
-        return context.put(KEY, collector);
+        return context.put(KEY, recorder);
     }
 
-    public static RetrievalTraceCollector collector(ContextView context) {
+    public static RetrievalTraceRecorder recorder(ContextView context) {
         if (context == null || !context.hasKey(KEY)) {
-            return NoopRetrievalTraceCollector.INSTANCE;
+            return NoopRetrievalTraceRecorder.INSTANCE;
         }
         return context.get(KEY);
     }

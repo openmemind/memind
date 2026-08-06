@@ -49,6 +49,8 @@ import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorgani
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.insight.InsightOperations;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
+import com.openmemind.ai.memory.core.support.RecordedObservation;
+import com.openmemind.ai.memory.core.support.RecordingObservationRegistry;
 import com.openmemind.ai.memory.core.utils.IdUtils;
 import java.time.Instant;
 import java.util.List;
@@ -69,6 +71,12 @@ class InsightBuildSchedulerTest {
     private static final MemoryId MEMORY_ID = () -> "memory-1";
     private static final String TYPE_NAME = "identity";
     private static final String GROUP_NAME = "group-a";
+    private static final String EXTRACTION_INSIGHT_PIPELINE = "memind.extraction.insight.pipeline";
+    private static final String EXTRACTION_INSIGHT_TREE_REORGANIZE =
+            "memind.extraction.insight.tree.reorganize";
+    private static final String MEMORY_ID_KEY = "memind.memory_id";
+    private static final String INSIGHT_TYPE_KEY = "memind.extraction.insight_type";
+    private static final String INSIGHT_LEAF_COUNT_KEY = "memind.extraction.insight_leaf_count";
 
     @Mock private MemoryStore store;
     @Mock private InsightGenerator generator;
@@ -164,6 +172,52 @@ class InsightBuildSchedulerTest {
                         eq("English"));
         verify(groupClassifier, never())
                 .classify(any(), anyList(), anyList(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("flushSync should publish scheduler observations through ObservationRegistry")
+    void flushSyncShouldPublishSchedulerObservationsThroughObservationRegistry() {
+        var registry = new RecordingObservationRegistry();
+        var observedScheduler =
+                new InsightBuildScheduler(
+                        buffer,
+                        store,
+                        generator,
+                        groupClassifier,
+                        groupRouter,
+                        treeReorganizer,
+                        null,
+                        IdUtils.snowflake(),
+                        InsightBuildConfig.defaults(),
+                        graphAssistant,
+                        registry);
+        seedGroupedBuffer(1L);
+        when(itemOperations.getItemsByIds(eq(MEMORY_ID), anyList())).thenReturn(List.of(item(1L)));
+        when(generator.generateLeafPointOps(
+                        any(), anyString(), anyList(), anyList(), anyInt(), any(), any()))
+                .thenReturn(
+                        Mono.just(
+                                new InsightPointOpsResponse(
+                                        List.of(
+                                                new PointOperation(
+                                                        PointOperation.OpType.ADD,
+                                                        null,
+                                                        new InsightPoint(
+                                                                InsightPoint.PointType.SUMMARY,
+                                                                "new",
+                                                                List.of("1")),
+                                                        "add")))));
+
+        observedScheduler.flushSync(MEMORY_ID, TYPE_NAME, "English");
+
+        assertThat(registry.observations())
+                .extracting(RecordedObservation::observationName)
+                .contains(EXTRACTION_INSIGHT_PIPELINE, EXTRACTION_INSIGHT_TREE_REORGANIZE);
+        assertThat(observation(registry, EXTRACTION_INSIGHT_PIPELINE).requestAttributes())
+                .containsEntry(MEMORY_ID_KEY, MEMORY_ID.toIdentifier())
+                .containsEntry(INSIGHT_TYPE_KEY, TYPE_NAME);
+        assertThat(observation(registry, EXTRACTION_INSIGHT_TREE_REORGANIZE).requestAttributes())
+                .containsEntry(INSIGHT_LEAF_COUNT_KEY, "1");
     }
 
     @Test
@@ -517,6 +571,14 @@ class InsightBuildSchedulerTest {
 
     private static boolean itemIdsMatch(List<MemoryItem> items, List<Long> expectedIds) {
         return items.stream().map(MemoryItem::id).toList().equals(expectedIds);
+    }
+
+    private static RecordedObservation observation(
+            RecordingObservationRegistry registry, String observationName) {
+        return registry.observations().stream()
+                .filter(observation -> observation.observationName().equals(observationName))
+                .findFirst()
+                .orElseThrow();
     }
 
     private static MemoryInsight existingLeaf(String content) {

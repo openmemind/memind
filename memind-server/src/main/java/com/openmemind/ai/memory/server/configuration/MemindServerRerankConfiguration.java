@@ -15,6 +15,8 @@ package com.openmemind.ai.memory.server.configuration;
 
 import com.openmemind.ai.memory.core.llm.rerank.LlmReranker;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
+import io.micrometer.observation.ObservationRegistry;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -32,12 +34,20 @@ public class MemindServerRerankConfiguration {
     @Bean
     @ConditionalOnMissingBean(Reranker.class)
     @Conditional(RerankPropertiesConfiguredCondition.class)
-    Reranker reranker(MemindServerRerankProperties properties) {
+    Reranker reranker(
+            MemindServerRerankProperties properties,
+            ObjectProvider<ObservationRegistry> observationRegistryProvider) {
+        ObservationRegistry observationRegistry =
+                observationRegistryProvider.getIfAvailable(() -> ObservationRegistry.NOOP);
         if (StringUtils.hasText(properties.getModel())) {
             return new LlmReranker(
-                    properties.getBaseUrl(), properties.getApiKey(), properties.getModel());
+                    properties.getBaseUrl(),
+                    properties.getApiKey(),
+                    properties.getModel(),
+                    observationRegistry);
         }
-        return new LlmReranker(properties.getBaseUrl(), properties.getApiKey());
+        return new LlmReranker(
+                properties.getBaseUrl(), properties.getApiKey(), observationRegistry);
     }
 
     static final class RerankPropertiesConfiguredCondition implements Condition {
