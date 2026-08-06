@@ -13,15 +13,12 @@
  */
 package com.openmemind.ai.memory.evaluation.dataset.loader;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openmemind.ai.memory.evaluation.dataset.DatasetLoadOptions;
 import com.openmemind.ai.memory.evaluation.dataset.DatasetLoader;
 import com.openmemind.ai.memory.evaluation.dataset.model.EvalConversation;
 import com.openmemind.ai.memory.evaluation.dataset.model.EvalDataset;
 import com.openmemind.ai.memory.evaluation.dataset.model.EvalMessage;
 import com.openmemind.ai.memory.evaluation.dataset.model.QAPair;
-import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -35,6 +32,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * LoCoMo dataset loader, parses multi-session conversations and QA pairs, supports three-level timestamp fallback and content truncation
@@ -79,8 +79,8 @@ public class LoCoMoDatasetLoader implements DatasetLoader {
                     idx++;
                 }
             } else {
-                root.fields()
-                        .forEachRemaining(
+                root.properties()
+                        .forEach(
                                 entry -> {
                                     String convId = entry.getKey();
                                     JsonNode convNode = entry.getValue();
@@ -96,7 +96,7 @@ public class LoCoMoDatasetLoader implements DatasetLoader {
             }
 
             return new EvalDataset(options.datasetName(), conversations, qaPairs);
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             throw new RuntimeException("Failed to load LoCoMo dataset from " + dataPath, e);
         }
     }

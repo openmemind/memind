@@ -13,18 +13,16 @@
  */
 package com.openmemind.ai.memory.evaluation.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.openmemind.ai.memory.evaluation.checkpoint.CheckpointStore;
 import io.netty.channel.ChannelOption;
 import java.time.Duration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
 import reactor.netty.resources.ConnectionProvider;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Evaluation-specific infrastructure configuration.
@@ -36,12 +34,6 @@ import reactor.netty.resources.ConnectionProvider;
 public class EvaluationConfiguration {
 
     // ─── Infrastructure ─────────────────────────────
-
-    @Bean
-    @Primary
-    public ObjectMapper objectMapper() {
-        return new ObjectMapper().registerModule(new JavaTimeModule());
-    }
 
     @Bean
     public CheckpointStore checkpointStore(ObjectMapper mapper, EvaluationProperties props) {
