@@ -16,6 +16,12 @@ package com.openmemind.ai.memory.core.retrieval.trace;
 import java.time.Instant;
 import java.util.List;
 
+/**
+ * Immutable snapshot of a retrieval trace returned to the server layer.
+ *
+ * <p>This is the core debug model. The server maps it to its API DTO so the core module does not
+ * depend on server response types.
+ */
 public record RetrievalDebugTrace(
         String traceId,
         Instant startedAt,

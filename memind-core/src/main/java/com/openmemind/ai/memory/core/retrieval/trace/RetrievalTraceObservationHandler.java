@@ -19,6 +19,14 @@ import io.micrometer.observation.ObservationHandler;
 import java.time.Duration;
 import java.time.Instant;
 
+/**
+ * Bridges Micrometer Observation lifecycle callbacks into retrieval debug trace events.
+ *
+ * <p>The handler is registered globally with the ObservationRegistry, but it only records when the
+ * current {@link MemoryObservationContext} carries a request-scoped {@link RetrievalTraceRecorder}.
+ * This keeps tracing opt-in per retrieval call while still letting every retrieval Observation use
+ * the normal Micrometer tap/handler path.
+ */
 public final class RetrievalTraceObservationHandler
         implements ObservationHandler<MemoryObservationContext> {
 
@@ -37,6 +45,8 @@ public final class RetrievalTraceObservationHandler
         if (recorder == null || !(context instanceof RetrievalTraceEventSource source)) {
             return;
         }
+        // Only contexts that explicitly know how to project themselves into trace data are
+        // recorded.
         source.toRetrievalTraceEvent(timing(context), recorder.options())
                 .ifPresent(recorder::record);
     }

@@ -15,12 +15,21 @@ package com.openmemind.ai.memory.core.retrieval.trace;
 
 import java.util.Optional;
 
+/**
+ * Collects normalized retrieval trace events for one retrieval execution.
+ *
+ * <p>Implementations should be cheap when disabled and bounded when enabled. Production code
+ * usually reads the recorder from {@link RetrievalTraceContext}; tests can inject their own
+ * recorder through Reactor Context to assert what observations emitted.
+ */
 public interface RetrievalTraceRecorder {
 
     void record(RetrievalTraceEvent event);
 
+    /** Returns the current response snapshot, or empty when the recorder intentionally captures nothing. */
     Optional<RetrievalDebugTrace> snapshot();
 
+    /** Limits applied by event sources before they attach candidate previews or long text. */
     default RetrievalTraceOptions options() {
         return RetrievalTraceOptions.defaults();
     }

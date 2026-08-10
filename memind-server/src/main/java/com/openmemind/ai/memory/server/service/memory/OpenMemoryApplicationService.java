@@ -189,6 +189,7 @@ public class OpenMemoryApplicationService {
         if (traceRecorder == null) {
             return operation;
         }
+        // Retrieval trace is request-scoped: attach the recorder to this reactive chain only.
         return operation.contextWrite(
                 context -> RetrievalTraceContext.withRecorder(context, traceRecorder));
     }
@@ -283,6 +284,7 @@ public class OpenMemoryApplicationService {
                 || !observabilityProperties.getRetrievalTrace().isEnabled()) {
             return null;
         }
+        // The recorder owns the response debug trace; Micrometer handlers feed it through context.
         var properties = observabilityProperties.getRetrievalTrace();
         return new BoundedRetrievalTraceRecorder(
                 new RetrievalTraceOptions(
@@ -393,6 +395,7 @@ public class OpenMemoryApplicationService {
     }
 
     private static RetrievalTraceView toTraceView(RetrievalDebugTrace trace) {
+        // Keep the core trace model free of server API DTO types.
         return new RetrievalTraceView(
                 trace.traceId(),
                 trace.startedAt(),

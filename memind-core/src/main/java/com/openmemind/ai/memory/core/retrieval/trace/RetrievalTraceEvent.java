@@ -19,6 +19,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.IntStream;
 
+/**
+ * Normalized event emitted by a retrieval-related Observation when it stops.
+ *
+ * <p>Component observation contexts own the domain-specific data they collected while the
+ * operation was running. When Micrometer calls {@link RetrievalTraceObservationHandler#onStop},
+ * those contexts convert that data into one of the payload shapes below. Keeping this event small
+ * avoids coupling the recorder to every retrieval component's internal result type.
+ */
 public record RetrievalTraceEvent(
         String observationName,
         String contextualName,
@@ -30,8 +38,15 @@ public record RetrievalTraceEvent(
         Map<String, String> highCardinality,
         Payload payload) {
 
+    /** Marker for the three trace sections exposed by the debug response. */
     public sealed interface Payload permits StagePayload, MergePayload, FinalPayload {}
 
+    /**
+     * A retrieval stage, such as an item tier, insight tier, graph expansion, rerank, or gate.
+     *
+     * <p>Counts describe the shape of the stage; candidates contain a bounded preview of concrete
+     * returned results when that stage naturally produces ranked items.
+     */
     public record StagePayload(
             String stage,
             String tier,
@@ -45,17 +60,21 @@ public record RetrievalTraceEvent(
             List<CandidatePayload> candidates)
             implements Payload {}
 
+    /** Summary of the merge/dedup step that combines stage outputs. */
     public record MergePayload(
             int inputCount, int outputCount, int deduplicatedCount, int sourceCount)
             implements Payload {}
 
+    /** Final retrieval result summary after strategy execution completes. */
     public record FinalPayload(
             String strategy, int itemCount, int insightCount, int rawDataCount, int evidenceCount)
             implements Payload {}
 
+    /** Bounded candidate preview for debug display; full item/raw data stays in the main result. */
     public record CandidatePayload(
             String sourceType, int rank, Double finalScore, Float vectorScore, String preview) {}
 
+    /** Converts ranked results into bounded candidate previews according to request trace limits. */
     public static List<CandidatePayload> candidates(
             List<ScoredResult> results, int maxCandidates, int maxTextLength) {
         if (results == null || maxCandidates <= 0) {

@@ -15,6 +15,13 @@ package com.openmemind.ai.memory.core.retrieval.trace;
 
 import java.util.Optional;
 
+/**
+ * Disabled trace recorder.
+ *
+ * <p>Callers can use this singleton to avoid null checks in lower-level retrieval code. It is not
+ * propagated into Reactor Context, so observations do not spend time building trace events when
+ * tracing is disabled.
+ */
 public enum NoopRetrievalTraceRecorder implements RetrievalTraceRecorder {
     INSTANCE;
 

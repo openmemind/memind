@@ -26,6 +26,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+/**
+ * In-memory recorder for one retrieval response trace.
+ *
+ * <p>The recorder can be called from different Reactor worker threads because retrieval stages may
+ * run concurrently. Stage events are stored in a concurrent queue and ordered by start time only
+ * when the server builds the response snapshot. Merge and final result summaries are single-slot
+ * values because each retrieval should expose only the latest aggregate summary for those sections.
+ */
 public final class BoundedRetrievalTraceRecorder implements RetrievalTraceRecorder {
 
     private final String traceId;
@@ -53,6 +61,7 @@ public final class BoundedRetrievalTraceRecorder implements RetrievalTraceRecord
         if (event == null || event.payload() == null) {
             return;
         }
+        // The recorder owns the public debug model; observations only emit normalized events.
         switch (event.payload()) {
             case RetrievalTraceEvent.StagePayload stage -> recordStage(toStageTrace(event, stage));
             case RetrievalTraceEvent.MergePayload merge -> recordMerge(toMergeTrace(event, merge));
@@ -65,6 +74,7 @@ public final class BoundedRetrievalTraceRecorder implements RetrievalTraceRecord
         if (event == null) {
             return;
         }
+        // The response trace is bounded so a pathological retrieval cannot create a huge payload.
         if (stageCount.incrementAndGet() > options.maxStages()) {
             truncated.set(true);
             return;
@@ -86,6 +96,7 @@ public final class BoundedRetrievalTraceRecorder implements RetrievalTraceRecord
 
     @Override
     public Optional<RetrievalDebugTrace> snapshot() {
+        // Stage observations may finish on different threads; sort once for deterministic output.
         List<RetrievalStageTrace> orderedStages =
                 stages.stream()
                         .sorted(Comparator.comparing(RetrievalStageTrace::startedAt))

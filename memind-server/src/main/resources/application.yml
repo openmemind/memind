@@ -19,7 +19,7 @@
 # - Optional Memind AI client slot routing can be configured under memind.ai.chat.slots.
 # - Optional rerank provider settings are read from MEMIND_RERANK_* env vars.
 # - To switch to MySQL or Qdrant, replace/merge the commented examples at the bottom of this file.
-
+debug: true
 spring:
   application:
     name: memind-server
@@ -41,7 +41,7 @@ spring:
       default:
         type: openai
         openai:
-          base-url: ${OPENAI_BASE_URL:https://openrouter.ai/api}
+          base-url: ${OPENAI_BASE_URL:https://openrouter.ai/api/v1}
           api-key: ${OPENAI_API_KEY:your-api-key}
           model: ${OPENAI_CHAT_MODEL:openai/gpt-4o-mini}
           temperature: ${OPENAI_CHAT_TEMPERATURE:0.2}
@@ -49,7 +49,7 @@ spring:
       default:
         type: openai
         openai:
-          base-url: ${EMBEDDING_BASE_URL:${OPENAI_BASE_URL:https://openrouter.ai/api}}
+          base-url: ${EMBEDDING_BASE_URL:${OPENAI_BASE_URL:https://openrouter.ai/api/v1}}
           api-key: ${EMBEDDING_API_KEY:${OPENAI_API_KEY:your-api-key}}
           model: ${OPENAI_EMBEDDING_MODEL:openai/text-embedding-3-small}
     vectorstore:
@@ -97,6 +97,10 @@ memind:
     model: ${MEMIND_RERANK_MODEL:jina-reranker-v3}
   store:
     init-schema: ${MEMIND_STORE_INIT_SCHEMA:true}
+  observability:
+    retrieval-trace:
+      enabled: true
+
 
 logging:
   level:
@@ -140,3 +144,18 @@ logging:
 #     driver-class-name: org.postgresql.Driver
 #     username: memind
 #     password: changeit
+#management:
+#  opentelemetry:
+#    tracing:
+#      export:
+#        otlp:
+#          endpoint: http://localhost:4318/v1/traces
+#---
+#management:
+#  tracing:
+#    sampling:
+#      probability: 1.0
+#---
+#spring:
+#  reactor:
+#    context-propagation: auto

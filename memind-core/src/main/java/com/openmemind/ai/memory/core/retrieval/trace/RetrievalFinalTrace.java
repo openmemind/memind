@@ -13,6 +13,12 @@
  */
 package com.openmemind.ai.memory.core.retrieval.trace;
 
+/**
+ * Final result summary for the retrieval strategy.
+ *
+ * <p>This mirrors the high-level response counts so trace consumers can read outcome information
+ * without recomputing it from the response payload.
+ */
 public record RetrievalFinalTrace(
         String strategy,
         String status,

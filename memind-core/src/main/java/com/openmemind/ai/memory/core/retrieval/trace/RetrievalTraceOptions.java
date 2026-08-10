@@ -13,6 +13,13 @@
  */
 package com.openmemind.ai.memory.core.retrieval.trace;
 
+/**
+ * Size limits applied while producing a retrieval debug trace.
+ *
+ * <p>These limits protect the API response from becoming a telemetry dump. Stage count bounds the
+ * number of recorded observations, candidate count bounds per-stage previews, and text length
+ * bounds each preview string.
+ */
 public record RetrievalTraceOptions(int maxStages, int maxCandidatesPerStage, int maxTextLength) {
 
     public static RetrievalTraceOptions defaults() {
@@ -20,6 +27,7 @@ public record RetrievalTraceOptions(int maxStages, int maxCandidatesPerStage, in
     }
 
     public RetrievalTraceOptions {
+        // Keep invalid configuration safe and deterministic instead of failing the whole request.
         maxStages = Math.max(1, maxStages);
         maxCandidatesPerStage = Math.max(0, maxCandidatesPerStage);
         maxTextLength = Math.max(0, maxTextLength);

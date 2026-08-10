@@ -13,5 +13,11 @@
  */
 package com.openmemind.ai.memory.core.retrieval.trace;
 
+/**
+ * Summary of the scoring merge step after retrieval stages have produced candidates.
+ *
+ * <p>The trace records aggregate counts only here; per-candidate details stay with the stage that
+ * produced or reranked them.
+ */
 public record RetrievalMergeTrace(
         int inputCount, int outputCount, int deduplicatedCount, int sourceCount, String status) {}

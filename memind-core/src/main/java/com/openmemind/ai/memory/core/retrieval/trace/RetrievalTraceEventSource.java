@@ -15,6 +15,13 @@ package com.openmemind.ai.memory.core.retrieval.trace;
 
 import java.util.Optional;
 
+/**
+ * Implemented by observation contexts that can expose retrieval debug details.
+ *
+ * <p>The ObservationHandler does not inspect component-specific fields directly. Instead, each
+ * context decides whether it has enough data to emit a trace event and how much detail to include
+ * based on the active {@link RetrievalTraceOptions}.
+ */
 public interface RetrievalTraceEventSource {
 
     Optional<RetrievalTraceEvent> toRetrievalTraceEvent(

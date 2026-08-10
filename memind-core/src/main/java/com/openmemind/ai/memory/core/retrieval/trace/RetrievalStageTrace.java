@@ -17,6 +17,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Debug data for one retrieval stage.
+ *
+ * <p>A stage can represent an item/insight/raw-data tier, graph expansion, query expansion, rerank,
+ * or sufficiency gate. Counts are optional because not every stage naturally has every count.
+ */
 public record RetrievalStageTrace(
         String stage,
         String tier,

@@ -13,5 +13,11 @@
  */
 package com.openmemind.ai.memory.core.retrieval.trace;
 
+/**
+ * Bounded preview of a ranked candidate shown inside a stage trace.
+ *
+ * <p>The trace intentionally stores a text preview rather than the full scored result. Full result
+ * data remains in the normal retrieval response and source stores.
+ */
 public record RetrievalCandidateTrace(
         String sourceType, int rank, Double finalScore, Float vectorScore, String textPreview) {}
