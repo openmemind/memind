@@ -27,6 +27,7 @@ import com.openmemind.ai.memory.core.retrieval.scoring.ResultMerger;
 import com.openmemind.ai.memory.core.retrieval.scoring.RetrievalResultMerger;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.TimeDecay;
+import com.openmemind.ai.memory.core.retrieval.strategy.observation.SimpleRetrievalStrategyObservation;
 import com.openmemind.ai.memory.core.retrieval.temporal.DefaultTemporalConstraintExtractor;
 import com.openmemind.ai.memory.core.retrieval.temporal.DefaultTemporalItemChannel;
 import com.openmemind.ai.memory.core.retrieval.temporal.TemporalConstraintExtractor;
@@ -43,6 +44,7 @@ import com.openmemind.ai.memory.core.retrieval.truncation.AdaptiveTruncator;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.textsearch.TextSearchResult;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -83,6 +85,7 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
             graphItemChannel; // nullable: preserves legacy graph assistant behavior
     private final RetrievalResultMerger resultMerger;
     private final Clock clock;
+    private final ObservationRegistry observationRegistry;
 
     public SimpleRetrievalStrategy(
             InsightTierSearch insightRetriever,
@@ -120,6 +123,36 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
             GraphItemChannel graphItemChannel,
             RetrievalResultMerger resultMerger,
             Clock clock) {
+        this(
+                insightRetriever,
+                itemRetriever,
+                textSearch,
+                memoryStore,
+                defaultStrategyConfig,
+                graphAssistant,
+                memoryThreadAssistant,
+                temporalConstraintExtractor,
+                temporalItemChannel,
+                graphItemChannel,
+                resultMerger,
+                clock,
+                ObservationRegistry.NOOP);
+    }
+
+    public SimpleRetrievalStrategy(
+            InsightTierSearch insightRetriever,
+            ItemTierSearch itemRetriever,
+            MemoryTextSearch textSearch,
+            MemoryStore memoryStore,
+            SimpleStrategyConfig defaultStrategyConfig,
+            RetrievalGraphAssistant graphAssistant,
+            MemoryThreadAssistant memoryThreadAssistant,
+            TemporalConstraintExtractor temporalConstraintExtractor,
+            TemporalItemChannel temporalItemChannel,
+            GraphItemChannel graphItemChannel,
+            RetrievalResultMerger resultMerger,
+            Clock clock,
+            ObservationRegistry observationRegistry) {
         this.insightRetriever =
                 Objects.requireNonNull(insightRetriever, "insightRetriever must not be null");
         this.itemRetriever =
@@ -148,6 +181,8 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
         this.resultMerger =
                 resultMerger != null ? resultMerger : DefaultRetrievalResultMerger.INSTANCE;
         this.clock = clock != null ? clock : Clock.systemDefaultZone();
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     public SimpleRetrievalStrategy(
@@ -207,7 +242,8 @@ public class SimpleRetrievalStrategy implements RetrievalStrategy {
     public Mono<RetrievalResult> retrieve(QueryContext context, RetrievalConfig config) {
         log.debug("Simple strategy started: query={}", context.searchQuery());
 
-        return executePipeline(context, config);
+        return SimpleRetrievalStrategyObservation.observe(
+                observationRegistry, context, name(), () -> executePipeline(context, config));
     }
 
     private Mono<RetrievalResult> executePipeline(QueryContext context, RetrievalConfig config) {

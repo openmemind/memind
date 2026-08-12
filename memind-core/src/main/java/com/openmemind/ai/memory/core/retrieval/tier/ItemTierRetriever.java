@@ -23,11 +23,14 @@ import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoringConfig;
 import com.openmemind.ai.memory.core.retrieval.scoring.TimeDecay;
 import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
+import com.openmemind.ai.memory.core.retrieval.tier.observation.ItemTierRetrieverObservation;
+import com.openmemind.ai.memory.core.retrieval.tier.observation.ItemTierRetrieverObservation.ItemTierDocument;
 import com.openmemind.ai.memory.core.retrieval.truncation.AdaptiveTruncator;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import com.openmemind.ai.memory.core.vector.VectorSearchResult;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -54,6 +57,7 @@ public class ItemTierRetriever implements ItemTierSearch {
     private final MemoryStore memoryStore;
     private final MemoryVector memoryVector;
     private final MemoryTextSearch textSearch;
+    private final ObservationRegistry observationRegistry;
 
     public ItemTierRetriever(MemoryStore memoryStore, MemoryVector memoryVector) {
         this(memoryStore, memoryVector, null);
@@ -61,9 +65,19 @@ public class ItemTierRetriever implements ItemTierSearch {
 
     public ItemTierRetriever(
             MemoryStore memoryStore, MemoryVector memoryVector, MemoryTextSearch textSearch) {
+        this(memoryStore, memoryVector, textSearch, ObservationRegistry.NOOP);
+    }
+
+    public ItemTierRetriever(
+            MemoryStore memoryStore,
+            MemoryVector memoryVector,
+            MemoryTextSearch textSearch,
+            ObservationRegistry observationRegistry) {
         this.memoryStore = Objects.requireNonNull(memoryStore, "memoryStore must not be null");
         this.memoryVector = Objects.requireNonNull(memoryVector, "memoryVector must not be null");
         this.textSearch = textSearch;
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     /**
@@ -83,6 +97,16 @@ public class ItemTierRetriever implements ItemTierSearch {
      * @return Scoring results + scopeHints (rawDataIds)
      */
     public Mono<TierResult> searchByVector(QueryContext context, RetrievalConfig config) {
+        return ItemTierRetrieverObservation.observe(
+                observationRegistry,
+                context,
+                "vector",
+                ItemTierDocument.VECTOR_SEARCH,
+                config.tier2().topK(),
+                () -> searchByVectorInternal(context, config));
+    }
+
+    private Mono<TierResult> searchByVectorInternal(QueryContext context, RetrievalConfig config) {
         if (!config.tier2().enabled()) {
             return Mono.just(TierResult.empty());
         }
@@ -371,7 +395,8 @@ public class ItemTierRetriever implements ItemTierSearch {
     public Mono<List<ScoredResult>> searchByVector(
             QueryContext context, RetrievalConfig.TierConfig tier, ScoringConfig scoring) {
         RetrievalConfig tempConfig = buildTempConfig(tier, scoring);
-        return searchByVector(context, tempConfig).map(TierResult::results);
+        var operation = searchByVectorInternal(context, tempConfig).map(TierResult::results);
+        return observeListSearch(operation, context, tier.topK(), ItemTierDocument.VECTOR_SEARCH);
     }
 
     /**
@@ -381,6 +406,12 @@ public class ItemTierRetriever implements ItemTierSearch {
      */
     @Override
     public Mono<List<ScoredResult>> searchByKeyword(
+            QueryContext context, RetrievalConfig.TierConfig tier, ScoringConfig scoring) {
+        var operation = searchByKeywordInternal(context, tier, scoring);
+        return observeListSearch(operation, context, tier.topK(), ItemTierDocument.KEYWORD_SEARCH);
+    }
+
+    private Mono<List<ScoredResult>> searchByKeywordInternal(
             QueryContext context, RetrievalConfig.TierConfig tier, ScoringConfig scoring) {
         if (textSearch == null || !tier.enabled()) {
             return Mono.just(List.of());
@@ -434,15 +465,23 @@ public class ItemTierRetriever implements ItemTierSearch {
     @Override
     public Mono<List<ScoredResult>> searchHybrid(
             QueryContext context, RetrievalConfig.TierConfig tier, ScoringConfig scoring) {
+        var operation = searchHybridInternal(context, tier, scoring);
+        return observeListSearch(operation, context, tier.topK(), ItemTierDocument.HYBRID_SEARCH);
+    }
+
+    private Mono<List<ScoredResult>> searchHybridInternal(
+            QueryContext context, RetrievalConfig.TierConfig tier, ScoringConfig scoring) {
+        RetrievalConfig tempConfig = buildTempConfig(tier, scoring);
         Mono<List<ScoredResult>> vectorMono =
-                searchByVector(context, tier, scoring)
+                searchByVectorInternal(context, tempConfig)
+                        .map(TierResult::results)
                         .onErrorResume(
                                 e -> {
                                     log.warn("searchHybrid vector channel failed", e);
                                     return Mono.just(List.of());
                                 });
         Mono<List<ScoredResult>> keywordMono =
-                searchByKeyword(context, tier, scoring)
+                searchByKeywordInternal(context, tier, scoring)
                         .onErrorResume(
                                 e -> {
                                     log.warn("searchHybrid keyword channel failed", e);
@@ -489,5 +528,14 @@ public class ItemTierRetriever implements ItemTierSearch {
 
     private static String formatItemText(MemoryItem item) {
         return item.content();
+    }
+
+    private Mono<List<ScoredResult>> observeListSearch(
+            Mono<List<ScoredResult>> operation,
+            QueryContext queryContext,
+            int topK,
+            ItemTierDocument document) {
+        return ItemTierRetrieverObservation.observeResults(
+                observationRegistry, queryContext, "item", document, topK, () -> operation);
     }
 }

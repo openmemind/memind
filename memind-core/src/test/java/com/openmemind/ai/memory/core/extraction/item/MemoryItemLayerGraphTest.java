@@ -106,7 +106,6 @@ class MemoryItemLayerGraphTest {
                 .thenReturn(Mono.just(List.of(entry)));
         when(deduplicator.deduplicate(eq(memoryId), anyList()))
                 .thenReturn(Mono.just(new DeduplicationResult(List.of(entry), List.of())));
-        when(deduplicator.spanName()).thenReturn("test");
         when(vector.storeBatch(eq(memoryId), anyList(), anyList()))
                 .thenReturn(Mono.just(List.of("vec-1")));
         var graphResult =
@@ -205,7 +204,6 @@ class MemoryItemLayerGraphTest {
                 .thenReturn(Mono.just(List.of(entry)));
         when(deduplicator.deduplicate(eq(memoryId), anyList()))
                 .thenReturn(Mono.just(new DeduplicationResult(List.of(entry), List.of())));
-        when(deduplicator.spanName()).thenReturn("test");
         when(vector.storeBatch(eq(memoryId), anyList(), anyList()))
                 .thenReturn(Mono.just(List.of("vec-1")));
         when(graphMaterializer.materialize(eq(memoryId), anyList(), eq(List.of(entry))))
@@ -278,7 +276,6 @@ class MemoryItemLayerGraphTest {
                 .thenReturn(Mono.just(List.of(entry)));
         when(deduplicator.deduplicate(eq(memoryId), anyList()))
                 .thenReturn(Mono.just(new DeduplicationResult(List.of(entry), List.of())));
-        when(deduplicator.spanName()).thenReturn("test");
         when(vector.storeBatch(eq(memoryId), anyList(), anyList()))
                 .thenReturn(Mono.just(List.of("vec-1")));
         when(graphMaterializer.materialize(eq(memoryId), anyList(), eq(List.of(entry))))
@@ -355,7 +352,6 @@ class MemoryItemLayerGraphTest {
                 .thenReturn(Mono.just(List.of(entry)));
         when(deduplicator.deduplicate(eq(memoryId), anyList()))
                 .thenReturn(Mono.just(new DeduplicationResult(List.of(entry), List.of())));
-        when(deduplicator.spanName()).thenReturn("test");
         when(vector.storeBatch(eq(memoryId), anyList(), anyList()))
                 .thenReturn(Mono.just(List.of("vec-1")));
         when(graphMaterializer.materialize(eq(memoryId), anyList(), eq(List.of(entry))))

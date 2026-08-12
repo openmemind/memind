@@ -95,7 +95,6 @@ import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.graph.NoOpItemGraphCommitOperations;
 import com.openmemind.ai.memory.core.store.thread.NoOpThreadEnrichmentInputStore;
 import com.openmemind.ai.memory.core.store.thread.ThreadEnrichmentInputStore;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingItemGraphMaterializer;
 import com.openmemind.ai.memory.core.utils.IdUtils;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -141,13 +140,15 @@ final class MemoryExtractionAssembler {
                         captionGenerator,
                         context.memoryStore(),
                         context.memoryVector(),
-                        context.options().extraction().rawdata().vectorBatchSize());
+                        context.options().extraction().rawdata().vectorBatchSize(),
+                        context.observationRegistry());
 
         MemoryItemExtractor itemExtractor =
                 createMemoryItemExtractor(registry, processors, context.promptRegistry());
         MemoryItemDeduplicator deduplicator =
                 new CompositeDeduplicator(
-                        List.of(new HashBasedDeduplicator(context.memoryStore())));
+                        List.of(new HashBasedDeduplicator(context.memoryStore())),
+                        context.observationRegistry());
         ItemGraphMaterializer graphMaterializer = graphMaterializer(context);
         MemoryItemLayer memoryItemLayer =
                 new MemoryItemLayer(
@@ -157,19 +158,22 @@ final class MemoryExtractionAssembler {
                         context.memoryVector(),
                         IdUtils.snowflake(),
                         null,
-                        graphMaterializer);
+                        graphMaterializer,
+                        context.observationRegistry());
         MemoryItemExtractStep memoryItemStep = memoryItemLayer;
         MemoryThreadLayer memoryThreadLayer = null;
 
         InsightGenerator insightGenerator =
                 new LlmInsightGenerator(
                         registry.resolve(ChatClientSlot.INSIGHT_GENERATOR),
-                        context.promptRegistry());
+                        context.promptRegistry(),
+                        context.observationRegistry());
         InsightGraphAssistant insightGraphAssistant = insightGraphAssistant(context);
         InsightGroupClassifier insightGroupClassifier =
                 new LlmInsightGroupClassifier(
                         registry.resolve(ChatClientSlot.INSIGHT_GROUP_CLASSIFIER),
-                        context.promptRegistry());
+                        context.promptRegistry(),
+                        context.observationRegistry());
         var identityManager = new InsightPointIdentityManager();
         var evidenceNormalizer = new InsightPointEvidenceNormalizer();
         BubbleTrackerStore bubbleTrackerStore =
@@ -201,12 +205,13 @@ final class MemoryExtractionAssembler {
                         identityManager,
                         evidenceNormalizer,
                         insightGraphAssistant,
-                        null);
+                        context.observationRegistry());
         InsightLayer insightLayer =
                 new InsightLayer(
                         context.memoryStore(),
                         insightBuildScheduler,
-                        unsupportedInsightTypes(processors));
+                        unsupportedInsightTypes(processors),
+                        context.observationRegistry());
 
         ContextCommitDetector contextCommitDetector =
                 new LlmContextCommitDetector(
@@ -320,7 +325,8 @@ final class MemoryExtractionAssembler {
                         resolveResourceFetcher(context.resourceFetcher()),
                         ingestionPolicyRegistry,
                         context.options().extraction().rawdata(),
-                        context.options().extraction().item());
+                        context.options().extraction().item(),
+                        context.observationRegistry());
         return new MemoryExtractionAssembly(
                 pipeline, insightLayer, extractionLifecycle, memoryThreadLayer);
     }
@@ -405,8 +411,9 @@ final class MemoryExtractionAssembler {
                         planner,
                         context.memoryStore().itemGraphCommitOperations(),
                         derivedMaintainer,
-                        context.options().extraction().item().graph());
-        return new TracingItemGraphMaterializer(graphMaterializer, context.memoryObserver());
+                        context.options().extraction().item().graph(),
+                        context.observationRegistry());
+        return graphMaterializer;
     }
 
     private ConversationContentProcessor conversationProcessor(

@@ -19,6 +19,7 @@ import com.openmemind.ai.memory.core.data.MemoryResource;
 import com.openmemind.ai.memory.core.extraction.rawdata.caption.CaptionGenerator;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.ConversationContent;
 import com.openmemind.ai.memory.core.extraction.rawdata.content.RawContent;
+import com.openmemind.ai.memory.core.extraction.rawdata.observation.RawDataLayerObservation;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.CharBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.MessageBoundary;
 import com.openmemind.ai.memory.core.extraction.rawdata.segment.Segment;
@@ -29,6 +30,7 @@ import com.openmemind.ai.memory.core.extraction.step.SegmentProcessor;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.utils.HashUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -54,6 +56,7 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
     private final MemoryStore memoryStore;
     private final MemoryVector vector;
     private final int vectorBatchSize;
+    private final ObservationRegistry observationRegistry;
 
     /**
      * Creates a RawDataLayer with a list of content processors.
@@ -84,11 +87,28 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
             MemoryVector vector,
             int vectorBatchSize) {
         this(
+                processorList,
+                defaultCaptionGenerator,
+                memoryStore,
+                vector,
+                vectorBatchSize,
+                ObservationRegistry.NOOP);
+    }
+
+    public RawDataLayer(
+            List<RawContentProcessor<?>> processorList,
+            CaptionGenerator defaultCaptionGenerator,
+            MemoryStore memoryStore,
+            MemoryVector vector,
+            int vectorBatchSize,
+            ObservationRegistry observationRegistry) {
+        this(
                 new RawContentProcessorRegistry(processorList),
                 defaultCaptionGenerator,
                 memoryStore,
                 vector,
-                vectorBatchSize);
+                vectorBatchSize,
+                observationRegistry);
     }
 
     public RawDataLayer(
@@ -97,6 +117,22 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
             MemoryStore memoryStore,
             MemoryVector vector,
             int vectorBatchSize) {
+        this(
+                processorRegistry,
+                defaultCaptionGenerator,
+                memoryStore,
+                vector,
+                vectorBatchSize,
+                ObservationRegistry.NOOP);
+    }
+
+    public RawDataLayer(
+            RawContentProcessorRegistry processorRegistry,
+            CaptionGenerator defaultCaptionGenerator,
+            MemoryStore memoryStore,
+            MemoryVector vector,
+            int vectorBatchSize,
+            ObservationRegistry observationRegistry) {
         this.processorRegistry =
                 java.util.Objects.requireNonNull(processorRegistry, "processorRegistry");
         this.defaultCaptionGenerator = defaultCaptionGenerator;
@@ -106,6 +142,8 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
             throw new IllegalArgumentException("vectorBatchSize must be > 0");
         }
         this.vectorBatchSize = vectorBatchSize;
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     @Override
@@ -119,6 +157,18 @@ public class RawDataLayer implements RawDataExtractStep, SegmentProcessor {
 
     @Override
     public Mono<RawDataResult> extract(
+            MemoryId memoryId,
+            RawContent content,
+            String contentType,
+            Map<String, Object> metadata,
+            String language) {
+        return RawDataLayerObservation.observe(
+                observationRegistry,
+                memoryId,
+                () -> extractInternal(memoryId, content, contentType, metadata, language));
+    }
+
+    private Mono<RawDataResult> extractInternal(
             MemoryId memoryId,
             RawContent content,
             String contentType,

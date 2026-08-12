@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.openmemind.ai.memory.core.llm.rerank.LlmReranker;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
+import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -90,12 +91,39 @@ class MemindServerRerankConfigurationTest {
                         });
     }
 
+    @Test
+    @DisplayName("Uses the noop observation registry when observability is disabled")
+    void usesNoopObservationRegistryWhenObservabilityDisabled() {
+        contextRunner
+                .withPropertyValues(
+                        "memind.rerank.base-url=https://rerank.example",
+                        "memind.rerank.api-key=test-key",
+                        "memind.observability.enabled=false")
+                .withUserConfiguration(ObservationRegistryConfig.class)
+                .run(
+                        context ->
+                                assertThat(
+                                                ReflectionTestUtils.getField(
+                                                        context.getBean(Reranker.class),
+                                                        "observationRegistry"))
+                                        .isSameAs(ObservationRegistry.NOOP));
+    }
+
     @Configuration(proxyBeanMethods = false)
     static class UserProvidedRerankerConfig {
 
         @Bean
         Reranker customReranker() {
             return new NoopReranker();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class ObservationRegistryConfig {
+
+        @Bean
+        ObservationRegistry observationRegistry() {
+            return ObservationRegistry.create();
         }
     }
 }

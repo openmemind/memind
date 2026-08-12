@@ -18,6 +18,8 @@ import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.prompt.retrieval.TypedQueryExpandPrompts;
 import com.openmemind.ai.memory.core.retrieval.deep.ExpandedQuery.QueryType;
+import com.openmemind.ai.memory.core.retrieval.deep.observation.LlmTypedQueryExpanderObservation;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
@@ -40,6 +42,7 @@ public class LlmTypedQueryExpander implements TypedQueryExpander {
 
     private final StructuredChatClient structuredChatClient;
     private final PromptRegistry promptRegistry;
+    private final ObservationRegistry observationRegistry;
 
     public LlmTypedQueryExpander(StructuredChatClient structuredChatClient) {
         this(structuredChatClient, PromptRegistry.EMPTY);
@@ -47,11 +50,20 @@ public class LlmTypedQueryExpander implements TypedQueryExpander {
 
     public LlmTypedQueryExpander(
             StructuredChatClient structuredChatClient, PromptRegistry promptRegistry) {
+        this(structuredChatClient, promptRegistry, ObservationRegistry.NOOP);
+    }
+
+    public LlmTypedQueryExpander(
+            StructuredChatClient structuredChatClient,
+            PromptRegistry promptRegistry,
+            ObservationRegistry observationRegistry) {
         this.structuredChatClient =
                 Objects.requireNonNull(
                         structuredChatClient, "structuredChatClient must not be null");
         this.promptRegistry =
                 Objects.requireNonNull(promptRegistry, "promptRegistry must not be null");
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     @Override
@@ -61,35 +73,51 @@ public class LlmTypedQueryExpander implements TypedQueryExpander {
             List<String> keyInformation,
             List<String> conversationHistory,
             int maxExpansions) {
-        return Mono.defer(
-                        () -> {
-                            var promptResult =
-                                    TypedQueryExpandPrompts.build(
-                                                    promptRegistry,
-                                                    query,
-                                                    gaps,
-                                                    keyInformation,
-                                                    conversationHistory,
-                                                    maxExpansions)
-                                            .render("English");
-                            var messages =
-                                    ChatMessages.systemUser(
-                                            promptResult.systemPrompt(), promptResult.userPrompt());
-                            return structuredChatClient
-                                    .call(messages, TypedExpandResponse.class)
-                                    .map(response -> toExpandedQueries(response, maxExpansions))
-                                    .switchIfEmpty(Mono.just(List.of()));
-                        })
-                .subscribeOn(Schedulers.boundedElastic())
-                .retryWhen(
-                        Retry.backoff(3, Duration.ofSeconds(2)).maxBackoff(Duration.ofSeconds(10)))
-                .onErrorResume(
-                        e -> {
-                            log.warn(
-                                    "Type-annotated query expansion failed, returning empty list",
-                                    e);
-                            return Mono.just(List.of());
-                        });
+        Mono<List<ExpandedQuery>> operation =
+                Mono.defer(
+                                () -> {
+                                    var promptResult =
+                                            TypedQueryExpandPrompts.build(
+                                                            promptRegistry,
+                                                            query,
+                                                            gaps,
+                                                            keyInformation,
+                                                            conversationHistory,
+                                                            maxExpansions)
+                                                    .render("English");
+                                    var messages =
+                                            ChatMessages.systemUser(
+                                                    promptResult.systemPrompt(),
+                                                    promptResult.userPrompt());
+                                    return structuredChatClient
+                                            .call(messages, TypedExpandResponse.class)
+                                            .map(
+                                                    response ->
+                                                            toExpandedQueries(
+                                                                    response, maxExpansions))
+                                            .switchIfEmpty(Mono.just(List.of()));
+                                })
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .retryWhen(
+                                Retry.backoff(3, Duration.ofSeconds(2))
+                                        .maxBackoff(Duration.ofSeconds(10)));
+        return LlmTypedQueryExpanderObservation.observe(
+                observationRegistry,
+                query,
+                gaps,
+                keyInformation,
+                conversationHistory,
+                maxExpansions,
+                context ->
+                        operation.onErrorResume(
+                                e -> {
+                                    context.markDegraded();
+                                    log.warn(
+                                            "Type-annotated query expansion failed, returning empty"
+                                                    + " list",
+                                            e);
+                                    return Mono.just(List.of());
+                                }));
     }
 
     private List<ExpandedQuery> toExpandedQueries(TypedExpandResponse response, int maxExpansions) {

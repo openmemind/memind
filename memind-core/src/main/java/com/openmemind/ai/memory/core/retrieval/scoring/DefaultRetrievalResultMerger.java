@@ -13,6 +13,8 @@
  */
 package com.openmemind.ai.memory.core.retrieval.scoring;
 
+import com.openmemind.ai.memory.core.retrieval.scoring.observation.DefaultRetrievalResultMergerObservation;
+import io.micrometer.observation.ObservationRegistry;
 import java.util.List;
 import reactor.core.publisher.Mono;
 
@@ -21,10 +23,28 @@ public final class DefaultRetrievalResultMerger implements RetrievalResultMerger
 
     public static final DefaultRetrievalResultMerger INSTANCE = new DefaultRetrievalResultMerger();
 
-    private DefaultRetrievalResultMerger() {}
+    private final ObservationRegistry observationRegistry;
+
+    public DefaultRetrievalResultMerger() {
+        this(ObservationRegistry.NOOP);
+    }
+
+    public DefaultRetrievalResultMerger(ObservationRegistry observationRegistry) {
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
+    }
 
     @Override
     public Mono<List<ScoredResult>> merge(
+            ScoringConfig scoring, List<List<ScoredResult>> rankedLists, double... weights) {
+        return DefaultRetrievalResultMergerObservation.observe(
+                observationRegistry,
+                rankedLists,
+                weights,
+                () -> mergeInternal(scoring, rankedLists, weights));
+    }
+
+    private Mono<List<ScoredResult>> mergeInternal(
             ScoringConfig scoring, List<List<ScoredResult>> rankedLists, double... weights) {
         return Mono.fromSupplier(() -> ResultMerger.merge(scoring, rankedLists, weights));
     }

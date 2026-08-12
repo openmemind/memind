@@ -35,6 +35,16 @@
     </properties>
 
     <dependencies>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-opentelemetry</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.openmemind.ai</groupId>
+            <artifactId>memind-plugin-observability-micrometer-starter</artifactId>
+            <version>${revision}</version>
+        </dependency>
         <dependency>
             <groupId>com.openmemind.ai</groupId>
             <artifactId>memind-core</artifactId>

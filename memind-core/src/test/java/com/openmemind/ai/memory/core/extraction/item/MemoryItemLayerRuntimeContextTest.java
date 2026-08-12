@@ -112,7 +112,6 @@ class MemoryItemLayerRuntimeContextTest {
         when(deduplicator.deduplicate(
                         org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(Mono.just(new DeduplicationResult(List.of(), List.of())));
-        when(deduplicator.spanName()).thenReturn("test");
 
         StepVerifier.create(
                         layer.extract(
@@ -192,7 +191,6 @@ class MemoryItemLayerRuntimeContextTest {
                 .thenReturn(Mono.just(List.of(initialEntry)));
         when(deduplicator.deduplicate(eq(memoryId), entriesCaptor.capture()))
                 .thenReturn(Mono.just(new DeduplicationResult(List.of(), List.of())));
-        when(deduplicator.spanName()).thenReturn("test");
 
         StepVerifier.create(
                         layer.extract(

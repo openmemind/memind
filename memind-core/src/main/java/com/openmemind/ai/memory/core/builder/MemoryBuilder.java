@@ -19,15 +19,14 @@ import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
-import com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
-import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
+import io.micrometer.observation.ObservationRegistry;
 
 /**
  * Builds a {@link Memory} instance from runtime components.
@@ -60,11 +59,7 @@ public interface MemoryBuilder {
 
     MemoryBuilder options(MemoryBuildOptions options);
 
-    default MemoryBuilder memoryObserver(MemoryObserver observer) {
-        return this;
-    }
-
-    default MemoryBuilder memoryMetricsRecorder(MemoryMetricsRecorder recorder) {
+    default MemoryBuilder observationRegistry(ObservationRegistry observationRegistry) {
         return this;
     }
 

@@ -32,9 +32,4 @@ public interface MemoryItemDeduplicator {
      * @return Deduplication result
      */
     Mono<DeduplicationResult> deduplicate(MemoryId memoryId, List<ExtractedMemoryEntry> entries);
-
-    /**
-     * The span name corresponding to this deduplicator
-     */
-    String spanName();
 }

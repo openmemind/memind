@@ -17,6 +17,8 @@ import com.openmemind.ai.memory.core.data.InsightPoint;
 import com.openmemind.ai.memory.core.data.MemoryInsight;
 import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
+import com.openmemind.ai.memory.core.extraction.insight.generator.observation.LlmInsightGeneratorObservation;
+import com.openmemind.ai.memory.core.extraction.insight.generator.observation.LlmInsightGeneratorObservation.InsightGenerateDocument;
 import com.openmemind.ai.memory.core.llm.ChatMessages;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
@@ -24,6 +26,7 @@ import com.openmemind.ai.memory.core.prompt.extraction.insight.BranchAggregation
 import com.openmemind.ai.memory.core.prompt.extraction.insight.InsightLeafPrompts;
 import com.openmemind.ai.memory.core.prompt.extraction.insight.InteractionGuideSynthesisPrompts;
 import com.openmemind.ai.memory.core.prompt.extraction.insight.RootSynthesisPrompts;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
@@ -45,22 +48,60 @@ public class LlmInsightGenerator implements InsightGenerator {
 
     private final StructuredChatClient structuredChatClient;
     private final PromptRegistry promptRegistry;
+    private final ObservationRegistry observationRegistry;
 
     public LlmInsightGenerator(StructuredChatClient structuredChatClient) {
         this(structuredChatClient, PromptRegistry.EMPTY);
     }
 
     public LlmInsightGenerator(
+            StructuredChatClient structuredChatClient, ObservationRegistry observationRegistry) {
+        this(structuredChatClient, PromptRegistry.EMPTY, observationRegistry);
+    }
+
+    public LlmInsightGenerator(
             StructuredChatClient structuredChatClient, PromptRegistry promptRegistry) {
+        this(structuredChatClient, promptRegistry, ObservationRegistry.NOOP);
+    }
+
+    public LlmInsightGenerator(
+            StructuredChatClient structuredChatClient,
+            PromptRegistry promptRegistry,
+            ObservationRegistry observationRegistry) {
         this.structuredChatClient =
                 Objects.requireNonNull(
                         structuredChatClient, "structuredChatClient must not be null");
         this.promptRegistry =
                 Objects.requireNonNull(promptRegistry, "promptRegistry must not be null");
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     @Override
     public Mono<InsightPointGenerateResponse> generatePoints(
+            MemoryInsightType insightType,
+            String groupName,
+            List<InsightPoint> existingPoints,
+            List<MemoryItem> newItems,
+            int targetTokens,
+            String additionalContext,
+            String language) {
+        return LlmInsightGeneratorObservation.observeLeafPointGeneration(
+                observationRegistry,
+                insightType,
+                groupName,
+                () ->
+                        generatePointsInternal(
+                                insightType,
+                                groupName,
+                                existingPoints,
+                                newItems,
+                                targetTokens,
+                                additionalContext,
+                                language));
+    }
+
+    private Mono<InsightPointGenerateResponse> generatePointsInternal(
             MemoryInsightType insightType,
             String groupName,
             List<InsightPoint> existingPoints,
@@ -102,6 +143,29 @@ public class LlmInsightGenerator implements InsightGenerator {
 
     @Override
     public Mono<InsightPointOpsResponse> generateLeafPointOps(
+            MemoryInsightType insightType,
+            String groupName,
+            List<InsightPoint> existingPoints,
+            List<MemoryItem> newItems,
+            int targetTokens,
+            String additionalContext,
+            String language) {
+        return LlmInsightGeneratorObservation.observeLeafPointOperations(
+                observationRegistry,
+                insightType,
+                groupName,
+                () ->
+                        generateLeafPointOpsInternal(
+                                insightType,
+                                groupName,
+                                existingPoints,
+                                newItems,
+                                targetTokens,
+                                additionalContext,
+                                language));
+    }
+
+    private Mono<InsightPointOpsResponse> generateLeafPointOpsInternal(
             MemoryInsightType insightType,
             String groupName,
             List<InsightPoint> existingPoints,
@@ -160,6 +224,28 @@ public class LlmInsightGenerator implements InsightGenerator {
             int targetTokens,
             String additionalContext,
             String language) {
+        return LlmInsightGeneratorObservation.observeAggregatePointGeneration(
+                observationRegistry,
+                InsightGenerateDocument.BRANCH,
+                insightType,
+                leafInsights,
+                () ->
+                        generateBranchSummaryInternal(
+                                insightType,
+                                existingPoints,
+                                leafInsights,
+                                targetTokens,
+                                additionalContext,
+                                language));
+    }
+
+    private Mono<InsightPointGenerateResponse> generateBranchSummaryInternal(
+            MemoryInsightType insightType,
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> leafInsights,
+            int targetTokens,
+            String additionalContext,
+            String language) {
 
         var promptResult =
                 BranchAggregationPrompts.build(
@@ -209,6 +295,28 @@ public class LlmInsightGenerator implements InsightGenerator {
             int targetTokens,
             String additionalContext,
             String language) {
+        return LlmInsightGeneratorObservation.observeAggregatePointOperations(
+                observationRegistry,
+                InsightGenerateDocument.BRANCH,
+                insightType,
+                leafInsights,
+                () ->
+                        generateBranchPointOpsInternal(
+                                insightType,
+                                existingPoints,
+                                leafInsights,
+                                targetTokens,
+                                additionalContext,
+                                language));
+    }
+
+    private Mono<InsightPointOpsResponse> generateBranchPointOpsInternal(
+            MemoryInsightType insightType,
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> leafInsights,
+            int targetTokens,
+            String additionalContext,
+            String language) {
 
         var promptResult =
                 BranchAggregationPrompts.buildPointOps(
@@ -252,6 +360,28 @@ public class LlmInsightGenerator implements InsightGenerator {
 
     @Override
     public Mono<InsightPointGenerateResponse> generateRootSynthesis(
+            MemoryInsightType rootInsightType,
+            List<InsightPoint> existingPoints,
+            List<MemoryInsight> branchInsights,
+            int targetTokens,
+            String additionalContext,
+            String language) {
+        return LlmInsightGeneratorObservation.observeAggregatePointGeneration(
+                observationRegistry,
+                InsightGenerateDocument.ROOT,
+                rootInsightType,
+                branchInsights,
+                () ->
+                        generateRootSynthesisInternal(
+                                rootInsightType,
+                                existingPoints,
+                                branchInsights,
+                                targetTokens,
+                                additionalContext,
+                                language));
+    }
+
+    private Mono<InsightPointGenerateResponse> generateRootSynthesisInternal(
             MemoryInsightType rootInsightType,
             List<InsightPoint> existingPoints,
             List<MemoryInsight> branchInsights,

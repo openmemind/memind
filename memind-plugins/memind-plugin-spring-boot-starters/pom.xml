@@ -40,6 +40,6 @@
         <module>memind-plugin-rawdata-image-starter</module>
         <module>memind-plugin-rawdata-jackson-starter</module>
         <module>memind-plugin-rawdata-toolcall-starter</module>
-        <module>memind-plugin-tracing-opentelemetry-starter</module>
+        <module>memind-plugin-observability-micrometer-starter</module>
     </modules>
 </project>

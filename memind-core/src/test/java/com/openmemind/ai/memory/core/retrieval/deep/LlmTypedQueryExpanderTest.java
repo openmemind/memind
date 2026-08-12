@@ -23,7 +23,12 @@ import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptType;
 import com.openmemind.ai.memory.core.prompt.retrieval.TypedQueryExpandPrompts;
 import com.openmemind.ai.memory.core.retrieval.deep.ExpandedQuery.QueryType;
+import com.openmemind.ai.memory.core.retrieval.deep.observation.LlmTypedQueryExpanderObservation.MultiQueryExpandObservationContext;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationHandler;
+import io.micrometer.observation.ObservationRegistry;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -171,13 +176,37 @@ class LlmTypedQueryExpanderTest {
         @Test
         @DisplayName("Should return an empty list on error when LLM call fails")
         void shouldReturnEmptyListOnError() {
+            var observedContext = new AtomicReference<MultiQueryExpandObservationContext>();
+            var observationRegistry = ObservationRegistry.create();
+            observationRegistry
+                    .observationConfig()
+                    .observationHandler(
+                            new ObservationHandler<MultiQueryExpandObservationContext>() {
+                                @Override
+                                public void onStop(MultiQueryExpandObservationContext context) {
+                                    observedContext.set(context);
+                                }
+
+                                @Override
+                                public boolean supportsContext(Observation.Context context) {
+                                    return context instanceof MultiQueryExpandObservationContext;
+                                }
+                            });
             var structuredLlmClient =
                     fakeStructuredLlmClientThrowing(new RuntimeException("LLM unavailable"));
-            var expander = new LlmTypedQueryExpander(structuredLlmClient);
+            var expander =
+                    new LlmTypedQueryExpander(
+                            structuredLlmClient,
+                            com.openmemind.ai.memory.core.prompt.PromptRegistry.EMPTY,
+                            observationRegistry);
 
             StepVerifier.create(expander.expand("test", List.of("gap"), List.of(), List.of(), 3))
                     .assertNext(queries -> assertThat(queries).isEmpty())
                     .verifyComplete();
+
+            assertThat(observedContext.get()).isNotNull();
+            assertThat(observedContext.get().degraded()).isTrue();
+            assertThat(observedContext.get().status()).isEqualTo("degraded");
         }
 
         @Test

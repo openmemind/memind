@@ -51,7 +51,9 @@ import com.openmemind.ai.memory.core.extraction.thread.ThreadWakeScheduler;
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
+import com.openmemind.ai.memory.core.llm.rerank.LlmReranker;
 import com.openmemind.ai.memory.core.llm.rerank.NoopReranker;
+import com.openmemind.ai.memory.core.llm.rerank.Reranker;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.prompt.PromptRegistry;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
@@ -61,6 +63,7 @@ import com.openmemind.ai.memory.core.retrieval.admission.DefaultRetrievalAdmissi
 import com.openmemind.ai.memory.core.retrieval.graph.NoOpRetrievalGraphAssistant;
 import com.openmemind.ai.memory.core.retrieval.query.LlmLongQueryCondenser;
 import com.openmemind.ai.memory.core.retrieval.query.LongQueryCondenser;
+import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
 import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
@@ -77,9 +80,8 @@ import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.store.rawdata.InMemoryRawDataOperations;
 import com.openmemind.ai.memory.core.store.rawdata.RawDataOperations;
 import com.openmemind.ai.memory.core.store.resource.ResourceOperations;
+import com.openmemind.ai.memory.core.support.RecordingObservationRegistry;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingItemGraphMaterializer;
-import com.openmemind.ai.memory.core.tracing.decorator.TracingMemoryThreadAssistant;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.lang.reflect.Proxy;
 import java.time.Duration;
@@ -89,6 +91,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 class MemoryAssemblersTest {
 
@@ -233,6 +236,33 @@ class MemoryAssemblersTest {
     }
 
     @Test
+    void retrievalAssemblerObservesCustomReranker() {
+        var registry = new RecordingObservationRegistry();
+        Reranker customReranker = (query, results, topK) -> Mono.just(results);
+        var reranker = MemoryRetrievalAssembler.observeCustomReranker(customReranker, registry);
+        var candidates =
+                List.of(new ScoredResult(ScoredResult.SourceType.ITEM, "1", "item-1", 0.8f, 0.9));
+
+        StepVerifier.create(reranker.rerank("query", candidates, 1))
+                .expectNext(candidates)
+                .verifyComplete();
+
+        assertThat(registry.observations())
+                .extracting(observation -> observation.observationName())
+                .containsExactly("memind.retrieval.rerank");
+    }
+
+    @Test
+    void retrievalAssemblerDoesNotWrapLlmRerankerTwice() {
+        var reranker = new LlmReranker("http://localhost", "test-key");
+
+        assertThat(
+                        MemoryRetrievalAssembler.observeCustomReranker(
+                                reranker, new RecordingObservationRegistry()))
+                .isSameAs(reranker);
+    }
+
+    @Test
     void retrievalAssemblerAlwaysWiresRuntimeGraphAssistantIntoBothStrategies() {
         var retriever =
                 new MemoryRetrievalAssembler()
@@ -292,20 +322,8 @@ class MemoryAssemblersTest {
         var deep = strategies.get(RetrievalStrategies.DEEP_RETRIEVAL);
 
         assertThat(readField(simple, "memoryThreadAssistant", Object.class))
-                .isInstanceOf(TracingMemoryThreadAssistant.class);
-        assertThat(readField(deep, "memoryThreadAssistant", Object.class))
-                .isInstanceOf(TracingMemoryThreadAssistant.class);
-        assertThat(
-                        readField(
-                                readField(simple, "memoryThreadAssistant", Object.class),
-                                "delegate",
-                                Object.class))
                 .isInstanceOf(DefaultMemoryThreadAssistant.class);
-        assertThat(
-                        readField(
-                                readField(deep, "memoryThreadAssistant", Object.class),
-                                "delegate",
-                                Object.class))
+        assertThat(readField(deep, "memoryThreadAssistant", Object.class))
                 .isInstanceOf(DefaultMemoryThreadAssistant.class);
         assertThat(
                         readField(simple, "defaultStrategyConfig", SimpleStrategyConfig.class)
@@ -457,8 +475,8 @@ class MemoryAssemblersTest {
                                         new InMemoryMemoryStore()));
         var extractor = (DefaultMemoryExtractor) assembly.pipeline();
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
-        var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
-        var delegate = readField(tracing, "delegate", DefaultItemGraphMaterializer.class);
+        var delegate =
+                readField(itemLayer, "graphMaterializer", DefaultItemGraphMaterializer.class);
 
         assertThat(readResolutionStrategy(delegate))
                 .isInstanceOf(ExactCanonicalEntityResolutionStrategy.class);
@@ -532,8 +550,8 @@ class MemoryAssemblersTest {
                                 context(options, null, null, List.of(), new InMemoryMemoryStore()));
         var extractor = (DefaultMemoryExtractor) assembly.pipeline();
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
-        var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
-        var delegate = readField(tracing, "delegate", DefaultItemGraphMaterializer.class);
+        var delegate =
+                readField(itemLayer, "graphMaterializer", DefaultItemGraphMaterializer.class);
 
         assertThat(readResolutionStrategy(delegate))
                 .isInstanceOf(ConservativeHeuristicEntityResolutionStrategy.class);
@@ -563,8 +581,8 @@ class MemoryAssemblersTest {
                         .assemble(context(options, null, null, List.of(), store));
         var extractor = (DefaultMemoryExtractor) assembly.pipeline();
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
-        var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
-        var delegate = readField(tracing, "delegate", DefaultItemGraphMaterializer.class);
+        var delegate =
+                readField(itemLayer, "graphMaterializer", DefaultItemGraphMaterializer.class);
         var strategy = readResolutionStrategy(delegate);
 
         assertThat(strategy).isInstanceOf(ConservativeHeuristicEntityResolutionStrategy.class);
@@ -619,8 +637,8 @@ class MemoryAssemblersTest {
                         .assemble(context(options, null, null, List.of(), stageTwoOnlyStore));
         var extractor = (DefaultMemoryExtractor) assembly.pipeline();
         var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
-        var tracing = readField(itemLayer, "graphMaterializer", TracingItemGraphMaterializer.class);
-        var delegate = readField(tracing, "delegate", DefaultItemGraphMaterializer.class);
+        var delegate =
+                readField(itemLayer, "graphMaterializer", DefaultItemGraphMaterializer.class);
         var strategy = readResolutionStrategy(delegate);
 
         assertThat(strategy).isInstanceOf(ConservativeHeuristicEntityResolutionStrategy.class);

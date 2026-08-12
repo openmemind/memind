@@ -21,7 +21,7 @@ import java.util.regex.Pattern;
  * Insight reference parsing tool
  *
  * <p>Parse and manipulate the {@code [ref:ITEM_ID]} reference tags in the summary,
- * supporting tracing the source item of each summary information.
+ * supporting tracking the source item of each summary information.
  *
  */
 public final class InsightReferences {

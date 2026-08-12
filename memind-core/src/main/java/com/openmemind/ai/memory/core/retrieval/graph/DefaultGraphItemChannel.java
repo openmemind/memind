@@ -14,9 +14,11 @@
 package com.openmemind.ai.memory.core.retrieval.graph;
 
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
+import com.openmemind.ai.memory.core.retrieval.graph.observation.DefaultGraphItemChannelObservation;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.store.graph.GraphQueryBudgetContext;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
@@ -30,13 +32,34 @@ public final class DefaultGraphItemChannel implements GraphItemChannel {
     private static final Logger log = LoggerFactory.getLogger(DefaultGraphItemChannel.class);
 
     private final GraphExpansionEngine engine;
+    private final ObservationRegistry observationRegistry;
 
     public DefaultGraphItemChannel(GraphExpansionEngine engine) {
+        this(engine, ObservationRegistry.NOOP);
+    }
+
+    public DefaultGraphItemChannel(
+            GraphExpansionEngine engine, ObservationRegistry observationRegistry) {
         this.engine = engine;
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     @Override
     public Mono<GraphExpansionResult> retrieve(
+            QueryContext context,
+            RetrievalConfig config,
+            RetrievalGraphSettings settings,
+            List<ScoredResult> seeds) {
+        return DefaultGraphItemChannelObservation.observe(
+                observationRegistry,
+                context,
+                settings,
+                seeds,
+                () -> retrieveInternal(context, config, settings, seeds));
+    }
+
+    private Mono<GraphExpansionResult> retrieveInternal(
             QueryContext context,
             RetrievalConfig config,
             RetrievalGraphSettings settings,

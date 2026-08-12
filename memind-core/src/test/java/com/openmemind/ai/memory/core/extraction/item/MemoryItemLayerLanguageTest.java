@@ -100,7 +100,6 @@ class MemoryItemLayerLanguageTest {
         when(deduplicator.deduplicate(
                         org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(Mono.just(new DeduplicationResult(List.of(), List.of())));
-        when(deduplicator.spanName()).thenReturn("test");
 
         StepVerifier.create(
                         layer.extract(
@@ -178,7 +177,6 @@ class MemoryItemLayerLanguageTest {
         when(deduplicator.deduplicate(
                         org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(Mono.just(new DeduplicationResult(List.of(), List.of())));
-        when(deduplicator.spanName()).thenReturn("test");
 
         StepVerifier.create(
                         layer.extract(
@@ -253,7 +251,6 @@ class MemoryItemLayerLanguageTest {
                 .thenReturn(Mono.just(List.of(temporalEntry)));
         when(deduplicator.deduplicate(eq(memoryId), anyList()))
                 .thenReturn(Mono.just(new DeduplicationResult(List.of(temporalEntry), List.of())));
-        when(deduplicator.spanName()).thenReturn("test");
         when(vector.storeBatch(eq(memoryId), anyList(), anyList()))
                 .thenReturn(Mono.just(List.of("vec-1")));
 

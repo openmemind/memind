@@ -21,6 +21,7 @@ import com.openmemind.ai.memory.core.llm.ChatMessage;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.prompt.InMemoryPromptRegistry;
 import com.openmemind.ai.memory.core.prompt.PromptType;
+import com.openmemind.ai.memory.core.support.RecordingObservationRegistry;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -144,6 +145,52 @@ class LlmInsightGroupClassifierTest {
         assertThat(client.lastMessages().get(1).content())
                 .contains("<AdditionalContext>")
                 .contains("GraphGroupingHints: cluster alpha");
+    }
+
+    @Test
+    @DisplayName("Should publish group classification observation")
+    void shouldPublishGroupClassificationObservation() {
+        var item =
+                new MemoryItem(
+                        1L,
+                        "m1",
+                        "The user prefers short status updates.",
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null);
+        var response =
+                new InsightGroupClassifyResponse(
+                        List.of(
+                                new InsightGroupClassifyResponse.GroupAssignment(
+                                        "Communication", List.of("1"))));
+        var registry = new RecordingObservationRegistry();
+        var classifier =
+                new LlmInsightGroupClassifier(
+                        new FakeStructuredChatClient(response),
+                        InMemoryPromptRegistry.builder().build(),
+                        registry);
+
+        StepVerifier.create(classifier.classify(createInsightType(), List.of(item), List.of()))
+                .assertNext(groups -> assertThat(groups).containsKey("Communication"))
+                .verifyComplete();
+
+        assertThat(registry.observations()).hasSize(1);
+        var observation = registry.observations().getFirst();
+        assertThat(observation.observationName())
+                .isEqualTo("memind.extraction.insight.group.classify");
+        assertThat(observation.requestAttributes())
+                .containsEntry("memind.extraction.insight_type", "experiences")
+                .containsEntry("memind.extraction.item_count", "1");
+        assertThat(observation.resultAttributes())
+                .containsEntry("memind.extraction.insight_group_count", "1");
     }
 
     private static MemoryInsightType createInsightType() {

@@ -14,7 +14,9 @@
 package com.openmemind.ai.memory.core.extraction.item.dedup;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
+import com.openmemind.ai.memory.core.extraction.item.dedup.observation.CompositeDeduplicatorObservation;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
+import io.micrometer.observation.ObservationRegistry;
 import java.util.ArrayList;
 import java.util.List;
 import reactor.core.publisher.Flux;
@@ -30,13 +32,27 @@ import reactor.core.publisher.Mono;
 public class CompositeDeduplicator implements MemoryItemDeduplicator {
 
     private final List<MemoryItemDeduplicator> deduplicators;
+    private final ObservationRegistry observationRegistry;
 
     public CompositeDeduplicator(List<MemoryItemDeduplicator> deduplicators) {
+        this(deduplicators, ObservationRegistry.NOOP);
+    }
+
+    public CompositeDeduplicator(
+            List<MemoryItemDeduplicator> deduplicators, ObservationRegistry observationRegistry) {
         this.deduplicators = List.copyOf(deduplicators);
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     @Override
     public Mono<DeduplicationResult> deduplicate(
+            MemoryId memoryId, List<ExtractedMemoryEntry> entries) {
+        return CompositeDeduplicatorObservation.observe(
+                observationRegistry, memoryId, () -> deduplicateInternal(memoryId, entries));
+    }
+
+    private Mono<DeduplicationResult> deduplicateInternal(
             MemoryId memoryId, List<ExtractedMemoryEntry> entries) {
         var seed = Mono.just(new DeduplicationResult(entries, List.of()));
 
@@ -53,11 +69,6 @@ public class CompositeDeduplicator implements MemoryItemDeduplicator {
                                                     .map(result -> merge(acc, result));
                                         }))
                 .flatMap(mono -> mono);
-    }
-
-    @Override
-    public String spanName() {
-        return "memind.extraction.item.dedup";
     }
 
     private DeduplicationResult merge(DeduplicationResult acc, DeduplicationResult stage) {

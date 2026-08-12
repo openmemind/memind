@@ -31,17 +31,14 @@ import com.openmemind.ai.memory.core.extraction.insight.graph.NoOpInsightGraphAs
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupClassifier;
 import com.openmemind.ai.memory.core.extraction.insight.group.InsightGroupRouter;
 import com.openmemind.ai.memory.core.extraction.insight.operation.PointOperationResolver;
+import com.openmemind.ai.memory.core.extraction.insight.scheduler.observation.InsightBuildSchedulerObservation;
 import com.openmemind.ai.memory.core.extraction.insight.support.InsightPointEvidenceNormalizer;
 import com.openmemind.ai.memory.core.extraction.insight.support.InsightPointIdentityManager;
 import com.openmemind.ai.memory.core.extraction.insight.tree.InsightTreeReorganizer;
 import com.openmemind.ai.memory.core.store.MemoryStore;
-import com.openmemind.ai.memory.core.tracing.MemoryAttributes;
-import com.openmemind.ai.memory.core.tracing.MemoryObserver;
-import com.openmemind.ai.memory.core.tracing.MemorySpanNames;
-import com.openmemind.ai.memory.core.tracing.NoopMemoryObserver;
-import com.openmemind.ai.memory.core.tracing.ObservationContext;
 import com.openmemind.ai.memory.core.utils.IdUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
+import io.micrometer.observation.ObservationRegistry;
 import java.io.Closeable;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -62,7 +59,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Mono;
 
 /**
  * Insight Build Scheduler
@@ -87,7 +83,7 @@ public class InsightBuildScheduler implements Closeable {
     private final InsightBuildConfig config;
     private final InsightPointIdentityManager pointIdentityManager;
     private final InsightPointEvidenceNormalizer evidenceNormalizer;
-    private final MemoryObserver observer;
+    private final ObservationRegistry observationRegistry;
 
     private final ExecutorService executor;
     private final Semaphore semaphore;
@@ -157,7 +153,7 @@ public class InsightBuildScheduler implements Closeable {
             MemoryVector memoryVector,
             IdUtils.SnowflakeIdGenerator idGenerator,
             InsightBuildConfig config,
-            MemoryObserver observer) {
+            ObservationRegistry observationRegistry) {
         this(
                 bufferStore,
                 store,
@@ -171,7 +167,7 @@ public class InsightBuildScheduler implements Closeable {
                 new InsightPointIdentityManager(),
                 new InsightPointEvidenceNormalizer(),
                 NoOpInsightGraphAssistant.INSTANCE,
-                observer);
+                observationRegistry);
     }
 
     public InsightBuildScheduler(
@@ -185,7 +181,7 @@ public class InsightBuildScheduler implements Closeable {
             IdUtils.SnowflakeIdGenerator idGenerator,
             InsightBuildConfig config,
             InsightGraphAssistant graphAssistant,
-            MemoryObserver observer) {
+            ObservationRegistry observationRegistry) {
         this(
                 bufferStore,
                 store,
@@ -199,7 +195,7 @@ public class InsightBuildScheduler implements Closeable {
                 new InsightPointIdentityManager(),
                 new InsightPointEvidenceNormalizer(),
                 graphAssistant,
-                observer);
+                observationRegistry);
     }
 
     public InsightBuildScheduler(
@@ -214,7 +210,7 @@ public class InsightBuildScheduler implements Closeable {
             InsightBuildConfig config,
             InsightPointIdentityManager pointIdentityManager,
             InsightPointEvidenceNormalizer evidenceNormalizer,
-            MemoryObserver observer) {
+            ObservationRegistry observationRegistry) {
         this(
                 bufferStore,
                 store,
@@ -228,7 +224,7 @@ public class InsightBuildScheduler implements Closeable {
                 pointIdentityManager,
                 evidenceNormalizer,
                 NoOpInsightGraphAssistant.INSTANCE,
-                observer);
+                observationRegistry);
     }
 
     public InsightBuildScheduler(
@@ -244,7 +240,7 @@ public class InsightBuildScheduler implements Closeable {
             InsightPointIdentityManager pointIdentityManager,
             InsightPointEvidenceNormalizer evidenceNormalizer,
             InsightGraphAssistant graphAssistant,
-            MemoryObserver observer) {
+            ObservationRegistry observationRegistry) {
         this.bufferStore = Objects.requireNonNull(bufferStore);
         this.store = Objects.requireNonNull(store);
         this.generator = Objects.requireNonNull(generator);
@@ -258,7 +254,8 @@ public class InsightBuildScheduler implements Closeable {
         this.config = Objects.requireNonNull(config);
         this.pointIdentityManager = Objects.requireNonNull(pointIdentityManager);
         this.evidenceNormalizer = Objects.requireNonNull(evidenceNormalizer);
-        this.observer = observer != null ? observer : new NoopMemoryObserver();
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
         this.executor = Executors.newVirtualThreadPerTaskExecutor();
         this.semaphore = new Semaphore(config.concurrency());
     }
@@ -405,23 +402,11 @@ public class InsightBuildScheduler implements Closeable {
             List<Long> itemIds,
             boolean force,
             String language) {
-        observer.observeMono(
-                        ObservationContext.<Void>of(
-                                MemorySpanNames.EXTRACTION_INSIGHT_PIPELINE,
-                                Map.of(
-                                        MemoryAttributes.MEMORY_ID,
-                                        memoryId.toIdentifier(),
-                                        MemoryAttributes.EXTRACTION_INSIGHT_TYPE,
-                                        insightTypeName)),
-                        () ->
-                                Mono.fromRunnable(
-                                        () ->
-                                                doRunPipeline(
-                                                        memoryId,
-                                                        insightTypeName,
-                                                        itemIds,
-                                                        force,
-                                                        language)))
+        InsightBuildSchedulerObservation.observePipeline(
+                        observationRegistry,
+                        memoryId,
+                        insightTypeName,
+                        () -> doRunPipeline(memoryId, insightTypeName, itemIds, force, language))
                 .block();
     }
 
@@ -894,28 +879,21 @@ public class InsightBuildScheduler implements Closeable {
             List<MemoryInsight> builtLeafs,
             String language) {
         try {
-            observer.<Void>observeMono(
-                            ObservationContext.<Void>of(
-                                    MemorySpanNames.EXTRACTION_INSIGHT_TREE_REORGANIZE,
-                                    Map.of(
-                                            MemoryAttributes.MEMORY_ID,
-                                            memoryId.toIdentifier(),
-                                            MemoryAttributes.EXTRACTION_INSIGHT_TYPE,
-                                            insightTypeName,
-                                            MemoryAttributes.EXTRACTION_INSIGHT_LEAF_COUNT,
-                                            builtLeafs.size())),
-                            () ->
-                                    Mono.fromRunnable(
-                                            () -> {
-                                                var treeConfig = insightType.resolveTreeConfig();
-                                                treeReorganizer.onLeafsUpdated(
-                                                        memoryId,
-                                                        insightTypeName,
-                                                        insightType,
-                                                        builtLeafs,
-                                                        treeConfig,
-                                                        language);
-                                            }))
+            InsightBuildSchedulerObservation.observeTreeReorganize(
+                            observationRegistry,
+                            memoryId,
+                            insightTypeName,
+                            builtLeafs.size(),
+                            () -> {
+                                var treeConfig = insightType.resolveTreeConfig();
+                                treeReorganizer.onLeafsUpdated(
+                                        memoryId,
+                                        insightTypeName,
+                                        insightType,
+                                        builtLeafs,
+                                        treeConfig,
+                                        language);
+                            })
                     .block();
             log.debug(
                     "Phase 4 Tree Reorganize completed [type={}, leafs={}]",

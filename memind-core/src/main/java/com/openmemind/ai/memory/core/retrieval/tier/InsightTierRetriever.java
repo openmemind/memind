@@ -22,8 +22,10 @@ import com.openmemind.ai.memory.core.data.enums.MemoryScope;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
+import com.openmemind.ai.memory.core.retrieval.tier.observation.InsightTierRetrieverObservation;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
+import io.micrometer.observation.ObservationRegistry;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -58,6 +60,7 @@ public class InsightTierRetriever implements InsightTierSearch {
     private final MemoryVector memoryVector;
     private final InsightTypeRouter router;
     private final int maxExpandedLeafsPerBranch;
+    private final ObservationRegistry observationRegistry;
 
     public InsightTierRetriever(
             MemoryStore memoryStore, MemoryVector memoryVector, InsightTypeRouter router) {
@@ -68,11 +71,35 @@ public class InsightTierRetriever implements InsightTierSearch {
             MemoryStore memoryStore,
             MemoryVector memoryVector,
             InsightTypeRouter router,
+            ObservationRegistry observationRegistry) {
+        this(memoryStore, memoryVector, router, 0, observationRegistry);
+    }
+
+    public InsightTierRetriever(
+            MemoryStore memoryStore,
+            MemoryVector memoryVector,
+            InsightTypeRouter router,
             int maxExpandedLeafsPerBranch) {
+        this(
+                memoryStore,
+                memoryVector,
+                router,
+                maxExpandedLeafsPerBranch,
+                ObservationRegistry.NOOP);
+    }
+
+    public InsightTierRetriever(
+            MemoryStore memoryStore,
+            MemoryVector memoryVector,
+            InsightTypeRouter router,
+            int maxExpandedLeafsPerBranch,
+            ObservationRegistry observationRegistry) {
         this.memoryStore = Objects.requireNonNull(memoryStore, "memoryStore must not be null");
         this.memoryVector = Objects.requireNonNull(memoryVector, "memoryVector must not be null");
         this.router = Objects.requireNonNull(router, "router must not be null");
         this.maxExpandedLeafsPerBranch = maxExpandedLeafsPerBranch;
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     /**
@@ -83,6 +110,11 @@ public class InsightTierRetriever implements InsightTierSearch {
      * @return Results containing ROOT + routed matching BRANCH + expanded LEAF
      */
     public Mono<TierResult> retrieve(QueryContext context, RetrievalConfig config) {
+        return InsightTierRetrieverObservation.observe(
+                observationRegistry, context, config, () -> retrieveInternal(context, config));
+    }
+
+    private Mono<TierResult> retrieveInternal(QueryContext context, RetrievalConfig config) {
         if (!config.tier1().enabled()) {
             return Mono.just(TierResult.empty());
         }

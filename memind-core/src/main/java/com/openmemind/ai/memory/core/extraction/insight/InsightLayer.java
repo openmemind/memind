@@ -18,11 +18,13 @@ import com.openmemind.ai.memory.core.data.MemoryInsightType;
 import com.openmemind.ai.memory.core.data.MemoryItem;
 import com.openmemind.ai.memory.core.data.enums.InsightAnalysisMode;
 import com.openmemind.ai.memory.core.data.enums.MemoryItemType;
+import com.openmemind.ai.memory.core.extraction.insight.observation.InsightLayerObservation;
 import com.openmemind.ai.memory.core.extraction.insight.scheduler.InsightBuildScheduler;
 import com.openmemind.ai.memory.core.extraction.result.InsightResult;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
 import com.openmemind.ai.memory.core.extraction.step.InsightExtractStep;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import io.micrometer.observation.ObservationRegistry;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -48,9 +50,17 @@ public class InsightLayer implements InsightExtractStep {
     private final MemoryStore memoryStore;
     private final InsightBuildScheduler scheduler;
     private final Set<String> unsupportedContentTypes;
+    private final ObservationRegistry observationRegistry;
 
     public InsightLayer(MemoryStore memoryStore, InsightBuildScheduler scheduler) {
         this(memoryStore, scheduler, Set.of());
+    }
+
+    public InsightLayer(
+            MemoryStore memoryStore,
+            InsightBuildScheduler scheduler,
+            ObservationRegistry observationRegistry) {
+        this(memoryStore, scheduler, Set.of(), observationRegistry);
     }
 
     /**
@@ -63,10 +73,20 @@ public class InsightLayer implements InsightExtractStep {
             MemoryStore memoryStore,
             InsightBuildScheduler scheduler,
             Set<String> unsupportedContentTypes) {
+        this(memoryStore, scheduler, unsupportedContentTypes, ObservationRegistry.NOOP);
+    }
+
+    public InsightLayer(
+            MemoryStore memoryStore,
+            InsightBuildScheduler scheduler,
+            Set<String> unsupportedContentTypes,
+            ObservationRegistry observationRegistry) {
         this.memoryStore = Objects.requireNonNull(memoryStore);
         this.scheduler = Objects.requireNonNull(scheduler);
         this.unsupportedContentTypes =
                 unsupportedContentTypes != null ? Set.copyOf(unsupportedContentTypes) : Set.of();
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     @Override
@@ -76,6 +96,14 @@ public class InsightLayer implements InsightExtractStep {
 
     @Override
     public Mono<InsightResult> extract(
+            MemoryId memoryId, MemoryItemResult memoryItemResult, String language) {
+        return InsightLayerObservation.observe(
+                observationRegistry,
+                memoryId,
+                () -> extractInternal(memoryId, memoryItemResult, language));
+    }
+
+    private Mono<InsightResult> extractInternal(
             MemoryId memoryId, MemoryItemResult memoryItemResult, String language) {
         // Only take FACT type items whose content type supports insight building
         var factItems =

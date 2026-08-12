@@ -20,7 +20,6 @@ import com.openmemind.ai.memory.core.builder.MemoryBuildOptionsSanitizer;
 import com.openmemind.ai.memory.core.extraction.insight.tree.BubbleTrackerStore;
 import com.openmemind.ai.memory.core.llm.StructuredChatClient;
 import com.openmemind.ai.memory.core.llm.rerank.Reranker;
-import com.openmemind.ai.memory.core.metrics.MemoryMetricsRecorder;
 import com.openmemind.ai.memory.core.plugin.RawDataPlugin;
 import com.openmemind.ai.memory.core.resource.ContentParser;
 import com.openmemind.ai.memory.core.resource.ContentParserRegistry;
@@ -28,7 +27,6 @@ import com.openmemind.ai.memory.core.resource.DefaultContentParserRegistry;
 import com.openmemind.ai.memory.core.resource.ResourceFetcher;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
-import com.openmemind.ai.memory.core.tracing.MemoryObserver;
 import com.openmemind.ai.memory.core.utils.JsonUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import com.openmemind.ai.memory.plugin.ai.spring.autoconfigure.MemindChatClients;
@@ -40,6 +38,7 @@ import com.openmemind.ai.memory.server.service.config.MemoryOptionService;
 import com.openmemind.ai.memory.server.service.config.MemoryOptionsCodec;
 import com.openmemind.ai.memory.server.service.config.MemoryOptionsProjectionMapper;
 import com.openmemind.ai.memory.server.service.config.ServerRuntimeConfigRepository;
+import io.micrometer.observation.ObservationRegistry;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,8 +81,8 @@ public class MemindServerRuntimeConfiguration {
             ObjectProvider<RawDataPlugin> rawDataPluginProvider,
             ObjectProvider<ResourceFetcher> resourceFetcherProvider,
             ObjectProvider<BubbleTrackerStore> bubbleTrackerStoreProvider,
-            ObjectProvider<MemoryObserver> memoryObserverProvider,
-            ObjectProvider<MemoryMetricsRecorder> memoryMetricsRecorderProvider) {
+            ObjectProvider<ObservationRegistry> observationRegistryProvider,
+            MemindServerObservabilityProperties observabilityProperties) {
         return options -> {
             MemindChatClients memindChatClients = memindChatClientsProvider.getIfAvailable();
             StructuredChatClient structuredChatClient =
@@ -100,11 +99,11 @@ public class MemindServerRuntimeConfiguration {
                     parsers.isEmpty() ? null : new DefaultContentParserRegistry(parsers);
             ResourceFetcher resourceFetcher = resourceFetcherProvider.getIfAvailable();
             BubbleTrackerStore bubbleTrackerStore = bubbleTrackerStoreProvider.getIfAvailable();
-            MemoryObserver memoryObserver = memoryObserverProvider.getIfAvailable();
-            MemoryMetricsRecorder memoryMetricsRecorder =
-                    memoryMetricsRecorderProvider == null
-                            ? null
-                            : memoryMetricsRecorderProvider.getIfAvailable();
+            ObservationRegistry observationRegistry =
+                    observabilityProperties.isEnabled() && observationRegistryProvider != null
+                            ? observationRegistryProvider.getIfAvailable(
+                                    () -> ObservationRegistry.NOOP)
+                            : ObservationRegistry.NOOP;
             var builder =
                     Memory.builder()
                             .chatClient(structuredChatClient)
@@ -119,12 +118,7 @@ public class MemindServerRuntimeConfiguration {
             if (bubbleTrackerStore != null) {
                 builder.bubbleTrackerStore(bubbleTrackerStore);
             }
-            if (memoryObserver != null) {
-                builder.memoryObserver(memoryObserver);
-            }
-            if (memoryMetricsRecorder != null) {
-                builder.memoryMetricsRecorder(memoryMetricsRecorder);
-            }
+            builder.observationRegistry(observationRegistry);
             if (contentParserRegistry != null) {
                 builder.contentParserRegistry(contentParserRegistry);
             }
@@ -145,6 +139,7 @@ public class MemindServerRuntimeConfiguration {
     }
 
     MemoryRuntimeFactory memoryRuntimeFactory(
+            ObjectProvider<MemindChatClients> memindChatClientsProvider,
             ObjectProvider<StructuredChatClient> structuredChatClientProvider,
             ObjectProvider<MemoryStore> memoryStoreProvider,
             ObjectProvider<MemoryBuffer> memoryBufferProvider,
@@ -155,7 +150,63 @@ public class MemindServerRuntimeConfiguration {
             ObjectProvider<RawDataPlugin> rawDataPluginProvider,
             ObjectProvider<ResourceFetcher> resourceFetcherProvider,
             ObjectProvider<BubbleTrackerStore> bubbleTrackerStoreProvider,
-            ObjectProvider<MemoryObserver> memoryObserverProvider) {
+            ObjectProvider<ObservationRegistry> observationRegistryProvider) {
+        return memoryRuntimeFactory(
+                memindChatClientsProvider,
+                structuredChatClientProvider,
+                memoryStoreProvider,
+                memoryBufferProvider,
+                memoryVectorProvider,
+                memoryTextSearch,
+                reranker,
+                contentParserProvider,
+                rawDataPluginProvider,
+                resourceFetcherProvider,
+                bubbleTrackerStoreProvider,
+                observationRegistryProvider,
+                new MemindServerObservabilityProperties());
+    }
+
+    MemoryRuntimeFactory memoryRuntimeFactory(
+            ObjectProvider<StructuredChatClient> structuredChatClientProvider,
+            ObjectProvider<MemoryStore> memoryStoreProvider,
+            ObjectProvider<MemoryBuffer> memoryBufferProvider,
+            ObjectProvider<MemoryVector> memoryVectorProvider,
+            ObjectProvider<MemoryTextSearch> memoryTextSearch,
+            ObjectProvider<Reranker> reranker,
+            ObjectProvider<ContentParser> contentParserProvider,
+            ObjectProvider<RawDataPlugin> rawDataPluginProvider,
+            ObjectProvider<ResourceFetcher> resourceFetcherProvider,
+            ObjectProvider<BubbleTrackerStore> bubbleTrackerStoreProvider,
+            ObjectProvider<ObservationRegistry> observationRegistryProvider) {
+        return memoryRuntimeFactory(
+                structuredChatClientProvider,
+                memoryStoreProvider,
+                memoryBufferProvider,
+                memoryVectorProvider,
+                memoryTextSearch,
+                reranker,
+                contentParserProvider,
+                rawDataPluginProvider,
+                resourceFetcherProvider,
+                bubbleTrackerStoreProvider,
+                observationRegistryProvider,
+                new MemindServerObservabilityProperties());
+    }
+
+    MemoryRuntimeFactory memoryRuntimeFactory(
+            ObjectProvider<StructuredChatClient> structuredChatClientProvider,
+            ObjectProvider<MemoryStore> memoryStoreProvider,
+            ObjectProvider<MemoryBuffer> memoryBufferProvider,
+            ObjectProvider<MemoryVector> memoryVectorProvider,
+            ObjectProvider<MemoryTextSearch> memoryTextSearch,
+            ObjectProvider<Reranker> reranker,
+            ObjectProvider<ContentParser> contentParserProvider,
+            ObjectProvider<RawDataPlugin> rawDataPluginProvider,
+            ObjectProvider<ResourceFetcher> resourceFetcherProvider,
+            ObjectProvider<BubbleTrackerStore> bubbleTrackerStoreProvider,
+            ObjectProvider<ObservationRegistry> observationRegistryProvider,
+            MemindServerObservabilityProperties observabilityProperties) {
         return memoryRuntimeFactory(
                 emptyProvider(MemindChatClients.class),
                 structuredChatClientProvider,
@@ -168,8 +219,8 @@ public class MemindServerRuntimeConfiguration {
                 rawDataPluginProvider,
                 resourceFetcherProvider,
                 bubbleTrackerStoreProvider,
-                memoryObserverProvider,
-                null);
+                observationRegistryProvider,
+                observabilityProperties);
     }
 
     private static <T> ObjectProvider<T> emptyProvider(Class<T> type) {

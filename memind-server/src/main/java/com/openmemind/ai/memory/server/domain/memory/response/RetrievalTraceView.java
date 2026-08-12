@@ -20,6 +20,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * API view of the core retrieval debug trace.
+ *
+ * <p>This DTO intentionally mirrors {@code RetrievalDebugTrace} closely while keeping server
+ * serialization concerns out of the core module.
+ */
 public record RetrievalTraceView(
         String traceId,
         Instant startedAt,

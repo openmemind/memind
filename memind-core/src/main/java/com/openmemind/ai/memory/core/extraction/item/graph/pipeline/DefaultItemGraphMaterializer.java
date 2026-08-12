@@ -20,9 +20,11 @@ import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializat
 import com.openmemind.ai.memory.core.extraction.item.graph.ItemGraphMaterializer;
 import com.openmemind.ai.memory.core.extraction.item.graph.commit.ExtractionBatchId;
 import com.openmemind.ai.memory.core.extraction.item.graph.derived.GraphDerivedMaintainer;
+import com.openmemind.ai.memory.core.extraction.item.graph.pipeline.observation.DefaultItemGraphMaterializerObservation;
 import com.openmemind.ai.memory.core.extraction.item.graph.plan.DefaultItemGraphPlanner;
 import com.openmemind.ai.memory.core.extraction.item.support.ExtractedMemoryEntry;
 import com.openmemind.ai.memory.core.store.graph.ItemGraphCommitOperations;
+import io.micrometer.observation.ObservationRegistry;
 import java.util.List;
 import java.util.Objects;
 import reactor.core.publisher.Mono;
@@ -36,20 +38,41 @@ public final class DefaultItemGraphMaterializer implements ItemGraphMaterializer
     private final ItemGraphCommitOperations commitOperations;
     private final GraphDerivedMaintainer derivedMaintainer;
     private final ItemGraphOptions options;
+    private final ObservationRegistry observationRegistry;
 
     public DefaultItemGraphMaterializer(
             DefaultItemGraphPlanner planner,
             ItemGraphCommitOperations commitOperations,
             GraphDerivedMaintainer derivedMaintainer,
             ItemGraphOptions options) {
+        this(planner, commitOperations, derivedMaintainer, options, ObservationRegistry.NOOP);
+    }
+
+    public DefaultItemGraphMaterializer(
+            DefaultItemGraphPlanner planner,
+            ItemGraphCommitOperations commitOperations,
+            GraphDerivedMaintainer derivedMaintainer,
+            ItemGraphOptions options,
+            ObservationRegistry observationRegistry) {
         this.planner = Objects.requireNonNull(planner, "planner");
         this.commitOperations = Objects.requireNonNull(commitOperations, "commitOperations");
         this.derivedMaintainer = Objects.requireNonNull(derivedMaintainer, "derivedMaintainer");
         this.options = Objects.requireNonNull(options, "options");
+        this.observationRegistry =
+                observationRegistry == null ? ObservationRegistry.NOOP : observationRegistry;
     }
 
     @Override
     public Mono<ItemGraphMaterializationResult> materialize(
+            MemoryId memoryId, List<MemoryItem> items, List<ExtractedMemoryEntry> sourceEntries) {
+        return DefaultItemGraphMaterializerObservation.observe(
+                observationRegistry,
+                memoryId,
+                items,
+                () -> materializeInternal(memoryId, items, sourceEntries));
+    }
+
+    private Mono<ItemGraphMaterializationResult> materializeInternal(
             MemoryId memoryId, List<MemoryItem> items, List<ExtractedMemoryEntry> sourceEntries) {
         if (!options.enabled() || items == null || items.isEmpty()) {
             return Mono.just(ItemGraphMaterializationResult.empty());
