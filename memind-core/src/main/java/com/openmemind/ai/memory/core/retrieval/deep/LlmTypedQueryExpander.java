@@ -100,15 +100,7 @@ public class LlmTypedQueryExpander implements TypedQueryExpander {
                         .subscribeOn(Schedulers.boundedElastic())
                         .retryWhen(
                                 Retry.backoff(3, Duration.ofSeconds(2))
-                                        .maxBackoff(Duration.ofSeconds(10)))
-                        .onErrorResume(
-                                e -> {
-                                    log.warn(
-                                            "Type-annotated query expansion failed, returning empty"
-                                                    + " list",
-                                            e);
-                                    return Mono.just(List.of());
-                                });
+                                        .maxBackoff(Duration.ofSeconds(10)));
         return LlmTypedQueryExpanderObservation.observe(
                 observationRegistry,
                 query,
@@ -116,7 +108,16 @@ public class LlmTypedQueryExpander implements TypedQueryExpander {
                 keyInformation,
                 conversationHistory,
                 maxExpansions,
-                () -> operation);
+                context ->
+                        operation.onErrorResume(
+                                e -> {
+                                    context.markDegraded();
+                                    log.warn(
+                                            "Type-annotated query expansion failed, returning empty"
+                                                    + " list",
+                                            e);
+                                    return Mono.just(List.of());
+                                }));
     }
 
     private List<ExpandedQuery> toExpandedQueries(TypedExpandResponse response, int maxExpansions) {

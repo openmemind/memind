@@ -25,12 +25,11 @@ import com.openmemind.ai.memory.core.extraction.result.InsightResult;
 import com.openmemind.ai.memory.core.extraction.result.MemoryItemResult;
 import com.openmemind.ai.memory.core.extraction.result.RawDataResult;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
+import com.openmemind.ai.memory.core.retrieval.observation.DefaultMemoryRetrieverObservation.RetrievalObservationContext;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult.SourceType;
 import com.openmemind.ai.memory.core.retrieval.scoring.observation.DefaultRetrievalResultMergerObservation.ResultMergeObservationContext;
-import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategies;
-import com.openmemind.ai.memory.core.retrieval.strategy.observation.SimpleRetrievalStrategyObservation.StrategyObservationContext;
 import com.openmemind.ai.memory.core.retrieval.temporal.TemporalItemChannelResult;
 import com.openmemind.ai.memory.core.retrieval.temporal.TemporalItemChannelSettings;
 import com.openmemind.ai.memory.core.retrieval.temporal.observation.DefaultTemporalItemChannelObservation.TemporalItemChannelObservationContext;
@@ -86,24 +85,23 @@ class MemoryMeterObservationHandlerTest {
                         List.of(scoredResults(10), scoredResults(10, 10)), new double[] {1.0, 1.0});
         observe(observationRegistry, merge, () -> merge.recordResult(scoredResults(12)));
 
-        StrategyObservationContext summary =
-                new StrategyObservationContext(queryContext(), "simple");
+        RetrievalObservationContext summary = new RetrievalObservationContext(memoryId());
         observe(
                 observationRegistry,
                 summary,
                 () -> summary.recordResult(RetrievalResult.empty("simple", "query")));
 
-        var deepSummary =
-                new com.openmemind.ai.memory.core.retrieval.strategy.observation
-                        .DeepRetrievalStrategyObservation.StrategyObservationContext(
-                        queryContext(), RetrievalStrategies.DEEP_RETRIEVAL);
+        RetrievalObservationContext deepSummary = new RetrievalObservationContext(memoryId());
         observe(
                 observationRegistry,
                 deepSummary,
-                () ->
-                        deepSummary.recordResult(
-                                RetrievalResult.empty(
-                                        RetrievalStrategies.DEEP_RETRIEVAL, "query")));
+                () -> deepSummary.recordResult(RetrievalResult.empty("deep_retrieval", "query")));
+
+        RetrievalObservationContext degradedSummary = new RetrievalObservationContext(memoryId());
+        observe(
+                observationRegistry,
+                degradedSummary,
+                () -> degradedSummary.recordResult(RetrievalResult.degraded("simple", "query")));
 
         Tags extractionTags =
                 Tags.of("operation", "extraction", "status", "success", "source", "core");
@@ -183,6 +181,20 @@ class MemoryMeterObservationHandlerTest {
                                 .counter()
                                 .count())
                 .isEqualTo(1.0);
+        assertThat(
+                        meterRegistry
+                                .find("memind.retrieval.empty_results")
+                                .tags(
+                                        Tags.of(
+                                                "operation", "retrieval",
+                                                "strategy", "simple",
+                                                "stage", "final",
+                                                "tier", "none",
+                                                "method", "final",
+                                                "status", "degraded",
+                                                "source", "core"))
+                                .counter())
+                .isNull();
         assertThat(
                         summaryTotal(
                                 meterRegistry,

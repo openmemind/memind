@@ -15,16 +15,24 @@ package com.openmemind.ai.memory.core.retrieval.observation;
 
 import com.openmemind.ai.memory.core.data.MemoryId;
 import com.openmemind.ai.memory.core.observation.MemoryObservation;
+import com.openmemind.ai.memory.core.observation.MemoryObservationContext;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
+import com.openmemind.ai.memory.core.retrieval.trace.ObservationTiming;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceEvent;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceEventSource;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceOptions;
 import io.micrometer.common.KeyValues;
 import io.micrometer.common.docs.KeyName;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationConvention;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.docs.ObservationDocumentation;
+import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import reactor.core.publisher.Mono;
+import reactor.util.context.ContextView;
 
 /** Observation contracts for DefaultMemoryRetriever. */
 public final class DefaultMemoryRetrieverObservation {
@@ -46,7 +54,7 @@ public final class DefaultMemoryRetrieverObservation {
                 observationRegistry,
                 RetrievalDocument.RETRIEVAL,
                 RetrievalObservationConvention.INSTANCE,
-                () -> new RetrievalObservationContext(memoryId),
+                reactorContext -> new RetrievalObservationContext(memoryId, reactorContext),
                 context -> operation.apply(context).doOnNext(context::recordResult));
     }
 
@@ -85,18 +93,94 @@ public final class DefaultMemoryRetrieverObservation {
         };
     }
 
-    public static final class RetrievalObservationContext extends Observation.Context {
+    public static final class RetrievalObservationContext extends MemoryObservationContext
+            implements RetrievalTraceEventSource {
 
         private final MemoryId memoryId;
+        private String strategyName = "unknown";
+        private int itemCount;
+        private int insightCount;
+        private int rawDataCount;
+        private int evidenceCount;
+        private String resultStatus = "unknown";
 
         public RetrievalObservationContext(MemoryId memoryId) {
+            this(memoryId, null);
+        }
+
+        public RetrievalObservationContext(MemoryId memoryId, ContextView reactorContext) {
+            super(reactorContext);
             this.memoryId = memoryId;
         }
 
         public void recordResult(RetrievalResult result) {
+            strategyName =
+                    result == null || result.strategy() == null ? "unknown" : result.strategy();
+            itemCount = result == null || result.items() == null ? 0 : result.items().size();
+            insightCount =
+                    result == null || result.insights() == null ? 0 : result.insights().size();
+            rawDataCount = result == null || result.rawData() == null ? 0 : result.rawData().size();
+            evidenceCount =
+                    result == null || result.evidences() == null ? 0 : result.evidences().size();
+            resultStatus =
+                    result == null || result.status() == null
+                            ? "unknown"
+                            : result.status().name().toLowerCase();
             addHighCardinalityKeyValue(
-                    HighCardinalityKeyNames.RESULT_COUNT.withValue(
-                            String.valueOf(result.items().size())));
+                    HighCardinalityKeyNames.RESULT_COUNT.withValue(String.valueOf(itemCount)));
+        }
+
+        @Override
+        public String status() {
+            String terminalStatus = errorOrCancellationStatus();
+            return terminalStatus == null ? resultStatus : terminalStatus;
+        }
+
+        public String strategyName() {
+            return strategyName;
+        }
+
+        public int itemCount() {
+            return itemCount;
+        }
+
+        public int insightCount() {
+            return insightCount;
+        }
+
+        public int rawDataCount() {
+            return rawDataCount;
+        }
+
+        public int evidenceCount() {
+            return evidenceCount;
+        }
+
+        public String source() {
+            return "core";
+        }
+
+        @Override
+        public Optional<RetrievalTraceEvent> toRetrievalTraceEvent(
+                ObservationTiming timing, RetrievalTraceOptions options) {
+            return Optional.of(
+                    new RetrievalTraceEvent(
+                            RetrievalDocument.RETRIEVAL.getName(),
+                            RetrievalDocument.RETRIEVAL.getName(),
+                            status(),
+                            timing.startedAt(),
+                            timing.completedAt(),
+                            timing.durationMillis(),
+                            Map.of("operation", "retrieval", "strategy", strategyName),
+                            Map.of(
+                                    HighCardinalityKeyNames.RESULT_COUNT.asString(),
+                                    String.valueOf(itemCount)),
+                            new RetrievalTraceEvent.FinalPayload(
+                                    strategyName,
+                                    itemCount,
+                                    insightCount,
+                                    rawDataCount,
+                                    evidenceCount)));
         }
     }
 

@@ -18,7 +18,16 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "memind.observability")
 public class MemindServerObservabilityProperties {
 
+    private boolean enabled = true;
     private final RetrievalTrace retrievalTrace = new RetrievalTrace();
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
 
     public RetrievalTrace getRetrievalTrace() {
         return retrievalTrace;

@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.openmemind.ai.memory.core.data.DefaultMemoryId;
 import com.openmemind.ai.memory.core.llm.rerank.observation.LlmRerankerObservation;
+import com.openmemind.ai.memory.core.llm.rerank.observation.LlmRerankerObservation.RerankObservationContext;
 import com.openmemind.ai.memory.core.retrieval.deep.ExpandedQuery;
 import com.openmemind.ai.memory.core.retrieval.deep.observation.LlmTypedQueryExpanderObservation;
 import com.openmemind.ai.memory.core.retrieval.graph.RetrievalGraphAssistResult;
@@ -26,10 +27,13 @@ import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.sufficiency.SufficiencyResult;
 import com.openmemind.ai.memory.core.retrieval.sufficiency.observation.LlmSufficiencyGateObservation;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationHandler;
 import io.micrometer.observation.ObservationRegistry;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
@@ -120,6 +124,43 @@ class RetrievalStageObservationCoverageTest {
                             assertThat(stage.resultCount()).isEqualTo(2);
                             assertThat(stage.candidates()).hasSize(2);
                         });
+    }
+
+    @Test
+    void recordsRerankFallbackAsDegraded() {
+        var registry = ObservationRegistry.create();
+        var observedContext = new AtomicReference<RerankObservationContext>();
+        registry.observationConfig()
+                .observationHandler(
+                        new ObservationHandler<Observation.Context>() {
+                            @Override
+                            public void onStop(Observation.Context context) {
+                                if (context instanceof RerankObservationContext rerank) {
+                                    observedContext.set(rerank);
+                                }
+                            }
+
+                            @Override
+                            public boolean supportsContext(Observation.Context context) {
+                                return context instanceof RerankObservationContext;
+                            }
+                        });
+        var candidate = scored("1", "candidate");
+
+        LlmRerankerObservation.observe(
+                        registry,
+                        "coffee",
+                        List.of(candidate),
+                        1,
+                        context -> {
+                            context.markDegraded();
+                            return Mono.just(List.of(candidate));
+                        })
+                .block();
+
+        assertThat(observedContext.get()).isNotNull();
+        assertThat(observedContext.get().degraded()).isTrue();
+        assertThat(observedContext.get().status()).isEqualTo("degraded");
     }
 
     private static ScoredResult scored(String sourceId, String text) {

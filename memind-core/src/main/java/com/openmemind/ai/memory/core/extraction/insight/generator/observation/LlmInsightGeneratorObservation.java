@@ -52,7 +52,8 @@ public final class LlmInsightGeneratorObservation {
                     operation) {
         return observePointGeneration(
                 observationRegistry,
-                InsightGenerateObservationContext.leaf(insightType, groupName),
+                InsightGenerateDocument.LEAF,
+                () -> InsightGenerateObservationContext.leaf(insightType, groupName),
                 operation);
     }
 
@@ -72,7 +73,8 @@ public final class LlmInsightGeneratorObservation {
             Function<InsightGenerateObservationContext, Mono<InsightPointOpsResponse>> operation) {
         return observePointOperations(
                 observationRegistry,
-                InsightGenerateObservationContext.leaf(insightType, groupName),
+                InsightGenerateDocument.LEAF,
+                () -> InsightGenerateObservationContext.leaf(insightType, groupName),
                 operation);
     }
 
@@ -95,7 +97,8 @@ public final class LlmInsightGeneratorObservation {
                     operation) {
         return observePointGeneration(
                 observationRegistry,
-                InsightGenerateObservationContext.aggregate(document, insightType, insights),
+                document,
+                () -> InsightGenerateObservationContext.aggregate(document, insightType, insights),
                 operation);
     }
 
@@ -117,33 +120,36 @@ public final class LlmInsightGeneratorObservation {
             Function<InsightGenerateObservationContext, Mono<InsightPointOpsResponse>> operation) {
         return observePointOperations(
                 observationRegistry,
-                InsightGenerateObservationContext.aggregate(document, insightType, insights),
+                document,
+                () -> InsightGenerateObservationContext.aggregate(document, insightType, insights),
                 operation);
     }
 
     private static Mono<InsightPointGenerateResponse> observePointGeneration(
             ObservationRegistry observationRegistry,
-            InsightGenerateObservationContext context,
+            InsightGenerateDocument document,
+            Supplier<InsightGenerateObservationContext> contextFactory,
             Function<InsightGenerateObservationContext, Mono<InsightPointGenerateResponse>>
                     operation) {
         return MemoryObservation.mono(
                 observationRegistry,
-                context.document,
-                InsightGenerateConvention.of(context.document),
-                () -> context,
-                ignored -> operation.apply(context).doOnNext(context::recordPointResponse));
+                document,
+                InsightGenerateConvention.of(document),
+                contextFactory,
+                context -> operation.apply(context).doOnNext(context::recordPointResponse));
     }
 
     private static Mono<InsightPointOpsResponse> observePointOperations(
             ObservationRegistry observationRegistry,
-            InsightGenerateObservationContext context,
+            InsightGenerateDocument document,
+            Supplier<InsightGenerateObservationContext> contextFactory,
             Function<InsightGenerateObservationContext, Mono<InsightPointOpsResponse>> operation) {
         return MemoryObservation.mono(
                 observationRegistry,
-                context.document,
-                InsightGenerateConvention.of(context.document),
-                () -> context,
-                ignored -> operation.apply(context).doOnNext(context::recordOpsResponse));
+                document,
+                InsightGenerateConvention.of(document),
+                contextFactory,
+                context -> operation.apply(context).doOnNext(context::recordOpsResponse));
     }
 
     public enum InsightGenerateDocument implements ObservationDocumentation {

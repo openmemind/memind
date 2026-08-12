@@ -19,9 +19,8 @@ import com.openmemind.ai.memory.core.observation.MemoryObservationContext;
 import com.openmemind.ai.memory.core.retrieval.deep.observation.LlmTypedQueryExpanderObservation.MultiQueryExpandObservationContext;
 import com.openmemind.ai.memory.core.retrieval.graph.observation.DefaultGraphItemChannelObservation.GraphItemChannelObservationContext;
 import com.openmemind.ai.memory.core.retrieval.graph.observation.DefaultRetrievalGraphAssistantObservation.GraphAssistObservationContext;
+import com.openmemind.ai.memory.core.retrieval.observation.DefaultMemoryRetrieverObservation.RetrievalObservationContext;
 import com.openmemind.ai.memory.core.retrieval.scoring.observation.DefaultRetrievalResultMergerObservation.ResultMergeObservationContext;
-import com.openmemind.ai.memory.core.retrieval.strategy.observation.DeepRetrievalStrategyObservation;
-import com.openmemind.ai.memory.core.retrieval.strategy.observation.SimpleRetrievalStrategyObservation;
 import com.openmemind.ai.memory.core.retrieval.sufficiency.observation.LlmSufficiencyGateObservation.SufficiencyObservationContext;
 import com.openmemind.ai.memory.core.retrieval.temporal.observation.DefaultTemporalItemChannelObservation.TemporalItemChannelObservationContext;
 import com.openmemind.ai.memory.core.retrieval.tier.observation.InsightTierRetrieverObservation.InsightTierObservationContext;
@@ -68,6 +67,7 @@ public final class MemoryMeterObservationHandler
             Set.of(
                     "success",
                     "error",
+                    "cancelled",
                     "degraded",
                     "skipped",
                     "empty",
@@ -99,6 +99,15 @@ public final class MemoryMeterObservationHandler
     private void write(MemoryObservationContext context) {
         if (context instanceof ExtractionObservationContext extraction) {
             writeExtractionSummary(extraction);
+        } else if (context instanceof RetrievalObservationContext retrieval) {
+            writeRetrievalSummary(
+                    retrieval.strategyName(),
+                    retrieval.status(),
+                    retrieval.itemCount(),
+                    retrieval.insightCount(),
+                    retrieval.rawDataCount(),
+                    retrieval.evidenceCount(),
+                    retrieval.source());
         } else if (context instanceof ItemTierObservationContext itemTier) {
             writeRetrievalStage(
                     itemTier.strategyName(),
@@ -197,26 +206,6 @@ public final class MemoryMeterObservationHandler
                     graphAssist.source());
         } else if (context instanceof ResultMergeObservationContext merge) {
             writeRetrievalMerge(merge);
-        } else if (context
-                instanceof SimpleRetrievalStrategyObservation.StrategyObservationContext simple) {
-            writeRetrievalSummary(
-                    simple.strategyName(),
-                    simple.status(),
-                    simple.itemCount(),
-                    simple.insightCount(),
-                    simple.rawDataCount(),
-                    simple.evidenceCount(),
-                    simple.source());
-        } else if (context
-                instanceof DeepRetrievalStrategyObservation.StrategyObservationContext deep) {
-            writeRetrievalSummary(
-                    deep.strategyName(),
-                    deep.status(),
-                    deep.itemCount(),
-                    deep.insightCount(),
-                    deep.rawDataCount(),
-                    deep.evidenceCount(),
-                    deep.source());
         }
     }
 
@@ -299,7 +288,7 @@ public final class MemoryMeterObservationHandler
         writeFinalResult(insightCount, "insight", tags);
         writeFinalResult(rawDataCount, "raw_data", tags);
         writeFinalResult(evidenceCount, "evidence", tags);
-        if (itemCount == 0 && insightCount == 0 && rawDataCount == 0) {
+        if ("empty".equals(status)) {
             incrementCounter("memind.retrieval.empty_results", tags);
         }
     }

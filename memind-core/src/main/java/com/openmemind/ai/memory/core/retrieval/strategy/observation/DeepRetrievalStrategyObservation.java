@@ -17,18 +17,12 @@ import com.openmemind.ai.memory.core.observation.MemoryObservation;
 import com.openmemind.ai.memory.core.observation.MemoryObservationContext;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
-import com.openmemind.ai.memory.core.retrieval.trace.ObservationTiming;
-import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceEvent;
-import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceEventSource;
-import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceOptions;
 import io.micrometer.common.KeyValues;
 import io.micrometer.common.docs.KeyName;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationConvention;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.docs.ObservationDocumentation;
-import java.util.Map;
-import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import reactor.core.publisher.Mono;
@@ -102,8 +96,7 @@ public final class DeepRetrievalStrategyObservation {
         };
     }
 
-    public static final class StrategyObservationContext extends MemoryObservationContext
-            implements RetrievalTraceEventSource {
+    public static final class StrategyObservationContext extends MemoryObservationContext {
 
         private final QueryContext queryContext;
         private final String strategyName;
@@ -141,8 +134,9 @@ public final class DeepRetrievalStrategyObservation {
 
         @Override
         public String status() {
-            if (getError() != null) {
-                return "error";
+            String terminalStatus = errorOrCancellationStatus();
+            if (terminalStatus != null) {
+                return terminalStatus;
             }
             return resultStatus;
         }
@@ -169,29 +163,6 @@ public final class DeepRetrievalStrategyObservation {
 
         public String source() {
             return "core";
-        }
-
-        @Override
-        public Optional<RetrievalTraceEvent> toRetrievalTraceEvent(
-                ObservationTiming timing, RetrievalTraceOptions options) {
-            return Optional.of(
-                    new RetrievalTraceEvent(
-                            StrategyDocument.RETRIEVE.getName(),
-                            StrategyDocument.RETRIEVE.getName(),
-                            status(),
-                            timing.startedAt(),
-                            timing.completedAt(),
-                            timing.durationMillis(),
-                            Map.of("operation", "retrieval", "strategy", strategyName),
-                            Map.of(
-                                    HighCardinalityKeyNames.RESULT_COUNT.asString(),
-                                    String.valueOf(itemCount)),
-                            new RetrievalTraceEvent.FinalPayload(
-                                    strategyName,
-                                    itemCount,
-                                    insightCount,
-                                    rawDataCount,
-                                    evidenceCount)));
         }
     }
 

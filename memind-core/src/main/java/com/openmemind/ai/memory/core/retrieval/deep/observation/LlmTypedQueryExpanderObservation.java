@@ -148,6 +148,7 @@ public final class LlmTypedQueryExpanderObservation {
         private final int conversationHistoryCount;
         private final int maxExpansions;
         private List<ExpandedQuery> results = List.of();
+        private boolean degraded;
 
         public MultiQueryExpandObservationContext(
                 String query,
@@ -192,6 +193,10 @@ public final class LlmTypedQueryExpanderObservation {
             return results.size();
         }
 
+        public void markDegraded() {
+            degraded = true;
+        }
+
         public String stage() {
             return "query_expand";
         }
@@ -205,7 +210,7 @@ public final class LlmTypedQueryExpanderObservation {
         }
 
         public boolean degraded() {
-            return false;
+            return degraded;
         }
 
         public boolean skipped() {
@@ -214,6 +219,12 @@ public final class LlmTypedQueryExpanderObservation {
 
         public String source() {
             return "core";
+        }
+
+        @Override
+        public String status() {
+            String terminalStatus = errorOrCancellationStatus();
+            return terminalStatus == null && degraded ? "degraded" : super.status();
         }
 
         @Override

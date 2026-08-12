@@ -29,10 +29,16 @@ import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
 import com.openmemind.ai.memory.core.retrieval.query.QueryRewriter;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategy;
+import com.openmemind.ai.memory.core.retrieval.trace.BoundedRetrievalTraceRecorder;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceObservationHandler;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceOptions;
+import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceRecorder;
 import com.openmemind.ai.memory.core.store.MemoryStore;
 import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.core.support.TestMemoryIds;
 import com.openmemind.ai.memory.core.textsearch.MemoryTextSearch;
+import io.micrometer.observation.ObservationRegistry;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -70,6 +76,55 @@ class DefaultMemoryRetrieverTest {
         assertThat(result).isNotNull();
         assertThat(result.isEmpty()).isTrue();
         assertThat(result.status()).isEqualTo(RetrievalStatus.DEGRADED);
+    }
+
+    @Test
+    @DisplayName("strategy timeout should record the final result as DEGRADED")
+    void strategyTimeoutShouldRecordFinalResultAsDegraded() {
+        var store = mock(MemoryStore.class);
+        var itemOperations = mock(ItemOperations.class);
+        var strategy = mock(RetrievalStrategy.class);
+        var observationRegistry = ObservationRegistry.create();
+        observationRegistry
+                .observationConfig()
+                .observationHandler(new RetrievalTraceObservationHandler());
+        var recorder = new BoundedRetrievalTraceRecorder(RetrievalTraceOptions.defaults());
+        when(store.itemOperations()).thenReturn(itemOperations);
+        when(itemOperations.hasItems(memoryId)).thenReturn(true);
+        when(strategy.name()).thenReturn("simple");
+        when(strategy.retrieve(any(), any())).thenReturn(Mono.never());
+
+        var retriever =
+                new DefaultMemoryRetriever(
+                        store,
+                        null,
+                        null,
+                        new com.openmemind.ai.memory.core.retrieval.admission
+                                .DefaultRetrievalAdmissionPolicy(
+                                com.openmemind.ai.memory.core.retrieval.admission
+                                        .RetrievalAdmissionOptions.defaults()),
+                        com.openmemind.ai.memory.core.retrieval.admission.RetrievalAdmissionOptions
+                                .defaults(),
+                        null,
+                        observationRegistry);
+        retriever.registerStrategy(strategy);
+        var config = RetrievalConfig.simple().withTimeout(Duration.ofMillis(10));
+        var request =
+                new RetrievalRequest(memoryId, "hello", List.of(), config, Map.of(), null, null);
+
+        var result =
+                retriever
+                        .retrieve(request)
+                        .contextWrite(
+                                context -> context.put(RetrievalTraceRecorder.class, recorder))
+                        .block();
+
+        assertThat(result).isNotNull();
+        assertThat(result.status()).isEqualTo(RetrievalStatus.DEGRADED);
+        assertThat(recorder.snapshot().orElseThrow().finalResults())
+                .isNotNull()
+                .extracting(trace -> trace.status())
+                .isEqualTo("degraded");
     }
 
     @Test

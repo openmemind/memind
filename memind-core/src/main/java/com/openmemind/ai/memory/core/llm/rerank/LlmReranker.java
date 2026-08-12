@@ -85,7 +85,17 @@ public class LlmReranker implements Reranker {
                 query,
                 results,
                 topK,
-                () -> rerankInternal(query, results, topK));
+                context ->
+                        rerankInternal(query, results, topK)
+                                .onErrorResume(
+                                        e -> {
+                                            context.markDegraded();
+                                            log.warn(
+                                                    "Rerank failed after 3 retries, returning"
+                                                            + " original sorted topK slice",
+                                                    e);
+                                            return Mono.just(fallback(results, topK));
+                                        }));
     }
 
     private Mono<List<ScoredResult>> rerankInternal(
@@ -97,15 +107,7 @@ public class LlmReranker implements Reranker {
         return Mono.fromCallable(() -> doRerank(query, results, topK))
                 .subscribeOn(Schedulers.boundedElastic())
                 .retryWhen(
-                        Retry.backoff(3, Duration.ofSeconds(2)).maxBackoff(Duration.ofSeconds(10)))
-                .onErrorResume(
-                        e -> {
-                            log.warn(
-                                    "Rerank failed after 3 retries, returning original sorted topK"
-                                            + " slice",
-                                    e);
-                            return Mono.just(fallback(results, topK));
-                        });
+                        Retry.backoff(3, Duration.ofSeconds(2)).maxBackoff(Duration.ofSeconds(10)));
     }
 
     private List<ScoredResult> doRerank(String query, List<ScoredResult> results, int topK)
@@ -221,7 +223,18 @@ public class LlmReranker implements Reranker {
                 query,
                 results,
                 rerankConfig.topK(),
-                () -> rerankInternal(query, results, rerankConfig));
+                context ->
+                        rerankInternal(query, results, rerankConfig)
+                                .onErrorResume(
+                                        e -> {
+                                            context.markDegraded();
+                                            log.warn(
+                                                    "Rerank failed after 3 retries, returning"
+                                                            + " original sorted topK slice",
+                                                    e);
+                                            return Mono.just(
+                                                    fallback(results, rerankConfig.topK()));
+                                        }));
     }
 
     private Mono<List<ScoredResult>> rerankInternal(
@@ -233,15 +246,7 @@ public class LlmReranker implements Reranker {
         return Mono.fromCallable(() -> doRerank(query, results, rerankConfig))
                 .subscribeOn(Schedulers.boundedElastic())
                 .retryWhen(
-                        Retry.backoff(3, Duration.ofSeconds(2)).maxBackoff(Duration.ofSeconds(10)))
-                .onErrorResume(
-                        e -> {
-                            log.warn(
-                                    "Rerank failed after 3 retries, returning original sorted topK"
-                                            + " slice",
-                                    e);
-                            return Mono.just(fallback(results, rerankConfig.topK()));
-                        });
+                        Retry.backoff(3, Duration.ofSeconds(2)).maxBackoff(Duration.ofSeconds(10)));
     }
 
     private List<ScoredResult> doRerank(

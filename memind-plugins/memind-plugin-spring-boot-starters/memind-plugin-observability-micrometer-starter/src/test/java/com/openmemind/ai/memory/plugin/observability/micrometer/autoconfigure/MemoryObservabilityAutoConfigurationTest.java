@@ -14,11 +14,21 @@
 package com.openmemind.ai.memory.plugin.observability.micrometer.autoconfigure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.openmemind.ai.memory.core.observation.MemoryObservationContext;
+import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
+import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
+import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
+import com.openmemind.ai.memory.core.retrieval.RetrievalStatus;
+import com.openmemind.ai.memory.core.retrieval.admission.DefaultRetrievalAdmissionPolicy;
+import com.openmemind.ai.memory.core.retrieval.admission.RetrievalAdmissionOptions;
+import com.openmemind.ai.memory.core.retrieval.observation.DefaultMemoryRetrieverObservation.RetrievalObservationContext;
 import com.openmemind.ai.memory.core.retrieval.query.QueryContext;
-import com.openmemind.ai.memory.core.retrieval.strategy.observation.SimpleRetrievalStrategyObservation.StrategyObservationContext;
+import com.openmemind.ai.memory.core.retrieval.strategy.RetrievalStrategy;
 import com.openmemind.ai.memory.core.retrieval.trace.BoundedRetrievalTraceRecorder;
 import com.openmemind.ai.memory.core.retrieval.trace.ObservationTiming;
 import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceEvent;
@@ -26,11 +36,14 @@ import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceEventSource;
 import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceObservationHandler;
 import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceOptions;
 import com.openmemind.ai.memory.core.retrieval.trace.RetrievalTraceRecorder;
+import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.store.item.ItemOperations;
 import com.openmemind.ai.memory.plugin.observability.micrometer.MemoryMeterObservationHandler;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -39,9 +52,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.micrometer.observation.autoconfigure.ObservationAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import reactor.core.publisher.Mono;
 
 @DisplayName("MemoryObservabilityAutoConfiguration Test")
 class MemoryObservabilityAutoConfigurationTest {
@@ -49,7 +64,9 @@ class MemoryObservabilityAutoConfigurationTest {
     private final ApplicationContextRunner contextRunner =
             new ApplicationContextRunner()
                     .withConfiguration(
-                            AutoConfigurations.of(MemoryObservabilityAutoConfiguration.class));
+                            AutoConfigurations.of(
+                                    ObservationAutoConfiguration.class,
+                                    MemoryObservabilityAutoConfiguration.class));
 
     @Nested
     @DisplayName("Default Configuration")
@@ -66,7 +83,7 @@ class MemoryObservabilityAutoConfigurationTest {
                                         .hasSingleBean(MemoryMeterObservationHandler.class);
 
                                 var observationContext =
-                                        new StrategyObservationContext(queryContext(), "simple");
+                                        new RetrievalObservationContext(() -> "memory-1");
                                 Observation.createNotStarted(
                                                 "memind.test",
                                                 () -> observationContext,
@@ -116,6 +133,82 @@ class MemoryObservabilityAutoConfigurationTest {
 
                         assertThat(recorder.snapshot().orElseThrow().stages()).hasSize(1);
                     });
+        }
+
+        @Test
+        @DisplayName("Record timeout fallback consistently across API, trace, and metrics")
+        void recordsTimeoutFallbackConsistently() {
+            contextRunner
+                    .withUserConfiguration(MicrometerProviderConfig.class)
+                    .run(
+                            context -> {
+                                var memoryId =
+                                        (com.openmemind.ai.memory.core.data.MemoryId)
+                                                () -> "memory-1";
+                                var store = mock(MemoryStore.class);
+                                var itemOperations = mock(ItemOperations.class);
+                                var strategy = mock(RetrievalStrategy.class);
+                                when(store.itemOperations()).thenReturn(itemOperations);
+                                when(itemOperations.hasItems(memoryId)).thenReturn(true);
+                                when(strategy.name()).thenReturn("simple");
+                                when(strategy.retrieve(any(), any())).thenReturn(Mono.never());
+
+                                var options = RetrievalAdmissionOptions.defaults();
+                                var retriever =
+                                        new DefaultMemoryRetriever(
+                                                store,
+                                                null,
+                                                null,
+                                                new DefaultRetrievalAdmissionPolicy(options),
+                                                options,
+                                                null,
+                                                context.getBean(ObservationRegistry.class));
+                                retriever.registerStrategy(strategy);
+                                var config =
+                                        RetrievalConfig.simple().withTimeout(Duration.ofMillis(10));
+                                var request =
+                                        new RetrievalRequest(
+                                                memoryId, "query", List.of(), config, Map.of(),
+                                                null, null);
+                                var recorder =
+                                        new BoundedRetrievalTraceRecorder(
+                                                RetrievalTraceOptions.defaults());
+
+                                var result =
+                                        retriever
+                                                .retrieve(request)
+                                                .contextWrite(
+                                                        reactorContext ->
+                                                                reactorContext.put(
+                                                                        RetrievalTraceRecorder
+                                                                                .class,
+                                                                        recorder))
+                                                .block(Duration.ofSeconds(1));
+
+                                assertThat(result).isNotNull();
+                                assertThat(result.status()).isEqualTo(RetrievalStatus.DEGRADED);
+                                assertThat(recorder.snapshot().orElseThrow().finalResults())
+                                        .isNotNull()
+                                        .extracting(finalTrace -> finalTrace.status())
+                                        .isEqualTo("degraded");
+
+                                var meterRegistry = context.getBean(MeterRegistry.class);
+                                assertThat(
+                                                meterRegistry
+                                                        .find("memind.retrieval.results")
+                                                        .tags(
+                                                                "status",
+                                                                "degraded",
+                                                                "result_type",
+                                                                "item")
+                                                        .summary())
+                                        .isNotNull();
+                                assertThat(
+                                                meterRegistry
+                                                        .find("memind.retrieval.empty_results")
+                                                        .counter())
+                                        .isNull();
+                            });
         }
 
         @Test

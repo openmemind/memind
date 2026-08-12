@@ -28,7 +28,10 @@ import org.springframework.core.type.AnnotatedTypeMetadata;
 import org.springframework.util.StringUtils;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(MemindServerRerankProperties.class)
+@EnableConfigurationProperties({
+    MemindServerRerankProperties.class,
+    MemindServerObservabilityProperties.class
+})
 public class MemindServerRerankConfiguration {
 
     @Bean
@@ -36,9 +39,12 @@ public class MemindServerRerankConfiguration {
     @Conditional(RerankPropertiesConfiguredCondition.class)
     Reranker reranker(
             MemindServerRerankProperties properties,
-            ObjectProvider<ObservationRegistry> observationRegistryProvider) {
+            ObjectProvider<ObservationRegistry> observationRegistryProvider,
+            MemindServerObservabilityProperties observabilityProperties) {
         ObservationRegistry observationRegistry =
-                observationRegistryProvider.getIfAvailable(() -> ObservationRegistry.NOOP);
+                observabilityProperties.isEnabled()
+                        ? observationRegistryProvider.getIfAvailable(() -> ObservationRegistry.NOOP)
+                        : ObservationRegistry.NOOP;
         if (StringUtils.hasText(properties.getModel())) {
             return new LlmReranker(
                     properties.getBaseUrl(),

@@ -19,7 +19,6 @@
 # - Optional Memind AI client slot routing can be configured under memind.ai.chat.slots.
 # - Optional rerank provider settings are read from MEMIND_RERANK_* env vars.
 # - To switch to MySQL or Qdrant, replace/merge the commented examples at the bottom of this file.
-debug: true
 spring:
   application:
     name: memind-server

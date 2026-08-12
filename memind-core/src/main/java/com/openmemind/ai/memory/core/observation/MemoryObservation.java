@@ -76,7 +76,7 @@ public final class MemoryObservation {
                                             registry,
                                             actualRegistry ->
                                                     document.observation(
-                                                            convention,
+                                                            null,
                                                             convention,
                                                             () -> context,
                                                             actualRegistry)));
@@ -129,7 +129,7 @@ public final class MemoryObservation {
                                             registry,
                                             actualRegistry ->
                                                     document.observation(
-                                                            convention,
+                                                            null,
                                                             convention,
                                                             () -> context,
                                                             actualRegistry)));

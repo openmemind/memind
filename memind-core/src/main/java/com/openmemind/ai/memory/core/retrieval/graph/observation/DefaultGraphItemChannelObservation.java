@@ -253,8 +253,9 @@ public final class DefaultGraphItemChannelObservation {
 
         @Override
         public String status() {
-            if (getError() != null) {
-                return "error";
+            String terminalStatus = errorOrCancellationStatus();
+            if (terminalStatus != null) {
+                return terminalStatus;
             }
             return degraded() ? "degraded" : "success";
         }

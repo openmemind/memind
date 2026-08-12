@@ -117,6 +117,7 @@ public final class LlmRerankerObservation {
         private final int candidateCount;
         private final int topK;
         private List<ScoredResult> results = List.of();
+        private boolean degraded;
 
         public RerankObservationContext(String query, List<ScoredResult> results, int topK) {
             this(query, results, topK, null);
@@ -148,8 +149,12 @@ public final class LlmRerankerObservation {
             return results.size();
         }
 
+        public void markDegraded() {
+            degraded = true;
+        }
+
         public boolean degraded() {
-            return false;
+            return degraded;
         }
 
         public boolean skipped() {
@@ -170,6 +175,12 @@ public final class LlmRerankerObservation {
 
         public String source() {
             return "core";
+        }
+
+        @Override
+        public String status() {
+            String terminalStatus = errorOrCancellationStatus();
+            return terminalStatus == null && degraded ? "degraded" : super.status();
         }
 
         @Override

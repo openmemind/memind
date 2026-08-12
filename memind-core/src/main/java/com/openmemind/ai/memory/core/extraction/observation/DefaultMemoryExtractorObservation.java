@@ -135,8 +135,9 @@ public final class DefaultMemoryExtractorObservation {
 
         @Override
         public String status() {
-            if (getError() != null) {
-                return "error";
+            String terminalStatus = errorOrCancellationStatus();
+            if (terminalStatus != null) {
+                return terminalStatus;
             }
             return resultStatus;
         }

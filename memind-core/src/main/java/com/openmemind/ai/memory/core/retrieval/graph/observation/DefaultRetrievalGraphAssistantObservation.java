@@ -274,8 +274,9 @@ public final class DefaultRetrievalGraphAssistantObservation {
 
         @Override
         public String status() {
-            if (getError() != null) {
-                return "error";
+            String terminalStatus = errorOrCancellationStatus();
+            if (terminalStatus != null) {
+                return terminalStatus;
             }
             if (degraded()) {
                 return "degraded";

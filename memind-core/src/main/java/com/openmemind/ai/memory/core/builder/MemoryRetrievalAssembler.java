@@ -15,6 +15,9 @@ package com.openmemind.ai.memory.core.builder;
 
 import com.openmemind.ai.memory.core.llm.ChatClientRegistry;
 import com.openmemind.ai.memory.core.llm.ChatClientSlot;
+import com.openmemind.ai.memory.core.llm.rerank.LlmReranker;
+import com.openmemind.ai.memory.core.llm.rerank.Reranker;
+import com.openmemind.ai.memory.core.llm.rerank.observation.LlmRerankerObservation;
 import com.openmemind.ai.memory.core.retrieval.DefaultMemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.admission.DefaultRetrievalAdmissionPolicy;
 import com.openmemind.ai.memory.core.retrieval.deep.LlmTypedQueryExpander;
@@ -46,6 +49,7 @@ import com.openmemind.ai.memory.core.retrieval.tier.InsightTypeRouter;
 import com.openmemind.ai.memory.core.retrieval.tier.ItemTierRetriever;
 import com.openmemind.ai.memory.core.retrieval.tier.ItemTierSearch;
 import com.openmemind.ai.memory.core.retrieval.tier.LlmInsightTypeRouter;
+import io.micrometer.observation.ObservationRegistry;
 
 final class MemoryRetrievalAssembler {
 
@@ -87,13 +91,15 @@ final class MemoryRetrievalAssembler {
                 new DefaultRetrievalResultMerger(context.observationRegistry());
         SimpleStrategyConfig simpleStrategyConfig = simpleStrategyConfig(context.options());
         DeepStrategyConfig deepStrategyConfig = deepStrategyConfig(context.options());
+        Reranker reranker =
+                observeCustomReranker(context.reranker(), context.observationRegistry());
         DeepRetrievalStrategy deepRetrievalStrategy =
                 new DeepRetrievalStrategy(
                         insightTierRetriever,
                         itemTierRetriever,
                         sufficiencyGate,
                         typedQueryExpander,
-                        context.reranker(),
+                        reranker,
                         context.memoryStore(),
                         deepStrategyConfig,
                         graphAssistant,
@@ -135,6 +141,20 @@ final class MemoryRetrievalAssembler {
         memoryRetriever.registerStrategy(simpleRetrievalStrategy);
         memoryRetriever.registerStrategy(deepRetrievalStrategy);
         return memoryRetriever;
+    }
+
+    static Reranker observeCustomReranker(
+            Reranker reranker, ObservationRegistry observationRegistry) {
+        if (reranker == null || reranker instanceof LlmReranker) {
+            return reranker;
+        }
+        return (query, results, topK) ->
+                LlmRerankerObservation.observe(
+                        observationRegistry,
+                        query,
+                        results,
+                        topK,
+                        () -> reranker.rerank(query, results, topK));
     }
 
     private RetrievalGraphAssistant buildGraphAssistant(

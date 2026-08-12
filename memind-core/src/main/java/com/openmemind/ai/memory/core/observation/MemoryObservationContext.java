@@ -21,6 +21,9 @@ import reactor.util.context.ContextView;
 /** Base observation context with request-scoped memory observability state. */
 public abstract class MemoryObservationContext extends Observation.Context {
 
+    private static final String REACTOR_STATUS = "reactor.status";
+    private static final String CANCELLED = "cancelled";
+
     protected MemoryObservationContext() {}
 
     protected MemoryObservationContext(ContextView reactorContext) {
@@ -36,6 +39,17 @@ public abstract class MemoryObservationContext extends Observation.Context {
     }
 
     public String status() {
-        return getError() == null ? "success" : "error";
+        String terminalStatus = errorOrCancellationStatus();
+        return terminalStatus == null ? "success" : terminalStatus;
+    }
+
+    protected String errorOrCancellationStatus() {
+        if (getError() != null) {
+            return "error";
+        }
+        var reactorStatus = getLowCardinalityKeyValue(REACTOR_STATUS);
+        return reactorStatus != null && CANCELLED.equals(reactorStatus.getValue())
+                ? CANCELLED
+                : null;
     }
 }

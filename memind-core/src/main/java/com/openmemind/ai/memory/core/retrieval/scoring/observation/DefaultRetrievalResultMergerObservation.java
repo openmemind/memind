@@ -155,7 +155,7 @@ public final class DefaultRetrievalResultMergerObservation {
         }
 
         public int deduplicatedCount() {
-            return Math.max(0, inputCount() - outputCount);
+            return deduplicatedCount;
         }
 
         public int sourceCount() {
@@ -228,7 +228,7 @@ public final class DefaultRetrievalResultMergerObservation {
                     HighCardinalityKeyNames.CANDIDATE_COUNT.withValue(
                             String.valueOf(context.inputCount())),
                     HighCardinalityKeyNames.DEDUPED_COUNT.withValue(
-                            String.valueOf(dedupedCount(context.rankedLists))),
+                            String.valueOf(context.deduplicatedCount())),
                     HighCardinalityKeyNames.WEIGHT_COUNT.withValue(
                             String.valueOf(context.weightCount())));
         }
@@ -244,18 +244,5 @@ public final class DefaultRetrievalResultMergerObservation {
             return 0;
         }
         return rankedLists.stream().filter(Objects::nonNull).mapToInt(List::size).sum();
-    }
-
-    private static int dedupedCount(List<List<ScoredResult>> rankedLists) {
-        if (rankedLists == null) {
-            return 0;
-        }
-        return (int)
-                rankedLists.stream()
-                        .filter(Objects::nonNull)
-                        .flatMap(List::stream)
-                        .map(ScoredResult::dedupKey)
-                        .distinct()
-                        .count();
     }
 }

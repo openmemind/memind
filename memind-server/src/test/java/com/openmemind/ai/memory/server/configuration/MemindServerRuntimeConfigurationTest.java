@@ -225,6 +225,38 @@ class MemindServerRuntimeConfigurationTest {
     }
 
     @Test
+    void serverRuntimeFactoryShouldUseNoopRegistryWhenObservabilityIsDisabled() {
+        var observationRegistry = ObservationRegistry.create();
+        var observabilityProperties = new MemindServerObservabilityProperties();
+        observabilityProperties.setEnabled(false);
+        var configuration = new MemindServerRuntimeConfiguration();
+
+        MemoryRuntimeFactory factory =
+                configuration.memoryRuntimeFactory(
+                        provider(StructuredChatClient.class, proxy(StructuredChatClient.class)),
+                        provider(MemoryStore.class, new InMemoryMemoryStore()),
+                        provider(MemoryBuffer.class, memoryBuffer()),
+                        provider(MemoryVector.class, proxy(MemoryVector.class)),
+                        emptyProvider(MemoryTextSearch.class),
+                        provider(Reranker.class, new NoopReranker()),
+                        emptyProvider(ContentParser.class),
+                        emptyProvider(RawDataPlugin.class),
+                        emptyProvider(ResourceFetcher.class),
+                        emptyProvider(BubbleTrackerStore.class),
+                        provider(ObservationRegistry.class, observationRegistry),
+                        observabilityProperties);
+
+        var memory = (DefaultMemory) factory.create(graphEnabledBuildOptions()).memory();
+        var extractor = underlyingExtractor(memory);
+        var itemLayer = readField(extractor, "memoryItemStep", MemoryItemLayer.class);
+        var graphMaterializer =
+                readField(itemLayer, "graphMaterializer", ItemGraphMaterializer.class);
+
+        assertThat(readField(graphMaterializer, "observationRegistry", ObservationRegistry.class))
+                .isSameAs(ObservationRegistry.NOOP);
+    }
+
+    @Test
     void runtimeFactoryPreservesSemanticSourceWindowSizeInEffectiveOptions() {
         var configuration = new MemindServerRuntimeConfiguration();
 

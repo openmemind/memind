@@ -46,29 +46,10 @@ public class MemoryObservabilityAutoConfiguration {
     }
 
     @Bean
-    public RetrievalTraceObservationHandlerRegistrar retrievalTraceObservationHandlerRegistrar(
-            ObservationRegistry observationRegistry, RetrievalTraceObservationHandler handler) {
-        observationRegistry.observationConfig().observationHandler(handler);
-        return new RetrievalTraceObservationHandlerRegistrar();
-    }
-
-    @Bean
     @ConditionalOnBean(MeterRegistry.class)
     @ConditionalOnMissingBean(MemoryMeterObservationHandler.class)
     public MemoryMeterObservationHandler memoryMeterObservationHandler(
             MeterRegistry meterRegistry) {
         return new MemoryMeterObservationHandler(meterRegistry);
     }
-
-    @Bean
-    @ConditionalOnBean(MemoryMeterObservationHandler.class)
-    public MemoryMeterObservationHandlerRegistrar memoryMeterObservationHandlerRegistrar(
-            ObservationRegistry observationRegistry, MemoryMeterObservationHandler handler) {
-        observationRegistry.observationConfig().observationHandler(handler);
-        return new MemoryMeterObservationHandlerRegistrar();
-    }
-
-    static final class RetrievalTraceObservationHandlerRegistrar {}
-
-    static final class MemoryMeterObservationHandlerRegistrar {}
 }
