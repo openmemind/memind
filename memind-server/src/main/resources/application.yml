@@ -58,7 +58,7 @@ spring:
       server:
         enabled: ${MEMIND_MCP_ENABLED:true}
         name: memind-mcp-server
-        version: ${MEMIND_MCP_SERVER_VERSION:0.2.0-SNAPSHOT}
+        version: ${MEMIND_MCP_SERVER_VERSION:0.2.0}
         type: SYNC
         protocol: STATELESS
         request-timeout: ${MEMIND_MCP_REQUEST_TIMEOUT:30s}
