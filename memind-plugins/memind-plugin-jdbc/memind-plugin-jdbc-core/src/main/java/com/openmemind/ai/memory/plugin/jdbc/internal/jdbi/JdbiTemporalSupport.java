@@ -13,6 +13,7 @@
  */
 package com.openmemind.ai.memory.plugin.jdbc.internal.jdbi;
 
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Optional;
 import org.jdbi.v3.core.Jdbi;
@@ -34,7 +35,7 @@ final class JdbiTemporalSupport {
                     if (value instanceof Instant instant) {
                         return Optional.of(
                                 (position, statement, context) ->
-                                        statement.setString(position, instant.toString()));
+                                        statement.setTimestamp(position, Timestamp.from(instant)));
                     }
                     return Optional.empty();
                 };
@@ -45,6 +46,7 @@ final class JdbiTemporalSupport {
         if (value.chars().allMatch(Character::isDigit)) {
             return Instant.ofEpochMilli(Long.parseLong(value));
         }
-        return Instant.parse(value);
+        String normalized = value.contains("T") ? value : value.replace(' ', 'T') + "Z";
+        return Instant.parse(normalized.endsWith("Z") ? normalized : normalized + "Z");
     }
 }

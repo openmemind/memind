@@ -32,6 +32,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -129,8 +130,8 @@ public class JdbcGraphOperations implements GraphOperations {
                     statement.setString(5, entity.displayName());
                     statement.setString(6, entity.entityType().name());
                     statement.setString(7, jsonCodec.toJson(entity.metadata()));
-                    statement.setString(8, formatInstant(entity.createdAt()));
-                    statement.setString(9, formatInstant(entity.updatedAt()));
+                    setTemporal(statement, 8, entity.createdAt());
+                    setTemporal(statement, 9, entity.updatedAt());
                 });
     }
 
@@ -164,7 +165,7 @@ public class JdbcGraphOperations implements GraphOperations {
                     statement.setString(5, mention.entityKey());
                     statement.setObject(6, mention.confidence());
                     statement.setString(7, jsonCodec.toJson(mention.metadata()));
-                    statement.setString(8, formatInstant(mention.createdAt()));
+                    setTemporal(statement, 8, mention.createdAt());
                 });
     }
 
@@ -250,7 +251,7 @@ public class JdbcGraphOperations implements GraphOperations {
                     statement.setString(6, link.linkType().name());
                     statement.setObject(7, link.strength());
                     statement.setString(8, jsonCodec.toJson(link.metadata()));
-                    statement.setString(9, formatInstant(link.createdAt()));
+                    setTemporal(statement, 9, link.createdAt());
                     statement.setString(10, link.relationCode());
                     statement.setString(11, link.evidenceSource());
                 });
@@ -287,8 +288,8 @@ public class JdbcGraphOperations implements GraphOperations {
                     statement.setString(6, alias.normalizedAlias());
                     statement.setInt(7, alias.evidenceCount());
                     statement.setString(8, jsonCodec.toJson(alias.metadata()));
-                    statement.setString(9, formatInstant(alias.createdAt()));
-                    statement.setString(10, formatInstant(alias.updatedAt()));
+                    setTemporal(statement, 9, alias.createdAt());
+                    setTemporal(statement, 10, alias.updatedAt());
                 });
     }
 
@@ -499,7 +500,7 @@ public class JdbcGraphOperations implements GraphOperations {
                 cooccurrence.rightEntityKey(),
                 cooccurrence.cooccurrenceCount(),
                 jsonCodec.toJson(cooccurrence.metadata()),
-                formatInstant(cooccurrence.updatedAt()));
+                cooccurrence.updatedAt());
     }
 
     private List<ItemEntityMention> listItemEntityMentions(
@@ -621,7 +622,7 @@ public class JdbcGraphOperations implements GraphOperations {
                 handle -> queryList(handle.getConnection(), sql, mapper::map, params));
     }
 
-    private static <T> List<T> queryList(
+    private <T> List<T> queryList(
             Connection connection, String sql, ResultSetMapper<T> mapper, Object... params) {
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             setParams(statement, params);
@@ -637,7 +638,7 @@ public class JdbcGraphOperations implements GraphOperations {
         }
     }
 
-    private static int executeUpdate(Connection connection, String sql, Object... params) {
+    private int executeUpdate(Connection connection, String sql, Object... params) {
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             setParams(statement, params);
             return statement.executeUpdate();
@@ -659,10 +660,28 @@ public class JdbcGraphOperations implements GraphOperations {
         }
     }
 
-    private static void setParams(PreparedStatement statement, Object... params)
+    private void setParams(PreparedStatement statement, Object... params)
             throws SQLException {
         for (int i = 0; i < params.length; i++) {
-            statement.setObject(i + 1, params[i]);
+            if (params[i] instanceof Instant instant) {
+                setTemporal(statement, i + 1, instant);
+            } else {
+                statement.setObject(i + 1, params[i]);
+            }
+        }
+    }
+
+    /**
+     * Binds an {@link Instant} timestamp. SQLite stores it as TEXT (ISO-8601); MySQL
+     * DATETIME / PostgreSQL TIMESTAMPTZ reject the ISO string with nanosecond precision
+     * ('Incorrect datetime value'), so use the standard JDBC {@link Timestamp} there.
+     */
+    private void setTemporal(PreparedStatement statement, int index, Instant instant)
+            throws SQLException {
+        if (dialect == JdbcGraphDialect.SQLITE) {
+            statement.setString(index, instant == null ? null : instant.toString());
+        } else {
+            statement.setTimestamp(index, instant == null ? null : Timestamp.from(instant));
         }
     }
 
@@ -906,10 +925,6 @@ public class JdbcGraphOperations implements GraphOperations {
 
     private static String placeholders(int count) {
         return String.join(", ", java.util.Collections.nCopies(count, "?"));
-    }
-
-    private static String formatInstant(Instant instant) {
-        return instant == null ? null : instant.toString();
     }
 
     private static Instant parseInstant(String value) {

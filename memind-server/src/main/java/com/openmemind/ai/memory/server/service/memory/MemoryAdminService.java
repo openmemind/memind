@@ -65,7 +65,9 @@ public class MemoryAdminService {
 
         Long total =
                 jdbcTemplate.queryForObject(
-                        "SELECT COUNT(*) FROM (SELECT memory_id " + where + " GROUP BY memory_id)",
+                        "SELECT COUNT(*) FROM (SELECT memory_id "
+                                + where
+                                + " GROUP BY memory_id) memory_count",
                         Long.class,
                         args.toArray());
         long totalItems = total == null ? 0 : total;
