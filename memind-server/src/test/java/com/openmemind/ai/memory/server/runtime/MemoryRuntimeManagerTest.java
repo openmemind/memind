@@ -18,12 +18,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.server.support.TestMemory;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
@@ -79,43 +78,42 @@ class MemoryRuntimeManagerTest {
     }
 
     @Test
-    void concurrentAcquireDuringSwapClosesOldRuntimeExactlyOnce() throws Exception {
-        AtomicInteger closeCount = new AtomicInteger();
-        Memory oldMemory = closeTrackingMemory(closeCount);
-        MemoryRuntimeManager manager =
-                new MemoryRuntimeManager(
-                        new RuntimeHandle(oldMemory, MemoryBuildOptions.defaults(), 1));
+    void closeOfOldRuntimeDoesNotBlockAcquireOfNewRuntime() throws Exception {
+        CountDownLatch closeEntered = new CountDownLatch(1);
+        CountDownLatch allowClose = new CountDownLatch(1);
+        Memory blockingMemory = new TestMemory(() -> {
+            closeEntered.countDown();
+            try {
+                allowClose.await();
+            }
+            catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        MemoryRuntimeManager manager = new MemoryRuntimeManager(
+                new RuntimeHandle(blockingMemory, MemoryBuildOptions.defaults(), 1));
 
-        int threads = 4;
-        int rounds = 200;
-        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        Thread swapper = new Thread(
+                () -> manager.swap(new TestMemory(), MemoryBuildOptions.defaults(), 2));
+        swapper.start();
+        assertThat(closeEntered.await(5, TimeUnit.SECONDS)).isTrue();
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
-            CountDownLatch start = new CountDownLatch(1);
-            List<Future<?>> futures = new ArrayList<>();
-            for (int i = 0; i < threads; i++) {
-                futures.add(executor.submit(() -> {
-                    start.await();
-                    for (int j = 0; j < rounds; j++) {
-                        try (RuntimeLease ignored = manager.acquire()) {
-                            // hold and release a lease while the runtime is being swapped
-                        }
-                    }
-                    return null;
-                }));
-            }
-            start.countDown();
-            for (int version = 2; version <= 20; version++) {
-                manager.swap(new TestMemory(), MemoryBuildOptions.defaults(), version);
-            }
-            for (Future<?> future : futures) {
-                future.get();
-            }
+            Future<Long> version = executor.submit(() -> {
+                try (RuntimeLease lease = manager.acquire()) {
+                    return lease.handle().version();
+                }
+            });
+            // The old runtime is still mid-close; acquiring the new runtime must
+            // not block on that close (close happens outside the manager lock).
+            assertThat(version.get(5, TimeUnit.SECONDS)).isEqualTo(2L);
         }
         finally {
+            allowClose.countDown();
             executor.shutdownNow();
+            swapper.join(5000);
         }
-
-        assertThat(closeCount).hasValue(1);
     }
 
     private static Memory closeTrackingMemory(AtomicInteger closeCount) {

@@ -44,6 +44,7 @@ public final class MemoryRuntimeManager {
     }
 
     public void swap(Memory memory, MemoryBuildOptions options, long version) {
+        Memory toClose;
         lock.lock();
         try {
             RuntimeHandle next = new RuntimeHandle(memory, options, version);
@@ -52,11 +53,12 @@ public final class MemoryRuntimeManager {
                 return;
             }
             previous.draining().set(true);
-            tryClose(previous);
+            toClose = shouldClose(previous);
         }
         finally {
             lock.unlock();
         }
+        closeMemory(toClose);
     }
 
     public long currentVersion() {
@@ -68,14 +70,16 @@ public final class MemoryRuntimeManager {
     }
 
     private void release(RuntimeHandle handle) {
+        Memory toClose;
         lock.lock();
         try {
             handle.inFlightRequests().decrementAndGet();
-            tryClose(handle);
+            toClose = shouldClose(handle);
         }
         finally {
             lock.unlock();
         }
+        closeMemory(toClose);
     }
 
     private RuntimeHandle requireCurrentHandle() {
@@ -88,13 +92,27 @@ public final class MemoryRuntimeManager {
         return handle;
     }
 
-    private void tryClose(RuntimeHandle handle) {
+    /**
+     * Returns the memory to close when the given handle is drained and has no
+     * in-flight requests, otherwise {@code null}. Must be called while holding the
+     * lock so that at most one caller observes the transition to (draining, zero
+     * in-flight) and therefore closes the memory exactly once.
+     */
+    private Memory shouldClose(RuntimeHandle handle) {
         if (handle.draining().get() && handle.inFlightRequests().get() == 0) {
-            try {
-                handle.memory().close();
-            } catch (Exception e) {
-                throw new IllegalStateException("Failed to close drained memory runtime", e);
-            }
+            return handle.memory();
+        }
+        return null;
+    }
+
+    private void closeMemory(Memory memory) {
+        if (memory == null) {
+            return;
+        }
+        try {
+            memory.close();
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to close drained memory runtime", e);
         }
     }
 }
