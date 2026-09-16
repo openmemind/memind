@@ -18,6 +18,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import com.openmemind.ai.memory.server.support.TestMemory;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
@@ -70,6 +76,46 @@ class MemoryRuntimeManagerTest {
             assertThat(lease.handle().memory()).isSameAs(firstMemory);
             assertThat(lease.handle().version()).isEqualTo(1);
         }
+    }
+
+    @Test
+    void concurrentAcquireDuringSwapClosesOldRuntimeExactlyOnce() throws Exception {
+        AtomicInteger closeCount = new AtomicInteger();
+        Memory oldMemory = closeTrackingMemory(closeCount);
+        MemoryRuntimeManager manager =
+                new MemoryRuntimeManager(
+                        new RuntimeHandle(oldMemory, MemoryBuildOptions.defaults(), 1));
+
+        int threads = 4;
+        int rounds = 200;
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        try {
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<?>> futures = new ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                futures.add(executor.submit(() -> {
+                    start.await();
+                    for (int j = 0; j < rounds; j++) {
+                        try (RuntimeLease ignored = manager.acquire()) {
+                            // hold and release a lease while the runtime is being swapped
+                        }
+                    }
+                    return null;
+                }));
+            }
+            start.countDown();
+            for (int version = 2; version <= 20; version++) {
+                manager.swap(new TestMemory(), MemoryBuildOptions.defaults(), version);
+            }
+            for (Future<?> future : futures) {
+                future.get();
+            }
+        }
+        finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(closeCount).hasValue(1);
     }
 
     private static Memory closeTrackingMemory(AtomicInteger closeCount) {

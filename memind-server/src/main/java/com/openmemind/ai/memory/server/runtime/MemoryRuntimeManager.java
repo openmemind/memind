@@ -16,10 +16,12 @@ package com.openmemind.ai.memory.server.runtime;
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 
 public final class MemoryRuntimeManager {
 
     private final AtomicReference<RuntimeHandle> current;
+    private final ReentrantLock lock = new ReentrantLock();
 
     public MemoryRuntimeManager() {
         this.current = new AtomicReference<>();
@@ -30,27 +32,31 @@ public final class MemoryRuntimeManager {
     }
 
     public RuntimeLease acquire() {
-        while (true) {
+        lock.lock();
+        try {
             RuntimeHandle handle = requireCurrentHandle();
-            if (handle.draining().get()) {
-                continue;
-            }
             handle.inFlightRequests().incrementAndGet();
-            if (handle == current.get() && !handle.draining().get()) {
-                return new RuntimeLease(handle, () -> release(handle));
-            }
-            release(handle);
+            return new RuntimeLease(handle, () -> release(handle));
+        }
+        finally {
+            lock.unlock();
         }
     }
 
     public void swap(Memory memory, MemoryBuildOptions options, long version) {
-        RuntimeHandle next = new RuntimeHandle(memory, options, version);
-        RuntimeHandle previous = current.getAndSet(next);
-        if (previous == null) {
-            return;
+        lock.lock();
+        try {
+            RuntimeHandle next = new RuntimeHandle(memory, options, version);
+            RuntimeHandle previous = current.getAndSet(next);
+            if (previous == null) {
+                return;
+            }
+            previous.draining().set(true);
+            tryClose(previous);
         }
-        previous.draining().set(true);
-        tryClose(previous);
+        finally {
+            lock.unlock();
+        }
     }
 
     public long currentVersion() {
@@ -62,8 +68,14 @@ public final class MemoryRuntimeManager {
     }
 
     private void release(RuntimeHandle handle) {
-        handle.inFlightRequests().decrementAndGet();
-        tryClose(handle);
+        lock.lock();
+        try {
+            handle.inFlightRequests().decrementAndGet();
+            tryClose(handle);
+        }
+        finally {
+            lock.unlock();
+        }
     }
 
     private RuntimeHandle requireCurrentHandle() {
