@@ -456,6 +456,9 @@ To disable the MCP endpoint, set `MEMIND_MCP_ENABLED=false` before starting `mem
 Do not expose `/mcp` directly to public networks without an authentication gateway or equivalent
 network controls. MCP tools can read and write scoped memory.
 
+For a research workflow that combines current web sources with persistent memory, see
+[Web research with Parallel Search MCP and Memind](./docs/parallel-research.md).
+
 ---
 
 ## Benchmark
