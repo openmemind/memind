@@ -15,31 +15,43 @@ package com.openmemind.ai.memory.server.runtime;
 
 import com.openmemind.ai.memory.core.Memory;
 import com.openmemind.ai.memory.core.builder.MemoryBuildOptions;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 
 public final class MemoryRuntimeManager {
 
     private final AtomicReference<RuntimeHandle> current;
+    private final ReentrantLock stateLock;
+    private final Set<RuntimeHandle> closedHandles;
 
     public MemoryRuntimeManager() {
         this.current = new AtomicReference<>();
+        this.stateLock = new ReentrantLock();
+        this.closedHandles = ConcurrentHashMap.newKeySet();
     }
 
     public MemoryRuntimeManager(RuntimeHandle initial) {
         this.current = new AtomicReference<>(initial);
+        this.stateLock = new ReentrantLock();
+        this.closedHandles = ConcurrentHashMap.newKeySet();
     }
 
     public RuntimeLease acquire() {
         while (true) {
-            RuntimeHandle handle = requireCurrentHandle();
-            if (handle.draining().get()) {
-                continue;
+            RuntimeHandle handle;
+            stateLock.lock();
+            try {
+                handle = requireCurrentHandle();
+                if (handle.draining().get() || handle != current.get()) {
+                    continue;
+                }
+                handle.inFlightRequests().incrementAndGet();
+            } finally {
+                stateLock.unlock();
             }
-            handle.inFlightRequests().incrementAndGet();
-            if (handle == current.get() && !handle.draining().get()) {
-                return new RuntimeLease(handle, () -> release(handle));
-            }
-            release(handle);
+            return new RuntimeLease(handle, () -> release(handle));
         }
     }
 
@@ -77,7 +89,18 @@ public final class MemoryRuntimeManager {
     }
 
     private void tryClose(RuntimeHandle handle) {
-        if (handle.draining().get() && handle.inFlightRequests().get() == 0) {
+        boolean shouldClose = false;
+        stateLock.lock();
+        try {
+            if (handle.draining().get()
+                    && handle.inFlightRequests().get() == 0
+                    && closedHandles.add(handle)) {
+                shouldClose = true;
+            }
+        } finally {
+            stateLock.unlock();
+        }
+        if (shouldClose) {
             try {
                 handle.memory().close();
             } catch (Exception e) {
