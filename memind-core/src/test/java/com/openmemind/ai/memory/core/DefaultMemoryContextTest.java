@@ -17,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -55,6 +56,7 @@ import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
 import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.store.MemoryStore;
+import com.openmemind.ai.memory.core.utils.TokenUtils;
 import com.openmemind.ai.memory.core.vector.MemoryVector;
 import java.time.Duration;
 import java.time.Instant;
@@ -190,6 +192,70 @@ class DefaultMemoryContextTest {
                                         .contains("Tell me about my project");
                             })
                     .verifyComplete();
+        }
+
+        @Test
+        @DisplayName("Retrieved memories respect the remaining context token budget")
+        void retrieved_memories_respect_remaining_budget() {
+            Message message = Message.user("Hello");
+            recentConversationBuffer.append("user1:agent1", message);
+
+            var tooLarge =
+                    new ScoredResult(
+                            ScoredResult.SourceType.ITEM,
+                            "item-large",
+                            "memory ".repeat(5000),
+                            0.99f,
+                            0.99,
+                            Instant.now());
+            var fitting =
+                    new ScoredResult(
+                            ScoredResult.SourceType.ITEM,
+                            "item-small",
+                            "User likes Java",
+                            0.9f,
+                            0.9,
+                            Instant.now());
+            var fittingOnly =
+                    RetrievalResult.of(
+                            List.of(fitting), List.of(), List.of(), List.of(), "SIMPLE", "Hello");
+            int maxTokens =
+                    TokenUtils.countTokens(List.of(message))
+                            + TokenUtils.countTokens(fittingOnly.formattedResult());
+            when(retriever.retrieve(any(RetrievalRequest.class)))
+                    .thenReturn(
+                            Mono.just(
+                                    RetrievalResult.of(
+                                            List.of(tooLarge, fitting),
+                                            List.of(),
+                                            List.of(),
+                                            List.of(),
+                                            "SIMPLE",
+                                            "Hello")));
+
+            StepVerifier.create(memory.getContext(ContextRequest.of(memoryId, maxTokens)))
+                    .assertNext(
+                            ctx -> {
+                                assertThat(ctx.memories().items())
+                                        .extracting(ScoredResult::sourceId)
+                                        .containsExactly("item-small");
+                                assertThat(ctx.totalTokens()).isLessThanOrEqualTo(maxTokens);
+                            })
+                    .verifyComplete();
+        }
+
+        @Test
+        @DisplayName("Skips memory retrieval when the buffer already uses the token budget")
+        void skips_retrieval_when_buffer_uses_budget() {
+            Message message = Message.user("Hello");
+            recentConversationBuffer.append("user1:agent1", message);
+            int maxTokens = TokenUtils.countTokens(List.of(message));
+
+            StepVerifier.create(memory.getContext(ContextRequest.of(memoryId, maxTokens)))
+                    .assertNext(ctx -> assertThat(ctx.hasMemories()).isFalse())
+                    .verifyComplete();
+
+            verify(retriever, never()).retrieve(any(RetrievalRequest.class));
         }
 
         @Test
