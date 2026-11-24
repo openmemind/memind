@@ -38,6 +38,7 @@ import com.openmemind.ai.memory.core.retrieval.MemoryRetriever;
 import com.openmemind.ai.memory.core.retrieval.RetrievalConfig;
 import com.openmemind.ai.memory.core.retrieval.RetrievalRequest;
 import com.openmemind.ai.memory.core.retrieval.RetrievalResult;
+import com.openmemind.ai.memory.core.retrieval.scoring.ScoredResult;
 import com.openmemind.ai.memory.core.retrieval.strategy.DeepStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.strategy.SimpleStrategyConfig;
 import com.openmemind.ai.memory.core.retrieval.thread.MemoryThreadAssistConfigMapper;
@@ -184,7 +185,9 @@ public class DefaultMemory implements Memory {
                         request.maxTokens());
         int bufferTokens = TokenUtils.countTokens(messages);
 
-        if (!request.includeMemories() || messages.isEmpty()) {
+        if (!request.includeMemories()
+                || messages.isEmpty()
+                || bufferTokens >= request.maxTokens()) {
             return Mono.just(ContextWindow.bufferOnly(messages, bufferTokens));
         }
 
@@ -201,9 +204,13 @@ public class DefaultMemory implements Memory {
                                 null))
                 .map(
                         memories -> {
-                            int memoriesTokens = TokenUtils.countTokens(memories.formattedResult());
+                            RetrievalResult fittedMemories =
+                                    fitRetrievalResult(
+                                            memories, request.maxTokens() - bufferTokens);
+                            int memoriesTokens =
+                                    TokenUtils.countTokens(fittedMemories.formattedResult());
                             return new ContextWindow(
-                                    messages, memories, bufferTokens + memoriesTokens);
+                                    messages, fittedMemories, bufferTokens + memoriesTokens);
                         });
     }
 
@@ -258,6 +265,83 @@ public class DefaultMemory implements Memory {
                 .map(Message::textContent)
                 .filter(t -> t != null && !t.isBlank())
                 .collect(Collectors.joining(" "));
+    }
+
+    private static RetrievalResult fitRetrievalResult(RetrievalResult result, int maxTokens) {
+        if (result == null || result.isEmpty() || maxTokens <= 0) {
+            return RetrievalResult.empty(
+                    result != null ? result.strategy() : null,
+                    result != null ? result.query() : null);
+        }
+
+        List<RetrievalResult.InsightResult> noInsights = List.of();
+        List<ScoredResult> noItems = List.of();
+        List<RetrievalResult.RawDataResult> noRawData = List.of();
+        List<String> noEvidences = List.of();
+        List<String> evidences = result.evidences() != null ? result.evidences() : noEvidences;
+
+        List<RetrievalResult.InsightResult> insights = new ArrayList<>();
+        for (RetrievalResult.InsightResult insight :
+                result.insights() != null
+                        ? result.insights()
+                        : List.<RetrievalResult.InsightResult>of()) {
+            insights.add(insight);
+            var candidate =
+                    RetrievalResult.of(
+                            noItems,
+                            List.copyOf(insights),
+                            noRawData,
+                            noEvidences,
+                            result.strategy(),
+                            result.query());
+            if (TokenUtils.countTokens(candidate.formattedResult()) > maxTokens) {
+                insights.remove(insights.size() - 1);
+            }
+        }
+
+        List<ScoredResult> items = new ArrayList<>();
+        for (ScoredResult item :
+                result.items() != null ? result.items() : List.<ScoredResult>of()) {
+            items.add(item);
+            var candidate =
+                    RetrievalResult.of(
+                            List.copyOf(items),
+                            List.copyOf(insights),
+                            noRawData,
+                            noEvidences,
+                            result.strategy(),
+                            result.query());
+            if (TokenUtils.countTokens(candidate.formattedResult()) > maxTokens) {
+                items.remove(items.size() - 1);
+            }
+        }
+
+        List<RetrievalResult.RawDataResult> rawData = new ArrayList<>();
+        for (RetrievalResult.RawDataResult raw :
+                result.rawData() != null
+                        ? result.rawData()
+                        : List.<RetrievalResult.RawDataResult>of()) {
+            rawData.add(raw);
+            var candidate =
+                    RetrievalResult.of(
+                            List.copyOf(items),
+                            List.copyOf(insights),
+                            List.copyOf(rawData),
+                            noEvidences,
+                            result.strategy(),
+                            result.query());
+            if (TokenUtils.countTokens(candidate.formattedResult()) > maxTokens) {
+                rawData.remove(rawData.size() - 1);
+            }
+        }
+
+        return RetrievalResult.of(
+                List.copyOf(items),
+                List.copyOf(insights),
+                List.copyOf(rawData),
+                evidences,
+                result.strategy(),
+                result.query());
     }
 
     private static List<Message> applySourceClient(List<Message> messages, String sourceClient) {
